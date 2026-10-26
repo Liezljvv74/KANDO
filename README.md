@@ -7,3 +7,16 @@ The new home of SkillWeb, a service marketplace for Germany: households book tru
 - **Rules for this project:** every change through a pull request merged by the owner; a test report in `Reports/` after every stage and every big change; no competitor names anywhere; no AI co-author or "Generated with" lines; every user-facing text exists in German and English; South Africa follows later, so no new Germany-only assumptions.
 
 Layout once Stage 1 starts: `apps/mobile`, `apps/web`, `packages/db`, `packages/contract`, `packages/i18n`, `packages/domain`, `Reports/`, `docs/`.
+
+## Run it
+
+Needs Node 24, pnpm 10 and Docker.
+
+```
+docker compose up -d db      # Postgres 17 + PostGIS on localhost:5433
+pnpm i
+pnpm test                    # web (Vitest, uses the Docker database); mobile joins later
+pnpm --filter web dev        # website on http://localhost:3000
+```
+
+Copy `.env.example` to `.env.local` and fill it in for anything that talks to Neon, storage, email or translation. `DATABASE_URL_TEST` defaults to `postgres://postgres:postgres@localhost:5433/kando`.
