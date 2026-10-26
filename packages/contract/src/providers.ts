@@ -92,3 +92,6 @@ export const TranslatableTextsSchema = z.object({
   references: z.array(z.object({ id: z.string(), description: z.string() })),
 })
 export type TranslatableTexts = z.infer<typeof TranslatableTextsSchema>
+
+/** The translate endpoint needs an explicit target language (no default). */
+export const TranslationQuerySchema = z.object({ lang: LangSchema })

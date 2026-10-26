@@ -43,6 +43,13 @@
       "when": 1793045749623,
       "tag": "0005_clean_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793047811585,
+      "tag": "0006_clumsy_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

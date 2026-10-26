@@ -2,7 +2,9 @@ import { sql } from 'drizzle-orm'
 import { lookupPostcode, type Tx } from '@kando/db'
 import type { ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
+import type { Lang } from '@kando/i18n'
 import { photoUrl } from './storage'
+import { needsTranslation, textsOf } from './translate'
 
 type Row = {
   id: string
@@ -25,9 +27,9 @@ type Row = {
 /**
  * A published, non-suspended provider with at least one offerable service, by slug; public fields only
  * (never owner, postcode or suspension). Everything runs in the request's `tx`; eligibility is a SECURITY DEFINER SQL function.
- * `lang` is for the translate flag (Task 8 sets `translatable`).
+ * `translatable`: the page texts are not in `lang`, so the translate button shows.
  */
-export async function getPublicProfile(tx: Tx, slug: string, _lang: string): Promise<ProviderDetail | null> {
+export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promise<ProviderDetail | null> {
   const { rows } = await tx.execute<Row>(sql`
     SELECT p.id, p.slug, p.display_name, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
            p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key
@@ -51,7 +53,7 @@ export async function getPublicProfile(tx: Tx, slug: string, _lang: string): Pro
     p.base_postcode ? lookupPostcode(p.country, p.base_postcode, tx) : null,
   ])
 
-  return {
+  const detail: ProviderDetail = {
     slug: p.slug,
     displayName: p.display_name,
     publicName: p.public_name,
@@ -79,6 +81,8 @@ export async function getPublicProfile(tx: Tx, slug: string, _lang: string): Pro
     // Without a description of its own, a photo is described by the current public name (it follows renames).
     photos: photos.rows.map((ph) => ({ id: ph.id, url: photoUrl(ph.key), alt: ph.alt || p.public_name })),
     isNew: true, // Until ratings exist (Stage 6).
-    translatable: false, // Task 8 computes this.
+    translatable: false,
   }
+  detail.translatable = needsTranslation(textsOf(detail), lang)
+  return detail
 }

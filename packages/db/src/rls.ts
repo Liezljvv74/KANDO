@@ -33,7 +33,7 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
 }
 
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
-export const INSERT_ONLY_TABLES: string[] = []
+export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
 
 // Readable by app_user, written only by staff (owner connection).
 export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
@@ -184,6 +184,15 @@ const ELIGIBILITY_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid) TO ${APP_ROLE}`,
 ]
 
+// app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.
+const TRANSLATION_FUNCTIONS = [
+  `CREATE OR REPLACE FUNCTION prune_translation_requests() RETURNS void
+    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      DELETE FROM translation_requests WHERE created_at < now() - interval '24 hours' $$`,
+  `REVOKE ALL ON FUNCTION prune_translation_requests() FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION prune_translation_requests() TO ${APP_ROLE}`,
+]
+
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
   tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...INSERT_ONLY_TABLES],
@@ -211,6 +220,7 @@ export function rlsStatements(
     ...policies,
     ...PROVIDER_FUNCTIONS,
     ...ELIGIBILITY_FUNCTIONS,
+    ...TRANSLATION_FUNCTIONS,
   ]
 }
 

@@ -51,7 +51,7 @@ it('a published provider page: contract shape, place, photo urls, only offerable
     publicName: 'Anna H.',
     place: 'Berlin',
     photoUrl: 'https://media.test/providers/p/profile.jpg',
-    translatable: false,
+    translatable: true,
     isNew: true,
   })
   expect(p.services.map((s) => s.title)).toEqual(['Anna H. service']) // the document-gated service is not shown

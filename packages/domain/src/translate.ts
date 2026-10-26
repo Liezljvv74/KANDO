@@ -1,0 +1,169 @@
+import { createHash } from 'node:crypto'
+import { sql } from 'drizzle-orm'
+import { detect } from 'tinyld'
+import type { ProviderDetail, TranslatableTexts } from '@kando/contract'
+import type { Tx } from '@kando/db'
+import type { Lang } from '@kando/i18n'
+import type { SessionUser } from './users'
+
+export type { TranslatableTexts }
+
+// OpenRouter slug of the current fast Claude model (Haiku tier), checked 2026-10-26 in https://openrouter.ai/api/v1/models
+// (the list also holds anthropic/claude-haiku-4.5, the older one). Override with TRANSLATE_MODEL.
+export const DEFAULT_TRANSLATE_MODEL = 'anthropic/claude-haiku-5.5'
+
+const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
+export const TRANSLATE_LIMIT_PER_HOUR = 30
+/** Default time to wait for the model, in ms; env TRANSLATE_TIMEOUT_MS overrides it. */
+export const TRANSLATE_TIMEOUT_MS = 12_000
+
+const SYSTEM_PROMPT = (lang: Lang) =>
+  `You translate texts from a service marketplace profile page into ${lang === 'de' ? 'German' : 'English'}. You get a JSON object whose values are texts.
+- Translate each value into the target language.
+- Keep line breaks, list markers and paragraph order.
+- Do not add, drop or summarise content.
+- Leave person and business names, brand names, prices, numbers, URLs and emails unchanged.
+- If a value is already in the target language, return it unchanged.
+- Answer with a JSON object with exactly the same keys.`
+
+/** The translation could not be made: no key, rate limit, timeout, provider error or unusable answer. */
+export class TranslationUnavailable extends Error {}
+
+export const textsOf = (p: ProviderDetail): TranslatableTexts => ({
+  displayName: p.displayName,
+  bio: p.bio ?? null,
+  strengths: p.strengths ?? null,
+  experience: p.experience ?? null,
+  skills: p.skills ?? [],
+  services: p.services.map((s) => ({ id: s.id, title: s.title, description: s.description })),
+  references: p.references.map((r) => ({ id: r.id, description: r.description })),
+})
+
+// Stable ids: displayName, bio, strengths, experience, skill:0, service:<id>:title, service:<id>:description, reference:<id>
+function flatten(t: TranslatableTexts): Record<string, string> {
+  const all: Record<string, string | null> = { displayName: t.displayName, bio: t.bio, strengths: t.strengths, experience: t.experience }
+  t.skills.forEach((s, i) => (all[`skill:${i}`] = s))
+  for (const s of t.services) {
+    all[`service:${s.id}:title`] = s.title
+    all[`service:${s.id}:description`] = s.description
+  }
+  for (const r of t.references) all[`reference:${r.id}`] = r.description
+  return Object.fromEntries(Object.entries(all).filter((e): e is [string, string] => !!e[1]?.trim()))
+}
+
+function rebuild(t: TranslatableTexts, f: Record<string, string>): TranslatableTexts {
+  return {
+    displayName: f.displayName ?? t.displayName,
+    bio: t.bio && (f.bio ?? t.bio),
+    strengths: t.strengths && (f.strengths ?? t.strengths),
+    experience: t.experience && (f.experience ?? t.experience),
+    skills: t.skills.map((s, i) => f[`skill:${i}`] ?? s),
+    services: t.services.map((s) => ({
+      ...s,
+      title: f[`service:${s.id}:title`] ?? s.title,
+      description: s.description && (f[`service:${s.id}:description`] ?? s.description),
+    })),
+    references: t.references.map((r) => ({ ...r, description: f[`reference:${r.id}`] ?? r.description })),
+  }
+}
+
+// tinyld misdetects short words with confidence ("Umzug" -> ber), so one text only counts when it is long enough.
+const LONG_TEXT = 80
+
+/** Decides for the button and for the model call: detect once on the whole page, plus any single long text in another language. */
+export function needsTranslation(texts: TranslatableTexts, lang: Lang): boolean {
+  const all = Object.values(flatten(texts))
+  const joined = all.join('\n')
+  const page = detect(joined)
+  if (page ? page !== lang : joined.length >= 20) return true
+  return all.some((text) => text.length >= LONG_TEXT && detect(text) !== lang)
+}
+
+/** Callers are counted per user id; anonymous ones as a salted hash of the first x-forwarded-for entry, never the raw address. */
+export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, request: Request): string {
+  if (user) return `user:${user.id}`
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const hash = createHash('sha256').update(`${process.env.NEON_AUTH_COOKIE_SECRET ?? ''}${ip}`).digest('hex')
+  return `ip:${hash.slice(0, 32)}`
+}
+
+const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
+
+/**
+ * Translates the texts into `lang`: from the store, else one model call for whatever is missing. Throws TranslationUnavailable.
+ * Everything runs in the caller's request transaction `tx` (as app_user); no second connection is opened.
+ */
+export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lang, clientKey: string): Promise<TranslatableTexts> {
+  if (!needsTranslation(texts, lang)) return texts
+  const flat = flatten(texts)
+  const keys = Object.fromEntries(Object.keys(flat).map((id) => [id, sha256(flat[id]!)]))
+  const result: Record<string, string> = {}
+
+  const hashes = [...new Set(Object.values(keys))]
+  if (hashes.length) {
+    const { rows } = await tx.execute<{ key: string; text: string }>(
+      sql`SELECT key, text FROM translations WHERE lang = ${lang} AND key IN (${sql.join(hashes.map((h) => sql`${h}`), sql`, `)})`,
+    )
+    const stored = new Map(rows.map((r) => [r.key, r.text]))
+    for (const id of Object.keys(flat)) {
+      const hit = stored.get(keys[id]!)
+      if (hit !== undefined) result[id] = hit
+      else if (flat[id]!.length >= LONG_TEXT && detect(flat[id]!) === lang) result[id] = flat[id]!
+    }
+  }
+
+  const missing = Object.keys(flat).filter((id) => !(id in result))
+  if (missing.length) {
+    const answer = await askModel(tx, Object.fromEntries(missing.map((id) => [id, flat[id]!])), lang, clientKey)
+    for (const id of missing) {
+      result[id] = answer[id]!
+      await tx.execute(sql`INSERT INTO translations (key, lang, text) VALUES (${keys[id]}, ${lang}, ${answer[id]}) ON CONFLICT (key, lang) DO NOTHING`)
+    }
+  }
+  return rebuild(texts, result)
+}
+
+async function askModel(tx: Tx, sent: Record<string, string>, lang: Lang, clientKey: string): Promise<Record<string, string>> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new TranslationUnavailable('No translation key configured')
+
+  const limit = Number(process.env.TRANSLATE_LIMIT_PER_HOUR) || TRANSLATE_LIMIT_PER_HOUR
+  // ponytail: the counter lives in the request transaction, so a row is visible to other requests only after commit and a
+  // burst of parallel requests from one client can slightly exceed the limit. Upgrade: count on a second (owner) connection
+  // with autocommit, as the Payload version did, once the pool can afford it.
+  await tx.execute(sql`SELECT prune_translation_requests()`) // app_user cannot DELETE; a definer function does it
+  const { rows } = await tx.execute<{ n: number }>(
+    sql`SELECT count(*)::int AS n FROM translation_requests WHERE client_key = ${clientKey} AND created_at > now() - interval '1 hour'`,
+  )
+  if (rows[0]!.n >= limit) throw new TranslationUnavailable('Rate limit reached')
+  await tx.execute(sql`INSERT INTO translation_requests (client_key) VALUES (${clientKey})`)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Number(process.env.TRANSLATE_TIMEOUT_MS) || TRANSLATE_TIMEOUT_MS)
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: process.env.TRANSLATE_MODEL || DEFAULT_TRANSLATE_MODEL,
+        temperature: 0,
+        max_tokens: Math.min(4000, Math.max(256, Math.ceil((JSON.stringify(sent).length / 3) * 2))),
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT(lang) },
+          { role: 'user', content: JSON.stringify(sent) },
+        ],
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new TranslationUnavailable(`Translation service answered ${res.status}`)
+    const content = ((await res.json()) as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content as string
+    const answer = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
+    if (!Object.keys(sent).every((id) => typeof answer?.[id] === 'string' && answer[id].trim())) throw new Error('incomplete')
+    return answer
+  } catch (e) {
+    throw e instanceof TranslationUnavailable ? e : new TranslationUnavailable('Translation failed')
+  } finally {
+    clearTimeout(timer)
+  }
+}
