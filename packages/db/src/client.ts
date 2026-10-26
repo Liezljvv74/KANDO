@@ -29,6 +29,7 @@ const lazy = <T extends object>(get: () => T): T =>
     getPrototypeOf: () => Object.getPrototypeOf(get()),
   })
 
-export const pool: pg.Pool = lazy(() => (_pool ??= new pg.Pool({ connectionString: connectionString() })))
+// connectionTimeoutMillis: a request that cannot get a connection fails after 10 s instead of waiting forever.
+export const pool: pg.Pool = lazy(() => (_pool ??= new pg.Pool({ connectionString: connectionString(), connectionTimeoutMillis: 10_000 })))
 export const db: Db = lazy(() => (_db ??= drizzle(pool, { schema })))
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]

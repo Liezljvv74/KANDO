@@ -154,6 +154,36 @@ const PROVIDER_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text), set_provider_photo(uuid) TO ${APP_ROLE}`,
 ]
 
+// Eligibility: documents are private (RLS), so the check runs as the table owner, for the provider's owner only.
+// Callable by app_user so search and public pages can use their own request transaction.
+const ELIGIBILITY_FUNCTIONS = [
+  `CREATE OR REPLACE FUNCTION offerable_service_ids(p_provider_id uuid) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT s.id FROM services s
+      JOIN categories c ON c.id = s.category_id
+      JOIN providers p ON p.id = s.provider_id
+      WHERE s.provider_id = p_provider_id
+        AND NOT EXISTS (
+          SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
+          )
+        )
+      ORDER BY s.created_at, s.id $$`,
+  `CREATE OR REPLACE FUNCTION missing_requirements(p_provider_id uuid, p_service_id uuid) RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT coalesce(array_agg(r.requirement ORDER BY r.requirement), '{}') FROM services s
+      JOIN categories c ON c.id = s.category_id
+      JOIN providers p ON p.id = s.provider_id
+      CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
+      WHERE s.id = p_service_id AND s.provider_id = p_provider_id
+        AND NOT EXISTS (
+          SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
+        ) $$`,
+  `REVOKE ALL ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid) TO ${APP_ROLE}`,
+]
+
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
   tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...INSERT_ONLY_TABLES],
@@ -180,6 +210,7 @@ export function rlsStatements(
     END $$`,
     ...policies,
     ...PROVIDER_FUNCTIONS,
+    ...ELIGIBILITY_FUNCTIONS,
   ]
 }
 

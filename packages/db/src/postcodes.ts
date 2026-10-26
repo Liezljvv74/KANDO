@@ -1,19 +1,22 @@
 import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { eq, sql } from 'drizzle-orm'
-import { db } from './client'
+import { db, type Tx } from './client'
 import { countries } from './schema'
 
 export type PostcodeHit = { code: string; place: string; state: string; lat: number; lng: number }
 
-export async function isPostcode(country: string, code: string): Promise<boolean> {
-  const [row] = await db.select({ p: countries.postcodePattern }).from(countries).where(eq(countries.code, country))
+/** Postcodes and countries are public reference tables: pass the request's `tx` so no second connection is needed. */
+export type Executor = Tx | typeof db
+
+export async function isPostcode(country: string, code: string, exec: Executor = db): Promise<boolean> {
+  const [row] = await exec.select({ p: countries.postcodePattern }).from(countries).where(eq(countries.code, country))
   return !!row && new RegExp(row.p).test(code)
 }
 
-export async function lookupPostcode(country: string, code: string): Promise<PostcodeHit | null> {
-  if (!(await isPostcode(country, code))) return null
-  const { rows } = await db.execute<PostcodeHit>(sql`
+export async function lookupPostcode(country: string, code: string, exec: Executor = db): Promise<PostcodeHit | null> {
+  if (!(await isPostcode(country, code, exec))) return null
+  const { rows } = await exec.execute<PostcodeHit>(sql`
     SELECT code, place, state, ST_Y(location) AS lat, ST_X(location) AS lng
     FROM postcodes WHERE country = ${country} AND code = ${code}`)
   return rows[0] ?? null

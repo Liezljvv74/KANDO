@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { db, distanceKm, lookupPostcode, type Tx } from '@kando/db'
+import { distanceKm, lookupPostcode, type Tx } from '@kando/db'
 import type { SearchItem, SearchResult } from '@kando/contract'
-import { offerableServiceIds } from './providers/eligibility'
 import { fail } from './providers/http'
 import { photoUrl } from './storage'
 
@@ -24,8 +23,9 @@ type Candidate = {
 const like = (q: string) => `%${q.replace(/[\\%_]/g, '\\$&')}%`
 
 /**
- * Visible providers: published, not suspended, with at least one offerable service (checked per provider below).
- * Reads run in the caller's `tx` (public RLS); eligibility needs the private documents, so it uses the owner connection `db`.
+ * Visible providers: published, not suspended, with at least one offerable service, all decided in the candidate SQL.
+ * Everything runs in the request's `tx`: eligibility is the SECURITY DEFINER function `offerable_service_ids`
+ * (documents are private), and postcodes are public reference data.
  */
 export async function search(
   tx: Tx,
@@ -35,23 +35,29 @@ export async function search(
   if (!known) return fail(400, { error: 'Unknown country' })
   const cat = category ? (await tx.execute<{ id: string }>(sql`SELECT id FROM categories WHERE slug = ${category}`)).rows[0] : undefined
   if (category && !cat) return fail(400, { error: 'Unknown category' })
-  const origin = postcode ? await lookupPostcode(country, postcode) : null
+  const origin = postcode ? await lookupPostcode(country, postcode, tx) : null
   if (postcode && !origin) return fail(400, { error: 'Unknown postcode' })
   const term = q?.trim()
 
+  const here = origin ? sql`ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography` : sql``
+  // On-site providers must be within their own radius (plus 1 % for sphere vs spheroid; the exact check is haversine below),
+  // so the 500 cap applies after the radius. Remote providers are always in.
   const near = origin
-    ? sql`AND (p.works_remotely OR ST_DWithin(p.location::geography, ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography, ${MAX_DISTANCE_M}))`
+    ? sql`AND (p.works_remotely OR ST_DWithin(p.location::geography, ${here}, LEAST(p.service_radius_km * 1010, ${MAX_DISTANCE_M})))`
     : sql``
+  const offerable = cat
+    ? sql`EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id} AND s.id IN (SELECT offerable_service_ids(p.id)))`
+    : sql`EXISTS (SELECT 1 FROM offerable_service_ids(p.id))`
   const { rows } = await tx.execute<Candidate>(sql`
     SELECT p.id, p.slug, p.display_name, p.public_name, ph.key AS photo_key, ST_Y(p.location) AS lat, ST_X(p.location) AS lng,
            p.service_radius_km, p.works_remotely
     FROM providers p
     LEFT JOIN photos ph ON ph.id = p.photo_id
     WHERE p.status = 'published' AND p.suspended = false AND p.country = ${country} AND p.slug IS NOT NULL
+      AND ${offerable}
       ${near}
-      ${cat ? sql`AND EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id})` : sql``}
       ${term ? sql`AND (p.public_name ILIKE ${like(term)} OR EXISTS (SELECT 1 FROM unnest(p.skills) k WHERE k ILIKE ${like(term)}))` : sql``}
-    ORDER BY ${origin ? sql`ST_Distance(p.location::geography, ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography),` : sql``} p.public_name, p.id
+    ORDER BY ${origin ? sql`ST_Distance(p.location::geography, ${here}),` : sql``} p.public_name, p.id
     LIMIT ${MAX_CANDIDATES}`)
 
   const ranked = rows
@@ -68,36 +74,35 @@ export async function search(
         a.p.public_name.localeCompare(b.p.public_name, lang) ||
         a.p.id.localeCompare(b.p.id),
     )
+  const pageRows = ranked.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  // ponytail: eligibility is two queries per provider, run lazily until the requested page and one more row are known.
-  // Batch it into one SQL statement if a page ever needs hundreds of ineligible candidates skipped.
-  const items: SearchItem[] = []
-  let seen = 0
-  for (const { p, distance } of ranked) {
-    const ids = await offerableServiceIds(db, p.id)
-    if (!ids.length) continue
-    const { rows: svc } = await tx.execute<{ price: string | null; slug: string; category_id: string }>(sql`
-      SELECT s.price, c.slug, c.id AS category_id FROM services s JOIN categories c ON c.id = s.category_id
-      WHERE s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})`)
-    const counted = cat ? svc.filter((s) => s.category_id === cat.id) : svc
-    if (!counted.length) continue
-    seen++
-    if (seen > page * PAGE_SIZE) break // one more than the page: there is a next page
-    if (seen <= (page - 1) * PAGE_SIZE) continue
+  // One query for the page: each provider's offerable services (price, category slug).
+  const svc = pageRows.length
+    ? (
+        await tx.execute<{ provider_id: string; price: string | null; slug: string; category_id: string }>(sql`
+          SELECT s.provider_id, s.price, c.slug, c.id AS category_id FROM services s JOIN categories c ON c.id = s.category_id
+          WHERE s.provider_id IN (${sql.join(pageRows.map(({ p }) => sql`${p.id}::uuid`), sql`, `)})
+            AND s.id IN (SELECT offerable_service_ids(s.provider_id))`)
+      ).rows
+    : []
+
+  const items: SearchItem[] = pageRows.map(({ p, distance }) => {
+    const own = svc.filter((s) => s.provider_id === p.id)
+    const counted = cat ? own.filter((s) => s.category_id === cat.id) : own
     const prices = counted.flatMap((s) => (s.price === null ? [] : [Number(s.price)]))
-    items.push({
+    return {
       slug: p.slug,
       displayName: p.display_name,
       publicName: p.public_name,
       photoUrl: p.photo_key ? photoUrl(p.photo_key) : null,
-      categories: [...new Set(svc.map((s) => s.slug))],
+      categories: [...new Set(own.map((s) => s.slug))],
       fromPrice: prices.length ? Math.min(...prices) : null,
       // Whole km, at least 1: coarse enough not to pinpoint the base postcode.
       distanceKm: distance == null ? null : Math.max(1, Math.round(distance)),
       worksRemotely: p.works_remotely,
       currency: 'EUR',
       isNew: true, // Until ratings exist (Stage 6).
-    })
-  }
-  return { items, page, hasMore: seen > page * PAGE_SIZE }
+    }
+  })
+  return { items, page, hasMore: ranked.length > page * PAGE_SIZE }
 }

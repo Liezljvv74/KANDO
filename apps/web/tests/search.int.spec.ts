@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { distanceKm, pool } from '@kando/db'
 import { SearchResultSchema } from '@kando/contract'
-import { cleanupUsers, seedBase, seedProvider } from './helpers'
+import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/providers/route')
@@ -12,8 +12,11 @@ let otherCategoryId: string
 let otherSlug: string
 const origins = { exact: '90001', far: '90002', paging: '90003' }
 
-const search = (query: string) =>
-  route.GET(new Request(`http://localhost/app-api/v1/providers?${query}`), { params: Promise.resolve({}) })
+const search = (query: string, uid?: string) =>
+  route.GET(
+    new Request(`http://localhost/app-api/v1/providers?${query}`, uid ? { headers: { cookie: `uid=${uid}:${EMAIL(uid)}` } } : undefined),
+    { params: Promise.resolve({}) },
+  )
 const result = async (query: string) => {
   const res = await search(query)
   expect(res.status).toBe(200)
@@ -26,28 +29,36 @@ beforeAll(async () => {
   otherSlug = `t7-other-${Date.now()}`
   otherCategoryId = (await pool.query('INSERT INTO categories (slug) VALUES ($1) RETURNING id', [otherSlug])).rows[0].id
   // Berlin fixture 10115 = (13.3, 52.5). Move due north by exactly 25 km, then 26 km.
+  const home = (
+    await pool.query("SELECT ST_X(location) AS lng, ST_Y(location) AS lat FROM postcodes WHERE country = 'DE' AND code = '10115'")
+  ).rows[0]
   const kmPerDeg = (2 * Math.PI * 6371) / 360
   for (const [code, km] of [
     [origins.exact, 25],
     [origins.far, 26],
   ] as const) {
-    const lat = 52.5 + km / kmPerDeg
-    expect(distanceKm({ lat: 52.5, lng: 13.3 }, { lat, lng: 13.3 })).toBeCloseTo(km, 6)
+    const lat = home.lat + km / kmPerDeg
+    expect(distanceKm(home, { lat, lng: home.lng })).toBeCloseTo(km, 6)
     await pool.query(
-      `INSERT INTO postcodes (country, code, place, state, location) VALUES ('DE', $1, 'Fixture', 'Berlin', ST_SetSRID(ST_MakePoint(13.3, $2), 4326))
+      `INSERT INTO postcodes (country, code, place, state, location) VALUES ('DE', $1, 'Fixture', 'Berlin', ST_SetSRID(ST_MakePoint($3, $2), 4326))
        ON CONFLICT (country, code) DO UPDATE SET location = excluded.location`,
-      [code, lat],
+      [code, lat, home.lng],
     )
   }
   await seedProvider('sx-near', { name: 'Anna Berlin', categoryId, skills: ['gardening', 'Pruning'] })
   await seedProvider('sx-remote', { name: 'Remote Rita', categoryId: otherCategoryId, postcode: null, remote: true, price: null })
+  // remote, based in Munich (more than 200 km from Berlin): found from any postcode, distance hidden
+  await pool.query(
+    `INSERT INTO postcodes (country, code, place, state, location) VALUES ('DE', '90004', 'Munich fixture', 'Bayern', ST_SetSRID(ST_MakePoint(11.57, 48.14), 4326)) ON CONFLICT DO NOTHING`,
+  )
+  await seedProvider('sx-munich', { name: 'Munich Max', categoryId, postcode: '90004', remote: true })
   await seedProvider('sx-draft', { name: 'Draft Dora', categoryId, status: 'draft' })
   await seedProvider('sx-susp', { name: 'Suspended Sam', categoryId, suspended: true })
   await seedProvider('sx-nodocs', { name: 'Nodocs Nina', categoryId: docCategoryId })
 })
 afterAll(async () => {
   await cleanupUsers()
-  await pool.query("DELETE FROM postcodes WHERE code IN ('90001', '90002', '90003')")
+  await pool.query("DELETE FROM postcodes WHERE code IN ('90001', '90002', '90003', '90004')")
   await pool.query('DELETE FROM categories WHERE id = $1', [otherCategoryId])
 })
 
@@ -59,6 +70,16 @@ it('radius edge and remote providers', async () => {
   expect(far).not.toContain('sx-near-slug') // 26 km is outside
   expect(far).toContain('sx-remote-slug') // remote: any postcode
   expect(await slugs('postcode=10115')).toEqual(expect.arrayContaining(['sx-near-slug', 'sx-remote-slug']))
+})
+
+it('a remote provider more than 200 km away is found, without a distance', async () => {
+  const res = await result('postcode=10115')
+  expect(res.items.find((i) => i.slug === 'sx-munich-slug')).toMatchObject({ distanceKm: null, worksRemotely: true })
+})
+
+it('a draft is invisible to its owner too', async () => {
+  const res = SearchResultSchema.parse(await (await search('', 'sx-draft')).json())
+  expect(res.items.map((i) => i.slug)).not.toContain('sx-draft-slug')
 })
 
 it('distance is whole km, at least 1, hidden for remote providers outside the radius', async () => {

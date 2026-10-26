@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db, lookupPostcode, type Tx } from '@kando/db'
+import { lookupPostcode, type Tx } from '@kando/db'
 import type { ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
 import { photoUrl } from './storage'
@@ -24,7 +24,7 @@ type Row = {
 
 /**
  * A published, non-suspended provider with at least one offerable service, by slug; public fields only
- * (never owner, postcode or suspension). Reads run in `tx`; eligibility needs private documents, so it uses `db`.
+ * (never owner, postcode or suspension). Everything runs in the request's `tx`; eligibility is a SECURITY DEFINER SQL function.
  * `lang` is for the translate flag (Task 8 sets `translatable`).
  */
 export async function getPublicProfile(tx: Tx, slug: string, _lang: string): Promise<ProviderDetail | null> {
@@ -35,7 +35,7 @@ export async function getPublicProfile(tx: Tx, slug: string, _lang: string): Pro
     WHERE p.slug = ${slug} AND p.status = 'published' AND p.suspended = false`)
   const p = rows[0]
   if (!p) return null
-  const ids = await offerableServiceIds(db, p.id)
+  const ids = await offerableServiceIds(tx, p.id)
   if (!ids.length) return null // same rule as search: no page until a service may be offered
 
   const [services, references, photos, place] = await Promise.all([
@@ -48,7 +48,7 @@ export async function getPublicProfile(tx: Tx, slug: string, _lang: string): Pro
       ORDER BY year DESC NULLS LAST, created_at DESC, id`),
     tx.execute<{ id: string; key: string; alt: string | null }>(sql`
       SELECT id, key, alt FROM photos WHERE provider_id = ${p.id} AND kind = 'portfolio' ORDER BY sort, created_at, id`),
-    p.base_postcode ? lookupPostcode(p.country, p.base_postcode) : null,
+    p.base_postcode ? lookupPostcode(p.country, p.base_postcode, tx) : null,
   ])
 
   return {

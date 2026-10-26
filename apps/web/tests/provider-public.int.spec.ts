@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { ProviderDetailSchema } from '@kando/contract'
 import { setStorageForTests } from '@kando/domain'
-import { cleanupUsers, memoryStorage, seedBase, seedProvider } from './helpers'
+import { cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/providers/[slug]/route')
@@ -38,7 +38,14 @@ const get = (slug: string, q = '') =>
 it('a published provider page: contract shape, place, photo urls, only offerable services', async () => {
   const res = await get('pp-a-slug', '?lang=en')
   expect(res.status).toBe(200)
-  const p = ProviderDetailSchema.parse(await res.json())
+  const raw = await res.json()
+  const text = JSON.stringify(raw)
+  for (const key of ['id', 'ownerId', 'owner_id', 'basePostcode', 'base_postcode', 'location', 'status', 'suspended']) {
+    expect(Object.keys(raw), key).not.toContain(key)
+  }
+  expect(text).not.toContain('10115')
+  expect(text).not.toMatch(/"(owner\w*|location|status|suspended|base_?[pP]ostcode)":/)
+  const p = ProviderDetailSchema.parse(raw)
   expect(p).toMatchObject({
     slug: 'pp-a-slug',
     publicName: 'Anna H.',
@@ -51,13 +58,20 @@ it('a published provider page: contract shape, place, photo urls, only offerable
   expect(p.categories).toHaveLength(1)
   expect(p.references).toEqual([expect.objectContaining({ clientName: 'Acme', year: 2024 })])
   expect(p.photos).toEqual([expect.objectContaining({ url: 'https://media.test/providers/p/one.jpg', alt: 'Anna H.' })])
-  expect(JSON.stringify(p)).not.toMatch(/10115|owner|suspended|pp-a@/)
 })
 
 it('404 when not visible: unknown, draft, or no offerable service', async () => {
   for (const s of ['nope', 'pp-draft-slug', 'pp-nodocs-slug']) {
     expect((await get(s)).status, s).toBe(404)
   }
+})
+
+it('a draft page is a 404 for its own owner too', async () => {
+  const res = await route.GET(
+    new Request('http://localhost/app-api/v1/providers/pp-draft-slug', { headers: { cookie: `uid=pp-draft:${EMAIL('pp-draft')}` } }),
+    { params: Promise.resolve({ slug: 'pp-draft-slug' }) },
+  )
+  expect(res.status).toBe(404)
 })
 
 it('unknown language is 400', async () => {

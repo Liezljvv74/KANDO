@@ -47,7 +47,7 @@ async function syncIdentity(tx: Tx, userId: string, row: Row): Promise<void> {
   const account = (await tx.select({ name: users.name }).from(users).where(eq(users.id, userId)))[0]?.name ?? ''
   const providerType = row.type === 'business' ? 'business' : 'individual'
   const name = publicNameFor({ providerType, businessName: row.businessName }, account)
-  const hit = row.basePostcode ? await lookupPostcode(row.country, row.basePostcode) : null
+  const hit = row.basePostcode ? await lookupPostcode(row.country, row.basePostcode, tx) : null
   await tx.execute(sql`SELECT set_provider_identity(${name}, ${hit?.lng ?? null}::float8, ${hit?.lat ?? null}::float8)`)
 }
 
@@ -95,7 +95,7 @@ export async function upsertMyProfile(
   const businessName = input.businessName !== undefined ? clean(input.businessName) : (existing?.businessName ?? null)
   if (type === 'business' && !businessName) fail(400, { error: 'Invalid fields', fields: ['businessName'] })
   const basePostcode = input.basePostcode !== undefined ? clean(input.basePostcode) : undefined
-  if (basePostcode && !(await lookupPostcode(existing?.country ?? 'DE', basePostcode))) {
+  if (basePostcode && !(await lookupPostcode(existing?.country ?? 'DE', basePostcode, tx))) {
     fail(400, { error: 'Unknown postcode' })
   }
   const values = {
