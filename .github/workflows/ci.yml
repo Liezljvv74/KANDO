@@ -34,15 +34,21 @@ jobs:
       - run: pnpm test
 
   mobile:
-    if: hashFiles('apps/mobile/package.json') != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: detect
+        run: echo "exists=$([ -f apps/mobile/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
+        if: steps.detect.outputs.exists == 'true'
       - uses: actions/setup-node@v4
+        if: steps.detect.outputs.exists == 'true'
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm i --frozen-lockfile
+        if: steps.detect.outputs.exists == 'true'
       - run: pnpm --filter mobile test
+        if: steps.detect.outputs.exists == 'true'
       - run: pnpm --filter mobile exec tsc --noEmit
+        if: steps.detect.outputs.exists == 'true'
