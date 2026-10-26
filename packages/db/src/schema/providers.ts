@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -11,10 +12,11 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { categories, point } from './reference'
+import { photos } from './files'
 import { users } from './users'
 
-// status, suspended, slug, public_name and location are written by the domain (set_provider_* SQL functions)
-// or staff only: see COLUMN_STAFF_ONLY in rls.ts. photo_id gets its foreign key to photos in Task 6.
+// status, suspended, slug, public_name, location and photo_id are written by the domain (set_provider_* SQL functions)
+// or staff only: see COLUMN_STAFF_ONLY in rls.ts. photo_id (FK to photos) is set through set_provider_photo.
 export const providers = pgTable(
   'providers',
   {
@@ -45,7 +47,7 @@ export const providers = pgTable(
     suspended: boolean().notNull().default(false),
     legalStatus: text('legal_status'),
     vatId: text('vat_id'),
-    photoId: uuid('photo_id'),
+    photoId: uuid('photo_id').references((): AnyPgColumn => photos.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -97,26 +99,4 @@ export const providerReferences = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('provider_references_provider_id_idx').on(t.providerId)],
-)
-
-// Uploaded verification files (the key points into the private bucket). Staff review them: owners cannot set the verdict.
-export const documents = pgTable(
-  'documents',
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    ownerId: text('owner_id')
-      .notNull()
-      .references(() => users.id),
-    requirement: text().notNull(),
-    key: text().notNull(),
-    status: text().notNull().default('pending'),
-    note: text(),
-    reviewedBy: text('reviewed_by'),
-    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    check('documents_status_check', sql`status in ('pending','approved','rejected')`),
-    index('documents_owner_id_idx').on(t.ownerId),
-  ],
 )

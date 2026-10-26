@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MyProfileSchema } from '@kando/contract'
 import { publicNameFor, slugify } from '@kando/domain'
-import { call, cleanupUsers, seedBase } from './helpers'
+import { call, givePhoto, cleanupUsers, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -35,7 +35,7 @@ const setup = async (uid: string, businessName: string) => {
   await call(profileRoute.GET, uid)
   const p = { displayName: 'Schreinerei', providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115' }
   expect((await call(profileRoute.PUT, uid, 'PUT', p)).status).toBe(201)
-  await pool.query('UPDATE providers SET photo_id = gen_random_uuid() WHERE owner_id = $1', [uid])
+  await givePhoto(uid)
   await call(services.POST, uid, 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
   return (await call(publish.POST, uid, 'POST')).status
 }

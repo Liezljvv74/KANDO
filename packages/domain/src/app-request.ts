@@ -3,12 +3,18 @@ import { EmailConflictError, ensureUser, type SessionUser } from './users'
 
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
 export type SessionResolver = (request: Request) => Promise<{ id: string; email: string } | null>
-type Opts = { auth: 'required' | 'optional'; maxBodyBytes?: number }
-type Handler = (ctx: {
+type Opts<P> = {
+  auth: 'required' | 'optional'
+  maxBodyBytes?: number
+  /** Reads and checks the body (an upload) after the session and size checks, before the transaction opens. */
+  prepare?: (request: Request) => Promise<P>
+}
+type Handler<P> = (ctx: {
   tx: Tx
   user: SessionUser | null
   request: Request
   params: Record<string, string>
+  prepared: P
 }) => Promise<Response>
 
 /**
@@ -16,7 +22,7 @@ type Handler = (ctx: {
  * session check, body-size limit, first-contact users row, one transaction as app_user, rollback on error.
  */
 export function createAppRequest(getSession: SessionResolver) {
-  return (opts: Opts, handler: Handler): RouteHandler =>
+  return <P = undefined>(opts: Opts<P>, handler: Handler<P>): RouteHandler =>
     async (request, ctx) => {
       const requestId = crypto.randomUUID()
       try {
@@ -30,9 +36,10 @@ export function createAppRequest(getSession: SessionResolver) {
             return Response.json({ error: 'Payload too large' }, { status: 413 })
           }
         }
+        const prepared = (opts.prepare ? await opts.prepare(request) : undefined) as P
         const user = session ? await ensureUser(session, request) : null
         const params = await ctx.params
-        return await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params }))
+        return await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared }))
       } catch (error) {
         // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
         if (error instanceof Response) return error

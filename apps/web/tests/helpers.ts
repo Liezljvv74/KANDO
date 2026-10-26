@@ -1,4 +1,5 @@
 import { pool } from '@kando/db'
+import type { Storage } from '@kando/domain'
 
 // Fake session: cookie "uid=<id>:<email>" is a session (each test file mocks lib/auth/server with `fakeSession`).
 export const fakeSession = async (request: Request) => {
@@ -40,6 +41,7 @@ export async function seedBase(): Promise<{ categoryId: string; docCategoryId: s
 }
 
 export async function cleanupUsers(): Promise<void> {
+  await pool.query("DELETE FROM private_files WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
   await pool.query("DELETE FROM documents WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
   await pool.query("DELETE FROM providers WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
   await pool.query("DELETE FROM users WHERE email LIKE '%@test.skilled.invalid'")
@@ -51,4 +53,30 @@ export const profile = {
   basePostcode: '10115',
   serviceRadiusKm: 25,
   worksRemotely: false,
+}
+
+/** In-memory object store: `objects` maps "bucket/key" to the bytes. Tests never touch S3. */
+export function memoryStorage(): Storage & { objects: Map<string, Buffer> } {
+  const objects = new Map<string, Buffer>()
+  return {
+    objects,
+    async put(bucket, key, body) {
+      objects.set(`${bucket}/${key}`, body)
+    },
+    getSignedUrl: async (bucket, key, seconds) => `https://signed.test/${bucket}/${key}?expires=${seconds}`,
+    async delete(bucket, key) {
+      objects.delete(`${bucket}/${key}`)
+    },
+    publicUrl: (key) => `https://media.test/${key}`,
+  }
+}
+
+/** Gives the user's provider a real profile photo row (publish needs one). */
+export async function givePhoto(uid: string): Promise<void> {
+  const p = await pool.query('SELECT id FROM providers WHERE owner_id = $1', [uid])
+  const photo = await pool.query(
+    "INSERT INTO photos (owner_id, provider_id, kind, key, width, height) VALUES ($1, $2, 'profile', $3, 1, 1) RETURNING id",
+    [uid, p.rows[0].id, `providers/${p.rows[0].id}/seed.jpg`],
+  )
+  await pool.query('UPDATE providers SET photo_id = $1 WHERE owner_id = $2', [photo.rows[0].id, uid])
 }

@@ -3,7 +3,7 @@ import { asUser, pool } from '@kando/db'
 import { MyProfileSchema } from '@kando/contract'
 import { offerableServiceIds } from '@kando/domain'
 import { sql } from 'drizzle-orm'
-import { call, cleanupUsers, profile, seedBase } from './helpers'
+import { call, givePhoto, cleanupUsers, profile, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -27,7 +27,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
   const refused = await call(publish.POST, 'pf1', 'POST')
   expect(refused.status).toBe(409)
   expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['photo', 'service'] })
-  await pool.query("UPDATE providers SET photo_id = gen_random_uuid() WHERE owner_id = 'pf1'") // Task 6 uploads for real
+  await givePhoto('pf1') // Task 6 uploads for real
   await call(services.POST, 'pf1', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
   const ok = await call(publish.POST, 'pf1', 'POST')
   expect(ok.status).toBe(200)
@@ -38,7 +38,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
 
 it('a postcode-less profile is refused unless it works remotely', async () => {
   await call(profileRoute.PUT, 'pf2', 'PUT', { displayName: 'x', providerType: 'individual' })
-  await pool.query("UPDATE providers SET photo_id = gen_random_uuid() WHERE owner_id = 'pf2'")
+  await givePhoto('pf2')
   await call(services.POST, 'pf2', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
   const refused = await call(publish.POST, 'pf2', 'POST')
   expect((await refused.json()).missing).toEqual(['location'])

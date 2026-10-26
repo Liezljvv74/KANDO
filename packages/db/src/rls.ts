@@ -9,13 +9,14 @@ export const APP_ROLE = 'app_user'
 export const PRIVATE_TABLES: Record<string, string> = {
   users: 'id = app_current_user_id()',
   documents: 'owner_id = app_current_user_id()',
+  private_files: 'owner_id = app_current_user_id()',
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
 // the set_provider_* SECURITY DEFINER functions below. Works for private and public-owned tables.
 export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   users: ['staff_role', 'suspended_until', 'suspended_reason'],
-  providers: ['status', 'suspended', 'slug', 'public_name', 'location'],
+  providers: ['status', 'suspended', 'slug', 'public_name', 'location', 'photo_id'],
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
 }
 
@@ -27,6 +28,8 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
   providers: { owner: 'owner_id = app_current_user_id()', publicRead: "status = 'published' AND suspended = false" },
   services: { owner: OWN_SERVICE, publicRead: LIVE_SERVICE },
   provider_references: { owner: OWN_SERVICE, publicRead: LIVE_SERVICE },
+  // A photo is written by its owner, on the owner's own provider only.
+  photos: { owner: `owner_id = app_current_user_id() AND ${OWN_SERVICE}`, publicRead: LIVE_SERVICE },
 }
 
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
@@ -138,8 +141,17 @@ const PROVIDER_FUNCTIONS = [
       UPDATE providers SET status = CASE WHEN p_published THEN 'published' ELSE 'draft' END, updated_at = now() WHERE id = r.id;
       RETURN true;
     END $$`,
-  `REVOKE ALL ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) FROM PUBLIC`,
-  `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) TO ${APP_ROLE}`,
+  // The profile photo: only one of the caller's own photos (or NULL to clear).
+  `CREATE OR REPLACE FUNCTION set_provider_photo(p_photo_id uuid) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      WITH u AS (
+        UPDATE providers p SET photo_id = p_photo_id, updated_at = now()
+        WHERE p.owner_id = app_current_user_id()
+          AND (p_photo_id IS NULL OR EXISTS (SELECT 1 FROM photos h WHERE h.id = p_photo_id AND h.provider_id = p.id AND h.owner_id = p.owner_id))
+        RETURNING 1)
+      SELECT EXISTS (SELECT 1 FROM u) $$`,
+  `REVOKE ALL ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text), set_provider_photo(uuid) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text), set_provider_photo(uuid) TO ${APP_ROLE}`,
 ]
 
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
