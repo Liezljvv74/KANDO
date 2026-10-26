@@ -79,11 +79,24 @@ export function needsTranslation(texts: TranslatableTexts, lang: Lang): boolean 
   return all.some((text) => text.length >= LONG_TEXT && detect(text) !== lang)
 }
 
+const MIN_SECRET = 16
+let warned = false
+/** Fail closed: without a real secret the public ip: hashes would be plain sha256(ip), reversible over the IPv4 space. */
+function requireSecret(): string {
+  const secret = process.env.NEON_AUTH_COOKIE_SECRET
+  if (secret && secret.length >= MIN_SECRET) return secret
+  if (!warned) {
+    warned = true
+    console.error('[translate] NEON_AUTH_COOKIE_SECRET is missing or shorter than 16 characters: translation is unavailable')
+  }
+  throw new TranslationUnavailable('No usable secret configured')
+}
+
 /** Callers are counted per user id; anonymous ones as a salted hash of the first x-forwarded-for entry, never the raw address. */
 export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, request: Request): string {
   if (user) return `user:${user.id}`
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-  const hash = createHash('sha256').update(`${process.env.NEON_AUTH_COOKIE_SECRET ?? ''}${ip}`).digest('hex')
+  const hash = createHash('sha256').update(`${requireSecret()}${ip}`).digest('hex')
   return `ip:${hash.slice(0, 32)}`
 }
 
@@ -95,6 +108,7 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  */
 export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lang, clientKey: string): Promise<TranslatableTexts> {
   if (!needsTranslation(texts, lang)) return texts
+  requireSecret() // before any count, insert or model call
   const flat = flatten(texts)
   const keys = Object.fromEntries(Object.keys(flat).map((id) => [id, sha256(flat[id]!)]))
   const result: Record<string, string> = {}

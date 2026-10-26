@@ -144,3 +144,26 @@ it('accepts no text from the client', async () => {
   expect(sent.bio).toBe(p.bio)
   expect(sent.displayName).toBe(`Tischlerei inject ${stamp}`)
 })
+
+const total = async () => (await pool.query('SELECT count(*)::int AS n FROM translation_requests')).rows[0].n as number
+
+it('fails closed without a usable secret: 503, no counter row, no model call', async () => {
+  const p = await provider('nosecret')
+  const f = fakeModel()
+  const keep = process.env.NEON_AUTH_COOKIE_SECRET
+  const before = await total()
+  const noSecretIp = `10.7.${stamp % 255}.${stamp % 193}`
+  try {
+    for (const secret of [undefined, 'short-secret']) {
+      if (secret === undefined) delete process.env.NEON_AUTH_COOKIE_SECRET
+      else process.env.NEON_AUTH_COOKIE_SECRET = secret
+      const r = await translate(p.slug, '?lang=de', { headers: { 'x-forwarded-for': noSecretIp } })
+      expect(r.status).toBe(503)
+      expect(r.body).toEqual({ error: 'Translation unavailable' })
+    }
+  } finally {
+    process.env.NEON_AUTH_COOKIE_SECRET = keep
+  }
+  expect(f).not.toHaveBeenCalled()
+  expect(await total()).toBe(before)
+})
