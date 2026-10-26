@@ -20,7 +20,7 @@ export default function DocumentShow() {
         <>
           <Descriptions column={1} bordered>
             <Descriptions.Item label={at('admin.field.email')}>{result.ownerEmail}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.requirement')}>{result.requirement}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.requirement')}>{at(`admin.requirement.${result.requirement}` as 'admin.requirement.permit')}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.status')}>
               <Tag>{at(`admin.status.${result.status}` as 'admin.status.pending')}</Tag>
             </Descriptions.Item>

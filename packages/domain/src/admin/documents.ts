@@ -56,6 +56,7 @@ export async function reviewDocument(tx: Tx, staff: StaffUser, id: string, input
   if (!isUuid(id)) return notFound()
   const [row] = await tx.select().from(documents).where(eq(documents.id, id)).for('update')
   if (!row) return notFound()
+  if (row.ownerId === staff.id) return fail(403, { error: 'You cannot review your own document' })
   if (row.status !== 'pending') return fail(409, { error: 'Already decided' })
   const note = input.note || null
   if (input.decision === 'rejected' && !note) return fail(400, { error: 'A reason is required' })

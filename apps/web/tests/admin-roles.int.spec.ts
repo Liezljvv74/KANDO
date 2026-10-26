@@ -43,6 +43,17 @@ it('a Reviewer cannot do Administrator actions, and nothing changes', async () =
   expect(t).toEqual({ suspended_until: null, staff_role: null })
 })
 
+it('a Reviewer cannot change or delete an existing category or page', async () => {
+  const c = await (await adminCall(list.POST, 'ar-admin', 'POST', '/x', { ...category, slug: 'ar-cat2' }, { resource: 'categories' })).json()
+  const p = await (await adminCall(list.POST, 'ar-admin', 'POST', '/x', { ...page, slug: 'ar-page2' }, { resource: 'pages' })).json()
+  const patch = (resource: string, id: string, b: object) => adminCall(item.PATCH, 'ar-rev', 'PATCH', '/x', b, { resource, id })
+  expect((await patch('categories', c.data.id, { sort: 99 })).status).toBe(403)
+  expect((await patch('pages', p.data.id, { published: true })).status).toBe(403)
+  expect((await adminCall(item.DELETE, 'ar-rev', 'DELETE', '/x', undefined, { resource: 'pages', id: p.data.id })).status).toBe(403)
+  expect((await pool.query("SELECT sort FROM categories WHERE slug = 'ar-cat2'")).rows[0].sort).toBe(1)
+  expect((await pool.query("SELECT published FROM pages WHERE slug = 'ar-page2'")).rows[0].published).toBe(false)
+})
+
 it('a Reviewer can read users and documents', async () => {
   expect((await adminCall(list.GET, 'ar-rev', 'GET', '/x', undefined, { resource: 'users' })).status).toBe(200)
   expect((await adminCall(list.GET, 'ar-rev', 'GET', '/x', undefined, { resource: 'documents' })).status).toBe(200)

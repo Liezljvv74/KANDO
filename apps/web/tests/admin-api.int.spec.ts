@@ -180,3 +180,19 @@ it('GET /me returns the staff user; unknown resources are 404', async () => {
   expect(body).toEqual({ id: 'aa-rev', email: EMAIL('aa-rev'), staffRole: 'reviewer' })
   expect((await get('nothing', 'aa-admin')).status).toBe(404)
 })
+
+it('a Reviewer cannot decide their own document', async () => {
+  const id = await doc('aa-rev')
+  const res = await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'approved' }, { id })
+  expect(res.status).toBe(403)
+  const row = (await pool.query('SELECT status, reviewed_by FROM documents WHERE id = $1', [id])).rows[0]
+  expect(row).toEqual({ status: 'pending', reviewed_by: null })
+})
+
+it('an expired suspension is not counted by the suspended filter', async () => {
+  await seedUser('aa-exp')
+  await pool.query("UPDATE users SET suspended_until = now() - interval '1 day', suspended_reason = 'old' WHERE id = 'aa-exp'")
+  const body = await (await get('users', 'aa-rev', `?pageSize=100&filter=${encodeURIComponent('{"suspended":true}')}`)).json()
+  expect(body.data.some((u: { id: string }) => u.id === 'aa-exp')).toBe(false)
+  expect(body.data.every((u: { suspendedUntil: string }) => new Date(u.suspendedUntil) > new Date())).toBe(true)
+})

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, ilike, or, sql } from 'drizzle-orm'
 import { providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { fail } from '../providers/http'
@@ -17,13 +17,13 @@ export const toAdminUser = (r: typeof users.$inferSelect): AdminUser => ({
   createdAt: r.createdAt.toISOString(),
 })
 
-/** Search by email or name; filter `suspended: true` lists users with a suspension (running or past). */
+/** Search by email or name; filter `suspended: true` lists active suspensions only (the end date is informational: a suspension stays until staff lift it). */
 export async function listUsers(tx: Tx, q: AdminListQuery) {
   const f = filterOf(q)
   const text = textOf(f.q)
   const where = and(
     text ? or(ilike(users.email, like(text)), ilike(users.name, like(text))) : undefined,
-    f.suspended === true ? isNotNull(users.suspendedUntil) : undefined,
+    f.suspended === true ? gt(users.suspendedUntil, sql`now()`) : undefined,
   )
   const total = (await tx.select({ n: count() }).from(users).where(where))[0]!.n
   const rows = await tx
@@ -38,7 +38,10 @@ export async function listUsers(tx: Tx, q: AdminListQuery) {
 
 export async function getUser(tx: Tx, id: string) {
   const row = (await tx.select().from(users).where(eq(users.id, id)))[0]
-  return row ? ok(toAdminUser(row)) : notFound()
+  if (!row) return notFound()
+  // The date has passed but the provider is still hidden: staff must lift it (no automatic expiry in Stage 1).
+  const hidden = row.suspendedUntil && row.suspendedUntil <= new Date() ? (await tx.select({ s: providers.suspended }).from(providers).where(eq(providers.ownerId, id)))[0]?.s : false
+  return ok({ ...toAdminUser(row), liftPending: !!hidden })
 }
 
 /**

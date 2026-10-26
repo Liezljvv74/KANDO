@@ -25,7 +25,7 @@ export default function ProviderShow() {
           <Descriptions column={1} bordered>
             <Descriptions.Item label={at('admin.field.name')}>{result.displayName}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.owner')}>{result.ownerEmail}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.type')}>{result.type}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.type')}>{at(`admin.type.${result.type}` as 'admin.type.private')}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.status')}>
               {at(`admin.status.${result.status}` as 'admin.status.draft')}
               {result.suspended && ` (${at('admin.status.suspended')})`}

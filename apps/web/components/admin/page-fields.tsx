@@ -10,7 +10,7 @@ export function PageFields() {
         <Input />
       </Form.Item>
       <Form.Item label={at('admin.field.kind')} name="kind" initialValue="page">
-        <Select options={[{ value: 'page' }, { value: 'post' }]} />
+        <Select options={[{ value: 'page', label: at('admin.kind.page') }, { value: 'post', label: at('admin.kind.post') }]} />
       </Form.Item>
       <Form.Item label={at('admin.status.published')} name="published" valuePropName="checked">
         <Switch />

@@ -6,6 +6,7 @@ import { Authenticated, Refine } from '@refinedev/core'
 import { ThemedLayout, RefineThemes, useNotificationProvider } from '@refinedev/antd'
 import routerProvider from '@refinedev/nextjs-router'
 import { App as AntdApp, ConfigProvider } from 'antd'
+import deDE from 'antd/locale/de_DE'
 import '@refinedev/antd/dist/reset.css'
 import { accessControlProvider, authProvider } from '../../lib/admin/auth-provider'
 import { dataProvider } from '../../lib/admin/data-provider'
@@ -33,7 +34,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <html lang="de">
       <body>
         <Suspense>
-          <ConfigProvider theme={RefineThemes.Blue}>
+          <ConfigProvider theme={RefineThemes.Blue} locale={deDE}>
             <AntdApp>
               <Refine
                 routerProvider={routerProvider}

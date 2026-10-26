@@ -18,7 +18,7 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
       const staff = await requireStaff(typeof role === 'function' ? role(params, request.method) : role)
       const queue: (() => Promise<void>)[] = []
       const response = await db.transaction((tx) => handler({ tx, staff, request, params, afterCommit: (fn) => void queue.push(fn) }))
-      for (const fn of queue) await fn().catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed`, e))
+      for (const fn of queue) await Promise.resolve().then(fn).catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed`, e))
       return response
     } catch (error) {
       // A thrown Response (401/403 from requireStaff, 400/409 from the domain) is the answer, as is; the transaction rolled back.

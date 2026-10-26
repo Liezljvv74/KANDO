@@ -20,3 +20,7 @@ pnpm --filter web dev        # website on http://localhost:3000
 ```
 
 Copy `.env.example` to `.env.local` and fill it in for anything that talks to Neon, storage, email or translation. `DATABASE_URL_TEST` defaults to `postgres://postgres:postgres@localhost:5433/kando`.
+
+## Known gaps
+
+- Suspensions do not expire by themselves: the end date is informational and a suspension stays in force until a staff member lifts it. Automatic expiry is a Stage 2 job.
