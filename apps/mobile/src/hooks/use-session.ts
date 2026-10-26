@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
-import { getLang } from '@/i18n'
+import { getLang, setLang, type Lang } from '@/i18n'
 
 type User = auth.SessionUser
 type State = { user: User | null; loading: boolean; offline: boolean }
@@ -76,6 +76,12 @@ export async function updateName(name: string) {
     // The auth account's copy is what the next app start shows; a failure only shows the old name there until the next save.
   }
   if (state.user) set({ ...state, user: { ...state.user, name } })
+}
+
+/** Switches the app language; signed in, the account follows so emails come in the same language. */
+export function chooseLanguage(lang: Lang) {
+  setLang(lang)
+  if (state.user) updateMe({ language: lang }).catch(() => {})
 }
 
 export const getSession = () => state

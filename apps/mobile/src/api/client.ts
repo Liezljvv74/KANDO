@@ -23,7 +23,16 @@ export class ApiError extends Error {
   }
 }
 
-export const getCookie = () => SecureStore.getItemAsync(SESSION_KEY)
+/** The stored cookies, or null. An unreadable store (e.g. a Keystore that cannot decrypt) counts as signed out and is cleared. */
+export async function getCookie(): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(SESSION_KEY)
+  } catch (e) {
+    if (__DEV__) console.warn('reading the session failed:', e)
+    await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => {})
+    return null
+  }
+}
 export const clearSession = () => SecureStore.deleteItemAsync(SESSION_KEY)
 
 let onUnauthorized: (() => void) | null = null
@@ -39,14 +48,26 @@ function setCookieLines(headers: Headers): string[] {
   return joined ? joined.split(/,(?=\s*[^;,=\s]+=)/) : []
 }
 
-/** Merges the answer's cookies into the stored ones: same name replaces, an empty or expired cookie is removed. */
+/**
+ * Merges the answer's cookies into the stored ones: same name replaces, an empty or expired cookie is removed.
+ * Never throws: the server has already acted (a used code, a saved profile), so a store failure must not fail the request.
+ */
 async function storeCookies(res: Response) {
+  try {
+    await mergeCookies(res)
+  } catch (e) {
+    if (__DEV__) console.warn('saving the session failed:', e)
+  }
+}
+
+async function mergeCookies(res: Response) {
   const lines = res.headers ? setCookieLines(res.headers) : []
   if (!lines.length) return
   const jar = new Map<string, string>()
   for (const pair of ((await getCookie()) ?? '').split('; ').filter(Boolean)) jar.set(pair.slice(0, pair.indexOf('=')), pair)
   for (const line of lines) {
     const [pair, ...attrs] = line.split(';').map((s) => s.trim())
+    if (!pair.includes('=') || pair.startsWith('=')) continue // malformed line
     const name = pair.slice(0, pair.indexOf('='))
     const value = pair.slice(pair.indexOf('=') + 1)
     const gone = !value || attrs.some((a) => /^max-age=\s*(0|-\d+)$/i.test(a) || (/^expires=/i.test(a) && Date.parse(a.slice(8)) <= Date.now()))

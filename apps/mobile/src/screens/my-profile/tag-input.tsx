@@ -31,7 +31,6 @@ export function TagInput({
   error?: string | null
 }) {
   const add = () => {
-    if (__DEV__) console.log(`add ${JSON.stringify(text)} to ${JSON.stringify(items)}`)
     onItems(withItem(items, text))
     onText('')
   }

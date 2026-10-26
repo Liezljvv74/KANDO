@@ -177,3 +177,22 @@ test('upload maps a network failure to ApiError network and does not retry', asy
   await expect(upload('/app-api/v1/files', file, {})).rejects.toMatchObject({ status: 0, code: 'network' })
   expect(fetchMock).toHaveBeenCalledTimes(1)
 })
+
+test('a store that cannot be read (Keystore failure) sends the request without a cookie', async () => {
+  jest.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error('Could not decrypt'))
+  fetchMock.mockResolvedValueOnce(json(200, { ok: true }))
+  await expect(api('/app-api/v1/categories')).resolves.toEqual({ ok: true })
+  expect(headers(0)).not.toHaveProperty('Cookie')
+})
+
+test('a cookie that cannot be saved does not fail a request the server already carried out', async () => {
+  jest.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore busy'))
+  fetchMock.mockResolvedValueOnce(json(200, { status: true }, ['__Secure-neon-auth.session_token=new; Path=/']))
+  await expect(api('/api/auth/email-otp/verify-email', { method: 'POST', body: {} })).resolves.toEqual({ status: true })
+})
+
+test('a malformed Set-Cookie line without "=" is skipped', async () => {
+  fetchMock.mockResolvedValueOnce(json(200, {}, ['garbage; Path=/', 'b=2; Path=/']))
+  await api('/app-api/v1/me')
+  expect(await getCookie()).toBe(`${TOKEN}; b=2`)
+})

@@ -1,10 +1,10 @@
 import * as auth from '@/api/auth'
 import * as client from '@/api/client'
 
-import { getSession, loadSession, resetSession, signIn, signOut, signUp, updateName, verify } from './use-session'
+import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, updateName, verify } from './use-session'
 
 jest.mock('@/api/auth')
-jest.mock('@/i18n', () => ({ getLang: () => 'en' }))
+jest.mock('@/i18n', () => ({ getLang: () => 'en', setLang: jest.fn() }))
 jest.mock('@/api/client', () => ({
   setOnUnauthorized: jest.fn(),
   updateMe: jest.fn(),
@@ -107,4 +107,13 @@ test('updateName saves the account name in both places and updates the session u
   api.updateMe.mockRejectedValueOnce(new client.ApiError(400, 'Invalid name'))
   await expect(updateName('')).rejects.toMatchObject({ status: 400 })
   expect(getSession().user?.name).toBe('Anna Berg')
+})
+
+test('switching the language also saves it for emails, but only while signed in', async () => {
+  chooseLanguage('de')
+  expect(api.updateMe).not.toHaveBeenCalled()
+  a.signIn.mockResolvedValueOnce(user)
+  await signIn('a@b.de', 'secret123')
+  chooseLanguage('en')
+  expect(api.updateMe).toHaveBeenCalledWith({ language: 'en' })
 })

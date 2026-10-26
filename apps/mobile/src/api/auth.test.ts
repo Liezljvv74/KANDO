@@ -133,3 +133,14 @@ test('updateUserName changes the name on the auth account', async () => {
   await updateUserName('Anna Berg')
   expect(sent()).toMatchObject({ url: 'https://skillweb.space/api/auth/update-user', method: 'POST', body: { name: 'Anna Berg' } })
 })
+
+test('signUp and signIn start without an old stored session', async () => {
+  await SecureStore.setItemAsync(SESSION_KEY, 'stale=1')
+  fetchMock.mockResolvedValueOnce(json(200, { user }))
+  await signIn('a@b.de', 'secret123')
+  expect(sent().headers).not.toHaveProperty('Cookie')
+  await SecureStore.setItemAsync(SESSION_KEY, 'stale=1')
+  fetchMock.mockResolvedValueOnce(json(200, { user }))
+  await signUp('a@b.de', 'secret123', 'Anna')
+  expect(sent(1).headers).not.toHaveProperty('Cookie')
+})

@@ -6,11 +6,16 @@ export type SessionUser = { id: string; name: string; email: string; emailVerifi
 // Better Auth (Neon Auth) through the web app's /api/auth catch-all. Cookies are stored and sent by `api`.
 const post = <T>(path: string, body: object, detached?: string) => api<T>(`/api/auth${path}`, { method: 'POST', body, detached })
 
-export const signUp = async (email: string, password: string, name: string) =>
-  (await post<{ user: SessionUser }>('/sign-up/email', { email, password, name })).user
+/** Sign-up and sign-in start from a clean store, so cookies of an earlier account never mix with the new session. */
+export async function signUp(email: string, password: string, name: string) {
+  await clearSession().catch(() => {})
+  return (await post<{ user: SessionUser }>('/sign-up/email', { email, password, name })).user
+}
 
-export const signIn = async (email: string, password: string) =>
-  (await post<{ user: SessionUser }>('/sign-in/email', { email, password })).user
+export async function signIn(email: string, password: string) {
+  await clearSession().catch(() => {})
+  return (await post<{ user: SessionUser }>('/sign-in/email', { email, password })).user
+}
 
 /** Signed out on the phone at once; the server call is not awaited, so a slow or unreachable server never blocks it. */
 export async function signOut(): Promise<void> {
