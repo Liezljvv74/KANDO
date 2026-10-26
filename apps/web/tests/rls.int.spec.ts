@@ -25,8 +25,8 @@ it('app_user cannot read a private table row of another user', async () => {
 })
 
 it('public reference tables are readable by app_user and not writable', async () => {
-  const r = await asUser(null, (tx) => tx.execute(sql`SELECT count(*)::int AS n FROM countries`))
-  expect(r.rows).toHaveLength(1)
+  const r = await asUser(null, (tx) => tx.execute(sql`SELECT code FROM countries WHERE code = 'DE'`))
+  expect(r.rows).toEqual([{ code: 'DE' }])
   await expect(
     asUser(null, (tx) => tx.execute(sql`INSERT INTO currencies (code, minor_units) VALUES ('XXX', 2)`)),
   ).rejects.toMatchObject({ cause: { message: expect.stringContaining("permission denied") } })
