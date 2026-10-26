@@ -7,6 +7,7 @@ export async function requireStaff(role: StaffRole | 'any'): Promise<StaffUser> 
   const { data: session } = await getAuth().getSession()
   if (!session?.user) throw Response.json({ error: 'Unauthorized' }, { status: 401 })
   const row = await db.query.users.findFirst({ where: (u, { eq }) => eq(u.id, session.user.id) })
-  if (!row || !staffAllows(row.staffRole, role)) throw Response.json({ error: 'Forbidden' }, { status: 403 })
+  const suspended = !!row?.suspendedUntil && row.suspendedUntil > new Date()
+  if (!row || suspended || !staffAllows(row.staffRole, role)) throw Response.json({ error: 'Forbidden' }, { status: 403 })
   return { id: row.id, email: row.email, staffRole: row.staffRole as StaffRole }
 }

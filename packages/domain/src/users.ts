@@ -6,6 +6,13 @@ export type SessionUser = { id: string; email: string; language: Lang; isProvide
 export type StaffRole = 'admin' | 'reviewer'
 export type StaffUser = { id: string; email: string; staffRole: StaffRole }
 
+/** The session email already belongs to a users row with a different id (a recreated Neon Auth account). */
+export class EmailConflictError extends Error {
+  constructor() {
+    super('Email belongs to another account')
+  }
+}
+
 /** Language from ?lang, else the first supported tag of Accept-Language, else the default. */
 export function requestLang(request: Request): Lang {
   const q = new URL(request.url).searchParams.get('lang')
@@ -19,10 +26,16 @@ export function requestLang(request: Request): Lang {
 
 /** First contact creates the users row (owner connection); later calls return the stored row. */
 export async function ensureUser(session: { id: string; email: string }, request: Request): Promise<SessionUser> {
-  await db
-    .insert(users)
-    .values({ id: session.id, email: session.email, language: requestLang(request) })
-    .onConflictDoNothing({ target: users.id })
+  try {
+    await db
+      .insert(users)
+      .values({ id: session.id, email: session.email, language: requestLang(request) })
+      .onConflictDoUpdate({ target: users.id, set: { email: session.email } }) // keeps a Neon Auth email change in sync
+  } catch (error) {
+    const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
+    if (cause?.code === '23505') throw new EmailConflictError()
+    throw error
+  }
   const row = (await db.select().from(users).where(eq(users.id, session.id)))[0]!
   return {
     id: row.id,

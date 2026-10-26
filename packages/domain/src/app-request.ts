@@ -1,5 +1,5 @@
 import { asUser, type Tx } from '@kando/db'
-import { ensureUser, type SessionUser } from './users'
+import { EmailConflictError, ensureUser, type SessionUser } from './users'
 
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
 export type SessionResolver = (request: Request) => Promise<{ id: string; email: string } | null>
@@ -34,6 +34,10 @@ export function createAppRequest(getSession: SessionResolver) {
         const params = await ctx.params
         return await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params }))
       } catch (error) {
+        if (error instanceof EmailConflictError) {
+          console.error(`[app-request ${requestId}] email conflict`)
+          return Response.json({ error: error.message }, { status: 409 })
+        }
         console.error(`[app-request ${requestId}] ${request.method} ${new URL(request.url).pathname}`, error)
         return Response.json({ error: 'Server error' }, { status: 500 })
       }

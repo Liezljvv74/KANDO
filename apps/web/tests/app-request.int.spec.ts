@@ -100,3 +100,24 @@ it('app_user cannot write staff columns of its own row', async () => {
   expect((await h(as('ua'), ctx)).status).toBe(500)
   expect((await pool.query("SELECT staff_role FROM users WHERE id='ua'")).rows[0].staff_role).toBeNull()
 })
+
+it('first contact with a changed email updates the row', async () => {
+  await me(as('ue'), ctx)
+  const res = await me(
+    new Request('http://localhost/x', { headers: { cookie: 'uid=ue:ue-new@test.skilled.invalid' } }),
+    ctx,
+  )
+  expect(res.status).toBe(200)
+  expect((await pool.query("SELECT email FROM users WHERE id='ue'")).rows[0].email).toBe('ue-new@test.skilled.invalid')
+})
+
+it('a second id with the same email gets 409 and no row is written', async () => {
+  const before = await count()
+  const res = await me(
+    new Request('http://localhost/x', { headers: { cookie: 'uid=other:ua@test.skilled.invalid' } }),
+    ctx,
+  )
+  expect(res.status).toBe(409)
+  expect(await res.json()).toEqual({ error: 'Email belongs to another account' })
+  expect(await count()).toBe(before)
+})
