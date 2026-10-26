@@ -1,0 +1,39 @@
+import { eq } from 'drizzle-orm'
+import { db, users } from '@kando/db'
+import { DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
+
+export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean }
+export type StaffRole = 'admin' | 'reviewer'
+export type StaffUser = { id: string; email: string; staffRole: StaffRole }
+
+/** Language from ?lang, else the first supported tag of Accept-Language, else the default. */
+export function requestLang(request: Request): Lang {
+  const q = new URL(request.url).searchParams.get('lang')
+  if (isLang(q)) return q
+  for (const part of (request.headers.get('accept-language') ?? '').split(',')) {
+    const tag = part.split(';')[0]!.trim().toLowerCase().split('-')[0]!
+    if (isLang(tag)) return tag
+  }
+  return DEFAULT_LANG
+}
+
+/** First contact creates the users row (owner connection); later calls return the stored row. */
+export async function ensureUser(session: { id: string; email: string }, request: Request): Promise<SessionUser> {
+  await db
+    .insert(users)
+    .values({ id: session.id, email: session.email, language: requestLang(request) })
+    .onConflictDoNothing({ target: users.id })
+  const row = (await db.select().from(users).where(eq(users.id, session.id)))[0]!
+  return {
+    id: row.id,
+    email: row.email,
+    language: isLang(row.language) ? row.language : DEFAULT_LANG,
+    isProvider: row.isProvider,
+  }
+}
+
+/** Administrator passes everything; Reviewer passes 'reviewer' and 'any'. */
+export function staffAllows(staffRole: string | null, role: StaffRole | 'any'): boolean {
+  if (staffRole === 'admin') return true
+  return staffRole === 'reviewer' && (role === 'reviewer' || role === 'any')
+}

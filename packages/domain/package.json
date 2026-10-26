@@ -7,5 +7,10 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kando/db": "workspace:*",
+    "@kando/i18n": "workspace:*",
+    "drizzle-orm": "0.45.4"
   }
 }

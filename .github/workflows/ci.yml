@@ -21,6 +21,8 @@ jobs:
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5433/kando
+      NEON_AUTH_BASE_URL: ${{ secrets.NEON_AUTH_BASE_URL }}
+      NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

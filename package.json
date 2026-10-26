@@ -2,7 +2,9 @@
   "name": "kando",
   "private": true,
   "packageManager": "pnpm@10.33.0",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
@@ -14,6 +16,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
+    "@neon/config": "1.9.4",
     "eslint": "9.39.5",
     "prettier": "3.9.10",
     "typescript": "5.9.3",

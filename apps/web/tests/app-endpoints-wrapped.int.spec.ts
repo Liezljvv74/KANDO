@@ -1,0 +1,27 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { expect, it } from 'vitest'
+
+const root = join(__dirname, '../app/app-api')
+const routes = (dir: string): string[] =>
+  readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n)
+    return statSync(p).isDirectory() ? routes(p) : n === 'route.ts' ? [p] : []
+  })
+
+it('every route file under app/app-api exports handlers built with appRequest', () => {
+  const files = routes(root)
+  expect(files.length).toBeGreaterThan(0)
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8')
+    const exported = [...src.matchAll(/export\s+(?:async\s+)?(?:const|function)\s+(\w+)/g)].map((m) => m[1]!)
+    const methods = exported.filter((n) => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(n))
+    expect(methods.length, `${file} exports no HTTP method`).toBeGreaterThan(0)
+    // anything else exported (besides route config) could bypass the wrapper
+    expect(exported.filter((n) => !methods.includes(n) && !['runtime', 'dynamic', 'maxDuration'].includes(n)), file).toEqual([])
+    for (const m of methods) {
+      expect(src, `${file}: ${m}`).toMatch(new RegExp(`export\\s+const\\s+${m}\\s*=\\s*appRequest\\(`))
+    }
+    expect(/export\s*\{|export\s+default/.test(src), `${file} re-exports`).toBe(false)
+  }
+})

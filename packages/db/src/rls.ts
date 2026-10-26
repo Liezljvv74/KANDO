@@ -1,4 +1,4 @@
-import { getTableName, is, sql } from 'drizzle-orm'
+import { getTableColumns, getTableName, is, sql } from 'drizzle-orm'
 import { PgTable } from 'drizzle-orm/pg-core'
 import * as schema from './schema'
 
@@ -6,7 +6,14 @@ import * as schema from './schema'
 export const APP_ROLE = 'app_user'
 
 // Private table → ownership expression. Every new private table goes here, plus an isolation test.
-export const PRIVATE_TABLES: Record<string, string> = {}
+export const PRIVATE_TABLES: Record<string, string> = {
+  users: 'id = app_current_user_id()',
+}
+
+// Columns app_user may not insert or update (staff write them on the owner connection), per table.
+export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
+  users: ['staff_role', 'suspended_until', 'suspended_reason'],
+}
 
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
 export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: string }> = {}
@@ -43,6 +50,22 @@ export function classifyTables(): { unclassified: string[]; duplicated: string[]
   return { unclassified: names.filter((n) => count(n) === 0), duplicated: names.filter((n) => count(n) > 1) }
 }
 
+// A table-level grant cannot be narrowed by a column revoke: drop it and grant the allowed columns.
+function columnRestrictions(table: string): string[] {
+  const blocked = COLUMN_STAFF_ONLY[table]
+  if (!blocked) return []
+  const t = (Object.values(schema) as unknown[]).find((x) => is(x, PgTable) && getTableName(x as PgTable) === table)
+  const allowed = Object.values(getTableColumns(t as PgTable))
+    .map((c) => c.name)
+    .filter((n) => !blocked.includes(n))
+    .map((n) => `"${n}"`)
+    .join(', ')
+  return [
+    `REVOKE INSERT, UPDATE ON "${table}" FROM ${APP_ROLE}`,
+    `GRANT INSERT (${allowed}), UPDATE (${allowed}) ON "${table}" TO ${APP_ROLE}`,
+  ]
+}
+
 function policyStatements(table: string): string[] {
   const t = `"${table}"`
   const drops = POLICY_NAMES.map((name) => `DROP POLICY IF EXISTS ${name} ON ${t}`)
@@ -51,6 +74,7 @@ function policyStatements(table: string): string[] {
   if (priv) {
     return [
       `GRANT INSERT, UPDATE, DELETE ON ${t} TO ${APP_ROLE}`,
+      ...columnRestrictions(table),
       ...head,
       `CREATE POLICY owner_only ON ${t} TO ${APP_ROLE} USING (${priv}) WITH CHECK (${priv})`,
     ]

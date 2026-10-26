@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@kando/db": "workspace:*",
+    "@kando/domain": "workspace:*",
+    "@kando/i18n": "workspace:*",
+    "@neondatabase/auth": "0.7.0-beta",
     "drizzle-orm": "0.45.4",
     "next": "16.4.3",
     "react": "19.3.1",
