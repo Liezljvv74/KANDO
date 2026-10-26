@@ -159,6 +159,6 @@ describe('renderMarkdown', () => {
     expect(renderMarkdown('[a](https://example.com)')).toContain('rel="nofollow ugc"')
     expect(renderMarkdown('[a](/agb)')).not.toContain('rel=')
     expect(renderMarkdown('[a](//evil.example)')).not.toContain('href')
-    expect(renderMarkdown('[a](/\evil.example)')).not.toContain('href')
+    expect(renderMarkdown('[a](/\\\\evil.example)')).not.toContain('href')
   })
 })
