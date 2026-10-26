@@ -20,7 +20,7 @@ function compose(lang: Lang, template: Template, params: { requirement: string; 
   const key = template === 'document-approved' ? 'email.documentApproved' : 'email.documentRejected'
   const document = t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1])
   const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '' })}\n\n${APP_LINK}`
-  const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>')}</p>`
+  const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   return { subject: t(lang, `${key}.subject` as Parameters<typeof t>[1]), text, html }
 }
 

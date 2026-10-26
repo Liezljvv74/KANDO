@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
 import { clearOutbox, outboxForTests } from '@kando/domain'
@@ -16,6 +16,9 @@ const store = memoryStorage()
 let categoryId: string
 let docCategoryId: string
 let providerId: string
+beforeEach(() => vi.stubEnv('RESEND_API_KEY', ''))
+afterEach(() => vi.unstubAllEnvs())
+
 beforeAll(async () => {
   setStorageForTests(store)
   await seedUser('aa-admin', 'admin')
