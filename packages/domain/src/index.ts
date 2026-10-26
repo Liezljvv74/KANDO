@@ -1,2 +1,7 @@
 export * from './users'
 export * from './app-request'
+export * from './providers/eligibility'
+export * from './providers/items'
+export * from './providers/profile'
+export * from './providers/public-name'
+export * from './providers/slug'

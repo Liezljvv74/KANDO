@@ -39,6 +39,7 @@ export const ProfileInputSchema = z
     worksRemotely: z.boolean(),
   })
   .partial()
+export type ProfileInput = z.infer<typeof ProfileInputSchema>
 
 export const OwnServiceSchema = z.object({
   id: z.string(),
@@ -72,6 +73,7 @@ export const ServiceInputSchema = z
   })
 export type ServiceInput = z.infer<typeof ServiceInputSchema>
 export const ServicePatchSchema = z.object(serviceFields).partial()
+export type ServicePatch = z.infer<typeof ServicePatchSchema>
 
 export const OwnReferenceSchema = z.object({
   id: z.string(),
@@ -91,7 +93,9 @@ export const ReferenceInputSchema = z.object({
     .refine((y) => y <= new Date().getFullYear(), 'Year is in the future')
     .nullish(),
 })
+export type ReferenceInput = z.infer<typeof ReferenceInputSchema>
 export const ReferencePatchSchema = ReferenceInputSchema.partial()
+export type ReferencePatch = z.infer<typeof ReferencePatchSchema>
 
 export const PhotoKindSchema = z.enum(['profile', 'portfolio'])
 export const PhotoSchema = z.object({

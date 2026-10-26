@@ -1,7 +1,7 @@
 import { customType, index, integer, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
-const point = customType<{ data: { lng: number; lat: number }; driverData: string }>({
+export const point = customType<{ data: { lng: number; lat: number }; driverData: string }>({
   dataType: () => 'geometry(Point,4326)',
 })
 

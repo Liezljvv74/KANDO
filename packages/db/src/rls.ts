@@ -8,15 +8,26 @@ export const APP_ROLE = 'app_user'
 // Private table → ownership expression. Every new private table goes here, plus an isolation test.
 export const PRIVATE_TABLES: Record<string, string> = {
   users: 'id = app_current_user_id()',
+  documents: 'owner_id = app_current_user_id()',
 }
 
-// Columns app_user may not insert or update (staff write them on the owner connection), per table.
+// Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
+// the set_provider_* SECURITY DEFINER functions below. Works for private and public-owned tables.
 export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   users: ['staff_role', 'suspended_until', 'suspended_reason'],
+  providers: ['status', 'suspended', 'slug', 'public_name', 'location'],
+  documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
 }
 
+const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
+const LIVE_SERVICE = "EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND p.suspended = false)"
+
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
-export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: string }> = {}
+export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: string }> = {
+  providers: { owner: 'owner_id = app_current_user_id()', publicRead: "status = 'published' AND suspended = false" },
+  services: { owner: OWN_SERVICE, publicRead: LIVE_SERVICE },
+  provider_references: { owner: OWN_SERVICE, publicRead: LIVE_SERVICE },
+}
 
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
 export const INSERT_ONLY_TABLES: string[] = []
@@ -84,6 +95,7 @@ function policyStatements(table: string): string[] {
     const { owner, publicRead } = pub
     return [
       `GRANT INSERT, UPDATE, DELETE ON ${t} TO ${APP_ROLE}`,
+      ...columnRestrictions(table),
       ...head,
       `CREATE POLICY public_read ON ${t} FOR SELECT TO ${APP_ROLE} USING ((${publicRead}) OR (${owner}))`,
       `CREATE POLICY owner_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (${owner})`,
@@ -101,6 +113,34 @@ function policyStatements(table: string): string[] {
   }
   throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES or INSERT_ONLY_TABLES`)
 }
+
+// The only write path to a provider's domain-only columns. SECURITY DEFINER (runs as the table owner, past RLS) but
+// each one touches just the caller's own row: owner_id = app_current_user_id() is in the statement itself.
+const PROVIDER_FUNCTIONS = [
+  `CREATE OR REPLACE FUNCTION set_provider_identity(p_public_name text, p_lng float8, p_lat float8) RETURNS void
+    LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+      UPDATE providers SET public_name = p_public_name, updated_at = now(),
+        location = CASE WHEN p_lng IS NULL OR p_lat IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326) END
+      WHERE owner_id = app_current_user_id() $$`,
+  // Publishing assigns the slug once (base, base-2, base-3 ...) and keeps it; false: no profile, or suspended.
+  `CREATE OR REPLACE FUNCTION set_provider_published(p_published boolean, p_slug_base text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+    DECLARE r providers; s text; n int := 1;
+    BEGIN
+      SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;
+      IF NOT FOUND THEN RETURN false; END IF;
+      IF p_published AND r.suspended THEN RETURN false; END IF;
+      IF p_published AND r.slug IS NULL THEN
+        s := p_slug_base;
+        WHILE EXISTS (SELECT 1 FROM providers WHERE slug = s) LOOP n := n + 1; s := p_slug_base || '-' || n; END LOOP;
+        UPDATE providers SET slug = s WHERE id = r.id;
+      END IF;
+      UPDATE providers SET status = CASE WHEN p_published THEN 'published' ELSE 'draft' END, updated_at = now() WHERE id = r.id;
+      RETURN true;
+    END $$`,
+  `REVOKE ALL ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) TO ${APP_ROLE}`,
+]
 
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
@@ -127,6 +167,7 @@ export function rlsStatements(
       END LOOP;
     END $$`,
     ...policies,
+    ...PROVIDER_FUNCTIONS,
   ]
 }
 

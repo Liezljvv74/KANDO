@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@kando/contract": "workspace:*",
     "@kando/db": "workspace:*",
     "@kando/i18n": "workspace:*",
     "drizzle-orm": "0.45.4"

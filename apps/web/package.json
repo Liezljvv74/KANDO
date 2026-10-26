@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@kando/contract": "workspace:*",
     "@kando/db": "workspace:*",
     "@kando/domain": "workspace:*",
     "@kando/i18n": "workspace:*",
@@ -21,7 +22,6 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@kando/contract": "workspace:*",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
