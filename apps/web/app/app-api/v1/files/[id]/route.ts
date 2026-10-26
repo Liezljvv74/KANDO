@@ -9,6 +9,6 @@ export const GET = appRequest({ auth: 'required' }, async ({ tx, user, params })
 })
 
 /** An uploaded file no check uses yet (e.g. after a failed submit). */
-export const DELETE = appRequest({ auth: 'required' }, async ({ tx, user, params }) =>
-  (await deleteFile(tx, user!.id, params.id!)) ? new Response(null, { status: 204 }) : notFound(),
+export const DELETE = appRequest({ auth: 'required' }, async ({ tx, user, params, afterCommit }) =>
+  (await deleteFile(tx, user!.id, params.id!, afterCommit)) ? new Response(null, { status: 204 }) : notFound(),
 )

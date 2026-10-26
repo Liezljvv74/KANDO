@@ -96,7 +96,7 @@ it('RLS: documents are private and the verdict is staff-only', async () => {
     asUser('pf1', (tx) => tx.execute(sql`UPDATE documents SET status = 'approved' WHERE owner_id = 'pf1'`)),
   ).rejects.toMatchObject(denied('permission denied'))
   const ins = await asUser('pf1', (tx) =>
-    tx.execute(sql`INSERT INTO documents (owner_id, requirement, key) VALUES ('pf1', 'police-certificate', 'k2') RETURNING status`),
+    tx.execute(sql`INSERT INTO documents (owner_id, requirement, key) VALUES ('pf1', 'permit', 'k2') RETURNING status`),
   )
   expect(ins.rows[0]).toEqual({ status: 'pending' })
   await expect(

@@ -29,7 +29,10 @@ function s3Storage(): Storage {
     async delete(Bucket, Key) {
       await client.send(new DeleteObjectCommand({ Bucket, Key }))
     },
-    publicUrl: (key) => `${endpoint?.replace(/\/$/, '')}/${mediaBucket()}/${key}`,
+    publicUrl(key) {
+      if (!endpoint) throw new Error('AWS_ENDPOINT is not set')
+      return `${endpoint.replace(/\/$/, '')}/${mediaBucket()}/${key}`
+    },
   }
 }
 
@@ -41,3 +44,9 @@ export const setStorageForTests = (impl: Storage | undefined) => {
 }
 
 export const photoUrl = (key: string): string => storage().publicUrl(key)
+
+/** Deletes an object; a failure is logged with the key (an orphaned object), never thrown. */
+export const removeObject = (bucket: string, key: string): Promise<void> =>
+  storage()
+    .delete(bucket, key)
+    .catch((e) => console.error(`[storage] could not delete ${bucket}/${key}`, e))

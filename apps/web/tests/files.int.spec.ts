@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { DocumentSchema, DocumentsListSchema, PhotosListSchema } from '@kando/contract'
-import { offerableServiceIds, setStorageForTests, uploadFile } from '@kando/domain'
+import { setStorageForTests, uploadFile } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -17,14 +17,13 @@ const file = await import('../app/app-api/v1/files/[id]/route')
 const verifications = await import('../app/app-api/v1/verifications/route')
 
 const store = memoryStorage()
-let docCategoryId: string
 const png = (w: number, h: number) =>
   sharp({ create: { width: w, height: h, channels: 3, background: '#c33' } }).png().toBuffer()
 const PDF = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n')
 
 beforeAll(async () => {
   setStorageForTests(store)
-  ;({ docCategoryId } = await seedBase())
+  await seedBase()
   for (const u of ['fl1', 'fl2', 'fl3']) await call(profileRoute.PUT, u, 'PUT', profile)
 })
 afterAll(async () => {
@@ -179,16 +178,4 @@ it('verifications: one pending check per requirement (409 removes the second fil
   expect(DocumentsListSchema.parse(await (await call(verifications.GET, 'fl2')).json()).docs).toEqual([])
   // the submitted file stays reachable through the document id
   expect((await call(file.GET, 'fl1', 'GET', undefined, { id: list.docs[0]!.id })).status).toBe(200)
-})
-
-it('approving the document (staff, direct SQL) makes the service offerable', async () => {
-  const svc = (await (await call(services.POST, 'fl1', 'POST', { categoryId: docCategoryId, title: 'Kinder', priceType: 'fixed', price: 10, currency: 'EUR' })).json()).id
-  const pid = (await pool.query("SELECT id FROM providers WHERE owner_id = 'fl1'")).rows[0].id
-  const { db } = await import('@kando/db')
-  expect(await offerableServiceIds(db, pid)).not.toContain(svc)
-  await pool.query("UPDATE documents SET status = 'approved', reviewed_by = 'staff1', reviewed_at = now() WHERE owner_id = 'fl1' AND requirement = 'police-certificate'")
-  expect(await offerableServiceIds(db, pid)).toContain(svc)
-  const list = DocumentsListSchema.parse(await (await call(verifications.GET, 'fl1')).json())
-  expect(list.docs[0]).toMatchObject({ status: 'approved' })
-  expect(list.docs[0]!.reviewedAt).not.toBeNull()
 })

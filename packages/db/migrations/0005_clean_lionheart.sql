@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "documents_one_pending_idx" ON "documents" USING btree ("owner_id","requirement") WHERE status = 'pending';

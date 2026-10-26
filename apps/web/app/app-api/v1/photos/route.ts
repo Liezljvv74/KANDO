@@ -1,4 +1,4 @@
-import { PhotosListSchema } from '@kando/contract'
+import { PhotoSchema, PhotosListSchema } from '@kando/contract'
 import { addPhoto, listPhotos, MAX_PHOTO_BYTES, preparePhoto } from '@kando/domain'
 import { appRequest } from '../../../../lib/app-request'
 
@@ -9,5 +9,9 @@ export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) =>
 // Room for the multipart framing on top of the photo itself.
 export const POST = appRequest(
   { auth: 'required', maxBodyBytes: MAX_PHOTO_BYTES + 65_536, prepare: preparePhoto },
-  async ({ tx, user, prepared }) => Response.json(await addPhoto(tx, user!.id, prepared), { status: 201 }),
+  async ({ tx, user, prepared, afterCommit }) => {
+    const created = await addPhoto(tx, user!.id, prepared, afterCommit)
+    PhotoSchema.parse(created) // the answer also carries width and height
+    return Response.json(created, { status: 201 })
+  },
 )

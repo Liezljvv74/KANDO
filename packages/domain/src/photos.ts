@@ -5,7 +5,8 @@ import { photos, type Tx } from '@kando/db'
 import type { Photo } from '@kando/contract'
 import { fail } from './providers/http'
 import { lockProfile, ownProvider } from './providers/profile'
-import { mediaBucket, photoUrl, storage } from './storage'
+import type { AfterCommit } from './app-request'
+import { mediaBucket, photoUrl, removeObject, storage } from './storage'
 
 export const MAX_PORTFOLIO_PHOTOS = 12
 export const MAX_PHOTO_BYTES = 10_000_000
@@ -58,7 +59,7 @@ export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
 }
 
 /** Stores the photo (object first, then the row; a failed insert removes the object). A profile photo replaces the old one. */
-export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto) {
+export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCommit: AfterCommit) {
   await lockProfile(tx, userId)
   const profile = await ownProvider(tx, userId)
   if (!profile) return fail(409, { error: 'Create your profile first' })
@@ -84,17 +85,17 @@ export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto) {
         .delete(photos)
         .where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'), ne(photos.id, row!.id)))
         .returning({ key: photos.key })
-      for (const o of old) await storage().delete(mediaBucket(), o.key).catch(() => {})
+      for (const o of old) afterCommit(() => removeObject(mediaBucket(), o.key)) // only once the new photo is committed
     }
     return toPhoto(row!)
   } catch (e) {
-    await storage().delete(mediaBucket(), key).catch(() => {})
+    await removeObject(mediaBucket(), key)
     throw e
   }
 }
 
 /** Deletes one of the caller's photos; false when it is not theirs. 409 for the profile photo of a published profile. */
-export async function deletePhoto(tx: Tx, userId: string, id: string): Promise<boolean> {
+export async function deletePhoto(tx: Tx, userId: string, id: string, afterCommit: AfterCommit): Promise<boolean> {
   await lockProfile(tx, userId) // serialises with publish
   const row = UUID.test(id)
     ? (await tx.select().from(photos).where(and(eq(photos.id, id), eq(photos.ownerId, userId))))[0]
@@ -103,6 +104,6 @@ export async function deletePhoto(tx: Tx, userId: string, id: string): Promise<b
   const profile = await ownProvider(tx, userId)
   if (profile?.status === 'published' && profile.photoId === id) fail(409, { error: 'Profile photo required while published' })
   await tx.delete(photos).where(eq(photos.id, id)) // providers.photo_id is cleared by its FK
-  await storage().delete(mediaBucket(), row.key).catch(() => {})
+  afterCommit(() => removeObject(mediaBucket(), row.key))
   return true
 }

@@ -3,6 +3,7 @@ import { EmailConflictError, ensureUser, type SessionUser } from './users'
 
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
 export type SessionResolver = (request: Request) => Promise<{ id: string; email: string } | null>
+export type AfterCommit = (fn: () => Promise<void>) => void
 type Opts<P> = {
   auth: 'required' | 'optional'
   maxBodyBytes?: number
@@ -15,6 +16,8 @@ type Handler<P> = (ctx: {
   request: Request
   params: Record<string, string>
   prepared: P
+  /** Queues work (storage deletes) that must only happen once the transaction has committed. */
+  afterCommit: AfterCommit
 }) => Promise<Response>
 
 /**
@@ -39,7 +42,12 @@ export function createAppRequest(getSession: SessionResolver) {
         const prepared = (opts.prepare ? await opts.prepare(request) : undefined) as P
         const user = session ? await ensureUser(session, request) : null
         const params = await ctx.params
-        return await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared }))
+        const queue: (() => Promise<void>)[] = []
+        const afterCommit: AfterCommit = (fn) => void queue.push(fn)
+        const response = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit }))
+        // The transaction has committed: only now touch storage. A failing task is logged, never turns the answer into a 500.
+        for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed`, e))
+        return response
       } catch (error) {
         // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
         if (error instanceof Response) return error

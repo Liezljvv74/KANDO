@@ -4,9 +4,11 @@ import { documents, privateFiles, type Tx } from '@kando/db'
 import type { Document } from '@kando/contract'
 import { fail } from './providers/http'
 import { lockProfile } from './providers/profile'
-import { documentsBucket, storage } from './storage'
+import type { AfterCommit } from './app-request'
+import { documentsBucket, removeObject, storage } from './storage'
 
 export const MAX_DOCUMENT_BYTES = 4_500_000
+export const MAX_PENDING_UPLOADS = 10
 export const REQUIREMENTS = ['police-certificate', 'permit']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -23,13 +25,16 @@ export async function preparePdf(request: Request): Promise<Buffer> {
 
 /** Stores the PDF in the private bucket (object first; a failed insert removes it). */
 export async function uploadFile(tx: Tx, userId: string, pdf: Buffer): Promise<{ id: string }> {
+  await lockProfile(tx, userId) // per user: concurrent uploads cannot pass the cap together
+  const pending = (await tx.select({ n: sql<number>`count(*)::int` }).from(privateFiles).where(eq(privateFiles.ownerId, userId)))[0]!.n
+  if (pending >= MAX_PENDING_UPLOADS) return fail(409, { error: 'Too many pending uploads' })
   const key = `documents/${userId}/${randomUUID()}.pdf`
   await storage().put(documentsBucket(), key, pdf, 'application/pdf')
   try {
     const [row] = await tx.insert(privateFiles).values({ ownerId: userId, key }).returning({ id: privateFiles.id })
     return { id: row!.id }
   } catch (e) {
-    await storage().delete(documentsBucket(), key).catch(() => {})
+    await removeObject(documentsBucket(), key)
     throw e
   }
 }
@@ -44,12 +49,12 @@ export async function fileLink(tx: Tx, userId: string, id: string): Promise<stri
 }
 
 /** Deletes an uploaded file that no check uses yet; false when it is not the caller's. */
-export async function deleteFile(tx: Tx, userId: string, id: string): Promise<boolean> {
+export async function deleteFile(tx: Tx, userId: string, id: string, afterCommit: AfterCommit): Promise<boolean> {
   const row = UUID.test(id)
     ? (await tx.delete(privateFiles).where(and(eq(privateFiles.id, id), eq(privateFiles.ownerId, userId))).returning({ key: privateFiles.key }))[0]
     : undefined
   if (!row) return false
-  await storage().delete(documentsBucket(), row.key).catch(() => {})
+  afterCommit(() => removeObject(documentsBucket(), row.key))
   return true
 }
 
@@ -72,7 +77,7 @@ export async function listDocuments(tx: Tx, userId: string): Promise<Document[]>
  * Opens a check for an uploaded file. 400 for an unknown requirement or file; 409 when a check for it is already
  * pending: then the file is removed (that answer is returned, not thrown, so the removal commits).
  */
-export async function submitDocument(tx: Tx, userId: string, requirement: string, fileId: string): Promise<Response | Document> {
+export async function submitDocument(tx: Tx, userId: string, requirement: string, fileId: string, afterCommit: AfterCommit): Promise<Response | Document> {
   if (!REQUIREMENTS.includes(requirement)) return fail(400, { error: 'Invalid requirement' })
   await lockProfile(tx, userId) // per user: a double tap cannot pass the pending check twice
   const file = UUID.test(fileId)
@@ -85,7 +90,7 @@ export async function submitDocument(tx: Tx, userId: string, requirement: string
     .where(and(eq(documents.ownerId, userId), eq(documents.requirement, requirement), eq(documents.status, 'pending')))
   if (pending.length) {
     await tx.delete(privateFiles).where(eq(privateFiles.id, file.id))
-    await storage().delete(documentsBucket(), file.key).catch(() => {})
+    afterCommit(() => removeObject(documentsBucket(), file.key))
     return Response.json({ error: 'Check already pending' }, { status: 409 })
   }
   // Raw SQL naming only the owner's columns: the verdict columns are staff-only (a Drizzle insert lists them as DEFAULT).

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { type AnyPgColumn, check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, check, index, integer, pgTable, uniqueIndex, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { providers } from './providers'
 import { users } from './users'
 
@@ -57,5 +57,7 @@ export const documents = pgTable(
   (t) => [
     check('documents_status_check', sql`status in ('pending','approved','rejected')`),
     index('documents_owner_id_idx').on(t.ownerId),
+    // Backstop for the one-pending-check rule (the domain also checks, under a per-user lock).
+    uniqueIndex('documents_one_pending_idx').on(t.ownerId, t.requirement).where(sql`status = 'pending'`),
   ],
 )
