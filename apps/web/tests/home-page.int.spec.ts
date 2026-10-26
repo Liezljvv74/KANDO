@@ -9,8 +9,9 @@ vi.mock('next/headers', () => ({
   headers: async () => new Headers(headerLang ? { 'x-lang': headerLang } : {}),
 }))
 
+process.env.NEXT_PUBLIC_SERVER_URL = 'https://kando.example'
 const { default: HomePage, generateMetadata } = await import('../app/(site)/page')
-const { default: Layout } = await import('../app/(site)/layout')
+const { default: Layout, metadata } = await import('../app/(site)/layout')
 
 const stamp = Date.now()
 let categoryId: string
@@ -65,6 +66,17 @@ describe('home page', () => {
 })
 
 describe('site layout', () => {
+  it('metadataBase makes canonical and hreflang absolute on the site url', async () => {
+    expect(String(metadata.metadataBase)).toBe('https://kando.example/')
+    const en = await generateMetadata({ searchParams: Promise.resolve({ lang: 'en' }) })
+    const urls = [
+      en.alternates!.canonical as string,
+      ...Object.values(en.alternates!.languages as Record<string, string>),
+    ]
+    for (const u of urls)
+      expect(new URL(u, metadata.metadataBase!).href).toMatch(/^https:\/\/kando\.example\//)
+  })
+
   const layout = async (lang?: string) => {
     headerLang = lang
     return renderToStaticMarkup(await Layout({ children: 'BODY' }))

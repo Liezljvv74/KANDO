@@ -1,10 +1,13 @@
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import { t } from '@kando/i18n'
 import { Footer } from '../../components/footer'
-import { langPath, siteLang } from '../../lib/site'
+import { langPath, siteLang, siteUrl } from '../../lib/site'
 import '../globals.css'
+
+export const metadata: Metadata = { metadataBase: new URL(siteUrl()) }
 
 // The root layout of the website. The proxy puts the ?lang= language on the request as x-lang.
 export default async function SiteLayout({ children }: { children: ReactNode }) {

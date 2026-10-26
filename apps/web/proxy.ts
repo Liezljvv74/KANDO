@@ -3,7 +3,8 @@ import { getAuth } from './lib/auth/server'
 import { siteLang } from './lib/site'
 
 export function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith('/admin'))
+  const { pathname } = request.nextUrl
+  if (pathname === '/admin' || pathname.startsWith('/admin/'))
     return getAuth().middleware({ loginUrl: '/admin/sign-in' })(request)
   // The website: the root layout cannot see ?lang=, so the language travels as a request header (overwritten, never trusted from outside).
   const headers = new Headers(request.headers)

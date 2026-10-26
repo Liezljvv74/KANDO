@@ -3,14 +3,18 @@ import { Marked } from 'marked'
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 // Absolute http(s) and mailto links, or paths and anchors on this site; never javascript: or data:.
-const SAFE_URL = /^(https?:\/\/|mailto:|\/(?!\/)|#)/i
+const SAFE_URL = /^(https?:\/\/|mailto:|\/(?![/\\])|#)/i
 
 // Page bodies are written by staff, but still rendered as plain Markdown: raw HTML is shown as text, unsafe URLs are dropped.
 const md = new Marked({
   renderer: {
     html: ({ text }) => esc(text),
     link(token) {
-      return SAFE_URL.test(token.href) ? false : this.parser.parseInline(token.tokens)
+      if (!SAFE_URL.test(token.href)) return this.parser.parseInline(token.tokens)
+      const inner = this.parser.parseInline(token.tokens)
+      const title = token.title ? ` title="${esc(token.title)}"` : ''
+      const external = /^(https?:)?\/\//i.test(token.href)
+      return `<a href="${esc(token.href)}"${title}${external ? ' rel="nofollow ugc"' : ''}>${inner}</a>`
     },
     image: (token) => (SAFE_URL.test(token.href) ? false : esc(token.text)),
   },

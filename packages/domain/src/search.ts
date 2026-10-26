@@ -29,17 +29,37 @@ const like = (q: string) => `%${q.replace(/[\\%_]/g, '\\$&')}%`
  */
 export async function search(
   tx: Tx,
-  { category, postcode, q, page = 1, lang, country = 'DE' }: { category?: string; postcode?: string; q?: string; page?: number; lang: string; country?: string },
+  {
+    category,
+    postcode,
+    q,
+    page = 1,
+    lang,
+    country = 'DE',
+  }: {
+    category?: string
+    postcode?: string
+    q?: string
+    page?: number
+    lang: string
+    country?: string
+  },
 ): Promise<SearchResult> {
-  const known = (await tx.execute(sql`SELECT 1 FROM countries WHERE code = ${country}`)).rows.length > 0
+  const known =
+    (await tx.execute(sql`SELECT 1 FROM countries WHERE code = ${country}`)).rows.length > 0
   if (!known) return fail(400, { error: 'Unknown country' })
-  const cat = category ? (await tx.execute<{ id: string }>(sql`SELECT id FROM categories WHERE slug = ${category}`)).rows[0] : undefined
+  const cat = category
+    ? (await tx.execute<{ id: string }>(sql`SELECT id FROM categories WHERE slug = ${category}`))
+        .rows[0]
+    : undefined
   if (category && !cat) return fail(400, { error: 'Unknown category' })
   const origin = postcode ? await lookupPostcode(country, postcode, tx) : null
   if (postcode && !origin) return fail(400, { error: 'Unknown postcode' })
   const term = q?.trim()
 
-  const here = origin ? sql`ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography` : sql``
+  const here = origin
+    ? sql`ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography`
+    : sql``
   // On-site providers must be within their own radius (plus 1 % for sphere vs spheroid; the exact check is haversine below),
   // so the 500 cap applies after the radius. Remote providers are always in.
   const near = origin
@@ -62,7 +82,10 @@ export async function search(
 
   const ranked = rows
     .flatMap((p) => {
-      const d = origin && p.lat != null && p.lng != null ? distanceKm(origin, { lat: p.lat, lng: p.lng }) : null
+      const d =
+        origin && p.lat != null && p.lng != null
+          ? distanceKm(origin, { lat: p.lat, lng: p.lng })
+          : null
       const inRadius = d != null && d <= p.service_radius_km + 1e-6 // 1 mm of float slack at exactly the radius
       if (origin && !p.works_remotely && !inRadius) return [] // on-site work only within the provider's own radius
       // Outside the radius (a remote match) the distance stays hidden: exact distances from many postcodes would reveal the base.
@@ -79,9 +102,17 @@ export async function search(
   // One query for the page: each provider's offerable services (price, category slug).
   const svc = pageRows.length
     ? (
-        await tx.execute<{ provider_id: string; price: string | null; slug: string; category_id: string }>(sql`
+        await tx.execute<{
+          provider_id: string
+          price: string | null
+          slug: string
+          category_id: string
+        }>(sql`
           SELECT s.provider_id, s.price, c.slug, c.id AS category_id FROM services s JOIN categories c ON c.id = s.category_id
-          WHERE s.provider_id IN (${sql.join(pageRows.map(({ p }) => sql`${p.id}::uuid`), sql`, `)})
+          WHERE s.provider_id IN (${sql.join(
+            pageRows.map(({ p }) => sql`${p.id}::uuid`),
+            sql`, `,
+          )})
             AND s.id IN (SELECT offerable_service_ids(s.provider_id))`)
       ).rows
     : []
@@ -108,10 +139,13 @@ export async function search(
 }
 
 /** Slugs (and last change) of the providers the search shows: the same visibility rule, for the sitemap. */
-export async function visibleProviderSlugs(tx: Tx): Promise<{ slug: string; updatedAt: Date }[]> {
+export async function visibleProviderSlugs(
+  tx: Tx,
+  country = 'DE',
+): Promise<{ slug: string; updatedAt: Date }[]> {
   const { rows } = await tx.execute<{ slug: string; updated_at: Date | string }>(sql`
     SELECT p.slug, p.updated_at FROM providers p
-    WHERE p.status = 'published' AND p.suspended = false AND p.slug IS NOT NULL
+    WHERE p.status = 'published' AND p.suspended = false AND p.country = ${country} AND p.slug IS NOT NULL
       AND EXISTS (SELECT 1 FROM offerable_service_ids(p.id))
     ORDER BY p.slug LIMIT ${MAX_SITEMAP_PROVIDERS}`)
   return rows.map((r) => ({ slug: r.slug, updatedAt: new Date(r.updated_at) }))

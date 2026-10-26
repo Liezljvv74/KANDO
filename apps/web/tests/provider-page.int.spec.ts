@@ -133,6 +133,9 @@ describe('translate link', () => {
     expect(await render(deSlug)).not.toContain(t('de', 'web.translate'))
     const en = await render(deSlug, { lang: 'en' })
     expect(en).toContain(t('en', 'web.translate'))
+    expect(en).toContain('rel="nofollow"')
+    expect(t('de', 'web.translate')).toBe('Übersetzen')
+    expect(t('en', 'web.translate')).toBe('Translate')
     expect(en).toContain(`/providers/${deSlug}?lang=en&amp;translate=1`)
     expect(await render(enSlug, { lang: 'en' })).not.toContain(t('en', 'web.translate'))
     const de = await render(enSlug)
@@ -157,8 +160,11 @@ describe('translate link', () => {
     })
     const html = await render(deSlug, { lang: 'en', translate: '1' })
     expect(html).toContain('TRANSLATED')
-    expect(html).toContain(t('en', 'web.translatedLabel'))
-    expect(html).toContain(t('en', 'web.showOriginal'))
+    expect(html).toContain('Automatically translated (AI) · Show original')
+    expect(await render(deSlug, { translate: '1' })).not.toContain('Automatisch übersetzt') // already German: no label
+    expect(`${t('de', 'web.translatedLabel')} · ${t('de', 'web.showOriginal')}`).toBe(
+      'Automatisch übersetzt (KI) · Original anzeigen',
+    )
     expect(html).not.toContain(t('en', 'web.translate'))
     const m = await generateMetadata(args(deSlug, { lang: 'en', translate: '1' }))
     expect(m.robots).toEqual({ index: false })
@@ -168,8 +174,19 @@ describe('translate link', () => {
   it('?translate=1 without a key shows the original texts and the unavailable copy', async () => {
     await pool.query('DELETE FROM translations WHERE key = ANY($1)', [hashes]) // nothing stored from the test above
     const html = await render(deSlug, { lang: 'en', translate: '1' })
-    expect(html).toContain(t('en', 'web.translationUnavailable'))
+    expect(html).toContain('Translation is not available right now.')
+    expect(t('de', 'web.translationUnavailable')).toBe('Übersetzung ist gerade nicht verfügbar.')
     expect(html).toContain('selbstständige Fotografin')
     expect(html).not.toContain(t('en', 'web.translatedLabel'))
+  })
+
+  it('translate=1 on texts already in the viewer language: original, no label, no model call', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key-not-real'
+    const f = vi.spyOn(global, 'fetch')
+    const html = await render(enSlug, { lang: 'en', translate: '1' })
+    expect(f).not.toHaveBeenCalled()
+    expect(html).toContain('freelance photographer')
+    expect(html).not.toContain('Automatically translated')
+    expect(html).not.toContain('Translate</a>')
   })
 })

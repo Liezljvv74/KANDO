@@ -154,4 +154,11 @@ describe('renderMarkdown', () => {
     expect(renderMarkdown('<script>x</script>')).not.toContain('<script')
     expect(renderMarkdown('- a\n- b')).toContain('<li>a</li>')
   })
+
+  it('external links get rel="nofollow ugc"; protocol-relative and backslash paths are dropped', () => {
+    expect(renderMarkdown('[a](https://example.com)')).toContain('rel="nofollow ugc"')
+    expect(renderMarkdown('[a](/agb)')).not.toContain('rel=')
+    expect(renderMarkdown('[a](//evil.example)')).not.toContain('href')
+    expect(renderMarkdown('[a](/\evil.example)')).not.toContain('href')
+  })
 })
