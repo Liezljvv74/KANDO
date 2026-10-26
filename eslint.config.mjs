@@ -13,4 +13,10 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // CommonJS tool configs (Metro).
+    files: ['**/metro.config.js'],
+    languageOptions: { sourceType: 'commonjs', globals: { require: 'readonly', module: 'writable', __dirname: 'readonly' } },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 )
