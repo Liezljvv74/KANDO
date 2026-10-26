@@ -14,8 +14,8 @@
     "db:import:postcodes": "pnpm --filter @kando/db import:postcodes",
     "db:seed": "pnpm --filter @kando/db seed",
     "db:seed:categories": "pnpm --filter @kando/db seed:categories",
-    "db:seed:test-users": "pnpm --filter @kando/db seed:test-users",
-    "db:seed:placeholder-photos": "pnpm --filter @kando/db seed:placeholder-photos"
+    "db:seed:test-users": "pnpm --filter @kando/domain seed:test-users",
+    "db:seed:placeholder-photos": "pnpm --filter @kando/domain seed:placeholder-photos"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

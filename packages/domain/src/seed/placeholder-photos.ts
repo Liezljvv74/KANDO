@@ -1,9 +1,8 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import sharp from 'sharp'
-import { addPhoto } from '@kando/domain'
-import { asUser } from '../as-user'
-import { db } from '../client'
-import { providers } from '../schema'
+import { isDevTarget } from '@kando/db/src/seed/guard'
+import { addPhoto } from '../photos'
+import { asUser, db, providers } from '@kando/db'
 
 const COLOURS = ['#2f6f8f', '#8f4f2f', '#4f8f5f', '#7a4f8f', '#8f7a2f', '#2f4f8f', '#8f2f5f', '#3f7f7f']
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`)
@@ -40,15 +39,9 @@ export async function addPlaceholderPhotos(): Promise<number> {
   return rows.length
 }
 
-export const isDevBranch = (branch: string | undefined) => branch === 'kando-dev' || branch === 'dev'
-
-/** Dev branch: go ahead. Anywhere else: ALLOW_PRODUCTION=1 and a typed "yes" from `ask`. */
-export async function confirmedOrDev(
-  branch: string | undefined,
-  env: Record<string, string | undefined>,
-  ask: () => Promise<string>,
-): Promise<void> {
-  if (isDevBranch(branch)) return
+/** Dev branch and database: go ahead. Anywhere else: ALLOW_PRODUCTION=1 and a typed "yes" from `ask`. */
+export async function confirmedOrDev(env: Record<string, string | undefined>, ask: () => Promise<string>): Promise<void> {
+  if (isDevTarget(env)) return
   if (env.ALLOW_PRODUCTION !== '1') throw new Error('Not the dev branch: set ALLOW_PRODUCTION=1 to run here')
   if ((await ask()).trim() !== 'yes') throw new Error('Cancelled')
 }

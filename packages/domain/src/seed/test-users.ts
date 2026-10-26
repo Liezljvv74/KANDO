@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm'
-import { addReference, addService, publish, upsertMyProfile } from '@kando/domain'
+import { and, eq, sql } from 'drizzle-orm'
 import type { ProfileInput, ReferenceInput } from '@kando/contract'
-import { asUser } from '../as-user'
-import { db } from '../client'
-import { categories, providers, users } from '../schema'
-import { givePlaceholderPhoto, isDevBranch } from './placeholder-photos'
+import { asUser, categories, db, providers, users } from '@kando/db'
+import { assertDevTarget } from '@kando/db/src/seed/guard'
+import { addReference, addService } from '../providers/items'
+import { publish, upsertMyProfile } from '../providers/profile'
+import { givePlaceholderPhoto } from './placeholder-photos'
 
 export const TEST_PASSWORD = 'TestPass123'
 
@@ -109,44 +109,50 @@ const providerList: Provider[] = [
 /** Creates an auth account (or, when the email exists, signs into it) and returns its id. */
 export type TestAuth = { signUp(email: string, password: string, name: string): Promise<{ id: string }> }
 
-/** Refuses anywhere but the development branch, no override. */
-export function assertDevBranch(branch: string | undefined): void {
-  if (!isDevBranch(branch)) throw new Error(`Test users go on the dev branch only (NEON_BRANCH=kando-dev or dev, got ${branch ?? 'unset'})`)
-}
-
 /** Neon Auth over REST. Never logs the password or tokens. */
-export function neonAuth(baseUrl: string): TestAuth {
+export function neonAuth(baseUrl: string, retryDelayMs = 2000): TestAuth {
+  const url = (path: string) => `${baseUrl.replace(new RegExp('/+$'), '')}/${path}`
   // A rate-limited or failing call (429, 5xx) is retried a few times, slowly.
   const post = async (path: string, body: object) => {
     for (let attempt = 1; ; attempt++) {
-      const res = await send(path, body)
+      const res = await fetch(url(path), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+        body: JSON.stringify(body),
+      })
       if ((res.status !== 429 && res.status < 500) || attempt === 4) return res
-      await new Promise((r) => setTimeout(r, 2000 * attempt))
+      await new Promise((r) => setTimeout(r, retryDelayMs * attempt))
     }
   }
-  const send = (path: string, body: object) =>
-    fetch(`${baseUrl.replace(/\/$/, '')}/${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: 'http://localhost' },
-      body: JSON.stringify(body),
-    })
+  const userId = async (res: Response) => ((await res.json().catch(() => null)) as { user?: { id?: string } } | null)?.user?.id
   return {
     async signUp(email, password, name) {
-      let res = await post('sign-up/email', { email, password, name })
-      if (!res.ok) res = await post('sign-in/email', { email, password }) // email taken: the account exists already
-      const id = ((await res.json().catch(() => null)) as { user?: { id?: string } } | null)?.user?.id
-      if (!res.ok || !id) throw new Error(`Neon Auth sign-up and sign-in failed for ${email} (HTTP ${res.status})`)
+      const up = await post('sign-up/email', { email, password, name })
+      const upBody = up.ok ? null : await up.clone().json().catch(() => null)
+      if (!up.ok && !String((upBody as { code?: string } | null)?.code ?? '').startsWith('USER_ALREADY_EXISTS')) {
+        throw new Error(`Neon Auth sign-up failed for ${email} (HTTP ${up.status})`)
+      }
+      const res = up.ok ? up : await post('sign-in/email', { email, password }) // email taken: the account exists already
+      const id = await userId(res)
+      if (!res.ok || !id) throw new Error(`Neon Auth ${up.ok ? 'sign-up' : 'sign-in'} gave no account for ${email} (HTTP ${res.status})`)
       return { id }
     },
   }
+}
+
+/** The app treats an unverified email as signed out, so the dev accounts are marked verified in the Neon Auth schema. */
+async function markVerified(email: string): Promise<void> {
+  await db.execute(sql`UPDATE neon_auth."user" SET "emailVerified" = true WHERE email = ${email}`)
 }
 
 /** One account: auth, users row, and for a provider the profile, services, references and photo through the domain, published. */
 export async function buildTestUser(auth: TestAuth, a: Account | Provider, categoryIds: Map<string, string>): Promise<boolean> {
   const { id } = await auth.signUp(a.email, TEST_PASSWORD, a.name)
   const existing = (await db.select({ id: users.id }).from(users).where(eq(users.id, id)))[0]
-  const hasProvider = existing && (await db.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, id))).length > 0
-  if (existing && (hasProvider || !('profile' in a))) return false
+  await markVerified(a.email) // also for accounts that already exist, so a rerun fixes them
+  // Only a published provider counts as done, so a crashed run resumes.
+  const done = existing && (await db.select({ id: providers.id }).from(providers).where(and(eq(providers.ownerId, id), eq(providers.status, 'published')))).length > 0
+  if (existing && (done || !('profile' in a))) return false
   if (!existing) await db.insert(users).values({ id, email: a.email, name: a.name, language: a.language ?? 'de' })
   if (!('profile' in a)) return true
   await asUser(id, async (tx) => {
@@ -169,7 +175,8 @@ export async function buildTestUser(auth: TestAuth, a: Account | Provider, categ
 }
 
 /** All test accounts; skips the ones that exist. Needs the categories and the postcodes imported. */
-export async function seedTestUsers(auth: TestAuth): Promise<{ created: number; skipped: number }> {
+export async function seedTestUsers(auth: TestAuth, env: Record<string, string | undefined> = process.env): Promise<{ created: number; skipped: number }> {
+  assertDevTarget(env)
   const categoryIds = new Map((await db.select({ id: categories.id, slug: categories.slug }).from(categories)).map((c) => [c.slug, c.id]))
   const missing = [...new Set(providerList.flatMap((p) => p.services.map((s) => s.category)))].filter((s) => !categoryIds.has(s))
   if (missing.length) throw new Error(`Unknown categories: ${missing.join(', ')}; run pnpm db:seed:categories first`)
