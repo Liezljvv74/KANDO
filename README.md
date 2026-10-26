@@ -13,7 +13,7 @@ Layout once Stage 1 starts: `apps/mobile`, `apps/web`, `packages/db`, `packages/
 Needs Node 24, pnpm 10 and Docker.
 
 ```
-docker compose up -d db      # Postgres 17 + PostGIS on localhost:5433
+docker compose up -d --wait db      # Postgres 17 + PostGIS on localhost:5433
 pnpm i
 pnpm test                    # web (Vitest, uses the Docker database); mobile joins later
 pnpm --filter web dev        # website on http://localhost:3000
