@@ -106,3 +106,14 @@ export async function search(
   })
   return { items, page, hasMore: ranked.length > page * PAGE_SIZE }
 }
+
+/** Slugs (and last change) of the providers the search shows: the same visibility rule, for the sitemap. */
+export async function visibleProviderSlugs(tx: Tx): Promise<{ slug: string; updatedAt: Date }[]> {
+  const { rows } = await tx.execute<{ slug: string; updated_at: Date | string }>(sql`
+    SELECT p.slug, p.updated_at FROM providers p
+    WHERE p.status = 'published' AND p.suspended = false AND p.slug IS NOT NULL
+      AND EXISTS (SELECT 1 FROM offerable_service_ids(p.id))
+    ORDER BY p.slug LIMIT ${MAX_SITEMAP_PROVIDERS}`)
+  return rows.map((r) => ({ slug: r.slug, updatedAt: new Date(r.updated_at) }))
+}
+const MAX_SITEMAP_PROVIDERS = 5000 // ponytail: one sitemap file holds 50,000 urls; split into an index beyond that

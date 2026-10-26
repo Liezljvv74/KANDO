@@ -36,7 +36,7 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
 export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
 
 // Readable by app_user, written only by staff (owner connection).
-export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
+export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'pages', 'page_texts']
 
 // Tables app requests never touch: all privileges revoked.
 export const STAFF_ONLY_TABLES: string[] = []

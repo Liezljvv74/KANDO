@@ -16,10 +16,14 @@
     "@kando/domain": "workspace:*",
     "@kando/i18n": "workspace:*",
     "@neondatabase/auth": "0.7.0-beta",
+    "@tailwindcss/postcss": "4.3.3",
     "drizzle-orm": "0.45.4",
+    "marked": "18.1.2",
     "next": "16.4.3",
+    "postcss": "8.5.32",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "tailwindcss": "4.3.3"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
