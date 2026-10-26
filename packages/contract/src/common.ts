@@ -13,3 +13,6 @@ export const AmountSchema = z
 
 export const text = (max: number) => z.string().max(max)
 export const requiredText = (max: number) => z.string().trim().min(1).max(max)
+
+/** The envelope the app reads lists from: `{ docs: [...] }`. */
+export const docsOf = <S extends z.ZodType>(schema: S) => z.object({ docs: z.array(schema) })

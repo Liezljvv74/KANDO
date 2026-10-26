@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { pool } from '@kando/db'
+import { parseBody, ServiceInputSchema } from '@kando/contract'
 import { createAppRequest } from '@kando/domain'
 
 // Fake session source: cookie "uid=<id>:<email>" is a session, anything else is not.
@@ -20,7 +21,9 @@ const me = appRequest({ auth: 'required' }, async ({ tx, user }) => {
 
 beforeAll(async () => {
   await pool.query('CREATE TABLE IF NOT EXISTS wrap_probe (id serial PRIMARY KEY, note text)')
-  await pool.query('GRANT INSERT ON wrap_probe TO app_user; GRANT USAGE ON SEQUENCE wrap_probe_id_seq TO app_user')
+  await pool.query(
+    'GRANT INSERT ON wrap_probe TO app_user; GRANT USAGE ON SEQUENCE wrap_probe_id_seq TO app_user',
+  )
 })
 afterAll(async () => {
   await pool.query('DROP TABLE IF EXISTS wrap_probe')
@@ -29,12 +32,19 @@ afterAll(async () => {
 
 it('first contact creates the users row', async () => {
   const res = await me(
-    new Request('http://localhost/x?lang=en', { headers: { cookie: 'uid=u1:u1@test.skilled.invalid' } }),
+    new Request('http://localhost/x?lang=en', {
+      headers: { cookie: 'uid=u1:u1@test.skilled.invalid' },
+    }),
     ctx,
   )
   expect(res.status).toBe(200)
   const body = await res.json()
-  expect(body.user).toMatchObject({ id: 'u1', email: 'u1@test.skilled.invalid', language: 'en', isProvider: false })
+  expect(body.user).toMatchObject({
+    id: 'u1',
+    email: 'u1@test.skilled.invalid',
+    language: 'en',
+    isProvider: false,
+  })
   expect(body.rows).toEqual([{ id: 'u1', language: 'en' }])
   // second contact keeps the stored language
   const again = await (await me(as('u1'), ctx)).json()
@@ -44,7 +54,9 @@ it('first contact creates the users row', async () => {
 it('a forged cookie is 401 and touches nothing', async () => {
   const before = await count()
   const res = await me(
-    new Request('http://localhost/x', { headers: { cookie: 'session_token=forged; session_data=forged' } }),
+    new Request('http://localhost/x', {
+      headers: { cookie: 'session_token=forged; session_data=forged' },
+    }),
     ctx,
   )
   expect(res.status).toBe(401)
@@ -73,7 +85,9 @@ it('a handler error rolls back and returns 500', async () => {
 })
 
 it('a body over maxBodyBytes is 413 before the handler runs', async () => {
-  const h = appRequest({ auth: 'required', maxBodyBytes: 10 }, async () => Response.json({ ok: true }))
+  const h = appRequest({ auth: 'required', maxBodyBytes: 10 }, async () =>
+    Response.json({ ok: true }),
+  )
   const res = await h(
     new Request('http://localhost/x', {
       method: 'POST',
@@ -98,17 +112,23 @@ it('app_user cannot write staff columns of its own row', async () => {
     return Response.json({})
   })
   expect((await h(as('ua'), ctx)).status).toBe(500)
-  expect((await pool.query("SELECT staff_role FROM users WHERE id='ua'")).rows[0].staff_role).toBeNull()
+  expect(
+    (await pool.query("SELECT staff_role FROM users WHERE id='ua'")).rows[0].staff_role,
+  ).toBeNull()
 })
 
 it('first contact with a changed email updates the row', async () => {
   await me(as('ue'), ctx)
   const res = await me(
-    new Request('http://localhost/x', { headers: { cookie: 'uid=ue:ue-new@test.skilled.invalid' } }),
+    new Request('http://localhost/x', {
+      headers: { cookie: 'uid=ue:ue-new@test.skilled.invalid' },
+    }),
     ctx,
   )
   expect(res.status).toBe(200)
-  expect((await pool.query("SELECT email FROM users WHERE id='ue'")).rows[0].email).toBe('ue-new@test.skilled.invalid')
+  expect((await pool.query("SELECT email FROM users WHERE id='ue'")).rows[0].email).toBe(
+    'ue-new@test.skilled.invalid',
+  )
 })
 
 it('a second id with the same email gets 409 and no row is written', async () => {
@@ -120,4 +140,23 @@ it('a second id with the same email gets 409 and no row is written', async () =>
   expect(res.status).toBe(409)
   expect(await res.json()).toEqual({ error: 'Email belongs to another account' })
   expect(await count()).toBe(before)
+})
+
+it('a thrown 400 Response is returned unchanged', async () => {
+  const h = appRequest({ auth: 'required' }, async ({ request }) => {
+    await parseBody(ServiceInputSchema, request)
+    return Response.json({ ok: true })
+  })
+  const res = await h(
+    new Request('http://localhost/x', {
+      method: 'POST',
+      body: '{"title":""}',
+      headers: { cookie: 'uid=u9:u9@test.skilled.invalid' },
+    }),
+    ctx,
+  )
+  expect(res.status).toBe(400)
+  const body = (await res.json()) as { error: string; issues: unknown[] }
+  expect(body.error).toBe('Invalid input')
+  expect(body.issues.length).toBeGreaterThan(0)
 })

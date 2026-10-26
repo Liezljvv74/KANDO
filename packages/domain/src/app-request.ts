@@ -34,6 +34,8 @@ export function createAppRequest(getSession: SessionResolver) {
         const params = await ctx.params
         return await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params }))
       } catch (error) {
+        // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
+        if (error instanceof Response) return error
         if (error instanceof EmailConflictError) {
           console.error(`[app-request ${requestId}] email conflict`)
           return Response.json({ error: error.message }, { status: 409 })

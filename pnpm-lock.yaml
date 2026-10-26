@@ -54,6 +54,9 @@ importers:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
     devDependencies:
+      '@kando/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2

@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { AdminListQuerySchema, parseBody, parseQuery, ServiceInputSchema } from './index'
+import {
+  AdminListQuerySchema,
+  DocumentsListSchema,
+  OwnServicesListSchema,
+  parseBody,
+  parseQuery,
+  PhotosListSchema,
+  ReferenceInputSchema,
+  ReferencesListSchema,
+  ServiceInputSchema,
+} from './index'
 
 const service = {
   categoryId: '3f1c2a52-6a40-4a2c-9f44-6d1f5a8c9b11',
@@ -56,5 +66,24 @@ describe('parse helpers', () => {
     expect(
       parseQuery(z.object({ page: z.coerce.number() }), new Request('http://x/?page=2')),
     ).toEqual({ page: 2 })
+  })
+})
+
+describe('list envelopes', () => {
+  it('lists are { docs: [...] }', () => {
+    const doc = { id: '1', kind: 'profile', url: null, alt: null }
+    expect(PhotosListSchema.safeParse({ docs: [doc] }).success).toBe(true)
+    expect(PhotosListSchema.safeParse([doc]).success).toBe(false)
+    expect(OwnServicesListSchema.safeParse({ docs: [] }).success).toBe(true)
+    expect(ReferencesListSchema.safeParse({ docs: [] }).success).toBe(true)
+    expect(DocumentsListSchema.safeParse({ docs: [] }).success).toBe(true)
+  })
+
+  it('reference year is checked against the current year at parse time', () => {
+    const ref = { clientName: 'A', description: 'B' }
+    expect(
+      ReferenceInputSchema.safeParse({ ...ref, year: new Date().getFullYear() + 1 }).success,
+    ).toBe(false)
+    expect(ReferenceInputSchema.safeParse({ ...ref, year: 2020 }).success).toBe(true)
   })
 })

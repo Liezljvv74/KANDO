@@ -21,6 +21,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@kando/contract": "workspace:*",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",

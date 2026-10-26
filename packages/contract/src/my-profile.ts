@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { AmountSchema, CurrencySchema, PriceTypeSchema, requiredText, text } from './common'
+import { AmountSchema, CurrencySchema, docsOf, PriceTypeSchema, requiredText, text } from './common'
 
 export const ProviderTypeSchema = z.enum(['individual', 'business'])
 
@@ -84,7 +84,12 @@ export type OwnReference = z.infer<typeof OwnReferenceSchema>
 export const ReferenceInputSchema = z.object({
   clientName: requiredText(120),
   description: requiredText(1000),
-  year: z.number().int().min(1970).max(new Date().getFullYear()).nullish(),
+  year: z
+    .number()
+    .int()
+    .min(1970)
+    .refine((y) => y <= new Date().getFullYear(), 'Year is in the future')
+    .nullish(),
 })
 export const ReferencePatchSchema = ReferenceInputSchema.partial()
 
@@ -113,3 +118,8 @@ export const DocumentInputSchema = z.object({
   requirement: z.string().min(1),
   document: z.string().min(1),
 })
+
+export const OwnServicesListSchema = docsOf(OwnServiceSchema)
+export const ReferencesListSchema = docsOf(OwnReferenceSchema)
+export const PhotosListSchema = docsOf(PhotoSchema)
+export const DocumentsListSchema = docsOf(DocumentSchema)

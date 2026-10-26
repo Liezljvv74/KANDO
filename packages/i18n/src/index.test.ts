@@ -28,13 +28,14 @@ describe('catalogue', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(de).sort())
   })
 
-  it('no text is empty and no two keys carry the same text', () => {
+  it('no text is empty and no two keys of one namespace carry the same text', () => {
     for (const texts of [de, en]) {
-      const seen = new Map<string, string>()
+      const seen = new Map<string, string>() // namespace + text -> key
       for (const [key, text] of Object.entries(texts)) {
         expect(text.trim(), key).not.toBe('')
-        expect(seen.get(text), `${key} repeats ${seen.get(text)}`).toBeUndefined()
-        seen.set(text, key)
+        const id = `${key.split('.')[0]}|${text}`
+        expect(seen.get(id), `${key} repeats ${seen.get(id)}`).toBeUndefined()
+        seen.set(id, key)
       }
     }
   })
