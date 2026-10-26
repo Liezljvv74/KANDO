@@ -9,11 +9,18 @@
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",
     "migrate": "tsx --env-file-if-exists=../../.env src/migrate-cli.ts",
-    "import:postcodes": "tsx --env-file-if-exists=../../.env src/import-postcodes-cli.ts"
+    "import:postcodes": "tsx --env-file-if-exists=../../.env src/import-postcodes-cli.ts",
+    "seed": "pnpm seed:categories",
+    "seed:categories": "tsx --env-file-if-exists=../../.env scripts/seed-categories.ts",
+    "seed:test-users": "tsx --env-file-if-exists=../../.env scripts/seed-test-users.ts",
+    "seed:placeholder-photos": "tsx --env-file-if-exists=../../.env scripts/seed-placeholder-photos.ts"
   },
   "dependencies": {
+    "@kando/contract": "workspace:*",
+    "@kando/domain": "workspace:*",
     "drizzle-orm": "0.45.4",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "sharp": "0.34.5"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

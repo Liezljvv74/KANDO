@@ -218,12 +218,21 @@ importers:
 
   packages/db:
     dependencies:
+      '@kando/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@kando/domain':
+        specifier: workspace:*
+        version: link:../domain
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@types/pg@8.23.1)(kysely@0.29.7)(pg@8.23.1)
       pg:
         specifier: 8.23.1
         version: 8.23.1
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
     devDependencies:
       '@types/node':
         specifier: 24.19.2
