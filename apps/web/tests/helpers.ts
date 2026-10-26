@@ -110,3 +110,27 @@ export async function seedProvider(
   )
   return p.rows[0].id
 }
+
+/** Who the faked staff session belongs to (the admin specs mock getAuth().getSession with it); '' = signed out. */
+export const staff = { id: '' }
+export const mockAuth = async () => ({
+  getAuth: () => ({ getSession: async () => ({ data: staff.id ? { user: { id: staff.id } } : null }) }),
+})
+
+type Route = (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>
+/** Calls an admin route handler as `uid` ('' = signed out). `path` is only for the URL (query strings go here). */
+export function adminCall(handler: Route, uid: string, method = 'GET', path = '/api/admin/x', body?: unknown, params: Record<string, string> = {}) {
+  staff.id = uid
+  return handler(
+    new Request(`http://localhost${path}`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+    { params: Promise.resolve(params) },
+  )
+}
+
+/** A user row written straight through the owner connection. */
+export const seedUser = (id: string, staffRole: string | null = null, name: string | null = null) =>
+  pool.query('INSERT INTO users (id, email, staff_role, name) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, name])
