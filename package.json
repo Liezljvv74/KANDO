@@ -9,6 +9,7 @@
     "test": "pnpm -r --if-present test",
     "db:migrate": "pnpm --filter @kando/db migrate",
     "db:generate": "pnpm --filter @kando/db generate",
+    "db:import:postcodes": "pnpm --filter @kando/db import:postcodes",
     "db:seed": "pnpm --filter @kando/db seed"
   },
   "devDependencies": {
