@@ -118,13 +118,13 @@ function policyStatements(table: string): string[] {
 // each one touches just the caller's own row: owner_id = app_current_user_id() is in the statement itself.
 const PROVIDER_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION set_provider_identity(p_public_name text, p_lng float8, p_lat float8) RETURNS void
-    LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
       UPDATE providers SET public_name = p_public_name, updated_at = now(),
         location = CASE WHEN p_lng IS NULL OR p_lat IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326) END
       WHERE owner_id = app_current_user_id() $$`,
   // Publishing assigns the slug once (base, base-2, base-3 ...) and keeps it; false: no profile, or suspended.
   `CREATE OR REPLACE FUNCTION set_provider_published(p_published boolean, p_slug_base text) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
     DECLARE r providers; s text; n int := 1;
     BEGIN
       SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;

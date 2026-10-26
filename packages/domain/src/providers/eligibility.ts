@@ -1,26 +1,30 @@
 import { sql } from 'drizzle-orm'
-import type { Tx } from '@kando/db'
-
-/** The requirements of a category that no approved document covers. */
-export const missingDocuments = (required: string[], approved: Iterable<string>): string[] => {
-  const have = new Set(approved)
-  return required.filter((r) => !have.has(r))
-}
-
-/** Requirements with an approved document of the owner (under RLS: the caller's own documents). */
-export async function approvedRequirements(tx: Tx, ownerId: string): Promise<Set<string>> {
-  const { rows } = await tx.execute<{ requirement: string }>(
-    sql`SELECT DISTINCT requirement FROM documents WHERE owner_id = ${ownerId} AND status = 'approved'`,
-  )
-  return new Set(rows.map((r) => r.requirement))
-}
+import type { db, Tx } from '@kando/db'
 
 /**
- * Services of the provider whose category's required documents are all approved for the provider's owner.
- * Run as the owner: documents are private, so for anyone else every required document counts as missing.
+ * Where eligibility is evaluated. Documents are private (RLS), so only the owner's own transaction sees them:
+ * search and public pages (Task 7) must pass the owner connection (`db`), never an anonymous or other user's `tx`.
  */
-export async function offerableServiceIds(tx: Tx, providerId: string): Promise<string[]> {
-  const { rows } = await tx.execute<{ id: string }>(sql`
+export type Exec = Tx | typeof db
+
+/** Requirements of the service's category that the provider owner has no approved document for. */
+export async function missingRequirements(exec: Exec, providerId: string, serviceId: string): Promise<string[]> {
+  const { rows } = await exec.execute<{ requirement: string }>(sql`
+    SELECT r.requirement FROM services s
+    JOIN categories c ON c.id = s.category_id
+    JOIN providers p ON p.id = s.provider_id
+    CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
+    WHERE s.id = ${serviceId} AND s.provider_id = ${providerId}
+      AND NOT EXISTS (
+        SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
+      )
+    ORDER BY r.requirement`)
+  return rows.map((r) => r.requirement)
+}
+
+/** Services of the provider whose category's required documents are all approved for the provider's owner. */
+export async function offerableServiceIds(exec: Exec, providerId: string): Promise<string[]> {
+  const { rows } = await exec.execute<{ id: string }>(sql`
     SELECT s.id FROM services s
     JOIN categories c ON c.id = s.category_id
     JOIN providers p ON p.id = s.provider_id

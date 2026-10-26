@@ -7,6 +7,7 @@ export function slugify(name: string): string {
       .toLowerCase()
       .replace(/[äöüß]/g, (c) => UMLAUTS[c]!)
       .normalize('NFKD')
+      .replace(/\p{M}/gu, '')
       .replace(/[^a-z0-9]+/g, '-')
       .slice(0, 60)
       .replace(/^-+|-+$/g, '') || 'profile'

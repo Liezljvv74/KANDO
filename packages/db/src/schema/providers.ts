@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { categories, point } from './reference'
 import { users } from './users'
 
@@ -9,7 +19,10 @@ export const providers = pgTable(
   'providers',
   {
     id: uuid().primaryKey().defaultRandom(),
-    ownerId: text('owner_id').notNull().unique().references(() => users.id),
+    ownerId: text('owner_id')
+      .notNull()
+      .unique()
+      .references(() => users.id),
     type: text().notNull(),
     displayName: text('display_name').notNull(),
     businessName: text('business_name'),
@@ -17,7 +30,10 @@ export const providers = pgTable(
     slug: text().unique(),
     bio: text(),
     strengths: text(),
-    skills: text().array().notNull().default(sql`'{}'`),
+    skills: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     experience: text(),
     country: text().notNull().default('DE'),
     basePostcode: text('base_postcode'),
@@ -37,7 +53,10 @@ export const providers = pgTable(
     check('providers_type_check', sql`type in ('private','business')`),
     check('providers_status_check', sql`status in ('draft','published')`),
     check('providers_radius_check', sql`service_radius_km between 1 and 200`),
-    check('providers_legal_status_check', sql`legal_status in ('private','kleinunternehmer','business')`),
+    check(
+      'providers_legal_status_check',
+      sql`legal_status in ('private','kleinunternehmer','business')`,
+    ),
   ],
 )
 
@@ -45,8 +64,12 @@ export const services = pgTable(
   'services',
   {
     id: uuid().primaryKey().defaultRandom(),
-    providerId: uuid('provider_id').notNull().references(() => providers.id, { onDelete: 'cascade' }),
-    categoryId: uuid('category_id').notNull().references(() => categories.id),
+    providerId: uuid('provider_id')
+      .notNull()
+      .references(() => providers.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => categories.id),
     title: text().notNull(),
     description: text(),
     priceType: text('price_type').notNull(),
@@ -55,24 +78,35 @@ export const services = pgTable(
     sort: integer().notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  () => [check('services_price_type_check', sql`price_type in ('fixed','hourly','from','on-request')`)],
+  (t) => [
+    check('services_price_type_check', sql`price_type in ('fixed','hourly','from','on-request')`),
+    index('services_provider_id_idx').on(t.providerId),
+  ],
 )
 
-export const providerReferences = pgTable('provider_references', {
-  id: uuid().primaryKey().defaultRandom(),
-  providerId: uuid('provider_id').notNull().references(() => providers.id, { onDelete: 'cascade' }),
-  clientName: text('client_name').notNull(),
-  description: text().notNull(),
-  year: integer(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const providerReferences = pgTable(
+  'provider_references',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    providerId: uuid('provider_id')
+      .notNull()
+      .references(() => providers.id, { onDelete: 'cascade' }),
+    clientName: text('client_name').notNull(),
+    description: text().notNull(),
+    year: integer(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('provider_references_provider_id_idx').on(t.providerId)],
+)
 
 // Uploaded verification files (the key points into the private bucket). Staff review them: owners cannot set the verdict.
 export const documents = pgTable(
   'documents',
   {
     id: uuid().primaryKey().defaultRandom(),
-    ownerId: text('owner_id').notNull().references(() => users.id),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id),
     requirement: text().notNull(),
     key: text().notNull(),
     status: text().notNull().default('pending'),
@@ -81,5 +115,8 @@ export const documents = pgTable(
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  () => [check('documents_status_check', sql`status in ('pending','approved','rejected')`)],
+  (t) => [
+    check('documents_status_check', sql`status in ('pending','approved','rejected')`),
+    index('documents_owner_id_idx').on(t.ownerId),
+  ],
 )

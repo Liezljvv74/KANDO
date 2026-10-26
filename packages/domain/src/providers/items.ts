@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { categories, providerReferences, providers, services, type Tx } from '@kando/db'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
-import { approvedRequirements, missingDocuments } from './eligibility'
+import { missingRequirements } from './eligibility'
 import { fail } from './http'
 import { lockProfile, ownProvider } from './profile'
 
@@ -40,17 +40,17 @@ export async function listServices(tx: Tx, userId: string): Promise<OwnService[]
   const profile = await ownProvider(tx, userId)
   if (!profile) return []
   const rows = await tx
-    .select({ s: services, required: categories.requiredDocuments })
+    .select({ s: services })
     .from(services)
-    .innerJoin(categories, eq(categories.id, services.categoryId))
     .where(eq(services.providerId, profile.id))
     .orderBy(desc(services.createdAt), desc(services.id))
-  const approved = await approvedRequirements(tx, userId)
   const live = profile.status === 'published' && !profile.suspended
-  return rows.map(({ s, required }) => {
-    const waitingFor = missingDocuments(required, approved)
-    return { ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false }
-  })
+  const out: OwnService[] = []
+  for (const { s } of rows) {
+    const waitingFor = await missingRequirements(tx, profile.id, s.id)
+    out.push({ ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false })
+  }
+  return out
 }
 
 export async function addService(tx: Tx, userId: string, input: ServiceInput): Promise<OwnService> {
