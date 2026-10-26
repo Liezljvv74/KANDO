@@ -24,6 +24,9 @@ const lazy = <T extends object>(get: () => T): T =>
       const value = Reflect.get(target, prop, target)
       return typeof value === 'function' ? value.bind(target) : value
     },
+    // drizzle checks `client instanceof Pool` to give a transaction its own connection; without this a
+    // transaction would run its statements on whichever pooled connection is free (RLS context could leak).
+    getPrototypeOf: () => Object.getPrototypeOf(get()),
   })
 
 export const pool: pg.Pool = lazy(() => (_pool ??= new pg.Pool({ connectionString: connectionString() })))

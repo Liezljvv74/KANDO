@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { CurrencySchema, PriceTypeSchema } from './common'
+import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
 
 export const SearchItemSchema = z.object({
   slug: z.string(),
@@ -30,7 +30,11 @@ export const SearchQuerySchema = z.object({
   postcode: z.string().optional(),
   q: z.string().max(100).optional(),
   page: z.coerce.number().int().min(1).max(1000).default(1),
+  lang: LangSchema.default('de'),
+  country: z.string().default('DE'),
 })
+
+export const LangQuerySchema = z.object({ lang: LangSchema.default('de') })
 
 export const ProviderServiceSchema = z.object({
   id: z.string(),

@@ -80,3 +80,33 @@ export async function givePhoto(uid: string): Promise<void> {
   )
   await pool.query('UPDATE providers SET photo_id = $1 WHERE owner_id = $2', [photo.rows[0].id, uid])
 }
+
+/** A provider written straight through the owner connection (fast fixtures for search tests). Returns its id. */
+export async function seedProvider(
+  uid: string,
+  o: {
+    name: string
+    categoryId: string
+    postcode?: string | null
+    radius?: number
+    remote?: boolean
+    skills?: string[]
+    status?: string
+    suspended?: boolean
+    price?: number | null
+  },
+): Promise<string> {
+  await pool.query('INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [uid, EMAIL(uid)])
+  const postcode = o.postcode === undefined ? '10115' : o.postcode
+  const p = await pool.query(
+    `INSERT INTO providers (owner_id, type, display_name, public_name, slug, skills, base_postcode, location, service_radius_km, works_remotely, status, suspended)
+     VALUES ($1, 'private', $2, $2, $3, $4, $5, (SELECT location FROM postcodes WHERE country = 'DE' AND code = $5), $6, $7, $8, $9) RETURNING id`,
+    [uid, o.name, `${uid}-slug`, o.skills ?? [], postcode, o.radius ?? 25, o.remote ?? false, o.status ?? 'published', o.suspended ?? false],
+  )
+  const price = o.price === undefined ? 10 : o.price
+  await pool.query(
+    "INSERT INTO services (provider_id, category_id, title, price_type, price) VALUES ($1, $2, $3, $4, $5)",
+    [p.rows[0].id, o.categoryId, `${o.name} service`, price === null ? 'on-request' : 'fixed', price],
+  )
+  return p.rows[0].id
+}
