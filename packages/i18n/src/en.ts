@@ -232,6 +232,10 @@ export const en: Record<Key, string> = {
   'email.verificationRejected.subject': 'Your verification was rejected',
   'email.verificationRejected.body':
     'Unfortunately your verification could not be approved. Reason: {reason}',
+  'email.documentApproved.subject': 'Your document has been approved',
+  'email.documentApproved.body': 'Good news: your document "{document}" has been approved.',
+  'email.documentRejected.subject': 'Your document was rejected',
+  'email.documentRejected.body': 'Unfortunately your document "{document}" could not be approved. Reason: {note}',
   'common.description': 'Description',
   'home.payment': 'Paid when it’s done',
   'home.paymentBadgeText': 'In-app payment coming soon',

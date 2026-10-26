@@ -231,6 +231,10 @@ export const de = {
   'email.verificationRejected.subject': 'Deine Verifizierung wurde abgelehnt',
   'email.verificationRejected.body':
     'Deine Verifizierung konnte leider nicht freigegeben werden. Grund: {reason}',
+  'email.documentApproved.subject': 'Dein Dokument wurde freigegeben',
+  'email.documentApproved.body': 'Gute Neuigkeiten: Dein Dokument "{document}" wurde freigegeben.',
+  'email.documentRejected.subject': 'Dein Dokument wurde abgelehnt',
+  'email.documentRejected.body': 'Leider konnte Dein Dokument "{document}" nicht freigegeben werden. Grund: {note}',
   'common.description': 'Beschreibung',
   'home.payment': 'Bezahlt, wenn’s erledigt ist',
   'home.paymentBadgeText': 'Zahlung in der App bald',

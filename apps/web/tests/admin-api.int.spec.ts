@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
+import { clearOutbox, outboxForTests } from '@kando/domain'
 import { adminCall, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => (await import('./helpers')).mockAuth())
@@ -55,8 +56,11 @@ it('lists documents with the pending ones first, with owner email', async () => 
 it('approving a document makes the service offerable and records the reviewer', async () => {
   const id = await doc('aa-owner')
   const before = await offerableServiceIds(db, providerId)
+  clearOutbox()
   const res = await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'approved' }, { id })
   expect(res.status).toBe(200)
+  expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('aa-owner'), 'Dein Dokument wurde freigegeben']])
+  expect(outboxForTests()[0]!.text).toContain('Führungszeugnis')
   const row = (await pool.query('SELECT status, reviewed_by, reviewed_at FROM documents WHERE id = $1', [id])).rows[0]
   expect(row.status).toBe('approved')
   expect(row.reviewed_by).toBe('aa-rev')
@@ -69,8 +73,17 @@ it('approving a document makes the service offerable and records the reviewer', 
 it('rejecting stores the note, and needs one', async () => {
   await seedUser('aa-d2')
   const id = await doc('aa-d2')
+  clearOutbox()
   expect((await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'rejected' }, { id })).status).toBe(400)
+  expect(outboxForTests()).toHaveLength(0)
+  await pool.query("UPDATE users SET language = 'en' WHERE id = 'aa-d2'")
+  clearOutbox()
   expect((await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'rejected', note: 'Unreadable scan' }, { id })).status).toBe(200)
+  const mails = outboxForTests()
+  expect(mails).toHaveLength(1)
+  expect(mails[0]).toMatchObject({ to: EMAIL('aa-d2'), subject: 'Your document was rejected' })
+  expect(mails[0]!.text).toContain('Police certificate')
+  expect(mails[0]!.text).toContain('Unreadable scan')
   const row = (await pool.query('SELECT status, note FROM documents WHERE id = $1', [id])).rows[0]
   expect(row).toEqual({ status: 'rejected', note: 'Unreadable scan' })
   expect((await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'approved' }, { id: '00000000-0000-0000-0000-000000000009' })).status).toBe(404)
