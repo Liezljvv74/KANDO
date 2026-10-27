@@ -9,8 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "space.skillweb.app",
-      "supportsTablet": false,
-      "infoPlist": {}
+      "supportsTablet": false
     },
     "android": {
       "package": "space.skillweb.app",
@@ -18,10 +17,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -42,7 +38,8 @@
         "expo-image-picker",
         {
           "photosPermission": "SkillWeb uses your photos for your provider profile.",
-          "cameraPermission": "SkillWeb uses the camera for your provider profile and documents."
+          "cameraPermission": "SkillWeb uses the camera for your provider profile and documents.",
+          "microphonePermission": false
         }
       ],
       "expo-web-browser"
@@ -56,11 +53,6 @@
       "en": "./locales/en.json"
     },
     "extra": {
-      "router": {
-        "asyncRoutes": {
-          "web": true
-        }
-      },
       "eas": {
         "projectId": "b66a6d0d-2214-47e3-85be-cd5501e24f6c"
       }
