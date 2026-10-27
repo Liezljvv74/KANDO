@@ -8,7 +8,7 @@ import type { Dayjs } from 'dayjs'
 import { LOCALE } from '@kando/i18n'
 import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
-type User = { id: string; email: string; firstName: string | null; lastName: string | null; address: { street: string; postcode: string; city: string; country: string } | null; photoUrl: string | null; photoId: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
+type User = { id: string; email: string; firstName: string | null; lastName: string | null; address: { street: string | null; postcode: string; city: string | null; country: string } | null; photoUrl: string | null; photoId: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
 
 export default function UserShow() {
   const at = useAt()
@@ -30,7 +30,7 @@ export default function UserShow() {
             <Descriptions.Item label={at('admin.field.firstName')}>{result.firstName}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.lastName')}>{result.lastName}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.address')}>
-              {result.address && `${result.address.street}, ${result.address.postcode} ${result.address.city}, ${result.address.country}`}
+              {result.address && [result.address.street, [result.address.postcode, result.address.city].filter(Boolean).join(' '), result.address.country].filter(Boolean).join(', ')}
             </Descriptions.Item>
             <Descriptions.Item label={at('admin.field.picture')}>
               {result.photoUrl && <Image src={result.photoUrl} alt="" width={96} />}

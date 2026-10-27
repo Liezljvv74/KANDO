@@ -91,12 +91,12 @@ describe('list envelopes', () => {
 
 describe('address', () => {
   const ok = { street: 'Weg 1', postcode: '10115', city: 'Berlin', country: 'DE' }
-  it('street, postcode and city are required (no empty or blank parts)', () => {
+  it('only the postcode is required; blank street and city become null', () => {
     expect(AddressSchema.safeParse(ok).success).toBe(true)
-    for (const k of ['street', 'postcode', 'city']) {
-      expect(AddressSchema.safeParse({ ...ok, [k]: '' }).success, k).toBe(false)
-      expect(AddressSchema.safeParse({ ...ok, [k]: '  ' }).success, k).toBe(false)
-    }
+    expect(AddressSchema.safeParse({ postcode: '10115', country: 'DE' }).success).toBe(true)
+    for (const bad of ['', '  ']) expect(AddressSchema.safeParse({ ...ok, postcode: bad }).success, bad).toBe(false)
+    expect(AddressSchema.safeParse({ street: 'Weg 1', country: 'DE' }).success).toBe(false)
+    expect(AddressSchema.parse({ ...ok, street: ' ', city: '' })).toEqual({ postcode: '10115', street: null, city: null, country: 'DE' })
   })
 })
 

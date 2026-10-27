@@ -2,11 +2,13 @@ import { z } from 'zod'
 
 import { LangSchema, requiredText } from './common'
 
-/** The person's private address (country defaults to 'DE'; country-ready for later markets). */
+const optionalText = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullish()
+
+/** The person's private address: only the postcode is required (search uses it); blank street and city are stored as null (country defaults to 'DE'; country-ready for later markets). */
 export const AddressSchema = z.object({
-  street: requiredText(120),
   postcode: requiredText(16),
-  city: requiredText(80),
+  street: optionalText(120),
+  city: optionalText(80),
   country: z.string().length(2),
 })
 export type Address = z.infer<typeof AddressSchema>

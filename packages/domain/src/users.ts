@@ -45,6 +45,12 @@ export async function ensureUser(session: { id: string; email: string }, request
   }
 }
 
+/** The stored address, whenever a postcode exists (street and city may be null). */
+export const addressOf = (row: typeof users.$inferSelect): Me['address'] =>
+  row.addressPostcode && row.addressCountry
+    ? { street: row.addressStreet, postcode: row.addressPostcode, city: row.addressCity, country: row.addressCountry }
+    : null
+
 const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notifications: Me['notifications']): Me => ({
   id: row.id,
   email: row.email,
@@ -53,9 +59,7 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   language: isLang(row.language) ? row.language : DEFAULT_LANG,
   isProvider: row.isProvider,
   photoUrl: pictureKey ? photoUrl(pictureKey) : null,
-  address: row.addressStreet && row.addressCountry
-    ? { street: row.addressStreet, postcode: row.addressPostcode ?? '', city: row.addressCity ?? '', country: row.addressCountry }
-    : null,
+  address: addressOf(row),
   notifications,
 })
 
