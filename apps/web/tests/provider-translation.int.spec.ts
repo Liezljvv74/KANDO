@@ -76,7 +76,7 @@ it('returns translated texts in the page shape', async () => {
   const f = fakeModel()
   const { status, body } = await translate(slugs.ok!, '?lang=de', { headers: { 'x-forwarded-for': `${ip}, 1.1.1.1` } })
   expect(status).toBe(200)
-  expect(Object.keys(body).sort()).toEqual(['bio', 'displayName', 'experience', 'references', 'services', 'skills', 'strengths'])
+  expect(Object.keys(body).sort()).toEqual(['bio', 'experience', 'references', 'services', 'skills', 'strengths'])
   expect(body.bio).toBe(`DE: ${bioOf('ok')}`)
   expect(body.services[0].title).toBe('DE: Möbelbau') // short texts of a page that needs translation are sent too
   expect(f).toHaveBeenCalledTimes(1)
@@ -121,7 +121,6 @@ it('a logged-in caller is counted under the user id', async () => {
 
 it('the provider endpoint reports translatable per viewer language', async () => {
   const p = await provider('flag', { bio: `Der Schreiner baut Küchen und Schränke für Familien in der Region (flag ${stamp}).` })
-  await pool.query("UPDATE providers SET display_name = 'Max' WHERE owner_id = $1", [p.uid])
   expect((await get(providerRoute, p.slug, '?lang=en')).body.translatable).toBe(true) // German texts, English viewer
   // English bio: a German viewer (and a missing lang, which means de) can translate it.
   for (const q of ['?lang=de', '']) expect((await get(providerRoute, slugs.ok!, q)).body.translatable).toBe(true)
@@ -134,7 +133,7 @@ it('the provider endpoint reports translatable per viewer language', async () =>
 it('accepts no text from the client', async () => {
   const p = await provider('inject')
   fakeModel()
-  const r = await translate(p.slug, '?lang=de&bio=INJECTED&text=INJECTED&displayName=INJECTED', {
+  const r = await translate(p.slug, '?lang=de&bio=INJECTED&text=INJECTED', {
     headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
   })
   expect(r.status).toBe(200)
@@ -142,7 +141,7 @@ it('accepts no text from the client', async () => {
   expect(JSON.stringify(calls[0])).not.toContain('INJECTED')
   const sent = JSON.parse(calls[0]!.messages.at(-1)!.content)
   expect(sent.bio).toBe(p.bio)
-  expect(sent.displayName).toBe(`Tischlerei inject ${stamp}`)
+  expect(sent).not.toHaveProperty('displayName')
 })
 
 const total = async () => (await pool.query('SELECT count(*)::int AS n FROM translation_requests')).rows[0].n as number

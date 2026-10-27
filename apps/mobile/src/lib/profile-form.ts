@@ -10,10 +10,8 @@ export const MAX_SKILL_LENGTH = 50
 export const MAX_STRENGTHS_TEXT = 1000
 
 export type ProfileForm = {
-  /** The account name (users.name), saved with PATCH /me, not with the profile. */
+  /** The account name (first and last name), saved with PATCH /me, not with the profile. */
   name: string
-  /** The service headline ("Hochzeitsfotografie in Berlin"). */
-  displayName: string
   providerType: 'individual' | 'business'
   businessName: string
   impressum: string
@@ -32,7 +30,6 @@ export type Errors = Record<string, Key>
 
 export const emptyProfile: ProfileForm = {
   name: '',
-  displayName: '',
   providerType: 'individual',
   businessName: '',
   impressum: '',
@@ -47,7 +44,6 @@ export const emptyProfile: ProfileForm = {
 
 const LIMITS: [keyof ProfileForm, number][] = [
   ['name', 100],
-  ['displayName', 80],
   ['businessName', 120],
   ['impressum', 1000],
   ['bio', 2000],
@@ -59,7 +55,6 @@ const whole = (text: string, min: number, max: number) => /^\d{1,4}$/.test(text)
 export function validateProfile(f: ProfileForm): Errors {
   const e: Errors = {}
   if (!f.name.trim()) e.name = 'form.required'
-  if (!f.displayName.trim()) e.displayName = 'form.required'
   if (f.providerType === 'business' && !f.businessName.trim()) e.businessName = 'form.required'
   for (const [name, max] of LIMITS) if (!e[name] && (f[name] as string).trim().length > max) e[name] = 'form.tooLong'
   const badList = (l: string[]) => l.length > MAX_SKILLS || l.some((s) => !s.length || s.length > MAX_SKILL_LENGTH)
@@ -75,7 +70,6 @@ export function validateProfile(f: ProfileForm): Errors {
 /** PUT body. Empty text is sent as '' (the server clears the field). */
 export function profileBody(f: ProfileForm) {
   return {
-    displayName: f.displayName.trim(),
     providerType: f.providerType,
     businessName: f.providerType === 'business' ? f.businessName.trim() : '',
     impressum: f.providerType === 'business' ? f.impressum.trim() : '',
@@ -101,7 +95,6 @@ export function profileFromDoc(d: Partial<MyProfile> | null, accountName = ''): 
   if (!d) return { ...emptyProfile, name: accountName }
   return {
     name: accountName,
-    displayName: d.displayName ?? '',
     providerType: d.providerType === 'business' ? 'business' : 'individual',
     businessName: d.businessName ?? '',
     impressum: d.impressum ?? '',

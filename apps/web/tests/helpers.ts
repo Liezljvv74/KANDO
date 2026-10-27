@@ -44,6 +44,9 @@ export async function seedBase(): Promise<{ categoryId: string; docCategoryId: s
 }
 
 export async function cleanupUsers(): Promise<void> {
+  const mine = "(SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')"
+  await pool.query(`DELETE FROM notifications WHERE user_id IN ${mine}`)
+  await pool.query(`DELETE FROM photos WHERE owner_id IN ${mine}`)
   await pool.query("DELETE FROM private_files WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
   await pool.query("DELETE FROM documents WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
   await pool.query("DELETE FROM providers WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
@@ -51,7 +54,6 @@ export async function cleanupUsers(): Promise<void> {
 }
 
 export const profile = {
-  displayName: 'Babysitting am Abend',
   providerType: 'individual',
   basePostcode: '10115',
   serviceRadiusKm: 25,
@@ -77,14 +79,9 @@ export function memoryStorage(): Storage & { objects: Map<string, Buffer>; types
   }
 }
 
-/** Gives the user's provider a real profile photo row (publish needs one). */
+/** Gives the person a profile photo row (no provider; publish needs one). */
 export async function givePhoto(uid: string): Promise<void> {
-  const p = await pool.query('SELECT id FROM providers WHERE owner_id = $1', [uid])
-  const photo = await pool.query(
-    "INSERT INTO photos (owner_id, provider_id, kind, key, width, height) VALUES ($1, $2, 'profile', $3, 1, 1) RETURNING id",
-    [uid, p.rows[0].id, `providers/${p.rows[0].id}/seed.jpg`],
-  )
-  await pool.query('UPDATE providers SET photo_id = $1 WHERE owner_id = $2', [photo.rows[0].id, uid])
+  await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ($1, 'profile', $2, 1, 1)", [uid, `users/${uid}/profile.jpg`])
 }
 
 /** A provider written straight through the owner connection (fast fixtures for search tests). Returns its id. */
@@ -105,8 +102,8 @@ export async function seedProvider(
   await pool.query('INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [uid, EMAIL(uid)])
   const postcode = o.postcode === undefined ? '10115' : o.postcode
   const p = await pool.query(
-    `INSERT INTO providers (owner_id, type, display_name, public_name, slug, skills, base_postcode, location, service_radius_km, works_remotely, status, suspended)
-     VALUES ($1, 'private', $2, $2, $3, $4, $5, (SELECT location FROM postcodes WHERE country = 'DE' AND code = $5), $6, $7, $8, $9) RETURNING id`,
+    `INSERT INTO providers (owner_id, type, public_name, slug, skills, base_postcode, location, service_radius_km, works_remotely, status, suspended_until)
+     VALUES ($1, 'private', $2, $3, $4, $5, (SELECT location FROM postcodes WHERE country = 'DE' AND code = $5), $6, $7, $8, CASE WHEN $9::boolean THEN now() + interval '1 day' END) RETURNING id`,
     [uid, o.name, `${uid}-slug`, o.skills ?? [], postcode, o.radius ?? 25, o.remote ?? false, o.status ?? 'published', o.suspended ?? false],
   )
   const price = o.price === undefined ? 10 : o.price
@@ -138,5 +135,7 @@ export function adminCall(handler: Route, uid: string, method = 'GET', path = '/
 }
 
 /** A user row written straight through the owner connection. */
-export const seedUser = (id: string, staffRole: string | null = null, name: string | null = null) =>
-  pool.query('INSERT INTO users (id, email, staff_role, name) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, name])
+export const seedUser = (id: string, staffRole: string | null = null, name: string | null = null) => {
+  const [first = null, ...rest] = name?.split(' ') ?? []
+  return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null])
+}

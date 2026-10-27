@@ -75,7 +75,7 @@ export default function MyProfileScreen() {
         ])
 
   const published = profile.status === 'published'
-  const name = profile.publicName || profile.displayName
+  const name = profile.publicName ?? ''
   const docRows = documentRows(services, categories ?? [], verifications)
   return (
     <FormScreen title={title} back={false}>
@@ -84,7 +84,7 @@ export default function MyProfileScreen() {
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />
           <View style={styles.rowText}>
-            <Text style={styles.name}>{profile.displayName}</Text>
+            <Text style={styles.name}>{name}</Text>
             <Text style={styles.status}>{published ? t('myProfile.published') : t('myProfile.draft')}</Text>
           </View>
           <View style={styles.side}>
@@ -95,7 +95,7 @@ export default function MyProfileScreen() {
             </View>
           </View>
         </View>
-        {profile.suspended ? <ErrorText text={errorText('Profile suspended')} /> : null}
+        {profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date() ? <ErrorText text={errorText('Profile suspended')} /> : null}
         <ErrorText text={problem} />
         {published && services.length > 0 && !services.some((s) => s.visibleInSearch) && <Info text={t('myProfile.notInSearch')} />}
         {missing.length > 0 && (
@@ -122,7 +122,7 @@ export default function MyProfileScreen() {
               <EditButton label={`${t('common.edit')}: ${s.title}`} onPress={() => router.push({ pathname: '/my-profile/service/[id]', params: { id: String(s.id) } })} />
             </View>
             <Text style={styles.status}>
-              {[categories?.find((c) => c.id === s.category)?.name, formatPrice(s)].filter(Boolean).join(' · ')}
+              {[categories?.find((c) => c.id === s.category)?.name, s.priceType && formatPrice({ ...s, priceType: s.priceType })].filter(Boolean).join(' · ')}
             </Text>
             {/* Only a reason of the service itself; a draft or suspended profile is shown on the profile card. */}
             {(s.categoryInactive || (s.waitingFor ?? []).length > 0) && (

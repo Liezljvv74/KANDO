@@ -16,7 +16,7 @@ const toService = (r: ServiceRow): OwnService => ({
   category: r.categoryId,
   title: r.title,
   description: r.description,
-  priceType: r.priceType as OwnService['priceType'],
+  priceType: r.priceType as OwnService['priceType'], // null until set
   price: r.price === null ? null : Number(r.price),
   currency: r.currency as OwnService['currency'],
 })
@@ -44,7 +44,7 @@ export async function listServices(tx: Tx, userId: string): Promise<OwnService[]
     .from(services)
     .where(eq(services.providerId, profile.id))
     .orderBy(desc(services.createdAt), desc(services.id))
-  const live = profile.status === 'published' && !profile.suspended
+  const live = profile.status === 'published' && (!profile.suspendedUntil || profile.suspendedUntil <= new Date())
   const out: OwnService[] = []
   for (const { s } of rows) {
     const waitingFor = await missingRequirements(tx, profile.id, s.id)
@@ -56,15 +56,15 @@ export async function listServices(tx: Tx, userId: string): Promise<OwnService[]
 export async function addService(tx: Tx, userId: string, input: ServiceInput): Promise<OwnService> {
   const profile = (await ownProvider(tx, userId)) ?? noProfile()
   await assertCategory(tx, input.categoryId)
-  const price = input.priceType === 'on-request' ? null : input.price
+  const price = input.priceType === 'on-request' ? null : (input.price ?? null)
   const [row] = await tx
     .insert(services)
     .values({
       providerId: profile.id, // always the caller's own profile, never from the body
       categoryId: input.categoryId,
-      title: input.title,
+      title: input.title ?? '', // a service may exist with a category alone until Publish
       description: input.description?.trim() || null,
-      priceType: input.priceType,
+      priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
       currency: input.currency,
     })
@@ -87,9 +87,9 @@ const ownServiceRow = async (tx: Tx, userId: string, id: string) =>
 export async function updateService(tx: Tx, userId: string, id: string, patch: ServicePatch): Promise<OwnService | null> {
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return null
-  const priceType = patch.priceType ?? (existing.priceType as ServiceInput['priceType'])
-  const price = priceType === 'on-request' ? null : patch.price !== undefined ? patch.price : existing.price === null ? null : Number(existing.price)
-  if (price === null && priceType !== 'on-request') fail(400, { error: 'Invalid fields', fields: ['price'] })
+  const priceType = patch.priceType ?? (existing.priceType as ServicePatch['priceType'] | null)
+  const price = priceType === 'on-request' || priceType == null ? null : patch.price !== undefined ? patch.price : existing.price === null ? null : Number(existing.price)
+  if (price === null && priceType != null && priceType !== 'on-request') fail(400, { error: 'Invalid fields', fields: ['price'] })
   if (patch.categoryId !== undefined) await assertCategory(tx, patch.categoryId)
   const [row] = await tx
     .update(services)

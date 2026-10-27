@@ -64,11 +64,10 @@ function ProfileFormView({ initial }: { initial: ProfileForm }) {
   }
 
   const business = f.providerType === 'business'
-  const shownFields = ['name', 'displayName', 'bio', 'strengths', 'skills', 'experience', 'basePostcode', 'serviceRadiusKm', ...(business ? ['businessName', 'impressum'] : [])]
+  const shownFields = ['name', 'bio', 'strengths', 'skills', 'experience', 'basePostcode', 'serviceRadiusKm', ...(business ? ['businessName', 'impressum'] : [])]
   return (
     <Card>
       <Field label={t('f.name')} value={f.name} onChangeText={(v) => set('name', v)} maxLength={100} autoComplete="name" textContentType="name" error={err('name')} />
-      <Field label={t('myProfile.form.displayName')} hint={t('f.displayNameHint')} value={f.displayName} onChangeText={(v) => set('displayName', v)} maxLength={80} error={err('displayName')} />
       <Select
         label={t('f.type')}
         value={f.providerType}

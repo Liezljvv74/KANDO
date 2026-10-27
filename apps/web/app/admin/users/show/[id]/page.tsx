@@ -8,7 +8,7 @@ import type { Dayjs } from 'dayjs'
 import { LOCALE } from '@kando/i18n'
 import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
-type User = { id: string; email: string; name: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; liftPending: boolean; createdAt: string }
+type User = { id: string; email: string; firstName: string | null; lastName: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
 
 export default function UserShow() {
   const at = useAt()
@@ -26,9 +26,9 @@ export default function UserShow() {
         <>
           <Descriptions column={1} bordered>
             <Descriptions.Item label={at('admin.field.email')}>{result.email}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.name')}>{result.name}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.name')}>{[result.firstName, result.lastName].filter(Boolean).join(' ')}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.role')}>{result.staffRole && at(result.staffRole === 'admin' ? 'admin.role.administrator' : 'admin.role.reviewer')}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.suspendedUntil')}>{result.suspendedUntil && new Date(result.suspendedUntil).toLocaleString(LOCALE[lang])}{result.liftPending && ` (${at('admin.suspension.expired')})`}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.suspendedUntil')}>{result.suspendedUntil && new Date(result.suspendedUntil).toLocaleString(LOCALE[lang])}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.reason')}>{result.suspendedReason}</Descriptions.Item>
           </Descriptions>
           {me?.staffRole === 'admin' && (
@@ -39,7 +39,7 @@ export default function UserShow() {
                 <Button danger disabled={!until || !reason.trim()} loading={suspend.mutation.isPending} onClick={() => send(until!.toISOString())}>
                   {at('admin.action.suspend')}
                 </Button>
-                <Button disabled={!result.suspendedUntil && !result.liftPending} onClick={() => send(null)}>
+                <Button disabled={!result.suspendedUntil} onClick={() => send(null)}>
                   {at('admin.action.unsuspend')}
                 </Button>
               </Space>

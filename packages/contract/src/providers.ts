@@ -5,8 +5,6 @@ import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
 
 export const SearchItemSchema = z.object({
   slug: z.string(),
-  /** The service headline. */
-  displayName: z.string(),
   /** Business name or "Anna H."; never the full account name. */
   publicName: z.string(),
   photoUrl: z.string().nullable(),
@@ -56,7 +54,6 @@ export const ProviderReferenceSchema = z.object({
 
 export const ProviderDetailSchema = z.object({
   slug: z.string(),
-  displayName: z.string(),
   publicName: z.string(),
   providerType: z.string().nullish(),
   businessName: z.string().nullish(),
@@ -82,7 +79,6 @@ export type ProviderDetail = z.infer<typeof ProviderDetailSchema>
 
 /** The texts of a profile that the translate button sends and receives. */
 export const TranslatableTextsSchema = z.object({
-  displayName: z.string(),
   bio: z.string().nullable(),
   strengths: z.string().nullable(),
   experience: z.string().nullable(),

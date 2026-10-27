@@ -3,16 +3,17 @@
   "customers": [
     {
       "email": "customer.one@example.com",
-      "name": "Example Customer",
+      "firstName": "Example",
+      "lastName": "Customer",
       "language": "en"
     }
   ],
   "providers": [
     {
       "email": "provider.one@example.com",
-      "name": "Example Provider",
+      "firstName": "Example",
+      "lastName": "Provider",
       "profile": {
-        "displayName": "Example cleaning service",
         "providerType": "individual",
         "basePostcode": "10115",
         "serviceRadiusKm": 25,

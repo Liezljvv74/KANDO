@@ -1,14 +1,23 @@
-import { and, count, desc, eq, gt, ilike, or, sql } from 'drizzle-orm'
-import { providers, users, type Tx } from '@kando/db'
+import { and, count, desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm'
+import { photos, providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { isLang } from '@kando/i18n'
 import { fail } from '../providers/http'
+import { photoUrl } from '../storage'
 import type { StaffUser } from '../users'
 import { filterOf, like, notFound, ok, orderOf, pageOf, textOf } from './common'
 
-export const toAdminUser = (r: typeof users.$inferSelect): AdminUser => ({
+/** "First Last" for searching in SQL. */
+export const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
+
+export const toAdminUser = (r: typeof users.$inferSelect, pictureKey: string | null = null): AdminUser => ({
   id: r.id,
-  name: r.name,
+  firstName: r.firstName,
+  lastName: r.lastName,
+  address: r.addressStreet
+    ? { street: r.addressStreet, postcode: r.addressPostcode ?? '', city: r.addressCity ?? '', country: r.addressCountry ?? 'DE' }
+    : null,
+  photoUrl: pictureKey ? photoUrl(pictureKey) : null,
   email: r.email,
   language: isLang(r.language) ? r.language : null,
   staffRole: r.staffRole === 'admin' || r.staffRole === 'reviewer' ? r.staffRole : null,
@@ -18,12 +27,20 @@ export const toAdminUser = (r: typeof users.$inferSelect): AdminUser => ({
   createdAt: r.createdAt.toISOString(),
 })
 
-/** Search by email or name; filter `suspended: true` lists active suspensions only (the end date is informational: a suspension stays until staff lift it). */
+/** The users with their pictures (the person's profile photo), one query for the page. */
+export async function withPictures(tx: Tx, rows: (typeof users.$inferSelect)[]): Promise<AdminUser[]> {
+  const pics = rows.length
+    ? await tx.select({ ownerId: photos.ownerId, key: photos.key }).from(photos).where(and(eq(photos.kind, 'profile'), inArray(photos.ownerId, rows.map((r) => r.id))))
+    : []
+  return rows.map((r) => toAdminUser(r, pics.find((p) => p.ownerId === r.id)?.key ?? null))
+}
+
+/** Search by email or name; filter `suspended: true` lists active suspensions only (a suspension ends by its date). */
 export async function listUsers(tx: Tx, q: AdminListQuery) {
   const f = filterOf(q)
   const text = textOf(f.q)
   const where = and(
-    text ? or(ilike(users.email, like(text)), ilike(users.name, like(text))) : undefined,
+    text ? or(ilike(users.email, like(text)), ilike(fullName, like(text))) : undefined,
     f.suspended === true ? gt(users.suspendedUntil, sql`now()`) : undefined,
   )
   const total = (await tx.select({ n: count() }).from(users).where(where))[0]!.n
@@ -34,20 +51,18 @@ export async function listUsers(tx: Tx, q: AdminListQuery) {
     .orderBy(...orderOf(q.sort, { createdAt: users.createdAt, email: users.email }, [desc(users.createdAt), desc(users.id)]))
     .limit(pageOf(q).limit)
     .offset(pageOf(q).offset)
-  return ok(rows.map(toAdminUser), total)
+  return ok(await withPictures(tx, rows), total)
 }
 
 export async function getUser(tx: Tx, id: string) {
   const row = (await tx.select().from(users).where(eq(users.id, id)))[0]
   if (!row) return notFound()
-  // The date has passed but the provider is still hidden: staff must lift it (no automatic expiry in Stage 1).
-  const hidden = row.suspendedUntil && row.suspendedUntil <= new Date() ? (await tx.select({ s: providers.suspended }).from(providers).where(eq(providers.ownerId, id)))[0]?.s : false
-  return ok({ ...toAdminUser(row), liftPending: !!hidden })
+  return ok((await withPictures(tx, [row]))[0])
 }
 
 /**
  * Suspends the user until `until`, or lifts it (null). The user's provider is hidden or shown with it
- * (search and the public page both check providers.suspended).
+ * (search and the public page both check providers.suspended_until, so the hiding ends with the date).
  */
 export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: { until: string | null; reason: string }) {
   const until = input.until ? new Date(input.until) : null
@@ -60,6 +75,6 @@ export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: {
     .where(eq(users.id, id))
     .returning()
   if (!row) return notFound()
-  await tx.update(providers).set({ suspended: !!until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id))
-  return ok(toAdminUser(row))
+  await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id))
+  return ok((await withPictures(tx, [row]))[0])
 }

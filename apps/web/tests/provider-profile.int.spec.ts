@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { MyProfileSchema } from '@kando/contract'
+import { MeSchema, MyProfileSchema } from '@kando/contract'
 import { call, cleanupUsers, EMAIL, profile } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -23,14 +23,14 @@ it('GET is null when there is no profile', async () => {
 
 it('PUT creates (201) and a later PUT edits (200); responses fit the contract', async () => {
   await call(GET, 'pp2') // first contact
-  await pool.query("UPDATE users SET name = 'Anna-Lena von der Heide' WHERE id = 'pp2'")
+  await pool.query("UPDATE users SET first_name = 'Anna-Lena', last_name = 'von der Heide' WHERE id = 'pp2'")
   const created = await call(PUT, 'pp2', 'PUT', profile)
   expect(created.status).toBe(201)
   const body = MyProfileSchema.parse(await created.json())
-  expect(body).toMatchObject({ displayName: 'Babysitting am Abend', status: 'draft', publicName: 'Anna-Lena H.', suspended: false })
+  expect(body).toMatchObject({ status: 'draft', publicName: 'Anna-Lena H.', suspendedUntil: null, missing: [] })
   const edited = await call(PUT, 'pp2', 'PUT', { bio: 'Hallo', skills: ['Kochen'] })
   expect(edited.status).toBe(200)
-  expect(MyProfileSchema.parse(await edited.json())).toMatchObject({ id: body.id, bio: 'Hallo', skills: ['Kochen'], displayName: 'Babysitting am Abend' })
+  expect(MyProfileSchema.parse(await edited.json())).toMatchObject({ id: body.id, bio: 'Hallo', skills: ['Kochen'] })
   expect(MyProfileSchema.parse(await (await call(GET, 'pp2')).json()).bio).toBe('Hallo')
   const loc = await pool.query("SELECT location IS NOT NULL AS has FROM providers WHERE owner_id = 'pp2'")
   expect(loc.rows[0].has).toBe(true)
@@ -43,14 +43,14 @@ it('an unknown postcode is 400 and changes nothing', async () => {
   expect(MyProfileSchema.parse(await (await call(GET, 'pp2')).json()).basePostcode).toBe('10115')
 })
 
-it('first save needs displayName and providerType; a business needs a business name', async () => {
+it('first save needs providerType; a business needs a business name', async () => {
   let res = await call(PUT, 'pp3', 'PUT', { bio: 'x' })
   expect(res.status).toBe(400)
-  expect(await res.json()).toEqual({ error: 'Invalid fields', fields: ['displayName', 'providerType'] })
-  res = await call(PUT, 'pp3', 'PUT', { displayName: 'Nord', providerType: 'business' })
+  expect(await res.json()).toEqual({ error: 'Invalid fields', fields: ['providerType'] })
+  res = await call(PUT, 'pp3', 'PUT', { providerType: 'business' })
   expect(res.status).toBe(400)
   expect(await res.json()).toEqual({ error: 'Invalid fields', fields: ['businessName'] })
-  expect((await call(PUT, 'pp3', 'PUT', { displayName: 'Nord', providerType: 'business', businessName: 'Nord GmbH' })).status).toBe(201)
+  expect((await call(PUT, 'pp3', 'PUT', { providerType: 'business', businessName: 'Nord GmbH' })).status).toBe(201)
 })
 
 it('status, slug and suspended in the body are ignored', async () => {
@@ -89,14 +89,14 @@ it('an unconfirmed email gets 403 EMAIL_NOT_VERIFIED from PUT provider-profile a
 })
 
 it('PATCH /me checks its body with the contract: 400 Invalid input names the field; a valid patch saves', async () => {
-  for (const [body, field] of [[{ name: 'x'.repeat(101) }, 'name'], [{ name: '   ' }, 'name'], [{ language: 'fr' }, 'language']] as const) {
+  for (const [body, field] of [[{ firstName: 'x'.repeat(61) }, 'firstName'], [{ lastName: '   ' }, 'lastName'], [{ language: 'fr' }, 'language']] as const) {
     const res = await call(me.PATCH, 'pp-me', 'PATCH', body)
     expect(res.status).toBe(400)
     const json = await res.json()
     expect(json.error).toBe('Invalid input')
     expect(json.issues[0].path).toEqual([field])
   }
-  const ok = await call(me.PATCH, 'pp-me', 'PATCH', { name: '  Anna Schmidt ', language: 'en' })
+  const ok = await call(me.PATCH, 'pp-me', 'PATCH', { firstName: '  Anna ', lastName: 'Schmidt', language: 'en' })
   expect(ok.status).toBe(200)
-  expect(await ok.json()).toEqual({ id: 'pp-me', name: 'Anna Schmidt', language: 'en' })
+  expect(MeSchema.parse(await ok.json())).toMatchObject({ id: 'pp-me', firstName: 'Anna', lastName: 'Schmidt', language: 'en', address: null, notifications: [] })
 })

@@ -1,15 +1,16 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { and, eq, sql } from 'drizzle-orm'
-import type { ProfileInput, ReferenceInput } from '@kando/contract'
+import type { Address, ProfileInput, ReferenceInput } from '@kando/contract'
 import type { Lang } from '@kando/i18n'
 import { asUser, categories, db, providers, services, users } from '@kando/db'
 import { assertDevTarget } from '@kando/db/src/seed/guard'
 import { addReference, addService } from '../providers/items'
+import { updateMe } from '../users'
 import { publish, upsertMyProfile } from '../providers/profile'
 import { givePlaceholderPhoto } from './placeholder-photos'
 
 type Service = { category: string; title: string; description: string; priceType: 'fixed' | 'hourly' | 'from' | 'on-request'; price?: number }
-type Account = { email: string; name: string; language?: Lang }
+type Account = { email: string; firstName: string; lastName: string; language?: Lang; address?: Address }
 type Provider = Account & { profile: ProfileInput; services: Service[]; references?: ReferenceInput[] }
 export type SeedData = { password: string; customers: Account[]; providers: Provider[] }
 
@@ -19,6 +20,8 @@ export function loadSeedData(file: string | URL | undefined = process.env.SEED_U
   const path = file ?? [new URL('test-users.json', DATA_DIR), new URL('test-users.example.json', DATA_DIR)].find((u) => existsSync(u))!
   const data = JSON.parse(readFileSync(path, 'utf8')) as SeedData
   if (!data.password || !Array.isArray(data.customers) || !Array.isArray(data.providers)) throw new Error(`Seed data ${path} needs password, customers and providers`)
+  const bad = [...data.customers, ...data.providers].find((a) => !a.email || !a.firstName || !a.lastName)
+  if (bad) throw new Error(`Seed data ${path}: every account needs email, firstName and lastName (${bad.email ?? 'no email'})`)
   return data
 }
 
@@ -63,13 +66,17 @@ async function markVerified(email: string): Promise<void> {
 
 /** One account: auth, users row, and for a provider the profile, services, references and photo through the domain, published. */
 export async function buildTestUser(auth: TestAuth, a: Account | Provider, categoryIds: Map<string, string>, password: string): Promise<boolean> {
-  const { id } = await auth.signUp(a.email, password, a.name)
+  const fullName = `${a.firstName} ${a.lastName}`
+  const { id } = await auth.signUp(a.email, password, fullName)
   const existing = (await db.select({ id: users.id }).from(users).where(eq(users.id, id)))[0]
   await markVerified(a.email) // also for accounts that already exist, so a rerun fixes them
   // Only a published provider counts as done, so a crashed run resumes.
   const done = existing && (await db.select({ id: providers.id }).from(providers).where(and(eq(providers.ownerId, id), eq(providers.status, 'published')))).length > 0
   if (existing && (done || !('profile' in a))) return false
-  if (!existing) await db.insert(users).values({ id, email: a.email, name: a.name, language: a.language ?? 'de' })
+  if (!existing) {
+    await db.insert(users).values({ id, email: a.email, language: a.language ?? 'de' })
+    await asUser(id, (tx) => updateMe(tx, id, { firstName: a.firstName, lastName: a.lastName, ...(a.address && { address: a.address }) }))
+  }
   if (!('profile' in a)) return true
   await asUser(id, async (tx) => {
     const { profile } = await upsertMyProfile(tx, id, a.profile)
@@ -88,7 +95,7 @@ export async function buildTestUser(auth: TestAuth, a: Account | Provider, categ
     }
     for (const r of a.references ?? []) await addReference(tx, id, r)
   })
-  await givePlaceholderPhoto(id, a.profile.businessName ?? a.name)
+  await givePlaceholderPhoto(id, fullName) // the picture is the person's
   await asUser(id, (tx) => publish(tx, id))
   return true
 }

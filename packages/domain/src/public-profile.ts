@@ -9,7 +9,6 @@ import { needsTranslation, textsOf } from './translate'
 type Row = {
   id: string
   slug: string
-  display_name: string
   public_name: string
   type: string
   business_name: string | null
@@ -31,10 +30,10 @@ type Row = {
  */
 export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promise<ProviderDetail | null> {
   const { rows } = await tx.execute<Row>(sql`
-    SELECT p.id, p.slug, p.display_name, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
+    SELECT p.id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
            p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key
-    FROM providers p LEFT JOIN photos ph ON ph.id = p.photo_id
-    WHERE p.slug = ${slug} AND p.status = 'published' AND p.suspended = false`)
+    FROM providers p LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
+    WHERE p.slug = ${slug} AND p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())`)
   const p = rows[0]
   if (!p) return null
   const ids = await offerableServiceIds(tx, p.id)
@@ -55,7 +54,6 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
 
   const detail: ProviderDetail = {
     slug: p.slug,
-    displayName: p.display_name,
     publicName: p.public_name,
     providerType: p.type,
     businessName: p.business_name,

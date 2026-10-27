@@ -156,5 +156,14 @@ export async function api<T>(path: string, init: Init = {}): Promise<T> {
   return data as T
 }
 
-/** Changes the account name (at most 100 characters; the next profile save derives the public name from it) and/or the language of emails. */
-export const updateMe = (patch: { name?: string; language?: Me['language'] }) => api<Partial<Me>>('/app-api/v1/me', { method: 'PATCH', body: patch })
+/** The one-field account name as first and last name: the last space splits ("Anna-Lena von der Heide" has no better answer). */
+export function splitName(name: string): { firstName?: string; lastName?: string } {
+  const s = name.trim()
+  const i = s.lastIndexOf(' ')
+  if (!s) return {}
+  return i < 0 ? { firstName: s } : { firstName: s.slice(0, i).trim(), lastName: s.slice(i + 1) }
+}
+
+/** Changes the account name (sent as first and last name; the server derives the public name) and/or the language of emails. */
+export const updateMe = ({ name, ...rest }: { name?: string; language?: Me['language'] }) =>
+  api<Partial<Me>>('/app-api/v1/me', { method: 'PATCH', body: { ...(name !== undefined && splitName(name)), ...rest } })

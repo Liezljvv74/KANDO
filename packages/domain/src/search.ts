@@ -11,7 +11,6 @@ export const MAX_DISTANCE_M = 200_000
 type Candidate = {
   id: string
   slug: string
-  display_name: string
   public_name: string
   photo_key: string | null
   lat: number | null
@@ -66,14 +65,14 @@ export async function search(
     ? sql`AND (p.works_remotely OR ST_DWithin(p.location::geography, ${here}, LEAST(p.service_radius_km * 1010, ${MAX_DISTANCE_M})))`
     : sql``
   const offerable = cat
-    ? sql`EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id} AND s.id IN (SELECT offerable_service_ids(p.id)))`
+    ? sql`EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id} AND s.price_type IS NOT NULL AND s.id IN (SELECT offerable_service_ids(p.id)))`
     : sql`EXISTS (SELECT 1 FROM offerable_service_ids(p.id))`
   const { rows } = await tx.execute<Candidate>(sql`
-    SELECT p.id, p.slug, p.display_name, p.public_name, ph.key AS photo_key, ST_Y(p.location) AS lat, ST_X(p.location) AS lng,
+    SELECT p.id, p.slug, p.public_name, ph.key AS photo_key, ST_Y(p.location) AS lat, ST_X(p.location) AS lng,
            p.service_radius_km, p.works_remotely
     FROM providers p
-    LEFT JOIN photos ph ON ph.id = p.photo_id
-    WHERE p.status = 'published' AND p.suspended = false AND p.country = ${country} AND p.slug IS NOT NULL
+    LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
+    WHERE p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now()) AND p.country = ${country} AND p.slug IS NOT NULL
       AND ${offerable}
       ${near}
       ${term ? sql`AND (p.public_name ILIKE ${like(term)} OR EXISTS (SELECT 1 FROM unnest(p.skills) k WHERE k ILIKE ${like(term)}))` : sql``}
@@ -124,7 +123,6 @@ export async function search(
     const priced = counted.filter((s) => s.price !== null).sort((a, b) => Number(a.price) - Number(b.price))
     return {
       slug: p.slug,
-      displayName: p.display_name,
       publicName: p.public_name,
       photoUrl: p.photo_key ? photoUrl(p.photo_key) : null,
       categories: [...new Set(own.map((s) => s.slug))],
@@ -147,7 +145,7 @@ export async function visibleProviderSlugs(
 ): Promise<{ slug: string; updatedAt: Date }[]> {
   const { rows } = await tx.execute<{ slug: string; updated_at: Date | string }>(sql`
     SELECT p.slug, p.updated_at FROM providers p
-    WHERE p.status = 'published' AND p.suspended = false AND p.country = ${country} AND p.slug IS NOT NULL
+    WHERE p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now()) AND p.country = ${country} AND p.slug IS NOT NULL
       AND EXISTS (SELECT 1 FROM offerable_service_ids(p.id))
     ORDER BY p.slug LIMIT ${MAX_SITEMAP_PROVIDERS}`)
   return rows.map((r) => ({ slug: r.slug, updatedAt: new Date(r.updated_at) }))

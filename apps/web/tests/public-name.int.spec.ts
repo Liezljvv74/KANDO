@@ -16,13 +16,14 @@ beforeAll(async () => {
 afterAll(cleanupUsers)
 
 it('publicNameFor: business name, else first name and surname initial', () => {
-  const ind = { providerType: 'individual' as const, businessName: null }
-  expect(publicNameFor(ind, 'Liezl Fourie')).toBe('Liezl F.')
-  expect(publicNameFor(ind, 'Anna-Lena von der Heide')).toBe('Anna-Lena H.')
-  expect(publicNameFor(ind, 'Cher')).toBe('Cher')
-  expect(publicNameFor(ind, '  Jörg   Müller  ')).toBe('Jörg M.')
-  expect(publicNameFor({ providerType: 'business', businessName: ' Müller Elektro GmbH ' }, 'Jörg Müller')).toBe('Müller Elektro GmbH')
-  expect(publicNameFor({ providerType: 'business', businessName: '  ' }, 'Jörg Müller')).toBe('Jörg M.')
+  expect(publicNameFor('Liezl', 'Fourie', null, 'private')).toBe('Liezl F.')
+  expect(publicNameFor('Anna-Lena', 'von der Heide', null, 'private')).toBe('Anna-Lena H.')
+  expect(publicNameFor('Cher', null, null, 'private')).toBe('Cher')
+  expect(publicNameFor('  Jörg ', '  Müller  ', null, 'private')).toBe('Jörg M.')
+  expect(publicNameFor('Jörg', 'Müller', ' Müller Elektro GmbH ', 'business')).toBe('Müller Elektro GmbH')
+  expect(publicNameFor('Jörg', 'Müller', '  ', 'business')).toBe('Jörg M.')
+  expect(publicNameFor('Jörg', 'Müller', 'Müller Elektro GmbH', null)).toBe('Jörg M.') // a draft has no type yet
+  expect(publicNameFor(null, null, null, null)).toBe('')
 })
 
 it('slugify transliterates umlauts and strips the rest', () => {
@@ -33,7 +34,7 @@ it('slugify transliterates umlauts and strips the rest', () => {
 
 const setup = async (uid: string, businessName: string) => {
   await call(profileRoute.GET, uid)
-  const p = { displayName: 'Schreinerei', providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115' }
+  const p = { providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115' }
   expect((await call(profileRoute.PUT, uid, 'PUT', p)).status).toBe(201)
   await givePhoto(uid)
   await call(services.POST, uid, 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
@@ -52,17 +53,16 @@ it('public name and slug are unique and stable', async () => {
   expect(await slugOf('pn1')).toBe('tischlerei-nord')
 })
 
-it('an individual without an account name gets a slug from the display name, never "profile"', async () => {
+it('an individual without names has an empty public name and the fallback slug', async () => {
   await call(profileRoute.GET, 'pn3')
-  await pool.query("UPDATE users SET name = '' WHERE id = 'pn3'")
   expect((await call(profileRoute.PUT, 'pn3', 'PUT', profile)).status).toBe(201)
   await givePhoto('pn3')
   await call(services.POST, 'pn3', 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
   expect((await call(publish.POST, 'pn3', 'POST')).status).toBe(200)
-  expect(await slugOf('pn3')).toBe('babysitting-am-abend')
+  expect(await slugOf('pn3')).toMatch(/^profile(-\d+)?$/)
 })
 
-it('first contact copies the account name from the session; a later contact does not overwrite it', async () => {
+it('first contact does not copy the session name: the person sets their own names', async () => {
   const as = (name: string) =>
     new Request('http://localhost/app-api/v1/x', {
       method: 'PUT',
@@ -70,7 +70,6 @@ it('first contact copies the account name from the session; a later contact does
       body: JSON.stringify(profile),
     })
   const created = await profileRoute.PUT(as('Anna Schmidt'), { params: Promise.resolve({}) })
-  expect(MyProfileSchema.parse(await created.json()).publicName).toBe('Anna S.')
-  await profileRoute.PUT(as('Someone Else'), { params: Promise.resolve({}) })
-  expect((await pool.query("SELECT name FROM users WHERE id = 'pn4'")).rows[0].name).toBe('Anna Schmidt')
+  expect(MyProfileSchema.parse(await created.json()).publicName).toBe('')
+  expect((await pool.query("SELECT first_name, last_name FROM users WHERE id = 'pn4'")).rows[0]).toEqual({ first_name: null, last_name: null })
 })

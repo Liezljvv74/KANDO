@@ -8,11 +8,10 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(async () => {}),
 }))
 
-const ok = { ...emptyProfile, name: 'Anna Berg', displayName: 'Hochzeitsfotografie in Berlin' }
+const ok = { ...emptyProfile, name: 'Anna Berg' }
 
 test('profile validation mirrors the server limits', () => {
   expect(validateProfile(ok)).toEqual({})
-  expect(validateProfile(emptyProfile).displayName).toBe('form.required')
   expect(validateProfile(emptyProfile).name).toBe('form.required')
   expect(validateProfile({ ...ok, name: '   ' }).name).toBe('form.required')
   expect(validateProfile({ ...ok, name: 'x'.repeat(101) }).name).toBe('form.tooLong')
@@ -40,7 +39,7 @@ test('profile body clears empty fields and drops business fields for private pro
 test('the account name is not part of the profile body; the form pre-fills it from the session user', () => {
   expect(profileBody(ok)).not.toHaveProperty('name')
   expect(profileFromDoc(null, 'Anna Berg').name).toBe('Anna Berg')
-  expect(profileFromDoc({ displayName: 'Fotos' }, 'Anna Berg')).toMatchObject({ name: 'Anna Berg', displayName: 'Fotos' })
+  expect(profileFromDoc({ bio: 'Fotos' }, 'Anna Berg')).toMatchObject({ name: 'Anna Berg', bio: 'Fotos' })
   expect(nameChange({ ...ok, name: ' Anna Berg ' }, 'Anna Berg')).toBeNull()
   expect(nameChange({ ...ok, name: ' Anna  Lena Berg ' }, 'Anna Berg')).toBe('Anna  Lena Berg')
 })
@@ -59,9 +58,9 @@ test('withItem adds a trimmed new skill or strength once and ignores blanks', ()
 })
 
 test('strengths are a list in the form and one per line on the server', () => {
-  const f = profileFromDoc({ displayName: 'x', strengths: 'Patient\n\n  Punctual \n' } as never, 'Name')
+  const f = profileFromDoc({ strengths: 'Patient\n\n  Punctual \n' } as never, 'Name')
   expect(f.strengths).toEqual(['Patient', 'Punctual'])
-  expect(profileFromDoc({ displayName: 'x', strengths: 'Patient\nPatient' } as never, 'N').strengths).toEqual(['Patient'])
+  expect(profileFromDoc({ strengths: 'Patient\nPatient' } as never, 'N').strengths).toEqual(['Patient'])
   expect(profileBody({ ...f, strengths: ['Patient', 'Calm'] }).strengths).toBe('Patient\nCalm')
   expect(validateProfile({ ...ok, strengths: Array(21).fill('x') }).strengths).toBe('f.strengthsError')
   expect(validateProfile({ ...ok, strengths: ['x'.repeat(51)] }).strengths).toBe('f.strengthsError')
@@ -93,7 +92,7 @@ test('service and reference validation', () => {
 test('every missing item the publish route can return has de and en text', () => {
   for (const lang of ['de', 'en'] as const) {
     setLang(lang)
-    for (const item of ['displayName', 'impressum', 'photo', 'service', 'location']) expect(missingText(item)).not.toBe(item)
+    for (const item of ['impressum', 'photo', 'service', 'location']) expect(missingText(item)).not.toBe(item)
   }
   expect(missingText('unheard-of')).toBe('unheard-of')
 })

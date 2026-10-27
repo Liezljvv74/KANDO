@@ -1,5 +1,8 @@
-import { eq } from 'drizzle-orm'
-import { db, users } from '@kando/db'
+import { and, eq } from 'drizzle-orm'
+import { db, photos, users, type Tx } from '@kando/db'
+import type { Me, MePatch } from '@kando/contract'
+import { ownProvider, syncIdentity } from './providers/profile'
+import { photoUrl } from './storage'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
 export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean }
@@ -20,15 +23,12 @@ export function requestLang(request: Request): Lang {
   return acceptLang(request.headers.get('accept-language')) ?? DEFAULT_LANG
 }
 
-/**
- * First contact creates the users row (owner connection) with the account name from the session, so the public name
- * does not depend on the app's own name save; later calls return the stored row and never overwrite the name.
- */
-export async function ensureUser(session: { id: string; email: string; name?: string }, request: Request): Promise<SessionUser> {
+/** First contact creates the users row (owner connection); names and address are the person's own, set through the app. */
+export async function ensureUser(session: { id: string; email: string }, request: Request): Promise<SessionUser> {
   try {
     await db
       .insert(users)
-      .values({ id: session.id, email: session.email, name: session.name?.trim().slice(0, 100) || null, language: requestLang(request) })
+      .values({ id: session.id, email: session.email, language: requestLang(request) })
       .onConflictDoUpdate({ target: users.id, set: { email: session.email } }) // keeps a Neon Auth email change in sync
   } catch (error) {
     const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
@@ -42,6 +42,52 @@ export async function ensureUser(session: { id: string; email: string; name?: st
     language: isLang(row.language) ? row.language : DEFAULT_LANG,
     isProvider: row.isProvider,
   }
+}
+
+const toMe = (row: typeof users.$inferSelect, pictureKey: string | null): Me => ({
+  id: row.id,
+  email: row.email,
+  firstName: row.firstName,
+  lastName: row.lastName,
+  language: isLang(row.language) ? row.language : DEFAULT_LANG,
+  isProvider: row.isProvider,
+  photoUrl: pictureKey ? photoUrl(pictureKey) : null,
+  address: row.addressStreet
+    ? { street: row.addressStreet, postcode: row.addressPostcode ?? '', city: row.addressCity ?? '', country: row.addressCountry ?? 'DE' }
+    : null,
+  notifications: [], // filled when notifications are created
+})
+
+/** The signed-in person: names, language, picture (their profile photo) and private address. */
+export async function getMe(tx: Tx, userId: string): Promise<Me> {
+  const row = (await tx.select().from(users).where(eq(users.id, userId)))[0]!
+  const pic = (await tx.select({ key: photos.key }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
+  return toMe(row, pic?.key ?? null)
+}
+
+/** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */
+export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<Me> {
+  const a = patch.address
+  await tx
+    .update(users)
+    .set({
+      ...(patch.firstName !== undefined && { firstName: patch.firstName }),
+      ...(patch.lastName !== undefined && { lastName: patch.lastName }),
+      ...(patch.language !== undefined && { language: patch.language }),
+      ...(a !== undefined && {
+        addressStreet: a?.street ?? null,
+        addressPostcode: a?.postcode ?? null,
+        addressCity: a?.city ?? null,
+        addressCountry: a ? a.country || 'DE' : null,
+      }),
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId))
+  if (patch.firstName !== undefined || patch.lastName !== undefined) {
+    const provider = await ownProvider(tx, userId)
+    if (provider) await syncIdentity(tx, userId, provider)
+  }
+  return getMe(tx, userId)
 }
 
 /** Administrator passes everything; Reviewer passes 'reviewer' and 'any'. */

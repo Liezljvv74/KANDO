@@ -31,3 +31,63 @@ it('public reference tables are readable by app_user and not writable', async ()
     asUser(null, (tx) => tx.execute(sql`INSERT INTO currencies (code, minor_units) VALUES ('XXX', 2)`)),
   ).rejects.toMatchObject({ cause: { message: expect.stringContaining("permission denied") } })
 })
+
+const ids = ['rl-cust', 'rl-other', 'rl-na', 'rl-nb']
+const cleanupPeople = async () => {
+  await pool.query('DELETE FROM notifications WHERE user_id = ANY($1)', [ids])
+  await pool.query('DELETE FROM photos WHERE owner_id = ANY($1)', [ids])
+  await pool.query('DELETE FROM providers WHERE owner_id = ANY($1)', [ids])
+  await pool.query('DELETE FROM users WHERE id = ANY($1)', [ids])
+}
+const photosOf = (uid: string | null) => asUser(uid, async (tx) => (await tx.execute(sql`SELECT id FROM photos WHERE owner_id = 'rl-cust'`)).rows)
+const providerOf = (uid: string | null) => asUser(uid, async (tx) => (await tx.execute(sql`SELECT id FROM providers WHERE owner_id = 'rl-cust'`)).rows)
+
+it("a person's picture is private until the owner's provider is published and not suspended", async () => {
+  for (const id of ids) await pool.query('INSERT INTO users (id, email) VALUES ($1, $2)', [id, `${id}@test.skilled.invalid`])
+  try {
+    await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('rl-cust', 'profile', 'users/rl-cust/p.jpg', 1, 1)")
+    expect(await photosOf('rl-cust')).toHaveLength(1)
+    expect(await photosOf('rl-other')).toHaveLength(0)
+    expect(await photosOf(null)).toHaveLength(0)
+    await pool.query("INSERT INTO providers (owner_id, type) VALUES ('rl-cust', 'private')") // a draft: still private
+    expect(await photosOf(null)).toHaveLength(0)
+    await pool.query("UPDATE providers SET status = 'published' WHERE owner_id = 'rl-cust'")
+    expect(await photosOf(null)).toHaveLength(1)
+    expect(await photosOf('rl-other')).toHaveLength(1)
+    await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'rl-cust'")
+    expect(await photosOf(null)).toHaveLength(0)
+    expect(await providerOf(null)).toHaveLength(0)
+    await pool.query("UPDATE providers SET suspended_until = now() - interval '1 minute' WHERE owner_id = 'rl-cust'")
+    expect(await providerOf(null)).toHaveLength(1) // the date has passed: visible again
+    expect(await photosOf(null)).toHaveLength(1)
+  } finally {
+    await cleanupPeople()
+  }
+})
+
+it('notifications: the owner reads and marks own rows; another user sees none, cannot insert or change kind', async () => {
+  await applyRls() // beforeAll's probe-only run revoked the write grants of every other table
+  for (const id of ids) await pool.query('INSERT INTO users (id, email) VALUES ($1, $2)', [id, `${id}@test.skilled.invalid`])
+  try {
+    const id = (
+      await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ('rl-na', 'profile-live', '{\"url\":\"https://x.test/p\"}') RETURNING id")
+    ).rows[0].id
+    const mine = await asUser('rl-na', (tx) => tx.execute(sql`SELECT kind, payload FROM notifications`))
+    expect(mine.rows).toEqual([{ kind: 'profile-live', payload: { url: 'https://x.test/p' } }])
+    const seen = await asUser('rl-na', (tx) => tx.execute(sql`UPDATE notifications SET seen_at = now(), dismissed_at = now() WHERE id = ${id}`))
+    expect(seen.rowCount).toBe(1)
+    expect((await asUser('rl-nb', (tx) => tx.execute(sql`SELECT id FROM notifications`))).rows).toEqual([])
+    const theirs = await asUser('rl-nb', (tx) => tx.execute(sql`UPDATE notifications SET dismissed_at = NULL WHERE id = ${id}`))
+    expect(theirs.rowCount).toBe(0)
+    const denied = { cause: { message: expect.stringContaining('permission denied') } }
+    await expect(
+      asUser('rl-nb', (tx) => tx.execute(sql`INSERT INTO notifications (user_id, kind, payload) VALUES ('rl-nb', 'profile-live', '{}')`)),
+    ).rejects.toMatchObject(denied)
+    await expect(asUser('rl-na', (tx) => tx.execute(sql`UPDATE notifications SET kind = 'x' WHERE id = ${id}`))).rejects.toMatchObject(denied)
+    await expect(
+      pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ('rl-na', 'other', '{}')"),
+    ).rejects.toThrow(/notifications_kind_check/)
+  } finally {
+    await cleanupPeople()
+  }
+})

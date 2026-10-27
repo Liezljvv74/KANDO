@@ -37,7 +37,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
 })
 
 it('a postcode-less profile is refused unless it works remotely', async () => {
-  await call(profileRoute.PUT, 'pf2', 'PUT', { displayName: 'x', providerType: 'individual' })
+  await call(profileRoute.PUT, 'pf2', 'PUT', { providerType: 'individual' })
   await givePhoto('pf2')
   await call(services.POST, 'pf2', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
   const refused = await call(publish.POST, 'pf2', 'POST')
@@ -47,7 +47,7 @@ it('a postcode-less profile is refused unless it works remotely', async () => {
 })
 
 it('a suspended profile cannot publish (409)', async () => {
-  await pool.query("UPDATE providers SET suspended = true, status = 'draft' WHERE owner_id = 'pf2'")
+  await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day', status = 'draft' WHERE owner_id = 'pf2'")
   const res = await call(publish.POST, 'pf2', 'POST')
   expect(res.status).toBe(409)
   expect(await res.json()).toEqual({ error: 'Profile suspended' })
@@ -74,7 +74,7 @@ it('RLS: another user cannot change or add to a provider; domain-only columns ar
       tx.execute(sql`INSERT INTO services (provider_id, category_id, title, price_type) VALUES (${pid}, ${categoryId}, 't', 'on-request')`),
     ),
   ).rejects.toMatchObject(denied('row-level security'))
-  for (const set of [sql`status = 'published'`, sql`suspended = false`, sql`slug = 'x'`, sql`public_name = 'x'`, sql`location = NULL`]) {
+  for (const set of [sql`status = 'published'`, sql`suspended_until = NULL`, sql`slug = 'x'`, sql`public_name = 'x'`, sql`location = NULL`]) {
     await expect(
       asUser('pf1', (tx) => tx.execute(sql`UPDATE providers SET ${set} WHERE owner_id = 'pf1'`)),
     ).rejects.toMatchObject(denied('permission denied'))

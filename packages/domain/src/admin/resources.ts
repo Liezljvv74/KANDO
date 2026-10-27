@@ -16,7 +16,7 @@ import { mediaBucket, photoUrl, removeObject } from '../storage'
 import type { StaffRole } from '../users'
 import { filterOf, isUuid, like, notFound, ok, orderOf, pageOf, textOf, uniqueViolation } from './common'
 import { getDocument, listDocuments } from './documents'
-import { getUser, listUsers, toAdminUser } from './users'
+import { fullName, getUser, listUsers, withPictures } from './users'
 
 /** Who may call a resource with a method: a Reviewer reads documents, users and providers and deletes photos; everything else is Administrator only. */
 export function roleFor(params: Record<string, string>, method: string): StaffRole {
@@ -30,24 +30,26 @@ const slugTaken = (e: unknown) => (uniqueViolation(e) ? fail(409, { error: 'Slug
 
 // ---- providers (read) and photos ----
 
+/** The provider is hidden until suspended_until passes. */
+const isSuspended = sql<boolean>`coalesce(${providers.suspendedUntil} > now(), false)`
+
 async function listProviders(tx: Tx, q: AdminListQuery) {
   const f = filterOf(q)
   const text = textOf(f.q)
   const where = and(
-    text ? or(ilike(providers.displayName, like(text)), ilike(providers.publicName, like(text)), ilike(users.email, like(text))) : undefined,
+    text ? or(ilike(providers.publicName, like(text)), ilike(users.email, like(text))) : undefined,
     textOf(f.status) ? eq(providers.status, textOf(f.status)!) : undefined,
-    typeof f.suspended === 'boolean' ? eq(providers.suspended, f.suspended) : undefined,
+    typeof f.suspended === 'boolean' ? sql`${isSuspended} = ${f.suspended}` : undefined,
   )
   const total = (await tx.select({ n: count() }).from(providers).innerJoin(users, eq(users.id, providers.ownerId)).where(where))[0]!.n
   const rows = await tx
     .select({
       id: providers.id,
-      displayName: providers.displayName,
       publicName: providers.publicName,
       slug: providers.slug,
       type: providers.type,
       status: providers.status,
-      suspended: providers.suspended,
+      suspended: isSuspended,
       ownerId: providers.ownerId,
       ownerEmail: users.email,
       createdAt: providers.createdAt,
@@ -55,7 +57,7 @@ async function listProviders(tx: Tx, q: AdminListQuery) {
     .from(providers)
     .innerJoin(users, eq(users.id, providers.ownerId))
     .where(where)
-    .orderBy(...orderOf(q.sort, { createdAt: providers.createdAt, displayName: providers.displayName }, [desc(providers.createdAt)]))
+    .orderBy(...orderOf(q.sort, { createdAt: providers.createdAt, publicName: providers.publicName }, [desc(providers.createdAt)]))
     .limit(pageOf(q).limit)
     .offset(pageOf(q).offset)
   return ok(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })), total)
@@ -71,6 +73,8 @@ async function getProvider(tx: Tx, id: string) {
   void location
   return ok({
     ...rest,
+    suspended: !!rest.suspendedUntil && rest.suspendedUntil > new Date(),
+    suspendedUntil: rest.suspendedUntil?.toISOString() ?? null,
     createdAt: rest.createdAt.toISOString(),
     updatedAt: rest.updatedAt.toISOString(),
     ownerEmail: p.ownerEmail,
@@ -78,15 +82,17 @@ async function getProvider(tx: Tx, id: string) {
   })
 }
 
-/** A Reviewer removes a photo that breaks the rules. A published profile that loses its required photo goes back to draft. */
+/** A Reviewer removes a photo that breaks the rules. A published profile that loses the person's picture goes back to draft. */
 async function deletePhoto(tx: Tx, id: string, afterCommit: AfterCommit) {
   const row = isUuid(id) ? (await tx.select().from(photos).where(eq(photos.id, id)))[0] : undefined
   if (!row) return notFound()
-  await tx
-    .update(providers)
-    .set({ status: 'draft', updatedAt: new Date() })
-    .where(and(eq(providers.id, row.providerId), eq(providers.photoId, id), eq(providers.status, 'published')))
-  await tx.delete(photos).where(eq(photos.id, id)) // providers.photo_id is cleared by its FK
+  if (row.kind === 'profile') {
+    await tx
+      .update(providers)
+      .set({ status: 'draft', updatedAt: new Date() })
+      .where(and(eq(providers.ownerId, row.ownerId), eq(providers.status, 'published')))
+  }
+  await tx.delete(photos).where(eq(photos.id, id))
   afterCommit(() => removeObject(mediaBucket(), row.key))
   return new Response(null, { status: 204 })
 }
@@ -239,10 +245,10 @@ async function updatePage(tx: Tx, id: string, request: Request) {
 
 async function listStaff(tx: Tx, q: AdminListQuery) {
   const text = textOf(filterOf(q).q)
-  const where = and(sql`${users.staffRole} is not null`, text ? or(ilike(users.email, like(text)), ilike(users.name, like(text))) : undefined)
+  const where = and(sql`${users.staffRole} is not null`, text ? or(ilike(users.email, like(text)), ilike(fullName, like(text))) : undefined)
   const total = (await tx.select({ n: count() }).from(users).where(where))[0]!.n
   const rows = await tx.select().from(users).where(where).orderBy(asc(users.email)).limit(pageOf(q).limit).offset(pageOf(q).offset)
-  return ok(rows.map(toAdminUser), total)
+  return ok(await withPictures(tx, rows), total)
 }
 
 /** Sets or clears users.staff_role by email. The Administrator rows are locked, so two demotions cannot together remove the last one. */
@@ -255,7 +261,7 @@ async function setStaffRole(tx: Tx, request: Request) {
     if (admins.rows.length <= 1) return fail(409, { error: 'The last Administrator cannot be demoted' })
   }
   const [row] = await tx.update(users).set({ staffRole: b.staffRole, updatedAt: new Date() }).where(eq(users.id, target.id)).returning()
-  return ok(toAdminUser(row!))
+  return ok((await withPictures(tx, [row!]))[0])
 }
 
 // ---- dispatch (the routes stay thin) ----

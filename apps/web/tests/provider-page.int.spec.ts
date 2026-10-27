@@ -73,10 +73,10 @@ const render = async (slug: string, q?: Q) =>
   renderToStaticMarkup(await ProviderPage(args(slug, q)))
 
 describe('public provider page', () => {
-  it('German default: headline, public name, category, price "ab 80,00 €", on request, place', async () => {
+  it('German default: public name heading, category, price "ab 80,00 €", on request, place', async () => {
     const html = await render(deSlug)
     expect(html).toContain('Anna Hübsch')
-    expect(html).toContain('von Anna Hübsch')
+    expect(html).toContain('>Anna Hübsch</h1>')
     expect(html).toContain(`Foto ${stamp}`)
     expect(html).toMatch(/ab\s80,00\s€/)
     expect(html).toContain('Preis auf Anfrage')
@@ -90,7 +90,6 @@ describe('public provider page', () => {
     expect(html).toContain('from €80.00')
     expect(html).toContain('Price on request')
     expect(html).toContain(`Photo ${stamp}`)
-    expect(html).toContain('by Anna Hübsch')
     expect(html).toContain('Get the app')
   })
 
@@ -113,7 +112,7 @@ describe('public provider page', () => {
 
   it('metadata: title, description, canonical and hreflang for every language', async () => {
     const m = await generateMetadata(args(deSlug, { lang: 'en' }))
-    expect(m.title).toBe(`Anna Hübsch – Anna Hübsch | ${t('de', 'brand.name')}`)
+    expect(m.title).toBe(`Anna Hübsch | ${t('de', 'brand.name')}`)
     expect(m.description).toBe(BIO_DE.slice(0, 155))
     expect(m.alternates?.canonical).toBe(`/providers/${deSlug}?lang=en`)
     expect(m.alternates?.languages).toEqual({

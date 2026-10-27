@@ -6,7 +6,6 @@ export function applyTexts(p: ProviderDetail, t: TranslatableTexts): ProviderDet
   const references = new Map(t.references.map((r) => [r.id, r]))
   return {
     ...p,
-    displayName: t.displayName,
     bio: t.bio,
     strengths: t.strengths,
     experience: t.experience,

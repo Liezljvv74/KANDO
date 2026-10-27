@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { distanceKm, pool } from '@kando/db'
 import { SearchResultSchema } from '@kando/contract'
-import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
+import { setStorageForTests } from '@kando/domain'
+import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/providers/route')
@@ -128,4 +129,18 @@ it('paging: 20 per page and hasMore', async () => {
   expect(p2).toMatchObject({ page: 2, hasMore: false })
   expect(p2.items).toHaveLength(1)
   expect(new Set([...p1.items, ...p2.items].map((i) => i.slug)).size).toBe(21)
+})
+
+it("anonymous: the card carries the owner's profile photo and the public name, no display name", async () => {
+  setStorageForTests(memoryStorage())
+  try {
+    await seedProvider('sx-lena', { name: 'Lena F.', categoryId, skills: ['lenatest'] })
+    await givePhoto('sx-lena')
+    const raw = await (await search('q=lenatest')).json()
+    expect(raw.items).toHaveLength(1)
+    expect(raw.items[0]).not.toHaveProperty('displayName')
+    expect(raw.items[0]).toMatchObject({ publicName: 'Lena F.', photoUrl: 'https://media.test/users/sx-lena/profile.jpg' })
+  } finally {
+    setStorageForTests(undefined)
+  }
 })

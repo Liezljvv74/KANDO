@@ -52,7 +52,7 @@ export default function ProviderScreen() {
   }
 
   const options = (
-    <Stack.Screen options={{ headerShown: true, title: p?.displayName ?? '', headerTintColor: '#0E8A6B', headerStyle: { backgroundColor: '#F2FBF8' } }} />
+    <Stack.Screen options={{ headerShown: true, title: p?.publicName ?? '', headerTintColor: '#0E8A6B', headerStyle: { backgroundColor: '#F2FBF8' } }} />
   )
   if (!p)
     return (
@@ -69,14 +69,12 @@ export default function ProviderScreen() {
     <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingBottom: 16 + bottom }]}>
       {options}
       <View style={styles.header}>
-        <Avatar name={p.publicName || p.displayName} url={p.photoUrl} size={88} />
+        <Avatar name={p.publicName} url={p.photoUrl} size={88} />
         <View style={styles.headerText}>
           <View style={styles.titleRow}>
-            <Text style={styles.name}>{p.displayName}</Text>
+            <Text style={styles.name}>{p.publicName}</Text>
             {p.isNew && <Text style={styles.badge}>{t('badge.new')}</Text>}
           </View>
-          {/* For businesses publicName is the business name. */}
-          {!!p.publicName && <Text style={styles.by}>{p.publicName}</Text>}
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
           {!!p.worksRemotely && <Text style={styles.small}>{t('provider.remote')}</Text>}
@@ -200,7 +198,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 22, fontWeight: '700', color: '#14352E' },
   badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#0E8A6B', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
   text: { fontSize: 16, lineHeight: 22, color: '#14352E' },
-  by: { fontSize: 17, fontWeight: '600', color: '#14352E' },
   small: { fontSize: 14, lineHeight: 20, color: '#14352E' },
   translateBox: { gap: 4, alignItems: 'flex-start' },
   translate: { minHeight: 44, minWidth: 44, borderRadius: 22, borderWidth: 1, borderColor: '#0E8A6B', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },

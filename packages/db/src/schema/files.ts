@@ -3,7 +3,8 @@ import { type AnyPgColumn, check, index, integer, pgTable, uniqueIndex, text, ti
 import { providers } from './providers'
 import { users } from './users'
 
-// Public images (the key points into the public media bucket). Readable with the provider's public page.
+// Public images (the key points into the public media bucket). A portfolio photo belongs to a provider; the person's
+// picture is the one 'profile' row without a provider, readable once the owner's provider is live (see rls.ts).
 export const photos = pgTable(
   'photos',
   {
@@ -11,9 +12,7 @@ export const photos = pgTable(
     ownerId: text('owner_id')
       .notNull()
       .references(() => users.id),
-    providerId: uuid('provider_id')
-      .notNull()
-      .references((): AnyPgColumn => providers.id, { onDelete: 'cascade' }),
+    providerId: uuid('provider_id').references((): AnyPgColumn => providers.id, { onDelete: 'cascade' }),
     kind: text().notNull(),
     key: text().notNull(),
     width: integer().notNull(),
@@ -24,7 +23,9 @@ export const photos = pgTable(
   },
   (t) => [
     check('photos_kind_check', sql`kind in ('profile','portfolio')`),
+    check('photos_profile_provider_check', sql`(kind = 'profile') = (provider_id IS NULL)`),
     index('photos_provider_id_idx').on(t.providerId),
+    uniqueIndex('photos_one_profile_idx').on(t.ownerId).where(sql`kind = 'profile'`),
   ],
 )
 

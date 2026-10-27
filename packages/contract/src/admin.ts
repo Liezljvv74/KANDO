@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { LangSchema, requiredText } from './common'
+import { AddressSchema } from './me'
 
 const jsonString = z.string().refine((s) => {
   try {
@@ -25,7 +26,10 @@ export const StaffRoleSchema = z.enum(['admin', 'reviewer'])
 
 export const AdminUserSchema = z.object({
   id: z.string(),
-  name: z.string().nullable(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  address: AddressSchema.nullable(),
+  photoUrl: z.string().nullable(),
   email: z.string(),
   language: LangSchema.nullable(),
   staffRole: StaffRoleSchema.nullable(),

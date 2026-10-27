@@ -32,7 +32,6 @@ const SYSTEM_PROMPT = (lang: Lang) =>
 export class TranslationUnavailable extends Error {}
 
 export const textsOf = (p: ProviderDetail): TranslatableTexts => ({
-  displayName: p.displayName,
   bio: p.bio ?? null,
   strengths: p.strengths ?? null,
   experience: p.experience ?? null,
@@ -41,9 +40,9 @@ export const textsOf = (p: ProviderDetail): TranslatableTexts => ({
   references: p.references.map((r) => ({ id: r.id, description: r.description })),
 })
 
-// Stable ids: displayName, bio, strengths, experience, skill:0, service:<id>:title, service:<id>:description, reference:<id>
+// Stable ids: bio, strengths, experience, skill:0, service:<id>:title, service:<id>:description, reference:<id>
 function flatten(t: TranslatableTexts): Record<string, string> {
-  const all: Record<string, string | null> = { displayName: t.displayName, bio: t.bio, strengths: t.strengths, experience: t.experience }
+  const all: Record<string, string | null> = { bio: t.bio, strengths: t.strengths, experience: t.experience }
   t.skills.forEach((s, i) => (all[`skill:${i}`] = s))
   for (const s of t.services) {
     all[`service:${s.id}:title`] = s.title
@@ -55,7 +54,6 @@ function flatten(t: TranslatableTexts): Record<string, string> {
 
 function rebuild(t: TranslatableTexts, f: Record<string, string>): TranslatableTexts {
   return {
-    displayName: f.displayName ?? t.displayName,
     bio: t.bio && (f.bio ?? t.bio),
     strengths: t.strengths && (f.strengths ?? t.strengths),
     experience: t.experience && (f.experience ?? t.experience),

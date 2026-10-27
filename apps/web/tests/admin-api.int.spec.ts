@@ -107,7 +107,7 @@ it('suspending a user hides the provider from search and the public page; liftin
   const u = (await pool.query("SELECT suspended_until, suspended_reason FROM users WHERE id = 'aa-sus'")).rows[0]
   expect(new Date(u.suspended_until).toISOString()).toBe(until)
   expect(u.suspended_reason).toBe('Complaints')
-  expect((await pool.query('SELECT suspended FROM providers WHERE id = $1', [sid])).rows[0].suspended).toBe(true)
+  expect(new Date((await pool.query('SELECT suspended_until FROM providers WHERE id = $1', [sid])).rows[0].suspended_until).toISOString()).toBe(until)
   expect(await visible()).toBe(false)
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-sus' })).status).toBe(200)
   expect((await pool.query("SELECT suspended_until FROM users WHERE id = 'aa-sus'")).rows[0].suspended_until).toBeNull()
@@ -201,8 +201,7 @@ it('providers are readable; a Reviewer deletes a photo (object removed, publishe
   expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [photo])).rowCount).toBe(0)
   expect(store.objects.has('media/providers/aa/one.jpg')).toBe(false)
   expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: photo })).status).toBe(404)
-  const prof = (await pool.query("INSERT INTO photos (owner_id, provider_id, kind, key, width, height) VALUES ('aa-owner', $1, 'profile', 'providers/aa/p.jpg', 1, 1) RETURNING id", [providerId])).rows[0].id
-  await pool.query('UPDATE providers SET photo_id = $1 WHERE id = $2', [prof, providerId])
+  const prof = (await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('aa-owner', 'profile', 'users/aa/p.jpg', 1, 1) RETURNING id")).rows[0].id
   expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: prof })).status).toBe(204)
   expect((await pool.query('SELECT status FROM providers WHERE id = $1', [providerId])).rows[0].status).toBe('draft')
 })
