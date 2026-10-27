@@ -5,21 +5,21 @@ import { ensureDraft } from '@/api/my-profile'
 import { loadMe } from '@/hooks/use-me'
 import { startOffering } from './start-offering'
 
-const calls: string[] = []
-jest.mock('expo-router', () => ({ router: { navigate: jest.fn((to: string) => calls.push(`navigate ${to}`)) } }))
-jest.mock('@/api/client', () => ({ ApiError: class ApiError extends Error { constructor(public status: number, public code: string) { super(code) } } }))
-jest.mock('@/api/my-profile', () => ({ ensureDraft: jest.fn(async () => void calls.push('ensureDraft')) }))
-jest.mock('@/hooks/use-me', () => ({ loadMe: jest.fn(async () => void calls.push('loadMe')) }))
+const mockCalls: string[] = []
+jest.mock('expo-router', () => ({ router: { navigate: jest.fn((to: string) => mockCalls.push(`navigate ${to}`)) } }))
+jest.mock('@/api/client', () => ({ ApiError: class ApiError extends Error { status: number; code: string; constructor(status: number, code: string) { super(code); this.status = status; this.code = code } } }))
+jest.mock('@/api/my-profile', () => ({ ensureDraft: jest.fn(async () => void mockCalls.push('ensureDraft')) }))
+jest.mock('@/hooks/use-me', () => ({ loadMe: jest.fn(async () => void mockCalls.push('loadMe')) }))
 jest.mock('@/i18n', () => ({ errorText: (c: string) => `error:${c}` }))
 
 beforeEach(() => {
-  calls.length = 0
+  mockCalls.length = 0
   jest.clearAllMocks()
 })
 
 test('creates the draft, reloads /me, then opens the profile page, in that order', async () => {
   expect(await startOffering()).toBeNull()
-  expect(calls).toEqual(['ensureDraft', 'loadMe', 'navigate /my-profile'])
+  expect(mockCalls).toEqual(['ensureDraft', 'loadMe', 'navigate /my-profile'])
 })
 
 test('welcome passes through to the page', async () => {
