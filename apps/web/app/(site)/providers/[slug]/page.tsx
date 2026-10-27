@@ -123,7 +123,7 @@ export default async function ProviderPage({ params, searchParams }: Args) {
       {p.translatable && !translated && (
         <p className="text-sm">
           <Link
-            href={`${langPath(base, lang)}${lang === 'de' ? '?' : '&'}translate=1`}
+            href={`${langPath(base, lang)}${langPath(base, lang).includes('?') ? '&' : '?'}translate=1`}
             rel="nofollow"
           >
             {tt('web.translate')}

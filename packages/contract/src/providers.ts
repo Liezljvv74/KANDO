@@ -1,3 +1,4 @@
+import { DEFAULT_LANG } from '@kando/i18n'
 import { z } from 'zod'
 
 import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
@@ -30,11 +31,11 @@ export const SearchQuerySchema = z.object({
   postcode: z.string().optional(),
   q: z.string().max(100).optional(),
   page: z.coerce.number().int().min(1).max(1000).default(1),
-  lang: LangSchema.default('de'),
+  lang: LangSchema.default(DEFAULT_LANG),
   country: z.string().default('DE'),
 })
 
-export const LangQuerySchema = z.object({ lang: LangSchema.default('de') })
+export const LangQuerySchema = z.object({ lang: LangSchema.default(DEFAULT_LANG) })
 
 export const ProviderServiceSchema = z.object({
   id: z.string(),

@@ -17,8 +17,10 @@ export const TRANSLATE_LIMIT_PER_HOUR = 30
 /** Default time to wait for the model, in ms; env TRANSLATE_TIMEOUT_MS overrides it. */
 export const TRANSLATE_TIMEOUT_MS = 12_000
 
+const LANGUAGE_NAME: Record<Lang, string> = { de: 'German', en: 'English' }
+
 const SYSTEM_PROMPT = (lang: Lang) =>
-  `You translate texts from a service marketplace profile page into ${lang === 'de' ? 'German' : 'English'}. You get a JSON object whose values are texts.
+  `You translate texts from a service marketplace profile page into ${LANGUAGE_NAME[lang]}. You get a JSON object whose values are texts.
 - Translate each value into the target language.
 - Keep line breaks, list markers and paragraph order.
 - Do not add, drop or summarise content.

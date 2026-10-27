@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { db, users } from '@kando/db'
-import { isLang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang } from '@kando/i18n'
 import { sendEmail } from './email'
 
 /** What a staff decision on a document tells the owner. */
@@ -12,7 +12,7 @@ export async function notifyDocumentDecision(userId: string, document: DocumentD
     if (!user) return
     await sendEmail({
       to: user.email,
-      lang: isLang(user.language) ? user.language : 'de',
+      lang: isLang(user.language) ? user.language : DEFAULT_LANG,
       template: document.status === 'approved' ? 'document-approved' : 'document-rejected',
       params: { requirement: document.requirement, note: document.note },
     })

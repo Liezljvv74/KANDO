@@ -1,4 +1,4 @@
-import { isLang, t as translate, type Key, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, t as translate, type Key, type Lang } from '@kando/i18n'
 import { getLocales } from 'expo-localization'
 import * as SecureStore from 'expo-secure-store'
 import { useSyncExternalStore } from 'react'
@@ -8,7 +8,8 @@ export type { Key, Lang }
 
 const LANG_KEY = 'skilled.lang'
 
-let lang: Lang = getLocales()[0]?.languageCode === 'en' ? 'en' : 'de'
+const deviceLang = getLocales()[0]?.languageCode
+let lang: Lang = isLang(deviceLang) ? deviceLang : DEFAULT_LANG
 const listeners = new Set<() => void>()
 
 function apply(next: Lang) {
@@ -72,7 +73,7 @@ const errorKeys: Record<string, Key> = {
 /** Maps a server machine string (ApiError.code) to text in the current language. */
 export const errorText = (code: string): string => t(errorKeys[code] ?? 'error.generic')
 
-const known = (key: string): key is Key => translate('de', key as Key) !== key
+const known = (key: string): key is Key => translate(DEFAULT_LANG, key as Key) !== key
 
 /** Maps a `missing` item of a 409 'Profile incomplete' response to text; unknown items show the raw name. */
 export const missingText = (item: string): string => {

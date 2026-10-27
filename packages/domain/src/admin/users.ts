@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gt, ilike, or, sql } from 'drizzle-orm'
 import { providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
+import { isLang } from '@kando/i18n'
 import { fail } from '../providers/http'
 import type { StaffUser } from '../users'
 import { filterOf, like, notFound, ok, orderOf, pageOf, textOf } from './common'
@@ -9,7 +10,7 @@ export const toAdminUser = (r: typeof users.$inferSelect): AdminUser => ({
   id: r.id,
   name: r.name,
   email: r.email,
-  language: r.language === 'de' || r.language === 'en' ? r.language : null,
+  language: isLang(r.language) ? r.language : null,
   staffRole: r.staffRole === 'admin' || r.staffRole === 'reviewer' ? r.staffRole : null,
   isProvider: r.isProvider,
   suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
