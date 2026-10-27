@@ -1,6 +1,10 @@
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator'
 import { expect, it } from 'vitest'
 import { assertTestDatabase } from '@kando/db/src/test/guard'
-import { applyRls, classifyTables, migrate, pool } from '@kando/db'
+import { applyRls, classifyTables, db, migrate, pool } from '@kando/db'
 
 it('migrates an empty database and classifies every table', async () => {
   assertTestDatabase(pool.options.connectionString!)
@@ -57,3 +61,38 @@ it('photos: a profile photo has no provider, a portfolio photo has one, one prof
     await pool.query("DELETE FROM users WHERE id = 'dm-1'")
   }
 })
+
+it('0008 on a database with data: a suspended provider stays hidden, a published one without names or picture goes back to draft', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const src = join(process.cwd(), '../../packages/db/migrations')
+  const upTo7 = mkdtempSync(join(tmpdir(), 'mig7-'))
+  cpSync(src, upTo7, { recursive: true })
+  const journalPath = join(upTo7, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => !e.tag.startsWith('0008'))
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo7 })
+  await pool.query(`INSERT INTO users (id, email, suspended_until) VALUES
+    ('m8-pub', 'm8-pub@test.skilled.invalid', NULL),
+    ('m8-sus', 'm8-sus@test.skilled.invalid', now() + interval '5 days'),
+    ('m8-susnodate', 'm8-susnodate@test.skilled.invalid', NULL),
+    ('m8-draft', 'm8-draft@test.skilled.invalid', NULL)`)
+  await pool.query(`INSERT INTO providers (owner_id, type, display_name, status, suspended) VALUES
+    ('m8-pub', 'private', 'P', 'published', false),
+    ('m8-sus', 'private', 'S', 'published', true),
+    ('m8-susnodate', 'private', 'N', 'published', true),
+    ('m8-draft', 'private', 'D', 'draft', false)`)
+  const pid = (await pool.query("SELECT id FROM providers WHERE owner_id = 'm8-pub'")).rows[0].id
+  await pool.query("INSERT INTO photos (owner_id, provider_id, kind, key, width, height) VALUES ('m8-pub', $1, 'profile', 'k', 1, 1)", [pid])
+  await migrate()
+  const rows = (await pool.query("SELECT owner_id, status, suspended_until, suspended_until > now() + interval '365 days' AS for_good FROM providers WHERE owner_id LIKE 'm8-%' ORDER BY owner_id")).rows
+  const by = Object.fromEntries(rows.map((r) => [r.owner_id, r]))
+  expect(by['m8-sus'].suspended_until.getTime()).toBeGreaterThan(Date.now() + 4 * 86_400_000) // the owner's end date carried over
+  expect(by['m8-susnodate'].for_good).toBe(true) // no date known: still hidden
+  expect(by['m8-pub'].suspended_until).toBeNull()
+  expect(rows.map((r) => r.status)).toEqual(['draft', 'draft', 'draft', 'draft']) // no names, no pictures after the migration
+  await pool.query("DELETE FROM providers WHERE owner_id LIKE 'm8-%'")
+  await pool.query("DELETE FROM users WHERE id LIKE 'm8-%'")
+}, 60_000)
