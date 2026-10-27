@@ -3,9 +3,10 @@
 import { useCustomMutation } from '@refinedev/core'
 import { List, useTable } from '@refinedev/antd'
 import { Button, Form, Input, Select, Space, Table, Tag } from 'antd'
-import { at } from '../../../lib/admin/t'
+import { useAt } from '../../../lib/admin/t'
 
 export default function StaffList() {
+  const at = useAt()
   const { tableProps, tableQuery } = useTable({ syncWithLocation: true })
   const set = useCustomMutation()
   return (

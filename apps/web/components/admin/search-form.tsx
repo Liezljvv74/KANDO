@@ -2,10 +2,11 @@
 
 import type { FormProps } from 'antd'
 import { Button, Form, Input, Space } from 'antd'
-import { at } from '../../lib/admin/t'
+import { useAt } from '../../lib/admin/t'
 
 /** The text filter above every list: `searchFormProps` from useTable (its onSearch turns `q` into the `q` filter). */
 export function SearchForm({ formProps }: { formProps: FormProps<{ q?: string }> }) {
+  const at = useAt()
   return (
     <Form {...formProps} layout="inline" style={{ marginBottom: 16 }}>
       <Space>

@@ -279,6 +279,7 @@ export const de = {
   'admin.action.show': 'Ansehen',
   'admin.action.filter': 'Filter',
   'admin.action.refresh': 'Aktualisieren',
+  'admin.action.list': 'Liste',
   'admin.status.pending': 'Zu prüfen',
   'admin.status.approved': 'Freigegeben',
   'admin.status.rejected': 'Zurückgewiesen',

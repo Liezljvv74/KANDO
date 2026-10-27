@@ -2,13 +2,14 @@
 
 import { useList } from '@refinedev/core'
 import { Card, Col, Row, Statistic } from 'antd'
-import { at } from '../../lib/admin/t'
+import { useAt } from '../../lib/admin/t'
 
 const useTotal = (resource: string, field: string, value: unknown) =>
   // pageSize 1: only `total` is needed
   useList({ resource, pagination: { currentPage: 1, pageSize: 1 }, filters: [{ field, operator: 'eq', value }] })
 
 export default function Dashboard() {
+  const at = useAt()
   const pending = useTotal('documents', 'status', 'pending')
   const suspended = useTotal('users', 'suspended', true)
   return (

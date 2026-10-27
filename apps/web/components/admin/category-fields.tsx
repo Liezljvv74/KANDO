@@ -1,11 +1,12 @@
 'use client'
 
 import { Form, Input, InputNumber, Select } from 'antd'
-import { at } from '../../lib/admin/t'
+import { useAt } from '../../lib/admin/t'
 
 const REQUIREMENTS = ['police-certificate', 'permit']
 
 export function CategoryFields() {
+  const at = useAt()
   return (
     <>
       <Form.Item label={at('admin.field.slug')} name="slug" rules={[{ required: true, pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/ }]}>

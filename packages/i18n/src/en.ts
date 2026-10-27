@@ -280,6 +280,7 @@ export const en: Record<Key, string> = {
   'admin.action.show': 'View',
   'admin.action.filter': 'Filter',
   'admin.action.refresh': 'Refresh',
+  'admin.action.list': 'List',
   'admin.status.pending': 'To review',
   'admin.status.approved': 'Accepted',
   'admin.status.rejected': 'Declined',
