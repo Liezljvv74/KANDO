@@ -3,12 +3,12 @@
 import { useState } from 'react'
 import { useCustomMutation, useGetIdentity, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
-import { Button, DatePicker, Descriptions, Input, Space } from 'antd'
+import { Button, DatePicker, Descriptions, Image, Input, Space } from 'antd'
 import type { Dayjs } from 'dayjs'
 import { LOCALE } from '@kando/i18n'
 import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
-type User = { id: string; email: string; firstName: string | null; lastName: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
+type User = { id: string; email: string; firstName: string | null; lastName: string | null; address: { street: string; postcode: string; city: string; country: string } | null; photoUrl: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
 
 export default function UserShow() {
   const at = useAt()
@@ -26,7 +26,14 @@ export default function UserShow() {
         <>
           <Descriptions column={1} bordered>
             <Descriptions.Item label={at('admin.field.email')}>{result.email}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.name')}>{[result.firstName, result.lastName].filter(Boolean).join(' ')}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.firstName')}>{result.firstName}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.lastName')}>{result.lastName}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.address')}>
+              {result.address && `${result.address.street}, ${result.address.postcode} ${result.address.city}, ${result.address.country}`}
+            </Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.picture')}>
+              {result.photoUrl && <Image src={result.photoUrl} alt="" width={96} />}
+            </Descriptions.Item>
             <Descriptions.Item label={at('admin.field.role')}>{result.staffRole && at(result.staffRole === 'admin' ? 'admin.role.administrator' : 'admin.role.reviewer')}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.suspendedUntil')}>{result.suspendedUntil && new Date(result.suspendedUntil).toLocaleString(LOCALE[lang])}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.reason')}>{result.suspendedReason}</Descriptions.Item>

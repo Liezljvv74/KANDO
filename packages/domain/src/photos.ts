@@ -54,7 +54,7 @@ const toPhoto = (r: Row): Photo & { width: number; height: number } => ({
 })
 
 export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
-  const rows = await tx.select().from(photos).where(eq(photos.ownerId, userId)).orderBy(asc(photos.createdAt), asc(photos.id))
+  const rows = await tx.select().from(photos).where(eq(photos.ownerId, userId)).orderBy(sql`(${photos.kind} = 'profile') DESC`, asc(photos.createdAt), asc(photos.id))
   return rows.map(toPhoto)
 }
 

@@ -8,6 +8,7 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
 const publish = await import('../app/app-api/v1/provider-profile/publish/route')
 const services = await import('../app/app-api/v1/services/route')
+const me = await import('../app/app-api/v1/me/route')
 
 let categoryId: string
 beforeAll(async () => {
@@ -72,4 +73,16 @@ it('first contact does not copy the session name: the person sets their own name
   const created = await profileRoute.PUT(as('Anna Schmidt'), { params: Promise.resolve({}) })
   expect(MyProfileSchema.parse(await created.json()).publicName).toBe('')
   expect((await pool.query("SELECT first_name, last_name FROM users WHERE id = 'pn4'")).rows[0]).toEqual({ first_name: null, last_name: null })
+})
+
+it('a rename of the person changes the public name of their provider profile', async () => {
+  await call(profileRoute.GET, 'pn5')
+  await call(me.PATCH, 'pn5', 'PATCH', { firstName: 'Anna', lastName: 'Schmidt' })
+  expect((await call(profileRoute.PUT, 'pn5', 'PUT', profile)).status).toBe(201)
+  const name = async () => (await pool.query("SELECT public_name FROM providers WHERE owner_id = 'pn5'")).rows[0].public_name
+  expect(await name()).toBe('Anna S.')
+  const res = await call(me.PATCH, 'pn5', 'PATCH', { lastName: 'Weber' })
+  expect(res.status).toBe(200)
+  expect(await name()).toBe('Anna W.')
+  expect(MyProfileSchema.parse(await (await call(profileRoute.GET, 'pn5')).json()).publicName).toBe('Anna W.')
 })

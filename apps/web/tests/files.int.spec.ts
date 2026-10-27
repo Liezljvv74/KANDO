@@ -225,3 +225,16 @@ it('verifications: one pending check per requirement (409 removes the second fil
   // the submitted file stays reachable through the document id
   expect((await call(file.GET, 'fl1', 'GET', undefined, { id: list.docs[0]!.id })).status).toBe(200)
 })
+
+it('the profile photo is private to its owner: another user cannot see it and gets 404 on delete; listPhotos puts it first', async () => {
+  const id = (await (await sendPhoto('fl1', 'profile')).json()).id
+  // there is no GET route for a photo: the row itself is invisible to another user (RLS)
+  expect(await asUser('fl2', async (tx) => (await tx.execute(sql`SELECT 1 FROM photos WHERE id = ${id}`)).rows)).toHaveLength(0)
+  expect((await call(photo.DELETE, 'fl2', 'DELETE', undefined, { id })).status).toBe(404)
+  expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [id])).rowCount).toBe(1)
+  // a portfolio photo uploaded later still lists after the picture; replacing the picture keeps it first
+  await sendPhoto('fl1', 'portfolio')
+  await pool.query("UPDATE photos SET created_at = now() - interval '1 day' WHERE owner_id = 'fl1' AND kind = 'portfolio'")
+  const kinds = async () => PhotosListSchema.parse(await (await call(photos.GET, 'fl1')).json()).docs.map((d) => d.kind)
+  expect((await kinds())[0]).toBe('profile')
+})

@@ -227,3 +227,13 @@ it('an expired suspension is not counted by the suspended filter', async () => {
   expect(body.data.some((u: { id: string }) => u.id === 'aa-exp')).toBe(false)
   expect(body.data.every((u: { suspendedUntil: string }) => new Date(u.suspendedUntil) > new Date())).toBe(true)
 })
+
+it('GET users/[id] carries names, the private address and the picture; the list shows them too', async () => {
+  await seedUser('aa-me1', null, 'Anna Schmidt')
+  await pool.query("UPDATE users SET address_street = 'Hauptstr. 1', address_postcode = '10115', address_city = 'Berlin', address_country = 'DE' WHERE id = 'aa-me1'")
+  await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('aa-me1', 'profile', 'users/aa-me1/p.jpg', 1, 1)")
+  const one = (await (await get('users', 'aa-rev', '', 'aa-me1')).json()).data
+  expect(one).toMatchObject({ firstName: 'Anna', lastName: 'Schmidt', address: { street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin', country: 'DE' }, photoUrl: 'https://media.test/users/aa-me1/p.jpg' })
+  const listed = (await (await get('users', 'aa-rev', `?filter=${encodeURIComponent(JSON.stringify({ q: 'Anna Schm' }))}`)).json()).data
+  expect(listed.map((u: { id: string }) => u.id)).toContain('aa-me1') // the name search works on "First Last"
+}) 

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
-import { MeSchema, MyProfileSchema } from '@kando/contract'
+import { asUser, pool } from '@kando/db'
+import { updateMe } from '@kando/domain'
+import { MeSchema, type MePatch, MyProfileSchema } from '@kando/contract'
 import { call, cleanupUsers, EMAIL, profile } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -99,4 +100,21 @@ it('PATCH /me checks its body with the contract: 400 Invalid input names the fie
   const ok = await call(me.PATCH, 'pp-me', 'PATCH', { firstName: '  Anna ', lastName: 'Schmidt', language: 'en' })
   expect(ok.status).toBe(200)
   expect(MeSchema.parse(await ok.json())).toMatchObject({ id: 'pp-me', firstName: 'Anna', lastName: 'Schmidt', language: 'en', address: null, notifications: [] })
+})
+
+it('updateMe stores country DE when the address carries none (the HTTP contract always sends one)', async () => {
+  await call(me.GET, 'pp-dflt')
+  const patch = { address: { street: 'Weg 2', postcode: '10115', city: 'Berlin' } } as unknown as MePatch
+  expect((await asUser('pp-dflt', (tx) => updateMe(tx, 'pp-dflt', patch))).address?.country).toBe('DE')
+})
+
+it('PATCH /me stores names and a private address (country stored as sent); GET /me returns them; null clears the address', async () => {
+  const set = await call(me.PATCH, 'pp-addr', 'PATCH', { firstName: 'Anna', lastName: 'Schmidt', address: { street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin', country: 'DE' } })
+  expect(set.status).toBe(200)
+  const got = MeSchema.parse(await (await call(me.GET, 'pp-addr')).json())
+  expect(got).toMatchObject({ firstName: 'Anna', lastName: 'Schmidt', address: { street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin', country: 'DE' }, photoUrl: null })
+  const cleared = await call(me.PATCH, 'pp-addr', 'PATCH', { address: null })
+  expect(MeSchema.parse(await cleared.json()).address).toBeNull()
+  const row = (await pool.query("SELECT address_street, address_postcode, address_city, address_country FROM users WHERE id = 'pp-addr'")).rows[0]
+  expect(row).toEqual({ address_street: null, address_postcode: null, address_city: null, address_country: null })
 })
