@@ -5,7 +5,7 @@ How KANDO goes live. Nothing here has been done yet except the Neon dev branch. 
 ## Pieces
 
 - **Website, back office and API:** one Next.js app in `apps/web`, on Vercel, region `fra1` (Frankfurt; set in `apps/web/vercel.json`).
-- **Daily check:** Vercel Cron (`crons` in `apps/web/vercel.json`) calls `/api/cron/suspensions` at 06:00 UTC with `Authorization: Bearer $CRON_SECRET`; it ends suspensions whose date has passed and sends the "published again" email. Needs `CRON_SECRET` set in Vercel (Production and Preview).
+- **Daily check:** Vercel Cron (`crons` in `apps/web/vercel.json`) calls `/api/cron/suspensions` at 06:00 UTC with `Authorization: Bearer $CRON_SECRET`; it ends suspensions whose date has passed and sends the "published again" email. Vercel runs crons on the Production deployment only, so `CRON_SECRET` is needed for Production (Preview never runs the check).
 - **Database, login and files:** Neon project `SkillWeb` in AWS Frankfurt (Postgres, Neon Auth, Object Storage).
 - **Branches:** `kando-dev` exists now (endpoint `ep-steep-scene-b9p4f2v6`). `kando-main` is created at cutover. The old `main` and `dev` branches belong to the old Payload app and stay untouched until then.
 
@@ -40,7 +40,7 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
 | `RESEND_API_KEY` | yes | web | Approval, rejection, suspension and "profile is live" emails. Required in production: without it no email is sent, only one line is logged. |
-| `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. |
+| `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. Production only (crons do not run on Preview). |
 | `NEXT_PUBLIC_SERVER_URL` | no | web | Public address of the site (links, sitemaps, canonical). |
 | `VERCEL_PROJECT_PRODUCTION_URL` | no | web | Set by Vercel itself; do not add it by hand. |
 | `ALLOW_PRODUCTION` | no | seeds only | Never set on Vercel. See Seeds. |
@@ -74,7 +74,7 @@ The app API refuses every account whose email is not confirmed yet (answer 403 `
 
 - `neon deploy` (reads `neon.ts` in the repository root) applies the Neon settings, including Auth, to a branch.
 - `pnpm db:migrate` changes the database schema. Run it against production only when the owner says so, with `DATABASE_URL_UNPOOLED` pointing at the target branch. Take a Neon branch of production first.
-- Migration `0008` (registration and provider setup) renames and drops columns: `users.name` becomes `first_name`, `last_name` and a private address; `providers.display_name`, `providers.suspended` and `providers.photo_id` are dropped (`suspended_until` replaces `suspended`); old `profile` photos are deleted (the picture now belongs to the person). Nobody uses the app yet, so nothing is preserved. Run it with `pnpm db:migrate` (it applies the row-level security afterwards); dev is already migrated. On any real database: Neon branch first, then migrate.
+- Migration `0008` (registration and provider setup) renames and drops columns: `users.name` becomes `first_name`, `last_name` and a private address; `providers.display_name`, `providers.suspended` and `providers.photo_id` are dropped (`suspended_until` replaces `suspended`); old `profile` photos are deleted (the picture now belongs to the person; the deleted photos' objects stay in the bucket as orphans, which is harmless and they can be removed by hand). Nobody uses the app yet, so nothing is preserved. Run it with `pnpm db:migrate` (it applies the row-level security afterwards); dev is already migrated. On any real database: Neon branch first, then migrate.
 - Every migration that creates tables must end with the row-level security statements for them (see the design, section on security).
 
 ## Cutover: preparing `kando-main`
