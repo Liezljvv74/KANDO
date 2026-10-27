@@ -6,7 +6,7 @@ import { CATEGORIES, seedCategories } from '@kando/db/src/seed/categories'
 import { assertDevTarget } from '@kando/db/src/seed/guard'
 import { setStorageForTests } from '@kando/domain'
 import { addPlaceholderPhotos, confirmedOrDev } from '@kando/domain/src/seed/placeholder-photos'
-import { neonAuth, seedTestUsers, TEST_PASSWORD } from '@kando/domain/src/seed/test-users'
+import { loadSeedData, neonAuth, seedTestUsers, type SeedData } from '@kando/domain/src/seed/test-users'
 import { memoryStorage } from './helpers'
 
 const file = resolve(__dirname, '../../../packages/db/data/postcodes-de.tsv')
@@ -77,47 +77,79 @@ it('the dev guard needs the dev branch AND the dev database host', () => {
   // an empty override falls back to the dev endpoint instead of matching every host
   expect(() => assertDevTarget({ ...PROD, NEON_BRANCH: 'kando-dev', NEON_DEV_ENDPOINT_ID: '' })).toThrow(/Dev branch only/)
   expect(() => assertDevTarget({ ...DEV, NEON_DEV_ENDPOINT_ID: '' })).not.toThrow()
-  expect(TEST_PASSWORD).toBe('TestPass123')
+})
+
+// The real account list is git-ignored; the tests use this fixture so they never depend on it.
+const SEED: SeedData = {
+  password: 'TestPass123',
+  customers: [
+    { email: 'kunde.berlin@example.com', name: 'Anna Schulz' },
+    { email: 'customer.hamburg@example.com', name: 'James Miller', language: 'en' },
+  ],
+  providers: [
+    {
+      email: 'anbieter.foto.berlin@example.com', name: 'Lena Fischer',
+      profile: { displayName: 'Hochzeitsfotografie Berlin', providerType: 'individual', basePostcode: '10115', serviceRadiusKm: 50, bio: 'Hochzeiten und Familienfeste.', strengths: 'Ruhige Art.', skills: ['Hochzeiten'], experience: 'Seit 2015' },
+      services: [
+        { category: 'photography', title: 'Hochzeitsreportage', description: '8 Stunden.', priceType: 'fixed', price: 1490 },
+        { category: 'photography', title: 'Portrait-Shooting', description: '1 Stunde.', priceType: 'from', price: 129 },
+      ],
+      references: [{ clientName: 'Familie Krüger', description: 'Hochzeit, 120 Gäste.', year: 2025 }],
+    },
+    {
+      email: 'anbieter.dj.hamburg@example.com', name: 'Tom Nord',
+      profile: { displayName: 'DJ für Hochzeiten und Firmenfeiern', providerType: 'business', businessName: 'Nordbeat Events GmbH', impressum: 'Nordbeat Events GmbH, Beispielstraße 1, 20095 Hamburg (Testdaten)', basePostcode: '20095', serviceRadiusKm: 80, bio: 'Musik für jede Feier.', strengths: 'Eigene Technik.', skills: ['Hochzeiten'], experience: 'Seit 2012' },
+      services: [{ category: 'dj', title: 'Hochzeits-DJ', description: 'Bis 2 Uhr.', priceType: 'from', price: 890 }],
+      references: [{ clientName: 'Hafenwerk GmbH', description: 'Sommerfest, 300 Gäste.', year: 2024 }],
+    },
+  ],
+}
+
+it('loadSeedData reads the git-ignored list or the committed example, and rejects a broken file', () => {
+  const data = loadSeedData()
+  expect(data.password.length).toBeGreaterThan(0)
+  expect(data.customers.length + data.providers.length).toBeGreaterThan(0)
+  expect(() => loadSeedData(new URL('../package.json', import.meta.url))).toThrow(/needs password/)
 })
 
 it('seedTestUsers itself refuses outside dev, before touching anything', async () => {
-  await expect(seedTestUsers(fakeAuth, PROD)).rejects.toThrow(/Dev branch only/)
+  await expect(seedTestUsers(fakeAuth, PROD, SEED)).rejects.toThrow(/Dev branch only/)
   expect(await count("SELECT count(*) n FROM users WHERE email LIKE '%@example.com'")).toBe(0)
 })
 
 it('builds the test users through the domain: published providers with photo, services, public names, verified; a rerun adds nothing', async () => {
-  const first = await seedTestUsers(fakeAuth, DEV)
-  expect(first).toEqual({ created: 14, skipped: 0 })
-  expect(await count("SELECT count(*) n FROM users WHERE email LIKE '%@example.com'")).toBe(14)
-  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND photo_id IS NOT NULL AND ${OWNED}`)).toBe(9)
-  expect(storage.objects.size).toBe(9)
-  expect(await count('SELECT count(*) n FROM neon_auth."user" WHERE "emailVerified"')).toBe(14)
+  const first = await seedTestUsers(fakeAuth, DEV, SEED)
+  expect(first).toEqual({ created: 4, skipped: 0 })
+  expect(await count("SELECT count(*) n FROM users WHERE email LIKE '%@example.com'")).toBe(4)
+  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND photo_id IS NOT NULL AND ${OWNED}`)).toBe(2)
+  expect(storage.objects.size).toBe(2)
+  expect(await count('SELECT count(*) n FROM neon_auth."user" WHERE "emailVerified"')).toBe(4)
   const dj = (await pool.query("SELECT public_name, slug FROM providers WHERE business_name = 'Nordbeat Events GmbH'")).rows[0]
   expect(dj).toEqual({ public_name: 'Nordbeat Events GmbH', slug: 'nordbeat-events-gmbh' })
   const foto = (await pool.query("SELECT public_name FROM providers p JOIN users u ON u.id = p.owner_id WHERE u.email = 'anbieter.foto.berlin@example.com'")).rows[0]
   expect(foto.public_name).toBe('Lena F.')
-  expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(14)
+  expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(3)
   // a rerun skips everything but still fixes the verified flag of existing accounts
   await pool.query('UPDATE neon_auth."user" SET "emailVerified" = false')
-  expect(await seedTestUsers(fakeAuth, DEV)).toEqual({ created: 0, skipped: 14 })
-  expect(await count('SELECT count(*) n FROM neon_auth."user" WHERE "emailVerified"')).toBe(14)
-  expect(await count(`SELECT count(*) n FROM providers WHERE ${OWNED}`)).toBe(9)
+  expect(await seedTestUsers(fakeAuth, DEV, SEED)).toEqual({ created: 0, skipped: 4 })
+  expect(await count('SELECT count(*) n FROM neon_auth."user" WHERE "emailVerified"')).toBe(4)
+  expect(await count(`SELECT count(*) n FROM providers WHERE ${OWNED}`)).toBe(2)
 })
 
 it('a run that crashed after the services (no photo, not published) resumes without adding the services twice', async () => {
   const owner = "(SELECT id FROM users WHERE email = 'anbieter.foto.berlin@example.com')"
   await pool.query(`UPDATE providers SET status = 'draft', photo_id = NULL WHERE owner_id = ${owner}`)
   await pool.query(`DELETE FROM photos WHERE owner_id = ${owner}`)
-  expect(await seedTestUsers(fakeAuth, DEV)).toEqual({ created: 1, skipped: 13 })
-  expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(14)
+  expect(await seedTestUsers(fakeAuth, DEV, SEED)).toEqual({ created: 1, skipped: 3 })
+  expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(3)
   expect(await count(`SELECT count(*) n FROM provider_references WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(2)
   expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND photo_id IS NOT NULL AND owner_id = ${owner}`)).toBe(1)
 })
 
 it('placeholder photos: gives a published profile without a photo one; elsewhere needs the typed yes', async () => {
-  await pool.query("UPDATE providers SET photo_id = NULL WHERE owner_id = (SELECT id FROM users WHERE email = 'anbieter.gassi.leipzig@example.com')")
+  await pool.query("UPDATE providers SET photo_id = NULL WHERE owner_id = (SELECT id FROM users WHERE email = 'anbieter.dj.hamburg@example.com')")
   expect(await addPlaceholderPhotos()).toBeGreaterThanOrEqual(1)
-  expect(await count(`SELECT count(*) n FROM providers WHERE photo_id IS NOT NULL AND ${OWNED}`)).toBe(9)
+  expect(await count(`SELECT count(*) n FROM providers WHERE photo_id IS NOT NULL AND ${OWNED}`)).toBe(2)
   expect(await addPlaceholderPhotos()).toBe(0)
   const ask = (answer: string) => async () => answer
   await expect(confirmedOrDev(DEV, ask('no'))).resolves.toBeUndefined()

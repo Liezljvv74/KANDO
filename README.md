@@ -36,7 +36,7 @@ Nothing has been checked on a phone or in a browser yet.
 
 ### Test accounts (dev branch only)
 
-`pnpm db:seed:test-users` creates customers and published providers; the list is in `packages/domain/src/seed/test-users.ts`. Password for all: `TestPass123`, emails already verified. Seeds refuse to run anywhere but the dev branch.
+`pnpm db:seed:test-users` creates customers and published providers from `packages/domain/seed-data/test-users.json`. That file is not in git (the repository is public); it lives on this PC only. A fresh clone starts from `test-users.example.json` (one customer, one provider): copy it to `test-users.json` and edit. The password is in the file; emails are created verified. Seeds refuse to run anywhere but the dev branch.
 
 ## Known gaps
 
