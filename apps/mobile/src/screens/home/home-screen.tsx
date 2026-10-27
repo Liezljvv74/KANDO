@@ -10,8 +10,10 @@ import { Card } from '@/components/form-ui'
 import { Select } from '@/components/select'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
-import { loadMe } from '@/hooks/use-me'
+import { loadMe, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang, type Key } from '@/i18n'
+import { showProfileTab } from '@/lib/profile-tab'
+import { startOffering } from '@/lib/start-offering'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { pictureNudgeKey } from '@/lib/picture-nudge'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
@@ -73,6 +75,30 @@ function PictureNudge() {
   )
 }
 
+/** "Become a provider": opens the profile page (creating the draft first); not for people who already have the My profile tab. */
+function ProviderCard() {
+  const me = useMe()
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  if (showProfileTab(me)) return null
+  const go = async () => {
+    setBusy(true)
+    setProblem(null)
+    setProblem(await startOffering())
+    setBusy(false)
+  }
+  return (
+    <View style={[styles.panel, styles.panelWarm]}>
+      <Text style={styles.h2} accessibilityRole="header">
+        {t('home.providersTitle')}
+      </Text>
+      <Text style={styles.body}>{t('home.providersText')}</Text>
+      <ErrorText text={problem} />
+      <Button label={t('home.becomeProvider')} onPress={go} busy={busy} />
+    </View>
+  )
+}
+
 export default function HomeScreen() {
   useLang()
   const { categories, error, retry } = useCategories()
@@ -87,6 +113,7 @@ export default function HomeScreen() {
         <Text style={styles.intro}>{k('intro')}</Text>
         <PictureNudge />
         <Button label={t('home.cta')} onPress={() => router.navigate('/search')} />
+        <ProviderCard />
         {categories ? (
           // Every pick starts a fresh search, even the same category again (`at` changes).
           <Select
@@ -134,14 +161,6 @@ export default function HomeScreen() {
             <Text style={styles.body}>{t(text)}</Text>
           </View>
         ))}
-
-        <View style={[styles.panel, styles.panelWarm]}>
-          <Text style={styles.h2} accessibilityRole="header">
-            {k('providersTitle')}
-          </Text>
-          <Text style={styles.body}>{k('providersText')}</Text>
-          <Button label={t('home.becomeProvider')} onPress={() => router.navigate('/my-profile')} />
-        </View>
       </ScrollView>
     </SafeAreaView>
   )

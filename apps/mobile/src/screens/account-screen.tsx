@@ -1,5 +1,4 @@
 import type { Me, Photo } from '@kando/contract'
-import { router } from 'expo-router'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -13,6 +12,7 @@ import { useFlash } from '@/hooks/use-flash'
 import { loadMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
+import { startOffering } from '@/lib/start-offering'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -40,6 +40,14 @@ export default function AccountScreen() {
   useEffect(() => {
     load()
   }, [load])
+
+  async function offer() {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    setError(await startOffering())
+    setBusy(false)
+  }
 
   async function save() {
     const addr = toAddress(address, me?.address?.country)
@@ -75,7 +83,7 @@ export default function AccountScreen() {
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}
-          <LinkText label={t('account.offerServices')} onPress={() => router.navigate('/my-profile')} />
+          <LinkText label={t('account.offerServices')} onPress={offer} />
           <LanguageSwitch />
         </View>
         <Button label={t('auth.logOut')} onPress={signOut} />
