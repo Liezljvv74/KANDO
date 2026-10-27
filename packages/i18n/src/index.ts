@@ -19,10 +19,10 @@ export function t(lang: Lang, key: Key, params: Record<string, string | number> 
   )
 }
 
-const LOCALES: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
+export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
 
 export const formatMoney = (amount: number, currency: string, lang: Lang): string =>
-  new Intl.NumberFormat(LOCALES[lang], { style: 'currency', currency }).format(amount)
+  new Intl.NumberFormat(LOCALE[lang], { style: 'currency', currency }).format(amount)
 
 export type PriceType = 'fixed' | 'hourly' | 'from' | 'on-request'
 

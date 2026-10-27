@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { de } from './de'
 import { en } from './en'
-import { DEFAULT_LANG, formatMoney, formatPrice, isLang, LANGS, t, type Key } from './index'
+import { DEFAULT_LANG, formatMoney, formatPrice, isLang, LANGS, LOCALE, t, type Key } from './index'
 
 const FORBIDDEN = [
   'treuhand',
@@ -94,5 +94,11 @@ describe('money', () => {
     expect(formatPrice('hourly', 20, 'EUR', 'en')).toBe('€20.00/hr')
     expect(formatPrice('on-request', null, 'EUR', 'en')).toBe('Price on request')
     expect(plain(formatPrice('fixed', 20, 'EUR', 'de'))).toBe('20,00 €')
+  })
+})
+
+describe('LOCALE', () => {
+  it('has an entry for every language', () => {
+    for (const l of LANGS) expect(LOCALE[l]).toBeTruthy()
   })
 })

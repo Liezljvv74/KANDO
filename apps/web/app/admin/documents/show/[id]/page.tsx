@@ -4,12 +4,14 @@ import { useState } from 'react'
 import { useCustomMutation, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, Descriptions, Input, Space, Tag } from 'antd'
-import { useAt } from '../../../../../lib/admin/t'
+import { LOCALE } from '@kando/i18n'
+import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
 type Doc = { id: string; ownerEmail: string; requirement: string; status: string; note: string | null; reviewedAt: string | null; link: string }
 
 export default function DocumentShow() {
   const at = useAt()
+  const lang = useAdminLang()
   const { query, result } = useShow<Doc>()
   const [note, setNote] = useState('')
   const review = useCustomMutation()
@@ -26,7 +28,7 @@ export default function DocumentShow() {
               <Tag>{at(`admin.status.${result.status}` as 'admin.status.pending')}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label={at('admin.field.note')}>{result.note}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.reviewedAt')}>{result.reviewedAt && new Date(result.reviewedAt).toLocaleString('de-DE')}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.reviewedAt')}>{result.reviewedAt && new Date(result.reviewedAt).toLocaleString(LOCALE[lang])}</Descriptions.Item>
           </Descriptions>
           <p>
             <a href={result.link} target="_blank" rel="noreferrer">

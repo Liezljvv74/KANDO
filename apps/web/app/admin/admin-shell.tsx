@@ -11,12 +11,19 @@ import enUS from 'antd/locale/en_US'
 import '@refinedev/antd/dist/reset.css'
 import { accessControlProvider, authProvider } from '../../lib/admin/auth-provider'
 import { dataProvider } from '../../lib/admin/data-provider'
-import { t, type Key, type Lang } from '@kando/i18n'
+import { LANGS, t, type Key, type Lang } from '@kando/i18n'
 import { AdminLangProvider, useAdminLang, useAt } from '../../lib/admin/t'
 
 const locales: Record<Lang, typeof deDE> = { de: deDE, en: enUS }
 
-const otherLang = (lang: Lang): Lang => (lang === 'de' ? 'en' : 'de')
+// The Refine labels that show up in the sider and the List/Show headers.
+const refineLabels: Record<string, Key> = {
+  'buttons.logout': 'admin.signOut',
+  'buttons.refresh': 'admin.action.refresh',
+  'buttons.list': 'admin.action.list',
+}
+
+const otherLang = (lang: Lang) => LANGS.find((l) => l !== lang)!
 
 // Language switch: one language per render, so set the cookie and reload.
 function Header() {
@@ -98,6 +105,14 @@ export default function AdminShell({ lang, children }: { lang: Lang; children: R
               accessControlProvider={accessControlProvider}
               notificationProvider={useNotificationProvider}
               resources={resources}
+              i18nProvider={{
+                translate: (key: string, _options?: unknown, defaultMessage?: string) => {
+                  const k = refineLabels[key]
+                  return k ? t(lang, k) : (defaultMessage ?? key)
+                },
+                changeLocale: async () => {},
+                getLocale: () => lang,
+              }}
               options={{ syncWithLocation: true, disableTelemetry: true }}
             >
               {signIn ? (
