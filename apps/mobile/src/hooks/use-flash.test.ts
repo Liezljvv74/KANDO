@@ -18,3 +18,12 @@ test('createFlash: on after show, off after the delay, off at once on hide, a se
   jest.advanceTimersByTime(5000)
   expect(seen).toEqual([true, true, false, true, false]) // hide switched it off; the timer did not fire again
 })
+
+test('createFlash: show is a no-op after dispose', () => {
+  const seen: boolean[] = []
+  const f = createFlash((on) => seen.push(on), 3000)
+  f.dispose()
+  f.show()
+  jest.advanceTimersByTime(5000)
+  expect(seen).toEqual([])
+})

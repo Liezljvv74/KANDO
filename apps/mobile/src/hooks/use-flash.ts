@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 /** A switch that turns itself off after `ms`; `hide` turns it off at once. */
 export function createFlash(onChange: (on: boolean) => void, ms: number) {
   let timer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
   const hide = () => {
     if (timer === undefined) return
     clearTimeout(timer)
@@ -11,12 +12,16 @@ export function createFlash(onChange: (on: boolean) => void, ms: number) {
   }
   return {
     show() {
+      if (disposed) return
       clearTimeout(timer)
       onChange(true)
       timer = setTimeout(hide, ms)
     },
     hide,
-    dispose: () => clearTimeout(timer),
+    dispose() {
+      disposed = true
+      clearTimeout(timer)
+    },
   }
 }
 

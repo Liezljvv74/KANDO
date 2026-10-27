@@ -4,6 +4,7 @@ import type { Me } from '@kando/contract'
 
 import { getMe } from '@/api/client'
 import { notificationsApi } from '@/api/my-profile'
+import { clearPending } from '@/lib/pending-navigation'
 
 /** The one place `GET /me` is loaded: the home nudge, the account tab and the setup page all read this copy. */
 let me: Me | null = null
@@ -26,6 +27,7 @@ export async function loadMe() {
 
 export function clearMe() {
   generation++
+  clearPending()
   set(null)
 }
 
