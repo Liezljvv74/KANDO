@@ -23,7 +23,7 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (27 October 2026)
 
-Stage 1 is built on branch `stage-1`: database with row-level security, login (Neon Auth), the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds. All automated tests pass (191 web, 85 app, 16 in the shared packages); typecheck and lint are clean. Report: `Reports/Stage-1-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`.
+Stage 1 is built on branch `stage-1`: database with row-level security, login (Neon Auth), the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds. A final review of the whole branch found 3 important and 10 minor points; all important ones and 8 minor ones are fixed, the other 2 wait for the South Africa work (see Known gaps). All automated tests pass (203 web, 85 app, 16 in the shared packages, 304 in total); typecheck and lint are clean. Report: `Reports/Stage-1-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`.
 
 Nothing has been checked on a phone or in a browser yet.
 
@@ -32,7 +32,7 @@ Nothing has been checked on a phone or in a browser yet.
 1. **Owner:** add the GitHub secrets `NEON_AUTH_BASE_URL` and `NEON_AUTH_COOKIE_SECRET` to this repository, so CI can run the web tests.
 2. **Owner:** create the Vercel project (root `apps/web`) and add the environment variables, as in `docs/deployment.md`.
 3. **Phone checks of every screen** on the development build, against the preview deployment, and the back office screens in a browser. The "Not yet done (phone)" rows in the report's Other Checks sheet are the list.
-4. **Final review of the whole branch**, then merge.
+4. **Owner review of the pull request**, then merge. The final review of the whole branch is done and its findings are fixed.
 
 ### Test accounts (dev branch only)
 
@@ -47,5 +47,4 @@ Nothing has been checked on a phone or in a browser yet.
 - No security scan of the whole project yet (row-level security, Next.js routes, Vercel settings); needed before launch.
 - Placeholder graphics (app icon, splash, home page pictures) are still to be replaced.
 - The legal pages (Impressum, Datenschutz, AGB, Ranking) are records that staff must write and publish in the back office.
-- Seeds: the dev-host check is switched off if `NEON_DEV_ENDPOINT_ID` is set to an empty value; a seed run that crashed during the photo upload can create a provider's services twice when run again.
-- `postcodes.int.spec.ts` timed out once (5 seconds) and passed on rerun.
+- Before South Africa (not needed for Germany): the website footer links to the German legal pages `/impressum` and `/datenschutz` directly, and the website language switch shows only one other language, so it assumes exactly two. Both get fixed with the South Africa work.

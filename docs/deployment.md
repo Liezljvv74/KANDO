@@ -38,10 +38,11 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
-| `RESEND_API_KEY` | yes | web | Approval and rejection emails. Without it emails are only logged. |
+| `RESEND_API_KEY` | yes | web | Approval and rejection emails. Required in production: without it no email is sent, only one line is logged. |
 | `NEXT_PUBLIC_SERVER_URL` | no | web | Public address of the site (links, sitemaps, canonical). |
 | `VERCEL_PROJECT_PRODUCTION_URL` | no | web | Set by Vercel itself; do not add it by hand. |
 | `ALLOW_PRODUCTION` | no | seeds only | Never set on Vercel. See Seeds. |
+| `NEON_DEV_ENDPOINT_ID` | no | seeds only (optional) | The dev branch's endpoint id, only if `kando-dev` is recreated and gets a new one. Empty or unset means `ep-steep-scene-b9p4f2v6`. Never set on Vercel. |
 
 ## Neon Auth: trusted domains
 
@@ -53,6 +54,10 @@ neon neon-auth domain add <origin>
 
 `https://skillweb.space` is already added on `kando-dev`. Add the preview address and, at cutover, the production address on `kando-main`.
 
+## Neon Auth: confirmed emails
+
+The app API refuses every account whose email is not confirmed yet (answer 403 `EMAIL_NOT_VERIFIED`), so nobody can use someone else's email address. On top of that, Neon Auth's own setting "Require email verification" may also be turned on for `kando-main`; then an unconfirmed account cannot even sign in. The app handles both: it asks for the code that was emailed.
+
 ## Database
 
 - `neon deploy` (reads `neon.ts` in the repository root) applies the Neon settings, including Auth, to a branch.
@@ -61,14 +66,18 @@ neon neon-auth domain add <origin>
 
 ## Cutover: preparing `kando-main`
 
+Proposal, not yet agreed: the owner decides when and whether.
+
 1. Create `kando-main` in the `SkillWeb` project (from `kando-dev` without data, or empty).
 2. Run `neon deploy` on it, then `pnpm db:migrate` against it (owner instruction).
-3. Import postcodes (`pnpm db:import:postcodes`) and categories (`pnpm db:seed:categories`). Test accounts and placeholder photos are never seeded on `kando-main`.
+3. Import postcodes (`pnpm db:import:postcodes`) and categories (`ALLOW_PRODUCTION=1 pnpm db:seed:categories`; the categories seed refuses any database but the dev one without it). Test accounts and placeholder photos are never seeded on `kando-main`.
 4. Import real users and providers from the old database (not part of Stage 1).
-5. Create the buckets and keys, set the Production variables in Vercel, add the production domain as trusted.
+5. Create the buckets and keys, set the Production variables in Vercel (including `RESEND_API_KEY`), add the production domain as trusted, and decide whether to turn on "Require email verification" in Neon Auth (see above).
 6. Point the domain at the new Vercel project.
 
 ## Retiring the old branches after cutover
+
+Proposal, not yet agreed: the owner decides when and whether.
 
 1. Keep the old `main` (read-only, no writes) as a fallback.
 2. When the owner is satisfied that the new site runs cleanly, take a final Neon branch of old `main` named `old-main-final`, then delete the old `dev` branch and the old `main` branch.
@@ -76,11 +85,11 @@ neon neon-auth domain add <origin>
 
 ## Seeds
 
-All four seeds refuse to run unless `NEON_BRANCH` is a dev branch and `DATABASE_URL` points at the dev endpoint.
+There are three seeds. Each one checks two things: `NEON_BRANCH` names a dev branch (`kando-dev` or `dev`) and `DATABASE_URL` points at the dev endpoint. They print the database host before they start.
 
-- `pnpm db:seed` (categories, in `packages/db`)
-- `pnpm db:seed:test-users` (in `packages/domain`): customers and published providers, all verified, password `TestPass123`. The account list is in `packages/domain/src/seed/test-users.ts`.
-- `pnpm db:seed:placeholder-photos` (in `packages/domain`): a generated photo for every published provider without one.
+- `pnpm db:seed:categories` (also `pnpm db:seed`; in `packages/db`): the 14 categories. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` (needed once at cutover, step 3).
+- `pnpm db:seed:test-users` (in `packages/domain`): customers and published providers, all verified, password `TestPass123`. The account list is in `packages/domain/src/seed/test-users.ts`. Dev branch only, no way around it. A run that stopped half-way can simply be run again.
+- `pnpm db:seed:placeholder-photos` (in `packages/domain`): a generated photo for every published provider without one. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` and a typed `yes`.
 
 ## CI
 
