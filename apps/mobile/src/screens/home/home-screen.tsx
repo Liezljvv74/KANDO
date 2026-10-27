@@ -63,7 +63,7 @@ function PictureNudge() {
       <ErrorText text={problem} />
       <Button label={t('home.pictureAdd')} onPress={() => askPhotoSource(add)} />
       <Text style={styles.dismiss} accessibilityRole="button" accessibilityLabel={t('home.pictureDismiss')} onPress={dismiss}>
-        ×
+        {'Ã—'}
       </Text>
     </Card>
   )

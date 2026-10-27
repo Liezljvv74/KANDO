@@ -10,6 +10,7 @@ jest.mock('expo-secure-store', () => {
 })
 
 const rec: PendingSignup = {
+  email: 'a@b.de',
   firstName: 'Anna',
   lastName: 'Berg',
   offerServices: true,

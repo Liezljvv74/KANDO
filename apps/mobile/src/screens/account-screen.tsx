@@ -45,7 +45,7 @@ export default function AccountScreen() {
     setBusy(true)
     setError(null)
     try {
-      await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), ...(addr && { address: addr }) })
+      await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr })
       await load()
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))

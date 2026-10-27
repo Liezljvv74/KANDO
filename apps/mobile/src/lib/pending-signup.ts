@@ -5,11 +5,14 @@ const KEY = 'skilled.pendingSignup'
 
 /** What the sign-up form collected that can only be saved once the email code is confirmed (the server refuses an unconfirmed session). The password is never stored. */
 export type PendingSignup = {
-  firstName: string
-  lastName: string
+  /** Lower-cased: the record only applies to the account it was made for. */
+  email: string
+  /** Gone once the names and address are saved, so a retry never overwrites later edits. */
+  firstName?: string
+  lastName?: string
   offerServices: boolean
   pictureUri: string | null
-  address: Address | null
+  address?: Address | null
 }
 
 export const savePending = (p: PendingSignup) => SecureStore.setItemAsync(KEY, JSON.stringify(p))

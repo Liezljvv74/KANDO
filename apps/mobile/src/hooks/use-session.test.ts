@@ -6,6 +6,8 @@ import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
 import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, updateName, verify } from './use-session'
 
 jest.mock('@/api/auth')
+let mockFileExists = true
+jest.mock('expo-file-system', () => ({ File: class { get exists() { return mockFileExists } } }))
 jest.mock('@/api/my-profile', () => ({ photosApi: { add: jest.fn() } }))
 jest.mock('expo-secure-store', () => {
   const store = new Map<string, string>()
@@ -31,7 +33,7 @@ const onUnauthorized = api.setOnUnauthorized.mock.calls[0][0]!
 
 const photos = jest.mocked(profile.photosApi)
 const address = { street: 'Weg 1', postcode: '10115', city: 'Berlin', country: 'DE' }
-const pending = { firstName: 'Anna', lastName: 'Berg', offerServices: true, pictureUri: 'file:///p.jpg', address }
+const pending = { email: 'a@b.de', firstName: 'Anna', lastName: 'Berg', offerServices: true, pictureUri: 'file:///p.jpg', address }
 
 beforeEach(async () => {
   resetSession()
@@ -39,6 +41,7 @@ beforeEach(async () => {
   api.updateMe.mockResolvedValue({})
   photos.add.mockResolvedValue({} as never)
   await clearPending()
+  mockFileExists = true
 })
 
 test('loading -> signed in -> signed out', async () => {
@@ -152,11 +155,11 @@ test('a failed upload keeps the record; loadSession retries it once and clears i
   photos.add.mockRejectedValueOnce(new client.ApiError(0, 'network'))
   await verify('a@b.de', '123456')
   expect(getSession().user).toEqual(user)
-  expect(await loadPending()).toEqual(pending)
+  expect(await loadPending()).toMatchObject({ pictureUri: 'file:///p.jpg' })
   a.session.mockResolvedValueOnce(user)
   await loadSession()
   await new Promise((r) => setTimeout(r, 0))
-  expect(api.updateMe).toHaveBeenCalledTimes(2)
+  expect(api.updateMe).toHaveBeenCalledTimes(1)
   expect(photos.add).toHaveBeenCalledTimes(2)
   expect(await loadPending()).toBeNull()
 })
@@ -169,4 +172,54 @@ test('loadSession without a record or while signed out does not finish a sign-up
   await loadSession()
   await new Promise((r) => setTimeout(r, 0))
   expect(api.updateMe).not.toHaveBeenCalled()
+})
+
+test('a record for another email is dropped and applies nothing', async () => {
+  await savePending({ ...pending, email: 'other@b.de' })
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await expect(verify('a@b.de', '123456')).resolves.toBe(false)
+  expect(photos.add).not.toHaveBeenCalled()
+  expect(api.updateMe).not.toHaveBeenCalledWith(expect.objectContaining({ firstName: 'Anna' }))
+  expect(await loadPending()).toBeNull()
+})
+
+test('a failed PATCH keeps the full record', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  api.updateMe.mockRejectedValueOnce(new client.ApiError(0, 'network'))
+  await verify('a@b.de', '123456')
+  expect(photos.add).not.toHaveBeenCalled()
+  expect(await loadPending()).toEqual(pending)
+})
+
+test('after the PATCH succeeded, a failed upload keeps only email, tick and picture; the retry does not PATCH again', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  photos.add.mockRejectedValueOnce(new client.ApiError(0, 'network'))
+  await verify('a@b.de', '123456')
+  expect(await loadPending()).toEqual({ email: 'a@b.de', offerServices: true, pictureUri: 'file:///p.jpg' })
+  a.session.mockResolvedValueOnce(user)
+  await loadSession()
+  await new Promise((r) => setTimeout(r, 0))
+  expect(api.updateMe).toHaveBeenCalledTimes(1)
+  expect(photos.add).toHaveBeenCalledTimes(2)
+  expect(await loadPending()).toBeNull()
+})
+
+test('a picture whose cached file is gone is dropped and the record cleared', async () => {
+  await savePending(pending)
+  mockFileExists = false
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(photos.add).not.toHaveBeenCalled()
+  expect(await loadPending()).toBeNull()
+})
+
+test('sign-up keeps the record for the code step; a failed sign-up leaves none', async () => {
+  a.signUp.mockResolvedValueOnce(unverified)
+  await signUp('Anna Berg', 'a@b.de', 'secret123', pending)
+  expect(await loadPending()).toEqual(pending)
+  a.signUp.mockRejectedValueOnce(new client.ApiError(422, 'USER_ALREADY_EXISTS'))
+  await expect(signUp('Anna Berg', 'a@b.de', 'secret123', pending)).rejects.toBeDefined()
+  expect(await loadPending()).toBeNull()
 })

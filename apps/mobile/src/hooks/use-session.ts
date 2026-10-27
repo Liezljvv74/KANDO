@@ -1,10 +1,12 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
+import { File } from 'expo-file-system'
+
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
 import { getLang, setLang, type Lang } from '@/i18n'
-import { clearPending, loadPending } from '@/lib/pending-signup'
+import { clearPending, loadPending, savePending, type PendingSignup } from '@/lib/pending-signup'
 
 type User = auth.SessionUser
 type State = { user: User | null; loading: boolean; offline: boolean }
@@ -28,7 +30,7 @@ export async function loadSession() {
   try {
     const user = await auth.session()
     signedIn(user)
-    if (user?.emailVerified) completeSignup().catch(() => {}) // a sign-up the last launch could not finish
+    if (user?.emailVerified) completeSignup(user).catch(() => {}) // a sign-up the last launch could not finish
   } catch (e) {
     set({ user: null, loading: false, offline: e instanceof ApiError && e.status === 0 })
   }
@@ -53,19 +55,42 @@ export async function signIn(email: string, password: string): Promise<'signed-i
   return 'signed-in'
 }
 
-/** Creates the account and emails the confirmation code (the server does not send one on sign-up). */
-export async function signUp(name: string, email: string, password: string) {
-  await auth.signUp(email, password, name)
-  await auth.sendVerificationCode(email)
+/** Creates the account and emails the confirmation code (the server does not send one on sign-up). `pending` is kept for the code step; a failed sign-up leaves none. */
+export async function signUp(name: string, email: string, password: string, pending?: PendingSignup) {
+  if (pending) await savePending(pending)
+  try {
+    await auth.signUp(email, password, name)
+    await auth.sendVerificationCode(email)
+  } catch (e) {
+    await clearPending()
+    throw e
+  }
+}
+
+/** The pending record for this user, or null; a record made for another email is dropped. */
+async function pendingFor(user: User) {
+  const p = await loadPending()
+  if (p && p.email !== user.email.trim().toLowerCase()) {
+    await clearPending()
+    return null
+  }
+  return p
 }
 
 /** Saves what the sign-up form collected: names and address, then the picture. A failed step keeps the record; loadSession retries it. */
-export async function completeSignup() {
-  const p = await loadPending()
+export async function completeSignup(user: User) {
+  const p = await pendingFor(user)
   if (!p) return
   try {
-    await updateMe({ firstName: p.firstName, lastName: p.lastName, language: getLang(), ...(p.address && { address: p.address }) })
-    if (p.pictureUri) await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
+    if (p.firstName && p.lastName) {
+      await updateMe({ firstName: p.firstName, lastName: p.lastName, language: getLang(), ...(p.address && { address: p.address }) })
+      // Saved: a retry only repeats the picture, so later edits are never overwritten.
+      await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri })
+    }
+    if (p.pictureUri) {
+      if (!new File(p.pictureUri).exists) return await clearPending() // the OS cleared its cache: nothing left to upload
+      await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
+    }
     await clearPending()
   } catch {
     // Kept for the next launch.
@@ -75,9 +100,9 @@ export async function completeSignup() {
 /** A correct code signs in and finishes the sign-up; true when the person ticked "offer services" (the screen then opens the provider page). */
 export async function verify(email: string, code: string) {
   const user = await auth.verifyEmail(email, code)
-  const pending = await loadPending()
+  const pending = await pendingFor(user)
   signedIn(user)
-  if (pending) await completeSignup()
+  if (pending) await completeSignup(user)
   else updateMe({ name: user.name, language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
   return !!pending?.offerServices
 }

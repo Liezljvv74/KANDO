@@ -10,7 +10,6 @@ import { DeniedNotice } from '@/screens/my-profile/denied-notice'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
-import { savePending } from '@/lib/pending-signup'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 
 export default function SignUpScreen() {
@@ -49,8 +48,14 @@ export default function SignUpScreen() {
     setError(null)
     try {
       // Saved after the code is confirmed (the server refuses an unconfirmed session); the password is never kept.
-      await savePending({ firstName: firstName.trim(), lastName: lastName.trim(), offerServices, pictureUri, address: addr })
-      await signUp(`${firstName.trim()} ${lastName.trim()}`, email.trim(), password)
+      await signUp(`${firstName.trim()} ${lastName.trim()}`, email.trim(), password, {
+        email: email.trim().toLowerCase(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        offerServices,
+        pictureUri,
+        address: addr,
+      })
       router.replace({ pathname: '/verify-email', params: { email: email.trim() } })
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))
