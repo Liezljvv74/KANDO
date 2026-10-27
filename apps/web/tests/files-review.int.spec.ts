@@ -230,11 +230,12 @@ it('the database refuses a second pending check for a requirement', async () => 
 it('approval (staff SQL) makes a service with required documents offerable', async () => {
   const svc = (await (await call(services.POST, 'rv1', 'POST', { categoryId: docCategoryId, title: 'Kinder', priceType: 'fixed', price: 10, currency: 'EUR' })).json()).id
   const pid = (await pool.query("SELECT id FROM providers WHERE owner_id = 'rv1'")).rows[0].id
-  const { db } = await import('@kando/db')
+  // rv1's profile is a draft: only its owner gets an answer about it.
+  const offerable = () => asUser('rv1', (tx) => offerableServiceIds(tx, pid))
   expect((await submit('rv1', 'police-certificate', await newFile('rv1'))).status).toBe(201)
-  expect(await offerableServiceIds(db, pid)).not.toContain(svc)
+  expect(await offerable()).not.toContain(svc)
   await pool.query("UPDATE documents SET status = 'approved', reviewed_by = 's', reviewed_at = now() WHERE owner_id = 'rv1' AND requirement = 'police-certificate'")
-  expect(await offerableServiceIds(db, pid)).toContain(svc)
+  expect(await offerable()).toContain(svc)
   const list = DocumentsListSchema.parse(await (await call(verifications.GET, 'rv1')).json())
   expect(list.docs.find((d) => d.requirement === 'police-certificate')).toMatchObject({ status: 'approved' })
   expect((await call(file.GET, 'rv1', 'GET', undefined, { id: list.docs[0]!.id })).status).toBe(200)

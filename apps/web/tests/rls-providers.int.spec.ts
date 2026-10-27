@@ -74,6 +74,21 @@ it('offerableServiceIds and missingRequirements are identical through tx and the
   expect(r.viaTx).toEqual(r.viaDb)
 })
 
+it('a stranger asking about a draft provider gets empty answers; the owner still gets the full ones', async () => {
+  await pool.query("DELETE FROM documents WHERE owner_id = 'rp1'") // the service with a requirement is not offerable again
+  await pool.query("UPDATE providers SET status = 'draft' WHERE id = $1", [pid])
+  try {
+    const ask = (uid: string | null) => asUser(uid, async (tx) => [await offerableServiceIds(tx, pid), await missingRequirements(tx, pid, needyId)])
+    expect(await ask('rp2')).toEqual([[], []])
+    expect(await ask(null)).toEqual([[], []])
+    expect(await ask('rp1')).toEqual([[serviceId], ['police-certificate']])
+    await pool.query("UPDATE providers SET suspended = true, status = 'published' WHERE id = $1", [pid])
+    expect(await ask('rp2')).toEqual([[], []])
+  } finally {
+    await pool.query("UPDATE providers SET status = 'published', suspended = false WHERE id = $1", [pid])
+  }
+})
+
 it('slugify strips accents', () => {
   expect(slugify('Josée')).toBe('josee')
 })

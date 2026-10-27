@@ -2,14 +2,17 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
 import { clearOutbox, outboxForTests } from '@kando/domain'
-import { adminCall, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
+import { adminCall, call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase, seedProvider, seedUser } from './helpers'
 
-vi.mock('../lib/auth/server', async () => (await import('./helpers')).mockAuth())
+vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
 const list = await import('../app/api/admin/[resource]/route')
 const item = await import('../app/api/admin/[resource]/[id]/route')
 const me = await import('../app/api/admin/me/route')
 const review = await import('../app/api/admin/documents/[id]/review/route')
 const suspend = await import('../app/api/admin/users/[id]/suspend/route')
+const profileRoute = await import('../app/app-api/v1/provider-profile/route')
+const publish = await import('../app/app-api/v1/provider-profile/publish/route')
+const services = await import('../app/app-api/v1/services/route')
 
 const anon = <T>(f: Parameters<typeof asUser<T>>[1]) => asUser(null, f)
 const store = memoryStorage()
@@ -110,6 +113,19 @@ it('suspending a user hides the provider from search and the public page; liftin
   expect((await pool.query("SELECT suspended_until FROM users WHERE id = 'aa-sus'")).rows[0].suspended_until).toBeNull()
   expect(await visible()).toBe(true)
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-nobody' })).status).toBe(404)
+})
+
+it('a user suspended before having a profile cannot create one and publish it (409)', async () => {
+  await seedUser('aa-early')
+  const until = new Date(Date.now() + 7 * 86_400_000).toISOString()
+  expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until, reason: 'Fraud' }, { id: 'aa-early' })).status).toBe(200)
+  expect((await call(profileRoute.PUT, 'aa-early', 'PUT', profile)).status).toBe(201)
+  await givePhoto('aa-early')
+  await call(services.POST, 'aa-early', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+  const res = await call(publish.POST, 'aa-early', 'POST')
+  expect(res.status).toBe(409)
+  expect(await res.json()).toEqual({ error: 'Profile suspended' })
+  expect((await pool.query("SELECT status FROM providers WHERE owner_id = 'aa-early'")).rows[0].status).toBe('draft')
 })
 
 it('lists users with pagination and a text filter on email or name', async () => {

@@ -125,14 +125,17 @@ const PROVIDER_FUNCTIONS = [
       UPDATE providers SET public_name = p_public_name, updated_at = now(),
         location = CASE WHEN p_lng IS NULL OR p_lat IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326) END
       WHERE owner_id = app_current_user_id() $$`,
-  // Publishing assigns the slug once (base, base-2, base-3 ...) and keeps it; false: no profile, or suspended.
+  // Publishing assigns the slug once (base, base-2, base-3 ...) and keeps it; false: no profile, or suspended
+  // (the profile, or the owner: a user suspended before the profile existed; a lift sets suspended_until to NULL).
   `CREATE OR REPLACE FUNCTION set_provider_published(p_published boolean, p_slug_base text) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
     DECLARE r providers; s text; n int := 1;
     BEGIN
       SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;
       IF NOT FOUND THEN RETURN false; END IF;
-      IF p_published AND r.suspended THEN RETURN false; END IF;
+      IF p_published AND (r.suspended OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND u.suspended_until IS NOT NULL)) THEN
+        RETURN false;
+      END IF;
       IF p_published AND r.slug IS NULL THEN
         s := p_slug_base;
         WHILE EXISTS (SELECT 1 FROM providers WHERE slug = s) LOOP n := n + 1; s := p_slug_base || '-' || n; END LOOP;
@@ -155,7 +158,8 @@ const PROVIDER_FUNCTIONS = [
 ]
 
 // Eligibility: documents are private (RLS), so the check runs as the table owner, for the provider's owner only.
-// Callable by app_user so search and public pages can use their own request transaction.
+// Callable by app_user so search and public pages can use their own request transaction. Answers only for a provider
+// the caller may see (published and not suspended, or the caller's own); anything else gets an empty answer.
 const ELIGIBILITY_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION offerable_service_ids(p_provider_id uuid) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -163,6 +167,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN categories c ON c.id = s.category_id
       JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = p_provider_id
+        AND ((p.status = 'published' AND NOT p.suspended) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
           WHERE NOT EXISTS (
@@ -177,6 +182,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
       WHERE s.id = p_service_id AND s.provider_id = p_provider_id
+        AND ((p.status = 'published' AND NOT p.suspended) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
         ) $$`,
