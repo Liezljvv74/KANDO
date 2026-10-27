@@ -124,6 +124,20 @@ it('suspending a user hides the provider from search and the public page; liftin
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-nobody' })).status).toBe(404)
 })
 
+it('suspension emails: none for a customer without a profile, none for a lift of a user who was not suspended', async () => {
+  await seedUser('aa-cust')
+  clearOutbox()
+  const until = new Date(Date.now() + 86_400_000).toISOString()
+  expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until, reason: 'Spam' }, { id: 'aa-cust' })).status).toBe(200)
+  expect(outboxForTests()).toEqual([])
+  expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-cust' })).status).toBe(200)
+  expect(outboxForTests()).toEqual([]) // the lift of a customer: nothing was hidden
+  await seedUser('aa-notsus')
+  await seedProvider('aa-notsus', { name: 'Not Suspended', categoryId })
+  expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-notsus' })).status).toBe(200)
+  expect(outboxForTests()).toEqual([])
+})
+
 it('a user suspended before having a profile cannot create one and publish it (409)', async () => {
   await seedUser('aa-early', null, 'Early Bird')
   const until = new Date(Date.now() + 7 * 86_400_000).toISOString()

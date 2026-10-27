@@ -3,6 +3,7 @@ import { db, photos, providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { isLang } from '@kando/i18n'
 import { notifySuspension } from '../notifications'
+import type { AfterCommit } from '../app-request'
 import { fail } from '../providers/http'
 import { photoUrl } from '../storage'
 import type { StaffUser } from '../users'
@@ -66,18 +67,21 @@ export async function getUser(tx: Tx, id: string) {
  * Suspends the user until `until`, or lifts it (null). The user's provider is hidden or shown with it
  * (search and the public page both check providers.suspended_until, so the hiding ends with the date).
  */
-export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: { until: string | null; reason: string }) {
+export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: { until: string | null; reason: string }, afterCommit: AfterCommit) {
   const until = input.until ? new Date(input.until) : null
   if (until && until <= new Date()) return fail(400, { error: 'The end must be in the future' })
   if (until && !input.reason) return fail(400, { error: 'A reason is required' })
   if (until && id === staff.id) return fail(400, { error: 'You cannot suspend yourself' })
+  const was = (await tx.select({ s: users.suspendedUntil }).from(users).where(eq(users.id, id)))[0]?.s
   const [row] = await tx
     .update(users)
     .set({ suspendedUntil: until, suspendedReason: until ? input.reason : null, updatedAt: new Date() })
     .where(eq(users.id, id))
     .returning()
   if (!row) return notFound()
-  await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id))
+  const hidden = await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id)).returning({ id: providers.id })
+  // the email speaks of the profile: only a person with one is told, and of a lift only when one was suspended
+  if (hidden.length && (until || was)) afterCommit(() => notifySuspension(id, { until, reason: input.reason }))
   return ok((await withPictures(tx, [row]))[0])
 }
 
@@ -90,9 +94,9 @@ export async function endExpiredSuspensions(exec: typeof db): Promise<string[]> 
       .where(lte(users.suspendedUntil, sql`now()`))
       .returning({ id: users.id })
     const ids = rows.map((r) => r.id)
-    if (ids.length) await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids))
-    return ids
+    const hidden = ids.length ? await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids)).returning({ owner: providers.ownerId }) : []
+    return { ids, withProfile: hidden.map((h) => h.owner) }
   })
-  for (const id of ended) await notifySuspension(id, { until: null, reason: '' })
-  return ended
+  for (const id of ended.withProfile) await notifySuspension(id, { until: null, reason: '' }) // the email speaks of the profile
+  return ended.ids
 }
