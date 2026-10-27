@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { distanceKm, pool } from '@kando/db'
+import { asUser, distanceKm, pool } from '@kando/db'
 import { SearchResultSchema } from '@kando/contract'
-import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
+import { getPublicProfile, setStorageForTests } from '@kando/domain'
+import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/providers/route')
@@ -128,4 +129,49 @@ it('paging: 20 per page and hasMore', async () => {
   expect(p2).toMatchObject({ page: 2, hasMore: false })
   expect(p2.items).toHaveLength(1)
   expect(new Set([...p1.items, ...p2.items].map((i) => i.slug)).size).toBe(21)
+})
+
+it("anonymous: the card carries the owner's profile photo and the public name, no display name", async () => {
+  setStorageForTests(memoryStorage())
+  try {
+    await seedProvider('sx-lena', { name: 'Lena F.', categoryId, skills: ['lenatest'] })
+    await givePhoto('sx-lena')
+    const raw = await (await search('q=lenatest')).json()
+    expect(raw.items).toHaveLength(1)
+    expect(raw.items[0]).not.toHaveProperty('displayName')
+    expect(raw.items[0]).toMatchObject({ publicName: 'Lena F.', photoUrl: 'https://media.test/users/sx-lena/profile.jpg' })
+  } finally {
+    setStorageForTests(undefined)
+  }
+})
+
+it('a provider whose only service has no price type is neither found nor has a public page', async () => {
+  const cat = (await pool.query("INSERT INTO categories (slug) VALUES ($1) RETURNING id, slug", [`t3-np-${Date.now()}`])).rows[0]
+  try {
+    await seedProvider('sx-priced', { name: 'Priced', categoryId: cat.id })
+    const b = await seedProvider('sx-noprice', { name: 'Noprice', categoryId: cat.id })
+    await pool.query('UPDATE services SET price_type = NULL, price = NULL WHERE provider_id = $1', [b])
+    setStorageForTests(memoryStorage())
+    expect(await slugs(`category=${cat.slug}`)).toEqual(['sx-priced-slug'])
+    expect(await asUser(null, (tx) => getPublicProfile(tx, 'sx-noprice-slug', 'de'))).toBeNull()
+    expect(await asUser(null, (tx) => getPublicProfile(tx, 'sx-priced-slug', 'de'))).not.toBeNull()
+  } finally {
+    setStorageForTests(undefined)
+    await pool.query('DELETE FROM services WHERE category_id = $1', [cat.id])
+    await pool.query("DELETE FROM providers WHERE owner_id IN ('sx-priced', 'sx-noprice')")
+    await pool.query('DELETE FROM categories WHERE id = $1', [cat.id])
+  }
+})
+
+it('a fixed service without a price is not found in its category', async () => {
+  const cat = (await pool.query("INSERT INTO categories (slug) VALUES ($1) RETURNING id, slug", [`t3-fp-${Date.now()}`])).rows[0]
+  try {
+    const a = await seedProvider('sx-fp', { name: 'Fp', categoryId: cat.id })
+    await pool.query('UPDATE services SET price = NULL WHERE provider_id = $1', [a])
+    expect(await slugs(`category=${cat.slug}`)).toEqual([])
+  } finally {
+    await pool.query('DELETE FROM services WHERE category_id = $1', [cat.id])
+    await pool.query("DELETE FROM providers WHERE owner_id = 'sx-fp'")
+    await pool.query('DELETE FROM categories WHERE id = $1', [cat.id])
+  }
 })

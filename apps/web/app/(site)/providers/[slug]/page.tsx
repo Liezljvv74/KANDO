@@ -41,7 +41,7 @@ export async function generateMetadata({ params, searchParams }: Args): Promise<
   if (!data) return {}
   const { profile } = data
   return {
-    title: `${profile.displayName}${profile.publicName ? ` – ${profile.publicName}` : ''} | ${t(lang, 'brand.name')}`,
+    title: `${profile.publicName} | ${t(lang, 'brand.name')}`,
     // The AI version is not indexed; the canonical stays the original.
     robots: query.translate === '1' ? { index: false } : undefined,
     description: profile.bio
@@ -58,7 +58,6 @@ function withTexts(
 ): ProviderDetail {
   return {
     ...p,
-    displayName: x.displayName,
     bio: x.bio,
     strengths: x.strengths,
     experience: x.experience,
@@ -140,14 +139,11 @@ export default async function ProviderPage({ params, searchParams }: Args) {
       )}
       <header className="flex items-center gap-4">
         {p.photoUrl && (
-          <img src={p.photoUrl} alt={p.displayName} className="size-24 rounded-full object-cover" />
+          <img src={p.photoUrl} alt={p.publicName} className="size-24 rounded-full object-cover" />
         )}
         <div>
-          <h1 className="text-3xl font-bold">{p.displayName}</h1>
-          {/* displayName is the service headline; publicName is the business name or "Anna H." */}
-          <p>
-            {tt('provider.by')} {p.publicName}
-          </p>
+          {/* publicName is the business name or "Anna H." */}
+          <h1 className="text-3xl font-bold">{p.publicName}</h1>
           {p.place && <p className="opacity-70">{p.place}</p>}
           <p className="opacity-70">{categoryNames.join(' · ')}</p>
           {p.worksRemotely && <p className="text-sm">{tt('provider.remote')}</p>}

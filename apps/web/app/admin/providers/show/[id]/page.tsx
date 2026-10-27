@@ -7,8 +7,8 @@ import { useAt } from '../../../../../lib/admin/t'
 
 type Provider = {
   id: string
-  displayName: string
-  type: string
+  publicName: string | null
+  type: string | null
   status: string
   suspended: boolean
   ownerEmail: string
@@ -24,9 +24,9 @@ export default function ProviderShow() {
       {result && (
         <>
           <Descriptions column={1} bordered>
-            <Descriptions.Item label={at('admin.field.name')}>{result.displayName}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.name')}>{result.publicName}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.owner')}>{result.ownerEmail}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.type')}>{at(`admin.type.${result.type}` as 'admin.type.private')}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.type')}>{result.type && at(`admin.type.${result.type}` as 'admin.type.private')}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.status')}>
               {at(`admin.status.${result.status}` as 'admin.status.draft')}
               {result.suspended && ` (${at('admin.status.suspended')})`}

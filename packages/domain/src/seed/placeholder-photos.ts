@@ -1,8 +1,8 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, notExists } from 'drizzle-orm'
 import sharp from 'sharp'
 import { isDevTarget } from '@kando/db/src/seed/guard'
 import { addPhoto } from '../photos'
-import { asUser, db, providers } from '@kando/db'
+import { asUser, db, photos, providers } from '@kando/db'
 
 const COLOURS = ['#2f6f8f', '#8f4f2f', '#4f8f5f', '#7a4f8f', '#8f7a2f', '#2f4f8f', '#8f2f5f', '#3f7f7f']
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`)
@@ -19,7 +19,7 @@ export function placeholderJpeg(name: string): Promise<{ data: Buffer; width: nu
   return sharp(Buffer.from(svg)).jpeg({ quality: 82 }).toBuffer({ resolveWithObject: true }).then((o) => ({ data: o.data, width: o.info.width, height: o.info.height }))
 }
 
-/** Adds a generated profile photo for one owner through the domain path (storage object, row, set_provider_photo). */
+/** Adds a generated picture (the person's profile photo, no provider) for one owner through the domain path (storage object, row). */
 export async function givePlaceholderPhoto(userId: string, name: string): Promise<void> {
   const img = await placeholderJpeg(name)
   const after: (() => Promise<void>)[] = []
@@ -27,14 +27,14 @@ export async function givePlaceholderPhoto(userId: string, name: string): Promis
   for (const fn of after) await fn()
 }
 
-/** Gives every published profile without a photo one; returns how many it added. */
+/** Gives every published provider whose owner has no picture one; returns how many it added. */
 export async function addPlaceholderPhotos(): Promise<number> {
   const rows = await db
-    .select({ owner: providers.ownerId, name: providers.publicName, display: providers.displayName })
+    .select({ owner: providers.ownerId, name: providers.publicName })
     .from(providers)
-    .where(and(eq(providers.status, 'published'), isNull(providers.photoId)))
+    .where(and(eq(providers.status, 'published'), notExists(db.select().from(photos).where(and(eq(photos.ownerId, providers.ownerId), eq(photos.kind, 'profile'))))))
   for (const r of rows) {
-    await givePlaceholderPhoto(r.owner, r.name ?? r.display)
+    await givePlaceholderPhoto(r.owner, r.name ?? '')
   }
   return rows.length
 }

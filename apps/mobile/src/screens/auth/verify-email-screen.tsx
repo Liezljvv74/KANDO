@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { useState } from 'react'
 
 import { sendVerificationCode } from '@/api/auth'
@@ -10,7 +10,6 @@ import { errorText, t, useLang } from '@/i18n'
 /** "Enter the code we emailed you": a correct code confirms the address and signs in (the root layout then shows the tabs). */
 export default function VerifyEmailScreen() {
   useLang()
-  const router = useRouter()
   const { email = '' } = useLocalSearchParams<{ email?: string }>()
   const { verify } = useSession()
   const [code, setCode] = useState('')
@@ -21,7 +20,9 @@ export default function VerifyEmailScreen() {
     setBusy(true)
     setError(null)
     try {
-      await verify(email, code.trim())
+      // Where to land is decided here, once (the global router: the guard has already swapped this screen out): the setup page for people who ticked "offer services", else Home.
+      const offerServices = await verify(email, code.trim())
+      router.replace(offerServices ? '/my-profile?welcome=1' : '/')
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))
       setBusy(false)

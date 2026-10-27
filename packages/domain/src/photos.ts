@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import sharp from 'sharp'
 import { photos, type Tx } from '@kando/db'
 import type { Photo } from '@kando/contract'
@@ -54,7 +54,7 @@ const toPhoto = (r: Row): Photo & { width: number; height: number } => ({
 })
 
 export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
-  const rows = await tx.select().from(photos).where(eq(photos.ownerId, userId)).orderBy(asc(photos.createdAt), asc(photos.id))
+  const rows = await tx.select().from(photos).where(eq(photos.ownerId, userId)).orderBy(sql`(${photos.kind} = 'profile') DESC`, asc(photos.createdAt), asc(photos.id))
   return rows.map(toPhoto)
 }
 
@@ -62,8 +62,8 @@ export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
 export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCommit: AfterCommit) {
   await lockProfile(tx, userId)
   const profile = await ownProvider(tx, userId)
-  if (!profile) return fail(409, { error: 'Create your profile first' })
   if (p.kind === 'portfolio') {
+    if (!profile) return fail(409, { error: 'Create your profile first' })
     const n = (
       await tx
         .select({ n: sql<number>`count(*)::int` })
@@ -72,21 +72,21 @@ export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCo
     )[0]!.n
     if (n >= MAX_PORTFOLIO_PHOTOS) return fail(409, { error: 'Photo limit reached' })
   }
-  const key = `providers/${profile.id}/${randomUUID()}.jpg`
+  const key = p.kind === 'profile' ? `people/${randomUUID()}/${randomUUID()}.jpg` : `providers/${profile!.id}/${randomUUID()}.jpg`
   await storage().put(mediaBucket(), key, p.data, 'image/jpeg')
   try {
-    const [row] = await tx
-      .insert(photos)
-      .values({ ownerId: userId, providerId: profile.id, kind: p.kind, key, width: p.width, height: p.height, alt: p.alt })
-      .returning()
     if (p.kind === 'profile') {
-      await tx.execute(sql`SELECT set_provider_photo(${row!.id}::uuid)`)
+      // One picture per person (unique index): the old one goes first, its object only once the new photo is committed.
       const old = await tx
         .delete(photos)
-        .where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'), ne(photos.id, row!.id)))
+        .where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile')))
         .returning({ key: photos.key })
-      for (const o of old) afterCommit(() => removeObject(mediaBucket(), o.key)) // only once the new photo is committed
+      for (const o of old) afterCommit(() => removeObject(mediaBucket(), o.key))
     }
+    const [row] = await tx
+      .insert(photos)
+      .values({ ownerId: userId, providerId: p.kind === 'profile' ? null : profile!.id, kind: p.kind, key, width: p.width, height: p.height, alt: p.alt })
+      .returning()
     return toPhoto(row!)
   } catch (e) {
     await removeObject(mediaBucket(), key)
@@ -102,8 +102,8 @@ export async function deletePhoto(tx: Tx, userId: string, id: string, afterCommi
     : undefined
   if (!row) return false
   const profile = await ownProvider(tx, userId)
-  if (profile?.status === 'published' && profile.photoId === id) fail(409, { error: 'Profile photo required while published' })
-  await tx.delete(photos).where(eq(photos.id, id)) // providers.photo_id is cleared by its FK
+  if (profile?.status === 'published' && row.kind === 'profile') fail(409, { error: 'Profile photo required while published' })
+  await tx.delete(photos).where(eq(photos.id, id))
   afterCommit(() => removeObject(mediaBucket(), row.key))
   return true
 }

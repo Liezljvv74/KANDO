@@ -1,8 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
+import { File } from 'expo-file-system'
+
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
+import { photosApi } from '@/api/my-profile'
+import { clearMe, loadMe } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
+import { clearPending, loadPending, savePending, type PendingSignup } from '@/lib/pending-signup'
 
 type User = auth.SessionUser
 type State = { user: User | null; loading: boolean; offline: boolean }
@@ -24,7 +29,9 @@ export async function loadSession() {
   started = true
   set({ user: null, loading: true, offline: false })
   try {
-    signedIn(await auth.session())
+    const user = await auth.session()
+    signedIn(user)
+    if (user?.emailVerified) completeSignup(user).catch(() => {}) // a sign-up the last launch could not finish
   } catch (e) {
     set({ user: null, loading: false, offline: e instanceof ApiError && e.status === 0 })
   }
@@ -49,33 +56,67 @@ export async function signIn(email: string, password: string): Promise<'signed-i
   return 'signed-in'
 }
 
-/** Creates the account and emails the confirmation code (the server does not send one on sign-up). */
-export async function signUp(name: string, email: string, password: string) {
-  await auth.signUp(email, password, name)
-  await auth.sendVerificationCode(email)
+/** Creates the account and emails the confirmation code (the server does not send one on sign-up). `pending` is kept for the code step; a failed sign-up leaves none. */
+export async function signUp(name: string, email: string, password: string, pending?: PendingSignup) {
+  if (pending) await savePending(pending)
+  try {
+    await auth.signUp(email, password, name)
+    await auth.sendVerificationCode(email)
+  } catch (e) {
+    await clearPending()
+    throw e
+  }
 }
 
-/** A correct code signs in; the account name and app language go to the app's own record (public name, email language). */
+/** The pending record for this user, or null; a record made for another email is dropped. */
+async function pendingFor(user: User) {
+  const p = await loadPending()
+  if (p && p.email !== user.email.trim().toLowerCase()) {
+    await clearPending()
+    return null
+  }
+  return p
+}
+
+/** Saves what the sign-up form collected: names and address, then the picture. A failed step keeps the record; loadSession retries it. */
+export async function completeSignup(user: User) {
+  const p = await pendingFor(user)
+  if (!p) return
+  await finish(p)
+  await loadMe().catch(() => {}) // the home picture nudge must not show for a picture just saved
+}
+
+async function finish(p: PendingSignup) {
+  try {
+    if (p.firstName && p.lastName) {
+      await updateMe({ firstName: p.firstName, lastName: p.lastName, language: getLang(), ...(p.address && { address: p.address }) })
+      // Saved: a retry only repeats the picture, so later edits are never overwritten.
+      await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri })
+    }
+    if (p.pictureUri) {
+      if (!new File(p.pictureUri).exists) return await clearPending() // the OS cleared its cache: nothing left to upload
+      await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
+    }
+    await clearPending()
+  } catch {
+    // Kept for the next launch.
+  }
+}
+
+/** A correct code signs in and finishes the sign-up; true when the person ticked "offer services" (the screen then opens the provider page). */
 export async function verify(email: string, code: string) {
   const user = await auth.verifyEmail(email, code)
+  const pending = await pendingFor(user)
   signedIn(user)
-  updateMe({ name: user.name, language: getLang() }).catch(() => {})
+  if (pending) await completeSignup(user)
+  else updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
+  return !!pending?.offerServices
 }
 
 export async function signOut() {
+  clearMe()
   set({ user: null, loading: false, offline: false })
   await auth.signOut()
-}
-
-/** Saves the account name; the session user follows. Errors (e.g. 400 'Invalid input' naming the field) are thrown to the form. */
-export async function updateName(name: string) {
-  await updateMe({ name })
-  try {
-    await auth.updateUserName(name)
-  } catch {
-    // The auth account's copy is what the next app start shows; a failure only shows the old name there until the next save.
-  }
-  if (state.user) set({ ...state, user: { ...state.user, name } })
 }
 
 /** Switches the app language; signed in, the account follows so emails come in the same language. */
@@ -87,7 +128,7 @@ export function chooseLanguage(lang: Lang) {
 export const getSession = () => state
 
 // The server no longer accepts the session: back to the login (Stack.Protected follows `user`).
-setOnUnauthorized(() => set({ user: null, loading: false, offline: false }))
+setOnUnauthorized(() => (clearMe(), set({ user: null, loading: false, offline: false })))
 
 /** Test helper. */
 export const resetSession = () => {
@@ -103,5 +144,5 @@ export function useSession() {
   useEffect(() => {
     if (!started) loadSession()
   }, [])
-  return { ...s, signIn, signUp, verify, signOut, updateName, retry: loadSession }
+  return { ...s, signIn, signUp, verify, signOut, retry: loadSession }
 }

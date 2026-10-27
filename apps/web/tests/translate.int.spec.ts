@@ -34,7 +34,6 @@ const en = (s: string) => {
 const de = (s: string) => `Der Schreiner baut Küchen und Schränke für Familien in der Region (${s} ${stamp}).`
 
 const texts = (over: Partial<TranslatableTexts> = {}): TranslatableTexts => ({
-  displayName: '',
   bio: null,
   strengths: null,
   experience: null,
@@ -106,7 +105,7 @@ describe('translate', () => {
   })
 
   it('texts already in the target language are returned unchanged without a call', async () => {
-    const t = texts({ displayName: '', bio: de('own1'), skills: [de('own2')] })
+    const t = texts({ bio: de('own1'), skills: [de('own2')] })
     const f = answer(echo('X: '))
     expect(await translate(t, 'de', client('own'))).toEqual(t)
     expect(f).not.toHaveBeenCalled()
@@ -226,7 +225,6 @@ describe('translate', () => {
 
   it('a German profile of short skills and titles needs no translation for de but does for en', async () => {
     const profile = texts({
-      displayName: 'Tischlerei Becker',
       bio: `Ich baue Möbel nach Maß und montiere Küchen. Zuverlässig und pünktlich seit zwölf Jahren (${stamp}).`,
       skills: ['Hochzeiten', 'Umzug', 'Möbelmontage', 'Fingerfood', 'SEO'],
       services: [
@@ -277,7 +275,6 @@ describe('translate', () => {
 
   it('textsOf picks the translatable fields of a profile', () => {
     const p = {
-      displayName: 'Anna',
       bio: 'b',
       strengths: null,
       experience: 'e',
@@ -286,7 +283,6 @@ describe('translate', () => {
       references: [{ id: 'r3', clientName: 'C', description: 'D', year: 2020 }],
     } as unknown as ProviderDetail
     expect(textsOf(p)).toEqual({
-      displayName: 'Anna',
       bio: 'b',
       strengths: null,
       experience: 'e',
@@ -297,7 +293,7 @@ describe('translate', () => {
   })
 
   it('needsTranslation is false for a page entirely in the viewer language and true for a mixed page', () => {
-    const german = texts({ displayName: '', bio: de('n1'), skills: [de('n2')] })
+    const german = texts({ bio: de('n1'), skills: [de('n2')] })
     expect(needsTranslation(german, 'de')).toBe(false)
     expect(needsTranslation(german, 'en')).toBe(true)
     expect(needsTranslation({ ...german, strengths: 'The carpenter builds kitchens and wardrobes for families in the whole region and also repairs doors.' }, 'de')).toBe(true)

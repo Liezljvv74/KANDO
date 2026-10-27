@@ -133,7 +133,7 @@ test('updateMe PATCHes the account name', async () => {
   await expect(updateMe({ name: 'Anna Berg' })).resolves.toMatchObject({ name: 'Anna Berg' })
   const [u, init] = fetchMock.mock.calls[0]
   expect(String(u)).toMatch(/\/app-api\/v1\/me$/)
-  expect(init).toMatchObject({ method: 'PATCH', body: JSON.stringify({ name: 'Anna Berg' }) })
+  expect(init).toMatchObject({ method: 'PATCH', body: JSON.stringify({ firstName: 'Anna', lastName: 'Berg' }) })
 })
 
 const file = { uri: 'file:///a.jpg', name: 'a.jpg', type: 'image/jpeg' }
@@ -195,4 +195,15 @@ test('a malformed Set-Cookie line without "=" is skipped', async () => {
   fetchMock.mockResolvedValueOnce(json(200, {}, ['garbage; Path=/', 'b=2; Path=/']))
   await api('/app-api/v1/me')
   expect(await getCookie()).toBe(`${TOKEN}; b=2`)
+})
+
+test('updateMe sends the one-field name as first and last name, split at the last space', async () => {
+  fetchMock.mockResolvedValue(json(200, {}))
+  for (const name of ['Anna Lena von der Heide', 'Cher', '   ']) await updateMe({ name, language: 'en' })
+  const bodies = fetchMock.mock.calls.map((c) => JSON.parse((c[1] as { body: string }).body))
+  expect(bodies.slice(-3)).toEqual([
+    { firstName: 'Anna Lena von der', lastName: 'Heide', language: 'en' },
+    { firstName: 'Cher', language: 'en' },
+    { language: 'en' },
+  ])
 })

@@ -44,6 +44,3 @@ export const requestPasswordReset = (email: string) => post('/forget-password/em
 
 export const resetPassword = (email: string, code: string, password: string) =>
   post('/email-otp/reset-password', { email, otp: code, password })
-
-/** The auth account's name (what get-session returns); the app's own copy is saved with `updateMe`. */
-export const updateUserName = (name: string) => post('/update-user', { name })

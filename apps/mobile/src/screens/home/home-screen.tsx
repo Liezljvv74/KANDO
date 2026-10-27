@@ -1,12 +1,20 @@
 import { router } from 'expo-router'
+import * as SecureStore from 'expo-secure-store'
+import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { Button } from '@/components/auth-ui'
+import { photosApi } from '@/api/my-profile'
+import { Button, ErrorText } from '@/components/auth-ui'
+import { Card } from '@/components/form-ui'
 import { Select } from '@/components/select'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
-import { t, useLang, type Key } from '@/i18n'
+import { loadMe } from '@/hooks/use-me'
+import { errorText, t, useLang, type Key } from '@/i18n'
+import { askPhotoSource } from '@/lib/ask-photo-source'
+import { pictureNudgeKey } from '@/lib/picture-nudge'
+import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 
 /** [title, text] per card. */
 const BADGES: [Key, Key][] = [
@@ -22,6 +30,49 @@ const SAFETY: [Key, Key][] = [
 ]
 const STEPS = [1, 2, 3] as const
 
+/** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
+function PictureNudge() {
+  const [show, setShow] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const [key, setKey] = useState('')
+  useEffect(() => {
+    loadMe()
+      .then(async (me) => {
+        setKey(pictureNudgeKey(me.id))
+        setShow(!me.photoUrl && !(await SecureStore.getItemAsync(pictureNudgeKey(me.id))))
+      })
+      .catch(() => {})
+  }, [])
+  const dismiss = () => {
+    setShow(false)
+    SecureStore.setItemAsync(key, '1').catch(() => {})
+  }
+  const add = useCallback(async (source: 'camera' | 'library') => {
+    setProblem(null)
+    try {
+      const file = await pickPhoto(source, true)
+      if (file === 'denied') setProblem(t('myProfile.denied'))
+      else if (file) {
+        await photosApi.add(file, 'profile')
+        setShow(false)
+      }
+    } catch (e) {
+      setProblem(errorText(uploadErrorCode(e)))
+    }
+  }, [])
+  if (!show) return null
+  return (
+    <Card>
+      <Text style={styles.body}>{t('home.pictureNudge')}</Text>
+      <ErrorText text={problem} />
+      <Button label={t('home.pictureAdd')} onPress={() => askPhotoSource(add)} />
+      <Text style={styles.dismiss} accessibilityRole="button" accessibilityLabel={t('home.pictureDismiss')} onPress={dismiss}>
+        {'×'}
+      </Text>
+    </Card>
+  )
+}
+
 export default function HomeScreen() {
   useLang()
   const { categories, error, retry } = useCategories()
@@ -34,6 +85,7 @@ export default function HomeScreen() {
           {k('headline')}
         </Text>
         <Text style={styles.intro}>{k('intro')}</Text>
+        <PictureNudge />
         <Button label={t('home.cta')} onPress={() => router.navigate('/search')} />
         {categories ? (
           // Every pick starts a fresh search, even the same category again (`at` changes).
@@ -108,4 +160,5 @@ const styles = StyleSheet.create({
   panel: { borderRadius: 12, backgroundColor: '#E1F4EE', padding: 12, gap: 4 },
   panelWarm: { backgroundColor: '#FFF7E8' },
   safety: { gap: 2 },
+  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: '#14352E' },
 })

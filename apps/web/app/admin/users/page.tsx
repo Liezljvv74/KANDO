@@ -15,7 +15,7 @@ export default function UsersList() {
       <SearchForm formProps={searchFormProps} />
       <Table {...tableProps} rowKey="id">
         <Table.Column dataIndex="email" title={at('admin.field.email')} sorter />
-        <Table.Column dataIndex="name" title={at('admin.field.name')} />
+        <Table.Column title={at('admin.field.name')} render={(_: unknown, r: { firstName: string | null; lastName: string | null }) => [r.firstName, r.lastName].filter(Boolean).join(' ')} />
         <Table.Column dataIndex="staffRole" title={at('admin.field.role')} render={(r: string | null) => (r ? <Tag>{at(r === 'admin' ? 'admin.role.administrator' : 'admin.role.reviewer')}</Tag> : null)} />
         <Table.Column dataIndex="suspendedUntil" title={at('admin.field.suspendedUntil')} render={(v: string | null) => v && new Date(v).toLocaleDateString(LOCALE[lang])} />
         <Table.Column dataIndex="createdAt" title={at('admin.field.createdAt')} sorter render={(v: string) => new Date(v).toLocaleDateString(LOCALE[lang])} />

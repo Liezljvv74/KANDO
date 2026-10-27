@@ -23,7 +23,15 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (27 October 2026)
 
-Stage 1 is built on branch `stage-1`: database with row-level security, login (Neon Auth), the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds. A final review of the whole branch found 3 important and 10 minor points; all important ones and 8 minor ones are fixed, the other 2 wait for the South Africa work (see Known gaps). All automated tests pass (204 web, 85 app, 16 in the shared packages, 305 in total); typecheck and lint are clean. Report: `Reports/Stage-1-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`.
+Stage 1 is built (database with row-level security, login, the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds). On top of it, branch `registration-setup` adds registration and a one-page provider setup:
+
+- **Sign-up** asks for first and last name, a private address and a picture, plus one tick: "I want to offer services". Nothing is lost if the confirmation code comes later: the answers are kept on the phone and saved when the email is confirmed.
+- **My service profile is one page.** Opening it creates an empty draft. Every field saves as you type; services, references and documents sit on the same page. A **Publish** button at the bottom lists what is still missing, in plain words, until the profile is complete.
+- **Checks, emails and the banner.** When staff approve a document, the provider gets an email that says what really happened (profile live, service visible, profile offline, profile suspended). When the profile goes live there is also a banner "Your profile is live. Tell people about it." with a Share button, and a dot on the Account tab.
+- **Suspensions end by their date.** Staff choose the end date; the provider gets an email when it starts and again when the profile is published again. A daily check at 06:00 UTC ends suspensions whose date has passed.
+- The public name is now first name plus the first letter of the surname (or the business name); it follows a rename.
+
+All automated tests pass (257 web, 108 app, 23 in the shared packages, 388 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. The whole-branch review is done and both fix waves are in; a scoped re-review follows.
 
 The back office is in German and English: the language comes from the `admin-lang` cookie, else the browser language, and a button in the header switches it.
 
@@ -33,16 +41,24 @@ Nothing has been checked on a phone or in a browser yet.
 
 1. **Owner:** add the GitHub secrets `NEON_AUTH_BASE_URL` and `NEON_AUTH_COOKIE_SECRET` to this repository, so CI can run the web tests.
 2. **Owner:** create the Vercel project (root `apps/web`) and add the environment variables, as in `docs/deployment.md`.
-3. **Phone checks of every screen** on the development build, against the preview deployment, and the back office screens in a browser. The "Not yet done (phone)" rows in the report's Other Checks sheet are the list.
-4. **Owner review of the pull request**, then merge. The final review of the whole branch is done and its findings are fixed.
+3. **Before this branch ships:** add `CRON_SECRET` on Vercel, and run `pnpm db:migrate` (migration `0008`) on any real database. The dev database is already migrated.
+4. **Phone checks of every screen** on the development build, against the preview deployment, and the back office screens in a browser. The "Not yet done (phone)" rows in the report's Other Checks sheet are the list. For the new flow:
+   1. Sign up with names, address, a picture and the "I want to offer services" tick; confirm the code.
+   2. Open My service profile: fill the page, watch the fields save, check the keyboard never hides a field.
+   3. Add a service and upload its document; press Publish and read the list of what is missing.
+   4. Approve the document in the back office; check the email, the banner, the Share sheet and the dot on the Account tab.
+   5. Check the home nudge and that it can be dismissed.
+5. **Scoped re-review** of the final fixes, then owner review of the pull request, then merge.
 
 ### Test accounts (dev branch only)
 
-`pnpm db:seed:test-users` creates customers and published providers from `packages/domain/seed-data/test-users.json`. That file is not in git (the repository is public); it lives on this PC only. A fresh clone starts from `test-users.example.json` (one customer, one provider): copy it to `test-users.json` and edit. The password is in the file; emails are created verified. Seeds refuse to run anywhere but the dev branch.
+`pnpm db:seed:test-users` creates customers and published providers from `packages/domain/seed-data/test-users.json`. Each person has `firstName` and `lastName` (and an optional address); there is no display name any more, the public name is built from the names. The file on this PC has been converted to this shape. That file is not in git (the repository is public); it lives on this PC only. A fresh clone starts from `test-users.example.json` (one customer, one provider): copy it to `test-users.json` and edit. The password is in the file; emails are created verified. Seeds refuse to run anywhere but the dev branch.
 
 ## Known gaps
 
-- Suspensions do not expire by themselves: the end date is informational and a suspension stays in force until a staff member lifts it. Automatic expiry is a Stage 2 job. A user suspended before having a provider profile is blocked from publishing even after the end date, and the back office shows no "lift" hint for them; lift the suspension on the user.
+- Refine's own button labels (Save, Create, Edit, Delete) are still English in the back office.
+- Push notifications come with bookings; until then the banner and the email are the only signals.
+- Small parked points from the reviews of the registration work are listed in the "Open Items" sheet of `Reports/Registration-Setup-Test-Report.xlsx` (for example: end dates in emails use the server time zone; the cron sends its emails one by one).
 - No thumbnail sizes: the photo grid and the cards load full-size images.
 - Documents over 4.5 MB cannot be uploaded through Vercel; the fix is to upload straight from the phone to storage.
 - No "Delete my account" in the app (GDPR erasure and data export come later).

@@ -26,6 +26,7 @@ beforeAll(async () => {
   setStorageForTests(store)
   await seedBase()
   for (const u of ['fl1', 'fl2', 'fl3']) await call(profileRoute.PUT, u, 'PUT', profile)
+  await pool.query("UPDATE users SET first_name = 'Fia', last_name = 'Lang' WHERE id IN ('fl1', 'fl2', 'fl3')")
 })
 afterAll(async () => {
   setStorageForTests(undefined)
@@ -55,9 +56,10 @@ it('a profile photo is re-encoded to JPEG at most 1600 px and returned in contra
   expect((await sharp(stored).metadata()).format).toBe('jpeg')
   const list = PhotosListSchema.parse(await (await call(photos.GET, 'fl1')).json())
   expect(list.docs.map((d) => d.id)).toEqual([body.id])
-  const p = await pool.query("SELECT photo_id, id FROM providers WHERE owner_id = 'fl1'")
-  expect(p.rows[0].photo_id).toBe(body.id)
-  expect(keys('media')[0]).toMatch(new RegExp(`^media/providers/${p.rows[0].id}/[0-9a-f-]{36}\\.jpg$`))
+  const row = (await pool.query('SELECT provider_id FROM photos WHERE id = $1', [body.id])).rows[0]
+  expect(row.provider_id).toBeNull() // the picture belongs to the person
+  expect(keys('media')[0]).toMatch(/^media\/people\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/) // a random folder: the account id is not in the public URL
+  expect(keys('media')[0]).not.toContain('fl1')
 })
 
 it('a new profile photo replaces the old one and deletes its object', async () => {
@@ -83,21 +85,21 @@ it('portfolio is limited to 12 (409), a non-image is 400, a missing kind is 400'
   expect((await upload(photos.POST, 'fl2', img, { kind: 'banner' })).status).toBe(400)
 })
 
-it('a photo needs a profile first (409); anonymous is 401; an oversize body is 413', async () => {
-  expect((await sendPhoto('fl0', 'profile')).status).toBe(409)
+it('a portfolio photo needs a profile first (409); anonymous is 401; an oversize body is 413', async () => {
+  expect((await sendPhoto('fl0', 'portfolio')).status).toBe(409)
   const anon = await photos.POST(new Request('http://localhost/x', { method: 'POST' }), { params: Promise.resolve({}) })
   expect(anon.status).toBe(401)
   const big = await upload(photos.POST, 'fl1', Buffer.alloc(10_100_000, 1), { kind: 'portfolio' })
   expect(big.status).toBe(413)
 })
 
-it('deleting a photo: another user gets 404, the owner 204 and the object is gone; the profile photo is cleared', async () => {
+it('deleting a photo: another user gets 404, the owner 204 and the object and row are gone', async () => {
   const id = (await (await sendPhoto('fl3', 'profile')).json()).id
   expect((await call(photo.DELETE, 'fl1', 'DELETE', undefined, { id })).status).toBe(404)
   expect(keys('media')).toHaveLength(1)
   expect((await call(photo.DELETE, 'fl3', 'DELETE', undefined, { id })).status).toBe(204)
   expect(keys('media')).toHaveLength(0)
-  expect((await pool.query("SELECT photo_id FROM providers WHERE owner_id = 'fl3'")).rows[0].photo_id).toBeNull()
+  expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [id])).rowCount).toBe(0)
   expect((await call(photo.DELETE, 'fl3', 'DELETE', undefined, { id: 'nope' })).status).toBe(404)
 })
 
@@ -111,14 +113,11 @@ it('the profile photo of a published profile cannot be deleted (409)', async () 
   expect(keys('media')).toHaveLength(1)
 })
 
-it('photo_id is domain-only and photos are isolated', async () => {
+it('suspended_until is domain-only and photos are isolated', async () => {
   const mine = (await pool.query("SELECT id FROM photos WHERE owner_id = 'fl2' LIMIT 1")).rows[0].id
-  await expect(asUser('fl1', (tx) => tx.execute(sql`UPDATE providers SET photo_id = ${mine} WHERE owner_id = 'fl1'`))).rejects.toMatchObject({
+  await expect(asUser('fl1', (tx) => tx.execute(sql`UPDATE providers SET suspended_until = now() WHERE owner_id = 'fl1'`))).rejects.toMatchObject({
     cause: { message: expect.stringContaining('permission denied') },
   })
-  // set_provider_photo refuses a photo of someone else
-  const r = await asUser('fl1', async (tx) => (await tx.execute(sql`SELECT set_provider_photo(${mine}::uuid) AS ok`)).rows[0])
-  expect(r).toEqual({ ok: false })
   // fl1 cannot insert a photo for fl2's provider, nor change or delete fl2's photos
   const fl2p = (await pool.query("SELECT id FROM providers WHERE owner_id = 'fl2'")).rows[0].id
   await expect(
@@ -227,4 +226,17 @@ it('verifications: one pending check per requirement (409 removes the second fil
   expect(DocumentsListSchema.parse(await (await call(verifications.GET, 'fl2')).json()).docs).toEqual([])
   // the submitted file stays reachable through the document id
   expect((await call(file.GET, 'fl1', 'GET', undefined, { id: list.docs[0]!.id })).status).toBe(200)
+})
+
+it('the profile photo is private to its owner: another user cannot see it and gets 404 on delete; listPhotos puts it first', async () => {
+  const id = (await (await sendPhoto('fl1', 'profile')).json()).id
+  // there is no GET route for a photo: the row itself is invisible to another user (RLS)
+  expect(await asUser('fl2', async (tx) => (await tx.execute(sql`SELECT 1 FROM photos WHERE id = ${id}`)).rows)).toHaveLength(0)
+  expect((await call(photo.DELETE, 'fl2', 'DELETE', undefined, { id })).status).toBe(404)
+  expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [id])).rowCount).toBe(1)
+  // a portfolio photo uploaded later still lists after the picture; replacing the picture keeps it first
+  await sendPhoto('fl1', 'portfolio')
+  await pool.query("UPDATE photos SET created_at = now() - interval '1 day' WHERE owner_id = 'fl1' AND kind = 'portfolio'")
+  const kinds = async () => PhotosListSchema.parse(await (await call(photos.GET, 'fl1')).json()).docs.map((d) => d.kind)
+  expect((await kinds())[0]).toBe('profile')
 })

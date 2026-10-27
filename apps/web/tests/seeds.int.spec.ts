@@ -83,13 +83,13 @@ it('the dev guard needs the dev branch AND the dev database host', () => {
 const SEED: SeedData = {
   password: 'TestPass123',
   customers: [
-    { email: 'kunde.berlin@example.com', name: 'Anna Schulz' },
-    { email: 'customer.hamburg@example.com', name: 'James Miller', language: 'en' },
+    { email: 'kunde.berlin@example.com', firstName: 'Anna', lastName: 'Schulz' },
+    { email: 'customer.hamburg@example.com', firstName: 'James', lastName: 'Miller', language: 'en', address: { street: 'Example Street 1', postcode: '20095', city: 'Hamburg', country: 'DE' } },
   ],
   providers: [
     {
-      email: 'anbieter.foto.berlin@example.com', name: 'Lena Fischer',
-      profile: { displayName: 'Hochzeitsfotografie Berlin', providerType: 'individual', basePostcode: '10115', serviceRadiusKm: 50, bio: 'Hochzeiten und Familienfeste.', strengths: 'Ruhige Art.', skills: ['Hochzeiten'], experience: 'Seit 2015' },
+      email: 'anbieter.foto.berlin@example.com', firstName: 'Lena', lastName: 'Fischer',
+      profile: { providerType: 'individual', basePostcode: '10115', serviceRadiusKm: 50, bio: 'Hochzeiten und Familienfeste.', strengths: 'Ruhige Art.', skills: ['Hochzeiten'], experience: 'Seit 2015' },
       services: [
         { category: 'photography', title: 'Hochzeitsreportage', description: '8 Stunden.', priceType: 'fixed', price: 1490 },
         { category: 'photography', title: 'Portrait-Shooting', description: '1 Stunde.', priceType: 'from', price: 129 },
@@ -97,8 +97,8 @@ const SEED: SeedData = {
       references: [{ clientName: 'Familie Krüger', description: 'Hochzeit, 120 Gäste.', year: 2025 }],
     },
     {
-      email: 'anbieter.dj.hamburg@example.com', name: 'Tom Nord',
-      profile: { displayName: 'DJ für Hochzeiten und Firmenfeiern', providerType: 'business', businessName: 'Nordbeat Events GmbH', impressum: 'Nordbeat Events GmbH, Beispielstraße 1, 20095 Hamburg (Testdaten)', basePostcode: '20095', serviceRadiusKm: 80, bio: 'Musik für jede Feier.', strengths: 'Eigene Technik.', skills: ['Hochzeiten'], experience: 'Seit 2012' },
+      email: 'anbieter.dj.hamburg@example.com', firstName: 'Tom', lastName: 'Nord',
+      profile: { providerType: 'business', businessName: 'Nordbeat Events GmbH', impressum: 'Nordbeat Events GmbH, Beispielstraße 1, 20095 Hamburg (Testdaten)', basePostcode: '20095', serviceRadiusKm: 80, bio: 'Musik für jede Feier.', strengths: 'Eigene Technik.', skills: ['Hochzeiten'], experience: 'Seit 2012' },
       services: [{ category: 'dj', title: 'Hochzeits-DJ', description: 'Bis 2 Uhr.', priceType: 'from', price: 890 }],
       references: [{ clientName: 'Hafenwerk GmbH', description: 'Sommerfest, 300 Gäste.', year: 2024 }],
     },
@@ -121,13 +121,21 @@ it('builds the test users through the domain: published providers with photo, se
   const first = await seedTestUsers(fakeAuth, DEV, SEED)
   expect(first).toEqual({ created: 4, skipped: 0 })
   expect(await count("SELECT count(*) n FROM users WHERE email LIKE '%@example.com'")).toBe(4)
-  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND photo_id IS NOT NULL AND ${OWNED}`)).toBe(2)
+  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND (SELECT count(*) FROM photos ph WHERE ph.owner_id = providers.owner_id AND ph.kind = 'profile' AND ph.provider_id IS NULL) = 1 AND ${OWNED}`)).toBe(2)
   expect(storage.objects.size).toBe(2)
   expect(await count('SELECT count(*) n FROM neon_auth."user" WHERE "emailVerified"')).toBe(4)
   const dj = (await pool.query("SELECT public_name, slug FROM providers WHERE business_name = 'Nordbeat Events GmbH'")).rows[0]
   expect(dj).toEqual({ public_name: 'Nordbeat Events GmbH', slug: 'nordbeat-events-gmbh' })
   const foto = (await pool.query("SELECT public_name FROM providers p JOIN users u ON u.id = p.owner_id WHERE u.email = 'anbieter.foto.berlin@example.com'")).rows[0]
   expect(foto.public_name).toBe('Lena F.')
+  const names = (await pool.query("SELECT first_name, last_name, address_city, address_country FROM users WHERE email LIKE '%@example.com' ORDER BY email")).rows
+  expect(names).toEqual([
+    { first_name: 'Tom', last_name: 'Nord', address_city: null, address_country: null },
+    { first_name: 'Lena', last_name: 'Fischer', address_city: null, address_country: null },
+    { first_name: 'James', last_name: 'Miller', address_city: 'Hamburg', address_country: 'DE' },
+    { first_name: 'Anna', last_name: 'Schulz', address_city: null, address_country: null },
+  ])
+  expect(await count("SELECT count(*) n FROM photos WHERE owner_id IN (SELECT id FROM users WHERE email LIKE 'k%@example.com' OR email LIKE 'c%@example.com')")).toBe(0)
   expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(3)
   // a rerun skips everything but still fixes the verified flag of existing accounts
   await pool.query('UPDATE neon_auth."user" SET "emailVerified" = false')
@@ -138,18 +146,18 @@ it('builds the test users through the domain: published providers with photo, se
 
 it('a run that crashed after the services (no photo, not published) resumes without adding the services twice', async () => {
   const owner = "(SELECT id FROM users WHERE email = 'anbieter.foto.berlin@example.com')"
-  await pool.query(`UPDATE providers SET status = 'draft', photo_id = NULL WHERE owner_id = ${owner}`)
+  await pool.query(`UPDATE providers SET status = 'draft' WHERE owner_id = ${owner}`)
   await pool.query(`DELETE FROM photos WHERE owner_id = ${owner}`)
   expect(await seedTestUsers(fakeAuth, DEV, SEED)).toEqual({ created: 1, skipped: 3 })
   expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(3)
   expect(await count(`SELECT count(*) n FROM provider_references WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(2)
-  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND photo_id IS NOT NULL AND owner_id = ${owner}`)).toBe(1)
+  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND (SELECT count(*) FROM photos ph WHERE ph.owner_id = providers.owner_id AND ph.kind = 'profile' AND ph.provider_id IS NULL) = 1 AND owner_id = ${owner}`)).toBe(1)
 })
 
 it('placeholder photos: gives a published profile without a photo one; elsewhere needs the typed yes', async () => {
-  await pool.query("UPDATE providers SET photo_id = NULL WHERE owner_id = (SELECT id FROM users WHERE email = 'anbieter.dj.hamburg@example.com')")
+  await pool.query("DELETE FROM photos WHERE kind = 'profile' AND owner_id = (SELECT id FROM users WHERE email = 'anbieter.dj.hamburg@example.com')")
   expect(await addPlaceholderPhotos()).toBeGreaterThanOrEqual(1)
-  expect(await count(`SELECT count(*) n FROM providers WHERE photo_id IS NOT NULL AND ${OWNED}`)).toBe(2)
+  expect(await count(`SELECT count(*) n FROM providers WHERE (SELECT count(*) FROM photos ph WHERE ph.owner_id = providers.owner_id AND ph.kind = 'profile' AND ph.provider_id IS NULL) = 1 AND ${OWNED}`)).toBe(2)
   expect(await addPlaceholderPhotos()).toBe(0)
   const ask = (answer: string) => async () => answer
   await expect(confirmedOrDev(DEV, ask('no'))).resolves.toBeUndefined()

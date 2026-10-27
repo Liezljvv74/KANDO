@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store'
 
 import { errorText, setLang } from '@/i18n'
 
-import { requestPasswordReset, resetPassword, sendVerificationCode, session, signIn, signOut, signUp, updateUserName, verifyEmail } from './auth'
+import { requestPasswordReset, resetPassword, sendVerificationCode, session, signIn, signOut, signUp, verifyEmail } from './auth'
 import { getCookie, SESSION_KEY } from './client'
 
 jest.mock('expo-secure-store', () => {
@@ -126,12 +126,6 @@ test('a wrong code throws INVALID_OTP, shown as the code message', async () => {
   expect(err).toMatchObject({ status: 400, code: 'INVALID_OTP' })
   setLang('de')
   expect(errorText(err.code)).toBe('Der Code ist falsch oder abgelaufen. Bitte fordere einen neuen an.')
-})
-
-test('updateUserName changes the name on the auth account', async () => {
-  fetchMock.mockResolvedValueOnce(json(200, { status: true }))
-  await updateUserName('Anna Berg')
-  expect(sent()).toMatchObject({ url: 'https://skillweb.space/api/auth/update-user', method: 'POST', body: { name: 'Anna Berg' } })
 })
 
 test('signUp and signIn start without an old stored session', async () => {

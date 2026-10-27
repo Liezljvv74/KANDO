@@ -15,19 +15,14 @@ export function ProviderCard({ item, names }: { item: SearchItem; names: Map<str
       accessibilityRole="button"
       style={styles.card}
     >
-      <Avatar name={item.publicName || item.displayName} url={item.photoUrl} />
+      <Avatar name={item.publicName} url={item.photoUrl} />
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <Text style={styles.name} numberOfLines={1}>
-            {item.displayName}
+            {item.publicName}
           </Text>
           {item.isNew && <Text style={styles.badge}>{t('badge.new')}</Text>}
         </View>
-        {!!item.publicName && (
-          <Text style={styles.by} numberOfLines={1}>
-            {item.publicName}
-          </Text>
-        )}
         <Text style={styles.sub} numberOfLines={1}>
           {item.categories.map((s) => names.get(s) ?? s).join(' · ')}
         </Text>
@@ -43,7 +38,6 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   name: { flexShrink: 1, fontSize: 17, fontWeight: '700', color: '#14352E' },
   badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#0E8A6B', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-  by: { fontSize: 15, fontWeight: '600', color: '#14352E' },
   sub: { fontSize: 14, color: '#14352E' },
   meta: { fontSize: 14, color: '#0E8A6B', fontWeight: '600' },
 })

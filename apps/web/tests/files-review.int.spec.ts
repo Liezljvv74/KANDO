@@ -27,6 +27,7 @@ beforeAll(async () => {
   setStorageForTests(store)
   ;({ categoryId, docCategoryId } = await seedBase())
   for (const u of USERS) await call(profileRoute.PUT, u, 'PUT', profile)
+  await pool.query("UPDATE users SET first_name = 'Rea', last_name = 'View' WHERE id = ANY($1)", [USERS])
 })
 afterAll(async () => {
   setStorageForTests(undefined)
@@ -190,9 +191,9 @@ it('photos of a published provider are public, and unreadable once suspended', a
   const photoId = await publishedUser('rv5')
   const read = () => asUser(null, async (tx) => (await tx.execute(sql`SELECT id FROM photos WHERE id = ${photoId}`)).rows)
   expect(await read()).toHaveLength(1)
-  await pool.query("UPDATE providers SET suspended = true WHERE owner_id = 'rv5'")
+  await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'rv5'")
   expect(await read()).toHaveLength(0)
-  await pool.query("UPDATE providers SET suspended = false WHERE owner_id = 'rv5'")
+  await pool.query("UPDATE providers SET suspended_until = NULL WHERE owner_id = 'rv5'")
   expect(await read()).toHaveLength(1)
 })
 
@@ -202,7 +203,8 @@ it('replacing the profile photo of a published profile works', async () => {
   expect(res.status).toBe(201)
   const fresh = (await res.json()).id
   expect(fresh).not.toBe(old)
-  expect((await pool.query("SELECT photo_id, status FROM providers WHERE owner_id = 'rv6'")).rows[0]).toEqual({ photo_id: fresh, status: 'published' })
+  expect((await pool.query("SELECT status FROM providers WHERE owner_id = 'rv6'")).rows[0]).toEqual({ status: 'published' })
+  expect((await photoRows('rv6'))[0]).toMatchObject({ id: fresh })
   expect(await photoRows('rv6')).toHaveLength(1)
   expect(keys('media')).toHaveLength(1)
 })
@@ -212,8 +214,8 @@ it('deleting the profile photo while publishing never leaves a published profile
     const id = (await (await sendPhoto(uid, 'profile')).json()).id
     await call(services.POST, uid, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
     await Promise.all([call(photo.DELETE, uid, 'DELETE', undefined, { id }), call(publish.POST, uid, 'POST')])
-    const row = (await pool.query('SELECT status, photo_id FROM providers WHERE owner_id = $1', [uid])).rows[0]
-    expect(row.status === 'published' && row.photo_id === null).toBe(false)
+    const row = (await pool.query("SELECT status, (SELECT count(*)::int FROM photos WHERE owner_id = $1 AND kind = 'profile') AS pics FROM providers WHERE owner_id = $1", [uid])).rows[0]
+    expect(row.status === 'published' && row.pics === 0).toBe(false)
   }
 })
 

@@ -41,7 +41,7 @@ export default function StaffList() {
       <p>{at('admin.staff.hint')}</p>
       <Table {...tableProps} rowKey="id">
         <Table.Column dataIndex="email" title={at('admin.field.email')} />
-        <Table.Column dataIndex="name" title={at('admin.field.name')} />
+        <Table.Column title={at('admin.field.name')} render={(_: unknown, r: { firstName: string | null; lastName: string | null }) => [r.firstName, r.lastName].filter(Boolean).join(' ')} />
         <Table.Column dataIndex="staffRole" title={at('admin.field.role')} render={(r: string) => <Tag>{at(r === 'admin' ? 'admin.role.administrator' : 'admin.role.reviewer')}</Tag>} />
       </Table>
     </List>

@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm'
 import {
-  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -12,11 +11,10 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { categories, point } from './reference'
-import { photos } from './files'
 import { users } from './users'
 
-// status, suspended, slug, public_name, location and photo_id are written by the domain (set_provider_* SQL functions)
-// or staff only: see COLUMN_STAFF_ONLY in rls.ts. photo_id (FK to photos) is set through set_provider_photo.
+// status, suspended_until, slug, public_name and location are written by the domain (set_provider_* SQL functions)
+// or staff only: see COLUMN_STAFF_ONLY in rls.ts. type is NULL on a draft; the picture is the owner's profile photo.
 export const providers = pgTable(
   'providers',
   {
@@ -25,8 +23,7 @@ export const providers = pgTable(
       .notNull()
       .unique()
       .references(() => users.id),
-    type: text().notNull(),
-    displayName: text('display_name').notNull(),
+    type: text(),
     businessName: text('business_name'),
     publicName: text('public_name'),
     slug: text().unique(),
@@ -44,10 +41,9 @@ export const providers = pgTable(
     worksRemotely: boolean('works_remotely').notNull().default(false),
     impressum: text(),
     status: text().notNull().default('draft'),
-    suspended: boolean().notNull().default(false),
+    suspendedUntil: timestamp('suspended_until', { withTimezone: true }),
     legalStatus: text('legal_status'),
     vatId: text('vat_id'),
-    photoId: uuid('photo_id').references((): AnyPgColumn => photos.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -74,7 +70,7 @@ export const services = pgTable(
       .references(() => categories.id),
     title: text().notNull(),
     description: text(),
-    priceType: text('price_type').notNull(),
+    priceType: text('price_type'), // NULL until set: a service may exist with a category alone, never offerable
     price: numeric({ precision: 10, scale: 2 }),
     currency: text().notNull().default('EUR'),
     sort: integer().notNull().default(0),

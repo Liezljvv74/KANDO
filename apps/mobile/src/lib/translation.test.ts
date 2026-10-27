@@ -3,7 +3,6 @@ import { applyTexts } from './translation'
 
 const base: ProviderDetail = {
   slug: 'anna',
-  displayName: 'Putzen',
   publicName: 'Anna H.',
   bio: 'Hallo',
   strengths: 'Pünktlich',
@@ -22,7 +21,6 @@ const base: ProviderDetail = {
   translatable: true,
 }
 const texts: TranslatableTexts = {
-  displayName: 'Cleaning',
   bio: 'Hello',
   strengths: 'Punctual',
   experience: 'Ten years',
@@ -33,7 +31,7 @@ const texts: TranslatableTexts = {
 
 test('applyTexts swaps only the translatable fields and keeps names, prices and photos', () => {
   const r = applyTexts(base, texts)
-  expect(r).toMatchObject({ displayName: 'Cleaning', bio: 'Hello', strengths: 'Punctual', experience: 'Ten years', skills: ['Windows'] })
+  expect(r).toMatchObject({ bio: 'Hello', strengths: 'Punctual', experience: 'Ten years', skills: ['Windows'] })
   expect(r.publicName).toBe('Anna H.')
   expect(r.place).toBe('Berlin')
   expect(r.categories).toEqual(['cleaning'])

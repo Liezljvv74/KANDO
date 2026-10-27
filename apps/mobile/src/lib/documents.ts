@@ -23,3 +23,6 @@ export function documentRows(services: OwnService[], categories: Category[], ver
 /** A hidden service's note: 'needed' while a document it waits for is missing or rejected, else 'waiting' (in staff review). */
 export const serviceDocNote = (waitingFor: string[], rows: DocumentRow[]): 'needed' | 'waiting' =>
   waitingFor.some((r) => ['none', 'rejected'].includes(rows.find((d) => d.requirement === r)?.state ?? 'none')) ? 'needed' : 'waiting'
+
+/** Share is offered only while no service waits for a document check (publish bar and banner alike). */
+export const canShare = (services: OwnService[]) => !services.some((s) => (s.waitingFor ?? []).length > 0)

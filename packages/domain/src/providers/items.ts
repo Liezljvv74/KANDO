@@ -1,5 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { categories, providerReferences, providers, services, type Tx } from '@kando/db'
+import { categories, categoryTexts, providerReferences, providers, services, users, type Tx } from '@kando/db'
+import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
@@ -16,7 +17,7 @@ const toService = (r: ServiceRow): OwnService => ({
   category: r.categoryId,
   title: r.title,
   description: r.description,
-  priceType: r.priceType as OwnService['priceType'],
+  priceType: r.priceType as OwnService['priceType'], // null until set
   price: r.price === null ? null : Number(r.price),
   currency: r.currency as OwnService['currency'],
 })
@@ -35,6 +36,13 @@ async function assertCategory(tx: Tx, id: string) {
   if (!ok) fail(400, { error: 'Unknown category' })
 }
 
+/** The category's name in the user's language (default language when missing): the title of a service saved without one. */
+async function categoryTitle(tx: Tx, userId: string, categoryId: string): Promise<string> {
+  const lang = (await tx.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l ?? DEFAULT_LANG
+  const names = await tx.select({ lang: categoryTexts.lang, name: categoryTexts.name }).from(categoryTexts).where(eq(categoryTexts.categoryId, categoryId))
+  return (names.find((n) => n.lang === lang) ?? names.find((n) => n.lang === DEFAULT_LANG))?.name ?? ''
+}
+
 /** The caller's services, newest first, each with whether it shows in search and which documents it waits for. */
 export async function listServices(tx: Tx, userId: string): Promise<OwnService[]> {
   const profile = await ownProvider(tx, userId)
@@ -44,32 +52,35 @@ export async function listServices(tx: Tx, userId: string): Promise<OwnService[]
     .from(services)
     .where(eq(services.providerId, profile.id))
     .orderBy(desc(services.createdAt), desc(services.id))
-  const live = profile.status === 'published' && !profile.suspended
   const out: OwnService[] = []
-  for (const { s } of rows) {
-    const waitingFor = await missingRequirements(tx, profile.id, s.id)
-    out.push({ ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false })
-  }
+  for (const { s } of rows) out.push(await withState(tx, profile, s))
   return out
+}
+
+/** One service with whether it shows in search and which documents it waits for: the same answer from list, add and update. */
+async function withState(tx: Tx, profile: NonNullable<Awaited<ReturnType<typeof ownProvider>>>, s: ServiceRow): Promise<OwnService> {
+  const live = profile.status === 'published' && (!profile.suspendedUntil || profile.suspendedUntil <= new Date())
+  const waitingFor = await missingRequirements(tx, profile.id, s.id)
+  return { ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false }
 }
 
 export async function addService(tx: Tx, userId: string, input: ServiceInput): Promise<OwnService> {
   const profile = (await ownProvider(tx, userId)) ?? noProfile()
   await assertCategory(tx, input.categoryId)
-  const price = input.priceType === 'on-request' ? null : input.price
+  const price = input.priceType === 'on-request' ? null : (input.price ?? null)
   const [row] = await tx
     .insert(services)
     .values({
       providerId: profile.id, // always the caller's own profile, never from the body
       categoryId: input.categoryId,
-      title: input.title,
+      title: input.title?.trim() || (await categoryTitle(tx, userId, input.categoryId)), // a category alone is enough until Publish
       description: input.description?.trim() || null,
-      priceType: input.priceType,
+      priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
-      currency: input.currency,
+      currency: input.currency ?? 'EUR', // ponytail: EUR only in v1; derive from the provider's country when a second currency exists
     })
     .returning()
-  return toService(row!)
+  return withState(tx, profile, row!)
 }
 
 const ownServiceRow = async (tx: Tx, userId: string, id: string) =>
@@ -87,15 +98,16 @@ const ownServiceRow = async (tx: Tx, userId: string, id: string) =>
 export async function updateService(tx: Tx, userId: string, id: string, patch: ServicePatch): Promise<OwnService | null> {
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return null
-  const priceType = patch.priceType ?? (existing.priceType as ServiceInput['priceType'])
+  const profile = (await ownProvider(tx, userId))!
+  const priceType = patch.priceType ?? (existing.priceType as ServicePatch['priceType'] | null)
+  // the type and the price save one field at a time: keep a sent price whatever the type is (completeness decides later)
   const price = priceType === 'on-request' ? null : patch.price !== undefined ? patch.price : existing.price === null ? null : Number(existing.price)
-  if (price === null && priceType !== 'on-request') fail(400, { error: 'Invalid fields', fields: ['price'] })
   if (patch.categoryId !== undefined) await assertCategory(tx, patch.categoryId)
   const [row] = await tx
     .update(services)
     .set({
       ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
-      ...(patch.title !== undefined && { title: patch.title }),
+      ...(patch.title !== undefined && { title: patch.title.trim() || (await categoryTitle(tx, userId, patch.categoryId ?? existing.categoryId)) }),
       ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
       ...(patch.currency !== undefined && { currency: patch.currency }),
       priceType,
@@ -103,7 +115,7 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
     })
     .where(eq(services.id, id))
     .returning()
-  return toService(row!)
+  return withState(tx, profile, row!)
 }
 
 export async function deleteService(tx: Tx, userId: string, id: string): Promise<boolean> {

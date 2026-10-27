@@ -10,26 +10,35 @@ export const PRIVATE_TABLES: Record<string, string> = {
   users: 'id = app_current_user_id()',
   documents: 'owner_id = app_current_user_id()',
   private_files: 'owner_id = app_current_user_id()',
+  notifications: 'user_id = app_current_user_id()',
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
 // the set_provider_* SECURITY DEFINER functions below. Works for private and public-owned tables.
 export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   users: ['staff_role', 'suspended_until', 'suspended_reason'],
-  providers: ['status', 'suspended', 'slug', 'public_name', 'location', 'photo_id'],
+  providers: ['status', 'suspended_until', 'slug', 'public_name', 'location'],
+  // Rows are created on the owner connection; the app only sets seen_at and dismissed_at.
+  notifications: ['kind', 'payload', 'user_id'],
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
 }
 
 const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
-const LIVE_SERVICE = "EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND p.suspended = false)"
+// Suspensions end by their date: a past suspended_until counts as none.
+const NOT_SUSPENDED = '(suspended_until IS NULL OR suspended_until <= now())'
+const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND ${NOT_SUSPENDED})`
 
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
 export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: string }> = {
-  providers: { owner: 'owner_id = app_current_user_id()', publicRead: "status = 'published' AND suspended = false" },
+  providers: { owner: 'owner_id = app_current_user_id()', publicRead: `status = 'published' AND ${NOT_SUSPENDED}` },
   services: { owner: OWN_SERVICE, publicRead: LIVE_SERVICE },
   provider_references: { owner: OWN_SERVICE, publicRead: LIVE_SERVICE },
-  // A photo is written by its owner, on the owner's own provider only.
-  photos: { owner: `owner_id = app_current_user_id() AND ${OWN_SERVICE}`, publicRead: LIVE_SERVICE },
+  // A portfolio photo is written by its owner on the owner's own provider; the person's picture (no provider) by the owner.
+  // The picture is public once the owner's provider is live; users is private, so this reads providers only.
+  photos: {
+    owner: `owner_id = app_current_user_id() AND (provider_id IS NULL OR ${OWN_SERVICE})`,
+    publicRead: `${LIVE_SERVICE} OR (kind = 'profile' AND EXISTS (SELECT 1 FROM providers p WHERE p.owner_id = photos.owner_id AND p.status = 'published' AND ${NOT_SUSPENDED}))`,
+  },
 }
 
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
@@ -133,7 +142,7 @@ const PROVIDER_FUNCTIONS = [
     BEGIN
       SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;
       IF NOT FOUND THEN RETURN false; END IF;
-      IF p_published AND (r.suspended OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND u.suspended_until IS NOT NULL)) THEN
+      IF p_published AND ((r.suspended_until IS NOT NULL AND r.suspended_until > now()) OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND u.suspended_until > now())) THEN
         RETURN false;
       END IF;
       IF p_published AND r.slug IS NULL THEN
@@ -144,17 +153,8 @@ const PROVIDER_FUNCTIONS = [
       UPDATE providers SET status = CASE WHEN p_published THEN 'published' ELSE 'draft' END, updated_at = now() WHERE id = r.id;
       RETURN true;
     END $$`,
-  // The profile photo: only one of the caller's own photos (or NULL to clear).
-  `CREATE OR REPLACE FUNCTION set_provider_photo(p_photo_id uuid) RETURNS boolean
-    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
-      WITH u AS (
-        UPDATE providers p SET photo_id = p_photo_id, updated_at = now()
-        WHERE p.owner_id = app_current_user_id()
-          AND (p_photo_id IS NULL OR EXISTS (SELECT 1 FROM photos h WHERE h.id = p_photo_id AND h.provider_id = p.id AND h.owner_id = p.owner_id))
-        RETURNING 1)
-      SELECT EXISTS (SELECT 1 FROM u) $$`,
-  `REVOKE ALL ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text), set_provider_photo(uuid) FROM PUBLIC`,
-  `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text), set_provider_photo(uuid) TO ${APP_ROLE}`,
+  `REVOKE ALL ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) TO ${APP_ROLE}`,
 ]
 
 // Eligibility: documents are private (RLS), so the check runs as the table owner, for the provider's owner only.
@@ -167,7 +167,8 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN categories c ON c.id = s.category_id
       JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = p_provider_id
-        AND ((p.status = 'published' AND NOT p.suspended) OR p.owner_id = app_current_user_id())
+        AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL)
+        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
           WHERE NOT EXISTS (
@@ -182,7 +183,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
       WHERE s.id = p_service_id AND s.provider_id = p_provider_id
-        AND ((p.status = 'published' AND NOT p.suspended) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
         ) $$`,

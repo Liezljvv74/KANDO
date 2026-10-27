@@ -82,10 +82,20 @@ it('a stranger asking about a draft provider gets empty answers; the owner still
     expect(await ask('rp2')).toEqual([[], []])
     expect(await ask(null)).toEqual([[], []])
     expect(await ask('rp1')).toEqual([[serviceId], ['police-certificate']])
-    await pool.query("UPDATE providers SET suspended = true, status = 'published' WHERE id = $1", [pid])
+    await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day', status = 'published' WHERE id = $1", [pid])
     expect(await ask('rp2')).toEqual([[], []])
   } finally {
-    await pool.query("UPDATE providers SET status = 'published', suspended = false WHERE id = $1", [pid])
+    await pool.query("UPDATE providers SET status = 'published', suspended_until = NULL WHERE id = $1", [pid])
+  }
+})
+
+it('a service with a category alone (no price type yet) is never offerable, not even to its owner', async () => {
+  const id = (await pool.query('INSERT INTO services (provider_id, category_id, title) VALUES ($1, $2, $3) RETURNING id', [pid, categoryId, ''])).rows[0].id
+  try {
+    expect(await asUser('rp1', (tx) => offerableServiceIds(tx, pid))).not.toContain(id)
+    expect(await asUser(null, (tx) => offerableServiceIds(tx, pid))).not.toContain(id)
+  } finally {
+    await pool.query('DELETE FROM services WHERE id = $1', [id])
   }
 })
 
