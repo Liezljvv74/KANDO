@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, StyleSheet, Text, View } from 'react-native'
+import { AppState, FlatList, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import type { SearchItem } from '@kando/contract'
@@ -32,6 +32,7 @@ export default function SearchScreen() {
   const [error, setError] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
   const latest = useRef(0) // Only the newest request may update the list.
+  const appliedRef = useRef<Filters>({}) // The filters of the list on screen, for the refresh on return.
 
   const load = useCallback(async (filters: Filters, next: number) => {
     const id = ++latest.current
@@ -66,8 +67,23 @@ export default function SearchScreen() {
     }
     const filters = preset ? { category: preset } : {}
     setApplied(filters)
+    appliedRef.current = filters
     load(filters, 1)
   }, [load, preset, at])
+
+  // A provider suspended or unpublished while the user was elsewhere (the detail screen, the browser, another app)
+  // must not stay on the list: re-run the search on every return to this tab and whenever the app comes to the front.
+  const mounted = useRef(false)
+  useFocusEffect(
+    useCallback(() => {
+      if (mounted.current) load(appliedRef.current, 1)
+      mounted.current = true
+      const sub = AppState.addEventListener('change', (s) => {
+        if (s === 'active') load(appliedRef.current, 1)
+      })
+      return () => sub.remove()
+    }, [load]),
+  )
 
   const submit = () => {
     const code = postcode.trim()
@@ -75,6 +91,7 @@ export default function SearchScreen() {
     setFormError(null)
     const filters = { category, postcode: code, q }
     setApplied(filters)
+    appliedRef.current = filters
     load(filters, 1)
   }
 
