@@ -65,7 +65,7 @@ export async function search(
     ? sql`AND (p.works_remotely OR ST_DWithin(p.location::geography, ${here}, LEAST(p.service_radius_km * 1010, ${MAX_DISTANCE_M})))`
     : sql``
   const offerable = cat
-    ? sql`EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id} AND s.price_type IS NOT NULL AND s.id IN (SELECT offerable_service_ids(p.id)))`
+    ? sql`EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id} AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL) AND s.id IN (SELECT offerable_service_ids(p.id)))`
     : sql`EXISTS (SELECT 1 FROM offerable_service_ids(p.id))`
   const { rows } = await tx.execute<Candidate>(sql`
     SELECT p.id, p.slug, p.public_name, ph.key AS photo_key, ST_Y(p.location) AS lat, ST_X(p.location) AS lng,

@@ -40,13 +40,13 @@ const blank = (v: string | null | undefined) => !v?.trim()
 /** The one list of what a profile still needs before Publish, in the order of `MissingSchema`. */
 export function completeness(
   row: Row,
-  services: { categoryId: string | null; priceType: string | null }[],
+  services: { categoryId: string | null; priceType: string | null; price: string | null }[],
   hasPhoto: boolean,
 ): Missing[] {
   const biz = row.type === 'business'
   const m: [Missing, boolean][] = [
     ['photo', !hasPhoto],
-    ['service', !services.some((s) => s.categoryId && s.priceType)],
+    ['service', !services.some((s) => s.categoryId && s.priceType && (s.priceType === 'on-request' || s.price !== null))],
     ['providerType', row.type === null],
     ['businessName', biz && blank(row.businessName)],
     ['impressum', biz && blank(row.impressum)],
@@ -60,7 +60,7 @@ export function completeness(
 
 /** The profile as the app sees it, with its completeness list. */
 async function view(tx: Tx, userId: string, row: Row): Promise<MyProfile> {
-  const svc = await tx.select({ categoryId: services.categoryId, priceType: services.priceType }).from(services).where(eq(services.providerId, row.id))
+  const svc = await tx.select({ categoryId: services.categoryId, priceType: services.priceType, price: services.price }).from(services).where(eq(services.providerId, row.id))
   const pic = (await tx.select({ id: photos.id }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
   return toMyProfile(row, completeness(row, svc, !!pic))
 }

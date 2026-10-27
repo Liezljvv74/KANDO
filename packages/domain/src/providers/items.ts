@@ -96,8 +96,8 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return null
   const priceType = patch.priceType ?? (existing.priceType as ServicePatch['priceType'] | null)
-  const price = priceType === 'on-request' || priceType == null ? null : patch.price !== undefined ? patch.price : existing.price === null ? null : Number(existing.price)
-  if (price === null && priceType != null && priceType !== 'on-request') fail(400, { error: 'Invalid fields', fields: ['price'] })
+  // the type and the price save one field at a time: keep a sent price whatever the type is (completeness decides later)
+  const price = priceType === 'on-request' ? null : patch.price !== undefined ? patch.price : existing.price === null ? null : Number(existing.price)
   if (patch.categoryId !== undefined) await assertCategory(tx, patch.categoryId)
   const [row] = await tx
     .update(services)

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
+import { sql } from 'drizzle-orm'
+import { asUser, pool } from '@kando/db'
 import { OwnReferenceSchema, OwnServiceSchema, OwnServicesListSchema, ReferencesListSchema } from '@kando/contract'
 import { call, cleanupUsers, profile, seedBase } from './helpers'
 
@@ -102,4 +103,31 @@ it('a service with a category alone is saved, not offerable, and a patch accepts
   expect(s).toMatchObject({ priceType: null, price: null })
   const patched = await call(service.PATCH, 'sr1', 'PATCH', { description: 'x', currency: 'EUR' }, { id: s.id })
   expect(OwnServiceSchema.parse(await patched.json())).toMatchObject({ priceType: null, description: 'x' })
+})
+
+const offerable = async (uid: string) =>
+  (await asUser(uid, (tx) => tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM offerable_service_ids((SELECT id FROM providers WHERE owner_id = ${uid}))`))).rows[0]!.n
+
+it('the price type and the price save in either order, each as its own one-field save', async () => {
+  for (const order of [['priceType', 'price'], ['price', 'priceType']] as const) {
+    const s = OwnServiceSchema.parse(await (await call(services.POST, 'sr1', 'POST', { categoryId, currency: 'EUR' })).json())
+    const body = { priceType: { priceType: 'fixed' }, price: { price: 50 } }
+    for (const k of order) expect((await call(service.PATCH, 'sr1', 'PATCH', body[k], { id: s.id })).status).toBe(200)
+    const row = (await pool.query('SELECT price_type, price FROM services WHERE id = $1', [s.id])).rows[0]
+    expect(row).toEqual({ price_type: 'fixed', price: '50.00' })
+  }
+})
+
+it('a fixed service without a price is not offerable, with a price it is; on-request clears the price', async () => {
+  const s = OwnServiceSchema.parse(await (await call(services.POST, 'sr2', 'POST', { categoryId, currency: 'EUR' })).json())
+  await call(service.PATCH, 'sr2', 'PATCH', { priceType: 'fixed' }, { id: s.id })
+  expect(await offerable('sr2')).toBe(0)
+  const missing = async () => (await (await call(profileRoute.PUT, 'sr2', 'PUT', {})).json()).missing
+  expect(await missing()).toContain('service')
+  await call(service.PATCH, 'sr2', 'PATCH', { price: 40 }, { id: s.id })
+  expect(await offerable('sr2')).toBe(1)
+  expect(await missing()).not.toContain('service')
+  await call(service.PATCH, 'sr2', 'PATCH', { priceType: 'on-request' }, { id: s.id })
+  expect((await pool.query('SELECT price FROM services WHERE id = $1', [s.id])).rows[0].price).toBeNull()
+  expect(await offerable('sr2')).toBe(1)
 })

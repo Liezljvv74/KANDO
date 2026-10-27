@@ -167,7 +167,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN categories c ON c.id = s.category_id
       JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = p_provider_id
-        AND s.price_type IS NOT NULL
+        AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL)
         AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM unnest(c.required_documents) AS r(requirement)

@@ -162,3 +162,16 @@ it('a provider whose only service has no price type is neither found nor has a p
     await pool.query('DELETE FROM categories WHERE id = $1', [cat.id])
   }
 })
+
+it('a fixed service without a price is not found in its category', async () => {
+  const cat = (await pool.query("INSERT INTO categories (slug) VALUES ($1) RETURNING id, slug", [`t3-fp-${Date.now()}`])).rows[0]
+  try {
+    const a = await seedProvider('sx-fp', { name: 'Fp', categoryId: cat.id })
+    await pool.query('UPDATE services SET price = NULL WHERE provider_id = $1', [a])
+    expect(await slugs(`category=${cat.slug}`)).toEqual([])
+  } finally {
+    await pool.query('DELETE FROM services WHERE category_id = $1', [cat.id])
+    await pool.query("DELETE FROM providers WHERE owner_id = 'sx-fp'")
+    await pool.query('DELETE FROM categories WHERE id = $1', [cat.id])
+  }
+})
