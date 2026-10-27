@@ -43,6 +43,19 @@ it('without a key it only logs and records, and never throws', async () => {
   expect(log).toHaveBeenCalled()
 })
 
+it('outside tests without a key: one log line without recipient or body, and nothing kept in memory', async () => {
+  vi.stubEnv('VITEST', '')
+  vi.stubEnv('NODE_ENV', 'production')
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  await sendEmail({ to: 'd@test.skilled.invalid', lang: 'de', template: 'document-rejected', params: { requirement: 'permit', note: 'secret note' } })
+  expect(outboxForTests()).toHaveLength(0)
+  expect(log).toHaveBeenCalledTimes(1)
+  const line = log.mock.calls[0]!.join(' ')
+  expect(line).toContain('[email] not sent (no RESEND_API_KEY)')
+  expect(line).not.toContain('d@test.skilled.invalid')
+  expect(line).not.toContain('secret note')
+})
+
 it('with a key it calls Resend with the full message; an { error } and a throw are logged, not thrown', async () => {
   vi.stubEnv('RESEND_API_KEY', 're_test')
   const err = vi.spyOn(console, 'error').mockImplementation(() => {})

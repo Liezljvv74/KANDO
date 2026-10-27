@@ -26,14 +26,15 @@ function compose(lang: Lang, template: Template, params: { requirement: string; 
 
 let client: Resend | undefined
 
-/** Sends through Resend; with no RESEND_API_KEY it logs and records in the outbox instead. Never throws. */
+/** Sends through Resend; with no RESEND_API_KEY it logs one line (and in tests records the mail in the outbox). Never throws. */
 export async function sendEmail(args: { to: string; lang: Lang; template: Template; params: { requirement: string; note?: string | null } }): Promise<void> {
   try {
     const mail: Mail = { to: args.to, from: FROM, replyTo: REPLY_TO, ...compose(args.lang, args.template, args.params) }
     const key = process.env.RESEND_API_KEY
     if (!key) {
-      console.log(`[email] to ${mail.to}: ${mail.subject}\n${mail.text}`)
-      outbox.push(mail)
+      // Never the recipient or the text in the log; the outbox is for tests only (in production it would only grow).
+      console.log(`[email] not sent (no RESEND_API_KEY): ${args.template}`)
+      if (process.env.VITEST || process.env.NODE_ENV === 'test') outbox.push(mail)
       return
     }
     client ??= new Resend(key)
