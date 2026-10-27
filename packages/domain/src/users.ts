@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { db, users } from '@kando/db'
-import { DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
+import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
 export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean }
 export type StaffRole = 'admin' | 'reviewer'
@@ -17,11 +17,7 @@ export class EmailConflictError extends Error {
 export function requestLang(request: Request): Lang {
   const q = new URL(request.url).searchParams.get('lang')
   if (isLang(q)) return q
-  for (const part of (request.headers.get('accept-language') ?? '').split(',')) {
-    const tag = part.split(';')[0]!.trim().toLowerCase().split('-')[0]!
-    if (isLang(tag)) return tag
-  }
-  return DEFAULT_LANG
+  return acceptLang(request.headers.get('accept-language')) ?? DEFAULT_LANG
 }
 
 /**

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { de } from './de'
 import { en } from './en'
-import { DEFAULT_LANG, formatMoney, formatPrice, isLang, LANGS, LOCALE, t, type Key } from './index'
+import { DEFAULT_LANG, formatMoney, formatPrice, isLang, LANGS, acceptLang, t, type Key } from './index'
 
 const FORBIDDEN = [
   'treuhand',
@@ -97,8 +97,12 @@ describe('money', () => {
   })
 })
 
-describe('LOCALE', () => {
-  it('has an entry for every language', () => {
-    for (const l of LANGS) expect(LOCALE[l]).toBeTruthy()
-  })
+describe('acceptLang', () => {
+  it.each([
+    ['en-GB,en;q=0.9,de;q=0.8', 'en'],
+    ['*', undefined],
+    ['fr-FR', undefined],
+    ['', undefined],
+    [undefined, undefined],
+  ] as const)('%s -> %s', (header, lang) => expect(acceptLang(header)).toBe(lang))
 })

@@ -5,11 +5,12 @@ import { usePathname } from 'next/navigation'
 import { Authenticated, Refine, useGetIdentity } from '@refinedev/core'
 import { ThemedLayout, RefineThemes, useNotificationProvider } from '@refinedev/antd'
 import routerProvider from '@refinedev/nextjs-router'
-import { App as AntdApp, Button, ConfigProvider, Layout as AntdLayout } from 'antd'
+import { App as AntdApp, Button, ConfigProvider, Layout as AntdLayout, theme } from 'antd'
 import deDE from 'antd/locale/de_DE'
 import enUS from 'antd/locale/en_US'
 import '@refinedev/antd/dist/reset.css'
 import { accessControlProvider, authProvider } from '../../lib/admin/auth-provider'
+import { adminLangCookie } from '../../lib/admin/lang'
 import { dataProvider } from '../../lib/admin/data-provider'
 import { LANGS, t, type Key, type Lang } from '@kando/i18n'
 import { AdminLangProvider, useAdminLang, useAt } from '../../lib/admin/t'
@@ -27,6 +28,7 @@ const otherLang = (lang: Lang) => LANGS.find((l) => l !== lang)!
 
 // Language switch: one language per render, so set the cookie and reload.
 function Header() {
+  const { token } = theme.useToken()
   const at = useAt()
   const { data: user } = useGetIdentity()
   const lang = useAdminLang()
@@ -38,12 +40,12 @@ function Header() {
         alignItems: 'center',
         gap: 16,
         padding: '0 24px',
-        background: '#fff',
+        background: token.colorBgElevated,
       }}
     >
       <Button
         onClick={() => {
-          document.cookie = `admin-lang=${otherLang(lang)}; path=/; max-age=31536000; SameSite=Lax`
+          document.cookie = adminLangCookie(otherLang(lang))
           location.reload()
         }}
       >

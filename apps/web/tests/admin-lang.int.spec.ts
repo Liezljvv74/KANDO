@@ -10,7 +10,7 @@ vi.mock('next/headers', () => ({
   headers: async () => ({ get: (n: string) => (n === 'accept-language' ? (jar.accept ?? null) : null) }),
 }))
 
-const { adminLang } = await import('../lib/admin/lang')
+const { adminLang, adminLangCookie } = await import('../lib/admin/lang')
 const { AdminLangProvider, useAt } = await import('../lib/admin/t')
 const { default: AdminLayout } = await import('../app/admin/layout')
 
@@ -18,10 +18,16 @@ describe('adminLang', () => {
   it.each([
     [{ cookie: 'en' }, 'en'],
     [{ cookie: 'fr' }, 'de'],
+    [{ cookie: 'xx', acceptLanguage: 'en' }, 'en'],
     [{ acceptLanguage: 'en-GB,en;q=0.9,de;q=0.8' }, 'en'],
     [{ acceptLanguage: 'fr-FR' }, 'de'],
     [{}, 'de'],
   ] as const)('%j -> %s', (input, lang) => expect(adminLang(input)).toBe(lang))
+})
+
+describe('adminLangCookie', () => {
+  it('lasts a year for the whole site', () =>
+    expect(adminLangCookie('en')).toBe('admin-lang=en; path=/; max-age=31536000; SameSite=Lax'))
 })
 
 describe('useAt', () => {
@@ -38,12 +44,13 @@ describe('admin layout', () => {
     jar.cookie = cookie
     jar.accept = accept
     const el = await AdminLayout({ children: null })
-    return (el as { type: string; props: { lang: string } }).props.lang
+    return (el as { props: { lang: string; translate: string } }).props
   }
   it('follows the cookie, then Accept-Language, then German', async () => {
-    expect(await htmlLang('en')).toBe('en')
-    expect(await htmlLang(undefined, 'en')).toBe('en')
-    expect(await htmlLang(undefined, 'de')).toBe('de')
-    expect(await htmlLang()).toBe('de')
+    expect((await htmlLang('en')).lang).toBe('en')
+    expect((await htmlLang('en')).translate).toBe('no')
+    expect((await htmlLang(undefined, 'en')).lang).toBe('en')
+    expect((await htmlLang(undefined, 'de')).lang).toBe('de')
+    expect((await htmlLang()).lang).toBe('de')
   })
 })

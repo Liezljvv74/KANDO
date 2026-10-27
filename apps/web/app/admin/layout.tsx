@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     acceptLanguage: (await headers()).get('accept-language'),
   })
   return (
-    <html lang={lang}>
+    <html lang={lang} translate="no">
       <body>
         <AdminShell lang={lang}>{children}</AdminShell>
       </body>
