@@ -1,6 +1,6 @@
 import { ApiError } from '@/api/client'
 import { ensureDraft } from '@/api/my-profile'
-import { loadMe } from '@/hooks/use-me'
+import { loadMe, signOutGeneration } from '@/hooks/use-me'
 import { errorText } from '@/i18n'
 import { setPending } from '@/lib/pending-navigation'
 
@@ -13,8 +13,11 @@ let running: Promise<string | null> | null = null
 export function startOffering(welcome = false): Promise<string | null> {
   running ??= (async () => {
     try {
+      const account = signOutGeneration()
       await ensureDraft()
-      await loadMe()
+      const me = await loadMe()
+      if (!me?.isProvider) return errorText('') // the draft did not make this person a provider: the tab would stay hidden
+      if (account !== signOutGeneration()) return null // signed out meanwhile: nothing to open
       setPending({ path: '/my-profile', welcome }) // the tabs layout navigates once the tab is visible
       return null
     } catch (e) {

@@ -13,7 +13,9 @@ export default function TabsLayout() {
   // "Offer services": go to the profile page only once this layout has rendered with the tab visible.
   const pending = usePending()
   useEffect(() => {
-    if (readyToNavigate(pending, me)) router.navigate(urlOf(consumePending()!))
+    if (!readyToNavigate(pending, me)) return // the target stays until the tab is visible
+    const p = consumePending()
+    if (p) router.navigate(urlOf(p))
   }, [me, pending])
   // A notification created while the app was in the background shows its dot as soon as the user returns.
   useEffect(() => {

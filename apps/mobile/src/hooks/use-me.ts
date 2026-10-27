@@ -15,13 +15,17 @@ const set = (next: Me | null) => {
 }
 
 let generation = 0
+let seq = 0
 export const currentMe = () => me
+/** Changes at every sign-out: a long task snapshots it to know the account is gone. */
+export const signOutGeneration = () => generation
 
 /** Fetches `/me` and replaces the shared copy, unless the user signed out meanwhile (the next account must not get this one's data). */
 export async function loadMe() {
   const started = generation
+  const n = ++seq
   const m = await getMe()
-  if (started === generation) set(m)
+  if (started === generation && n === seq) set(m) // the newest request wins; an older, slower answer never overwrites it
   return m
 }
 

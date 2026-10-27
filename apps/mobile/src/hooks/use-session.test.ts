@@ -183,6 +183,16 @@ test('a failed PATCH keeps the full record', async () => {
   expect(await loadPending()).toEqual(pending)
 })
 
+test('a postcode the server calls invalid does not block the names: they are saved without the address', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  api.updateMe.mockRejectedValueOnce(new client.ApiError(400, 'Invalid postcode'))
+  await verify('a@b.de', '123456')
+  expect(api.updateMe).toHaveBeenLastCalledWith({ firstName: 'Anna', lastName: 'Berg', language: 'en' })
+  expect(photos.add).toHaveBeenCalled()
+  expect(await loadPending()).toBeNull()
+})
+
 test('after the PATCH succeeded, a failed upload keeps only email, tick and picture; the retry does not PATCH again', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)

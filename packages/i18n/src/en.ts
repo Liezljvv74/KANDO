@@ -26,6 +26,7 @@ export const en: Record<Key, string> = {
   'auth.invalidEmail': 'Please enter a valid email address.',
   'common.retry': 'Try again',
   'error.emailTaken': 'An account with this email address already exists.',
+  'error.invalidPostcode': 'Please enter a valid postcode.',
   'error.unknownPostcode': 'We do not know this postcode.',
   'error.unknownCategory': 'This category does not exist.',
   'error.profileIncomplete': 'Your profile is not complete yet.',

@@ -13,6 +13,7 @@ const set = (next: PendingNavigation | null) => {
 }
 
 export const setPending = (p: PendingNavigation) => set(p)
+export const peekPending = () => pending
 export const clearPending = () => set(null)
 export function consumePending() {
   const p = pending

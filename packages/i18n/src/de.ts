@@ -25,6 +25,7 @@ export const de = {
   'auth.invalidEmail': 'Bitte gib eine gültige E-Mail-Adresse ein.',
   'common.retry': 'Erneut versuchen',
   'error.emailTaken': 'Mit dieser E-Mail-Adresse gibt es schon ein Konto.',
+  'error.invalidPostcode': 'Bitte eine gültige Postleitzahl eingeben.',
   'error.unknownPostcode': 'Diese Postleitzahl kennen wir nicht.',
   'error.unknownCategory': 'Diese Kategorie gibt es nicht.',
   'error.profileIncomplete': 'Dein Profil ist noch nicht vollständig.',

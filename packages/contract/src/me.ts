@@ -4,7 +4,7 @@ import { LangSchema, requiredText } from './common'
 
 const optionalText = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullish()
 
-/** The person's private address: only the postcode is required (search uses it); blank street and city are stored as null (country defaults to 'DE'; country-ready for later markets). */
+/** The person's private address: only the postcode is required (the provider draft's postcode is prefilled from it; nothing else reads it today); blank street and city are stored as null (country defaults to 'DE'; country-ready for later markets). */
 export const AddressSchema = z.object({
   postcode: requiredText(16),
   street: optionalText(120),

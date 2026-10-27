@@ -13,12 +13,12 @@ export function toAddress(a: AddressInput, country = 'DE'): Address | null | und
   return postcode ? { postcode, ...(street && { street }), ...(city && { city }), country } : undefined
 }
 
-export function AddressFields({ value, onChange }: { value: AddressInput; onChange: (a: AddressInput) => void }) {
+export function AddressFields({ value, onChange, disabled }: { value: AddressInput; onChange: (a: AddressInput) => void; disabled?: boolean }) {
   return (
     <>
-      <Field label={t('address.street')} value={value.street} onChangeText={(street) => onChange({ ...value, street })} autoComplete="street-address" />
-      <Field label={t('address.postcode')} value={value.postcode} onChangeText={(postcode) => onChange({ ...value, postcode })} keyboardType="number-pad" autoComplete="postal-code" />
-      <Field label={t('address.city')} value={value.city} onChangeText={(city) => onChange({ ...value, city })} />
+      <Field label={t('address.street')} value={value.street} onChangeText={(street) => onChange({ ...value, street })} autoComplete="street-address" editable={!disabled} />
+      <Field label={t('address.postcode')} value={value.postcode} onChangeText={(postcode) => onChange({ ...value, postcode })} keyboardType="number-pad" autoComplete="postal-code" editable={!disabled} />
+      <Field label={t('address.city')} value={value.city} onChangeText={(city) => onChange({ ...value, city })} editable={!disabled} />
     </>
   )
 }

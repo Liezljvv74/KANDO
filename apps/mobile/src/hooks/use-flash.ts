@@ -29,7 +29,14 @@ export function createFlash(onChange: (on: boolean) => void, ms: number) {
 export function useFlash(ms = 3000) {
   const [on, setOn] = useState(false)
   const flash = useRef<ReturnType<typeof createFlash>>(null)
-  flash.current ??= createFlash(setOn, ms)
-  useEffect(() => () => flash.current?.dispose(), [])
-  return [on, flash.current.show, flash.current.hide] as const
+  const get = () => (flash.current ??= createFlash(setOn, ms))
+  // Cleanup drops the flash, so a remount (Fast Refresh) starts a live one instead of a disposed one.
+  useEffect(
+    () => () => {
+      flash.current?.dispose()
+      flash.current = null
+    },
+    [],
+  )
+  return [on, () => get().show(), () => get().hide()] as const
 }

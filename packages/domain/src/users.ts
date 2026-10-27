@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
-import { db, photos, users, type Tx } from '@kando/db'
+import { db, isPostcode, photos, users, type Tx } from '@kando/db'
 import type { Me, MePatch } from '@kando/contract'
+import { fail } from './providers/http'
 import { ownProvider, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
@@ -73,6 +74,7 @@ export async function getMe(tx: Tx, userId: string): Promise<Me> {
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */
 export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<Me> {
   const a = patch.address
+  if (a && !(await isPostcode(a.country, a.postcode, tx))) fail(400, { error: 'Invalid postcode' }) // the format only: a real but unlisted postcode is fine
   await tx
     .update(users)
     .set({

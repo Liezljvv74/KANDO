@@ -89,7 +89,12 @@ export async function completeSignup(user: User) {
 async function finish(p: PendingSignup) {
   try {
     if (p.firstName && p.lastName) {
-      await updateMe({ firstName: p.firstName, lastName: p.lastName, language: getLang(), ...(p.address && { address: p.address }) })
+      const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
+      // A postcode the server refuses must not block the names for good (the form cannot show it any more): saved without the address.
+      await updateMe({ ...names, ...(p.address && { address: p.address }) }).catch((e) => {
+        if (e instanceof ApiError && e.code === 'Invalid postcode') return updateMe(names)
+        throw e
+      })
       // Saved: a retry only repeats the picture, so later edits are never overwritten.
       await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri })
     }

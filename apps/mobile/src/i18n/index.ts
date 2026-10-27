@@ -43,6 +43,7 @@ export const t = (key: Key, params?: Record<string, string | number>) => transla
 const errorKeys: Record<string, Key> = {
   // App API (`error`)
   'Unknown postcode': 'error.unknownPostcode',
+  'Invalid postcode': 'error.invalidPostcode',
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',
   'Profile suspended': 'error.profileSuspended',

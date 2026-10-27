@@ -1,13 +1,20 @@
 import { ApiError } from '@/api/client'
 import { ensureDraft } from '@/api/my-profile'
-import { loadMe } from '@/hooks/use-me'
+import { clearMe, loadMe } from '@/hooks/use-me'
 import { consumePending, clearPending } from './pending-navigation'
 import { startOffering } from './start-offering'
 
 const mockCalls: string[] = []
 jest.mock('@/api/client', () => ({ ApiError: class ApiError extends Error { status: number; code: string; constructor(status: number, code: string) { super(code); this.status = status; this.code = code } } }))
 jest.mock('@/api/my-profile', () => ({ ensureDraft: jest.fn(async () => void mockCalls.push('ensureDraft')) }))
-jest.mock('@/hooks/use-me', () => ({ loadMe: jest.fn(async () => void mockCalls.push('loadMe')) }))
+jest.mock('@/hooks/use-me', () => {
+  let gen = 0
+  return {
+    loadMe: jest.fn(async () => (mockCalls.push('loadMe'), { isProvider: true })),
+    clearMe: () => void gen++,
+    signOutGeneration: () => gen,
+  }
+})
 jest.mock('@/i18n', () => ({ errorText: (c: string) => `error:${c}` }))
 
 beforeEach(() => {
@@ -43,4 +50,16 @@ test('a second call while one runs does nothing extra', async () => {
   expect(consumePending()).not.toBeNull()
   await startOffering() // finished: a new tap works again
   expect(ensureDraft).toHaveBeenCalledTimes(2)
+})
+
+test('no target when /me says the person is not a provider', async () => {
+  ;(loadMe as jest.Mock).mockResolvedValueOnce({ isProvider: false })
+  expect(await startOffering()).toBe('error:')
+  expect(consumePending()).toBeNull()
+})
+
+test('a sign-out during the run leaves no target behind', async () => {
+  ;(loadMe as jest.Mock).mockImplementationOnce(async () => (clearMe(), { isProvider: true }))
+  await startOffering()
+  expect(consumePending()).toBeNull()
 })

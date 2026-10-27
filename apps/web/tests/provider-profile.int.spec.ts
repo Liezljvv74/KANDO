@@ -110,6 +110,10 @@ it('an address with only a postcode is stored and returned; a street without a p
   expect((await patch({ street: 'Weg 1', postcode: '10115', city: ' ', country: 'DE' })).status).toBe(200)
   expect(MeSchema.parse(await (await call(me.GET, 'pp-addr')).json()).address).toEqual({ street: 'Weg 1', postcode: '10115', city: null, country: 'DE' })
   expect((await patch({ street: 'Weg 1', country: 'DE' })).status).toBe(400)
+  expect((await patch({ postcode: 'abc', country: 'DE' })).status).toBe(400)
+  expect((await patch({ postcode: '99999', country: 'DE' })).status).toBe(200) // well-formed but not in the table: accepted
+  expect((await patch({ postcode: '10115', country: 'DE' })).status).toBe(200) // keys absent after a full address clear street and city
+  expect(MeSchema.parse(await (await call(me.GET, 'pp-addr')).json()).address).toEqual({ street: null, postcode: '10115', city: null, country: 'DE' })
   expect((await patch(null)).status).toBe(200)
   expect(MeSchema.parse(await (await call(me.GET, 'pp-addr')).json()).address).toBeNull()
   expect((await pool.query("SELECT address_street, address_postcode, address_city, address_country FROM users WHERE id = 'pp-addr'")).rows[0]).toEqual({ address_street: null, address_postcode: null, address_city: null, address_country: null })

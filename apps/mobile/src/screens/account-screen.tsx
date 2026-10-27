@@ -75,9 +75,9 @@ export default function AccountScreen() {
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
-              <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" />
-              <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" />
-              <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} />
+              <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy} />
+              <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy} />
+              <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy} />
               <ErrorText text={error} />
               <Button label={t('common.save')} onPress={save} busy={busy} />
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}

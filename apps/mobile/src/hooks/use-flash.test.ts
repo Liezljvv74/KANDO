@@ -27,3 +27,10 @@ test('createFlash: show is a no-op after dispose', () => {
   jest.advanceTimersByTime(5000)
   expect(seen).toEqual([])
 })
+
+test('createFlash: a fresh flash after a dispose works again (remount)', () => {
+  const seen: boolean[] = []
+  createFlash(() => {}, 3000).dispose()
+  createFlash((on) => seen.push(on), 3000).show()
+  expect(seen).toEqual([true])
+})
