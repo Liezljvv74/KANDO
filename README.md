@@ -23,7 +23,7 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (27 October 2026)
 
-Stage 1 is built on branch `stage-1`: database with row-level security, login (Neon Auth), the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds. A final review of the whole branch found 3 important and 10 minor points; all important ones and 8 minor ones are fixed, the other 2 wait for the South Africa work (see Known gaps). All automated tests pass (203 web, 85 app, 16 in the shared packages, 304 in total); typecheck and lint are clean. Report: `Reports/Stage-1-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`.
+Stage 1 is built on branch `stage-1`: database with row-level security, login (Neon Auth), the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds. A final review of the whole branch found 3 important and 10 minor points; all important ones and 8 minor ones are fixed, the other 2 wait for the South Africa work (see Known gaps). All automated tests pass (204 web, 85 app, 16 in the shared packages, 305 in total); typecheck and lint are clean. Report: `Reports/Stage-1-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`.
 
 Nothing has been checked on a phone or in a browser yet.
 
