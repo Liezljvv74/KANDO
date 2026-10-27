@@ -1,0 +1,12 @@
+node_modules
+.next
+.expo
+dist
+.env*
+!.env.example
+Marketing/
+Reports/~*
+.superpowers/
+*.tsbuildinfo
+next-env.d.ts
+packages/domain/seed-data/test-users.json

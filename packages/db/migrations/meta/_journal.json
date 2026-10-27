@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793041787621,
+      "tag": "0000_careless_big_bertha",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793042417491,
+      "tag": "0001_clear_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793044110537,
+      "tag": "0002_robust_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793044744582,
+      "tag": "0003_secret_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793045039154,
+      "tag": "0004_old_ultragirl",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793045749623,
+      "tag": "0005_clean_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793047811585,
+      "tag": "0006_clumsy_black_tarantula",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793049123915,
+      "tag": "0007_equal_colonel_america",
+      "breakpoints": true
+    }
+  ]
+}

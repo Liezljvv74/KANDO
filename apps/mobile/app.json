@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "SkillWeb",
+    "slug": "skilled",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "skilled",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "space.skillweb.app",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "space.skillweb.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SkillWeb uses your photos for your provider profile.",
+          "cameraPermission": "SkillWeb uses the camera for your provider profile and documents.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "locales": {
+      "de": "./locales/de.json",
+      "en": "./locales/en.json"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b66a6d0d-2214-47e3-85be-cd5501e24f6c"
+      }
+    },
+    "owner": "liezljvv74"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "password": "ChangeMe123",
+  "customers": [
+    {
+      "email": "customer.one@example.com",
+      "name": "Example Customer",
+      "language": "en"
+    }
+  ],
+  "providers": [
+    {
+      "email": "provider.one@example.com",
+      "name": "Example Provider",
+      "profile": {
+        "displayName": "Example cleaning service",
+        "providerType": "individual",
+        "basePostcode": "10115",
+        "serviceRadiusKm": 25,
+        "bio": "Example profile for the seed script. Replace with your own list in test-users.json.",
+        "strengths": "Reliable.",
+        "skills": [
+          "Cleaning"
+        ],
+        "experience": "Example"
+      },
+      "services": [
+        {
+          "category": "cleaning",
+          "title": "Apartment cleaning",
+          "description": "Example service.",
+          "priceType": "hourly",
+          "price": 25
+        }
+      ],
+      "references": [
+        {
+          "clientName": "Example client",
+          "description": "Example reference.",
+          "year": 2025
+        }
+      ]
+    }
+  ]
+}

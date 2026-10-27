@@ -1,0 +1,12 @@
+import { parseBody, ServiceInputSchema } from '@kando/contract'
+import { addService, listServices } from '@kando/domain'
+import { appRequest } from '../../../../lib/app-request'
+
+export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) =>
+  Response.json({ docs: await listServices(tx, user!.id) }),
+)
+
+export const POST = appRequest({ auth: 'required', maxBodyBytes: 16_384 }, async ({ tx, user, request }) => {
+  const input = await parseBody(ServiceInputSchema, request)
+  return Response.json(await addService(tx, user!.id, input), { status: 201 })
+})
