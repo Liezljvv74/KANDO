@@ -65,8 +65,8 @@ it('approving a document makes the service offerable and records the reviewer', 
   clearOutbox()
   const res = await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'approved' }, { id })
   expect(res.status).toBe(200)
-  expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('aa-owner'), 'Dein Dokument wurde freigegeben']])
-  expect(outboxForTests()[0]!.text).toContain('Führungszeugnis')
+  expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('aa-owner'), 'Dein Profil ist online']])
+  expect(outboxForTests()[0]!.text).toContain('/providers/aa-owner-slug')
   const row = (await pool.query('SELECT status, reviewed_by, reviewed_at FROM documents WHERE id = $1', [id])).rows[0]
   expect(row.status).toBe('approved')
   expect(row.reviewed_by).toBe('aa-rev')

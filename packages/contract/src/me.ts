@@ -22,6 +22,9 @@ export const NotificationSchema = z.object({
 })
 export type Notification = z.infer<typeof NotificationSchema>
 
+/** PATCH /notifications/[id]. */
+export const NotificationPatchSchema = z.object({ seen: z.literal(true).optional(), dismissed: z.literal(true).optional() })
+
 export const MeSchema = z.object({
   id: z.string(),
   email: z.string(),

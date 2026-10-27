@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { db, photos, users, type Tx } from '@kando/db'
 import type { Me, MePatch } from '@kando/contract'
 import { ownProvider, syncIdentity } from './providers/profile'
+import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
@@ -44,7 +45,7 @@ export async function ensureUser(session: { id: string; email: string }, request
   }
 }
 
-const toMe = (row: typeof users.$inferSelect, pictureKey: string | null): Me => ({
+const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notifications: Me['notifications']): Me => ({
   id: row.id,
   email: row.email,
   firstName: row.firstName,
@@ -55,14 +56,14 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null): Me => 
   address: row.addressStreet
     ? { street: row.addressStreet, postcode: row.addressPostcode ?? '', city: row.addressCity ?? '', country: row.addressCountry ?? 'DE' }
     : null,
-  notifications: [], // filled when notifications are created
+  notifications,
 })
 
 /** The signed-in person: names, language, picture (their profile photo) and private address. */
 export async function getMe(tx: Tx, userId: string): Promise<Me> {
   const row = (await tx.select().from(users).where(eq(users.id, userId)))[0]!
   const pic = (await tx.select({ key: photos.key }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
-  return toMe(row, pic?.key ?? null)
+  return toMe(row, pic?.key ?? null, await listNotifications(tx, userId))
 }
 
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */

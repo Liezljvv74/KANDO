@@ -5,7 +5,7 @@ const FROM = 'SkillWeb <noreply@skillweb.space>'
 const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skillweb://my-profile'
 
-export type Template = 'document-approved' | 'document-rejected' | 'suspended' | 'published-again'
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again'
 type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
 
@@ -20,6 +20,10 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const KEY: Record<Template, string> = {
   'document-approved': 'email.documentApproved',
   'document-rejected': 'email.documentRejected',
+  'document-approved-visible': 'email.documentApproved.visible',
+  'document-approved-offline': 'email.documentApproved.offline',
+  'document-approved-suspended': 'email.documentApproved.suspended',
+  'profile-live': 'email.profileLive',
   suspended: 'email.suspended',
   'published-again': 'email.publishedAgain',
 }
@@ -27,7 +31,7 @@ const KEY: Record<Template, string> = {
 function compose(lang: Lang, template: Template, params: Params) {
   const key = KEY[template]
   const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
-  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '' })}\n\n${APP_LINK}`
+  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '' })}\n\n${APP_LINK}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   return { subject: t(lang, `${key}.subject` as Parameters<typeof t>[1]), text, html }
 }
