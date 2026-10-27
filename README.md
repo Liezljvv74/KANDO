@@ -27,11 +27,12 @@ Stage 1 is built (database with row-level security, login, the app API, photo an
 
 - **Sign-up** asks for first and last name, a private address and a picture, plus one tick: "I want to offer services". Nothing is lost if the confirmation code comes later: the answers are kept on the phone and saved when the email is confirmed.
 - **My service profile is one page.** Opening it creates an empty draft. Every field saves as you type; services, references and documents sit on the same page. A **Publish** button at the bottom lists what is still missing, in plain words, until the profile is complete.
+- **The My profile tab is for providers.** A customer does not see it; they open the same page through Account, Offer services, which creates the draft and makes them a provider, and the tab then appears.
 - **Checks, emails and the banner.** When staff approve a document, the provider gets an email that says what really happened (profile live, service visible, profile offline, profile suspended). When the profile goes live there is also a banner "Your profile is live. Tell people about it." with a Share button, and a dot on the Account tab.
 - **Suspensions end by their date.** Staff choose the end date; the provider gets an email when it starts and again when the profile is published again. A daily check at 06:00 UTC ends suspensions whose date has passed.
 - The public name is now first name plus the first letter of the surname (or the business name); it follows a rename.
 
-All automated tests pass (257 web, 108 app, 23 in the shared packages, 388 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. The whole-branch review is done and both fix waves are in; a scoped re-review follows.
+All automated tests pass (257 web, 110 app, 23 in the shared packages, 390 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. The whole-branch review, an independent second review and their fixes are done and re-reviewed.
 
 The back office is in German and English: the language comes from the `admin-lang` cookie, else the browser language, and a button in the header switches it.
 
@@ -48,6 +49,7 @@ Nothing has been checked on a phone or in a browser yet.
    3. Add a service and upload its document; press Publish and read the list of what is missing.
    4. Approve the document in the back office; check the email, the banner, the Share sheet and the dot on the Account tab.
    5. Check the home nudge and that it can be dismissed.
+   6. Sign up without the tick: no My profile tab. Account, Offer services opens the page; afterwards the tab appears.
 5. **Scoped re-review** of the final fixes, then owner review of the pull request, then merge.
 
 ### Test accounts (dev branch only)
