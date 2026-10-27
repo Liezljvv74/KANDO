@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { importPostcodes, pool } from '@kando/db'
-import { seedCategories } from '@kando/db/src/seed/categories'
+import { CATEGORIES, seedCategories } from '@kando/db/src/seed/categories'
 import { assertDevTarget } from '@kando/db/src/seed/guard'
 import { setStorageForTests } from '@kando/domain'
 import { addPlaceholderPhotos, confirmedOrDev } from '@kando/domain/src/seed/placeholder-photos'
@@ -13,7 +13,7 @@ const file = resolve(__dirname, '../../../packages/db/data/postcodes-de.tsv')
 const storage = memoryStorage()
 const DEV = { NEON_BRANCH: 'kando-dev', DATABASE_URL: 'postgres://u:p@ep-steep-scene-b9p4f2v6-pooler.c-7.eu-central-1.aws.neon.tech/neondb' }
 const PROD = { NEON_BRANCH: 'main', DATABASE_URL: 'postgres://u:p@ep-other-prod-12345678.c-7.eu-central-1.aws.neon.tech/neondb' }
-const count = async (sql: string) => Number((await pool.query(sql)).rows[0].n)
+const count = async (sql: string, params: unknown[] = []) => Number((await pool.query(sql, params)).rows[0].n)
 const OWNED = "owner_id IN (SELECT id FROM users WHERE email LIKE '%@example.com')"
 
 // Stand-in for the Neon Auth user table (the real one only exists on the Neon branch).
@@ -48,8 +48,13 @@ afterAll(async () => {
 it('categories seed is idempotent: 14 categories, both names, babysitting needs a police certificate', async () => {
   await seedCategories()
   await seedCategories()
-  expect(await count('SELECT count(*) n FROM categories')).toBe(14)
-  expect(await count("SELECT count(*) n FROM category_texts WHERE lang IN ('de','en')")).toBe(28)
+  // Other spec files leave their own categories behind; count only the seeded slugs.
+  const slugs = CATEGORIES.map((c) => c.slug)
+  expect(slugs).toHaveLength(14)
+  expect(await count('SELECT count(*) n FROM categories WHERE slug = ANY($1)', [slugs])).toBe(14)
+  expect(
+    await count("SELECT count(*) n FROM category_texts t JOIN categories c ON c.id = t.category_id WHERE c.slug = ANY($1) AND t.lang IN ('de','en')", [slugs]),
+  ).toBe(28)
   const { rows } = await pool.query("SELECT required_documents FROM categories WHERE slug = 'babysitting'")
   expect(rows[0].required_documents).toEqual(['police-certificate'])
 })
