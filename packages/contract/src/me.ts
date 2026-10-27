@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { LangSchema, requiredText, text } from './common'
+import { LangSchema, requiredText } from './common'
 
 /** The person's private address (country defaults to 'DE'; country-ready for later markets). */
 export const AddressSchema = z.object({
