@@ -8,6 +8,7 @@ import { publishProfile, unpublishProfile } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, SmallButton } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
+import { canShare } from '@/lib/documents'
 import { errorText, getLang, missingText, t } from '@/i18n'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
 
@@ -54,8 +55,8 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
         <Text style={styles.live}>{waiting > 0 ? t('setup.liveWaiting', { count: waiting }) : t('setup.live')}</Text>
         {justPublished && (
           <>
-            <Text style={styles.live}>{waiting > 0 ? t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? '' }) : t('setup.liveMessage')}</Text>
-            {waiting === 0 && profile.slug ? <SmallButton label={t('setup.share')} onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())} /> : null}
+            <Text style={styles.live}>{waiting > 0 ? t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title }) : t('setup.liveMessage')}</Text>
+            {canShare(services) && profile.slug ? <SmallButton label={t('setup.share')} onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())} /> : null}
           </>
         )}
         <SmallButton label={t('setup.takeOffline')} onPress={takeOffline} busy={busy} />

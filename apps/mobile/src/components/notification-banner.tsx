@@ -7,7 +7,7 @@ import { getLang, t } from '@/i18n'
 import { shareProfile } from '@/lib/share-profile'
 
 /** "Your profile is live" with Share and a dismiss ×; `payload.url` is the link. */
-export function NotificationBanner({ notification, onDismiss }: { notification: Notification; onDismiss: () => void }) {
+export function NotificationBanner({ notification, canShare, onDismiss }: { notification: Notification; canShare: boolean; onDismiss: () => void }) {
   return (
     <Card>
       <View style={styles.row}>
@@ -16,7 +16,7 @@ export function NotificationBanner({ notification, onDismiss }: { notification: 
           {'×'}
         </Text>
       </View>
-      <SmallButton label={t('setup.share')} onPress={() => shareProfile(notification.payload.url, getLang())} />
+      {canShare && <SmallButton label={t('setup.share')} onPress={() => shareProfile(notification.payload.url, getLang())} />}
     </Card>
   )
 }

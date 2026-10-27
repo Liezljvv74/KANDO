@@ -1,11 +1,18 @@
 import { Tabs } from 'expo-router'
+import { useEffect } from 'react'
+import { AppState } from 'react-native'
 
-import { useMe } from '@/hooks/use-me'
+import { loadMe, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
 
 export default function TabsLayout() {
   useLang()
   const me = useMe()
+  // A notification created while the app was in the background shows its dot as soon as the user returns.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
+    return () => sub.remove()
+  }, [])
   // A dot (empty badge) while any notification is unseen; opening My service profile marks them seen.
   const unseen = me?.notifications.some((n) => !n.seenAt)
   return (

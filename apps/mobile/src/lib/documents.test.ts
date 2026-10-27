@@ -1,5 +1,5 @@
 import type { Category, Document, OwnService } from '@kando/contract'
-import { documentRows, serviceDocNote, type DocumentRow } from './documents'
+import { canShare, documentRows, serviceDocNote, type DocumentRow } from './documents'
 
 const cats = [
   { id: 'c1', requiredDocuments: ['police-certificate'] },
@@ -59,4 +59,11 @@ test('a hidden service says a document is needed until it is uploaded, then that
   expect(serviceDocNote(['police-certificate'], [row('rejected')])).toBe('needed')
   expect(serviceDocNote(['police-certificate'], [row('pending')])).toBe('waiting')
   expect(serviceDocNote(['police-certificate'], [])).toBe('needed')
+})
+
+test('sharing is allowed only while no service waits for a document', () => {
+  const w = (waitingFor?: string[]) => ({ waitingFor }) as OwnService
+  expect(canShare([w(['permit']), w()])).toBe(false)
+  expect(canShare([w([]), w()])).toBe(true)
+  expect(canShare([])).toBe(true)
 })

@@ -93,8 +93,6 @@ export const en: Record<Key, string> = {
   'myProfile.unpublishAsk': 'Unpublish your profile? Customers will no longer see it.',
   'myProfile.editProfile': 'Edit profile',
   'myProfile.missingTitle': 'Still missing:',
-  'myProfile.services': 'My services',
-  'myProfile.noServices': 'No services yet.',
   'myProfile.addService': 'Add service',
   'myProfile.noReferences': 'No past jobs yet.',
   'myProfile.addReference': 'Add past job',
@@ -145,9 +143,6 @@ export const en: Record<Key, string> = {
   'myProfile.portfolioRemove': 'Remove',
   'myProfile.portfolioAdd': 'Add a portfolio photo',
   'myProfile.portfolioRemoveAsk': 'Remove this photo?',
-  'myProfile.docsTitle': 'Documents',
-  'myProfile.docsIntro':
-    'Please upload the following document(s). Your profile will be live once the documents have been confirmed.',
   'myProfile.docs.none': 'Not uploaded yet',
   'myProfile.docs.pending': 'Waiting for check',
   'myProfile.docs.approved': 'Approved',

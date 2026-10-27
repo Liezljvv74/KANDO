@@ -92,8 +92,6 @@ export const de = {
   'myProfile.unpublishAsk': 'Profil verbergen? Kunden sehen es dann nicht mehr.',
   'myProfile.editProfile': 'Profil bearbeiten',
   'myProfile.missingTitle': 'Das fehlt noch:',
-  'myProfile.services': 'Meine Leistungen',
-  'myProfile.noServices': 'Noch keine Leistungen.',
   'myProfile.addService': 'Leistung hinzufügen',
   'myProfile.noReferences': 'Noch keine bisherigen Aufträge.',
   'myProfile.addReference': 'Bisherigen Auftrag hinzufügen',
@@ -144,9 +142,6 @@ export const de = {
   'myProfile.portfolioRemove': 'Entfernen',
   'myProfile.portfolioAdd': 'Foto zum Portfolio hinzufügen',
   'myProfile.portfolioRemoveAsk': 'Dieses Foto entfernen?',
-  'myProfile.docsTitle': 'Dokumente',
-  'myProfile.docsIntro':
-    'Bitte lade folgende(s) Dokument(e) hoch. Dein Profil ist live, sobald die Dokumente bestätigt wurden.',
   'myProfile.docs.none': 'Noch nicht hochgeladen',
   'myProfile.docs.pending': 'Wartet auf Prüfung',
   'myProfile.docs.approved': 'Geprüft',

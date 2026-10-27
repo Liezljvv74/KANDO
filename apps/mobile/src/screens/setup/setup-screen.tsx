@@ -13,7 +13,7 @@ import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
 import { dismissNotification, loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
-import { documentRows } from '@/lib/documents'
+import { canShare, documentRows } from '@/lib/documents'
 import { createStaleGuard } from '@/lib/stale-guard'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
@@ -82,7 +82,7 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
-      {banner && <NotificationBanner notification={banner} onDismiss={() => dismissNotification(banner.id).catch(() => {})} />}
+      {banner && <NotificationBanner notification={banner} canShare={canShare(services)} onDismiss={() => dismissNotification(banner.id).catch(() => {})} />}
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />

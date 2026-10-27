@@ -13,14 +13,21 @@ const set = (next: Me | null) => {
   listeners.forEach((l) => l())
 }
 
-/** Fetches `/me` and replaces the shared copy. */
+let generation = 0
+export const currentMe = () => me
+
+/** Fetches `/me` and replaces the shared copy, unless the user signed out meanwhile (the next account must not get this one's data). */
 export async function loadMe() {
+  const started = generation
   const m = await getMe()
-  set(m)
+  if (started === generation) set(m)
   return m
 }
 
-export const clearMe = () => set(null)
+export function clearMe() {
+  generation++
+  set(null)
+}
 
 /** Marks every unseen notification seen (opening the setup page); a failure only leaves the dot a little longer. */
 export async function markNotificationsSeen() {

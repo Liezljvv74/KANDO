@@ -11,6 +11,7 @@ import { Select } from '@/components/select'
 import { useCategories } from '@/hooks/use-categories'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { docText, errorText, t } from '@/i18n'
+import { createSerial } from '@/lib/serial-create'
 import { serviceDocNote, type DocumentRow } from '@/lib/documents'
 import { parsePrice } from '@/lib/profile-form'
 
@@ -77,6 +78,8 @@ function ServiceBlock({
   const [category, setCategory] = useState(initial?.category ?? null)
   const [code, setCode] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  // Choosing again before the create returns waits for it and updates: one service per block.
+  const [serial] = useState(() => createSerial(initial?.id ?? null, (categoryId) => servicesApi.create({ categoryId }), (id, categoryId) => servicesApi.update(id, { categoryId })))
 
   // One field = one saver = one request; `toBody` null skips the request.
   function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null) {
@@ -106,14 +109,14 @@ function ServiceBlock({
     setBusy(true)
     setCode((c) => ({ ...c, category: '' }))
     try {
-      const s = idRef.current ? await servicesApi.update(idRef.current, { categoryId }) : await servicesApi.create({ categoryId })
+      const s = await serial.choose(categoryId)
       idRef.current = s.id
       setId(s.id)
       onService(s)
     } catch (e) {
       setCode((c) => ({ ...c, category: e instanceof ApiError ? e.code : 'network' }))
     }
-    setBusy(false)
+    setBusy(serial.creating())
   }
 
   const remove = () =>
@@ -179,7 +182,7 @@ function ServiceBlock({
       )}
       {busy && <Text style={styles.hint}>…</Text>}
       <ErrorText text={code.remove ? errorText(code.remove) : null} />
-      <SmallButton label={t('setup.removeService')} onPress={remove} />
+      <SmallButton label={t('setup.removeService')} onPress={remove} disabled={busy} />
     </View>
   )
 }
