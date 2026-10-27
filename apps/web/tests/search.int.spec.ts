@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { distanceKm, pool } from '@kando/db'
+import { asUser, distanceKm, pool } from '@kando/db'
 import { SearchResultSchema } from '@kando/contract'
-import { setStorageForTests } from '@kando/domain'
+import { getPublicProfile, setStorageForTests } from '@kando/domain'
 import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -142,5 +142,23 @@ it("anonymous: the card carries the owner's profile photo and the public name, n
     expect(raw.items[0]).toMatchObject({ publicName: 'Lena F.', photoUrl: 'https://media.test/users/sx-lena/profile.jpg' })
   } finally {
     setStorageForTests(undefined)
+  }
+})
+
+it('a provider whose only service has no price type is neither found nor has a public page', async () => {
+  const cat = (await pool.query("INSERT INTO categories (slug) VALUES ($1) RETURNING id, slug", [`t3-np-${Date.now()}`])).rows[0]
+  try {
+    await seedProvider('sx-priced', { name: 'Priced', categoryId: cat.id })
+    const b = await seedProvider('sx-noprice', { name: 'Noprice', categoryId: cat.id })
+    await pool.query('UPDATE services SET price_type = NULL, price = NULL WHERE provider_id = $1', [b])
+    setStorageForTests(memoryStorage())
+    expect(await slugs(`category=${cat.slug}`)).toEqual(['sx-priced-slug'])
+    expect(await asUser(null, (tx) => getPublicProfile(tx, 'sx-noprice-slug', 'de'))).toBeNull()
+    expect(await asUser(null, (tx) => getPublicProfile(tx, 'sx-priced-slug', 'de'))).not.toBeNull()
+  } finally {
+    setStorageForTests(undefined)
+    await pool.query('DELETE FROM services WHERE category_id = $1', [cat.id])
+    await pool.query("DELETE FROM providers WHERE owner_id IN ('sx-priced', 'sx-noprice')")
+    await pool.query('DELETE FROM categories WHERE id = $1', [cat.id])
   }
 })

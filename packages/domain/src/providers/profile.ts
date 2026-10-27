@@ -118,7 +118,8 @@ async function ensure(tx: Tx, userId: string): Promise<{ profile: MyProfile; cre
   const created = !row
   if (!row) {
     const u = (await tx.select({ postcode: users.addressPostcode }).from(users).where(eq(users.id, userId)))[0]
-    await insertProvider(tx, userId, { ...(u?.postcode && { basePostcode: u.postcode }), serviceRadiusKm: 25 })
+    const known = u?.postcode ? await lookupPostcode('DE', u.postcode, tx) : null // an unknown one stays NULL so `postcode` is missing
+    await insertProvider(tx, userId, { ...(known && { basePostcode: u!.postcode }), serviceRadiusKm: 25 })
     await tx.update(users).set({ isProvider: true }).where(eq(users.id, userId))
     row = (await ownProvider(tx, userId))!
     await syncIdentity(tx, userId, row)

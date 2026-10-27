@@ -121,7 +121,6 @@ it('PATCH /me stores names and a private address (country stored as sent); GET /
 })
 
 const missingOf = async (res: Response) => MyProfileSchema.parse(await res.json()).missing
-const ALL = ['photo', 'service', 'providerType', 'skills', 'experience', 'postcode', 'radius']
 
 it('POST creates a draft with the postcode prefilled; again returns the same id; GET /me is fine', async () => {
   await call(me.GET, 'dr1')
@@ -144,7 +143,6 @@ it('missing: the empty draft lists the person-independent items, business adds t
   expect(biz).toEqual(['photo', 'service', 'businessName', 'impressum', 'skills', 'experience', 'postcode'])
   const next = await missingOf(await call(PUT, 'dr2', 'PUT', { businessName: 'Nord', basePostcode: '10115', skills: ['a'] }))
   expect(next).toEqual(['photo', 'service', 'impressum', 'experience'])
-  expect(ALL).toContain('radius')
 })
 
 it('publish of an incomplete draft is 409 with the list; complete publishes with public name Lena F.', async () => {
@@ -194,4 +192,17 @@ it('a draft created during a suspension cannot be published', async () => {
   await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'dr5'")
   const res = await call(publishRoute.POST, 'dr5', 'POST')
   expect(res.status).toBe(409)
+})
+
+it('the draft prefills the postcode only when it is a known one', async () => {
+  await call(me.GET, 'dr6')
+  await pool.query("UPDATE users SET address_postcode = '00000' WHERE id = 'dr6'")
+  const bad = MyProfileSchema.parse(await (await call(POST, 'dr6', 'POST')).json())
+  expect(bad.basePostcode).toBeNull()
+  expect(bad.missing).toContain('postcode')
+  await call(me.GET, 'dr7')
+  await pool.query("UPDATE users SET address_postcode = '10115' WHERE id = 'dr7'")
+  const good = MyProfileSchema.parse(await (await call(POST, 'dr7', 'POST')).json())
+  expect(good.basePostcode).toBe('10115')
+  expect(good.missing).not.toContain('postcode')
 })
