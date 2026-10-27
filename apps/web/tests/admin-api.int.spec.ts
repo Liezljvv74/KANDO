@@ -272,6 +272,12 @@ it('GET users/[id] carries names, the private address and the picture; the list 
   expect(listed.map((u: { id: string }) => u.id)).toContain('aa-me1') // the name search works on "First Last"
 }) 
 
+it('GET users/[id] returns an address that has only a postcode', async () => {
+  await seedUser('aa-pc', null, 'Paul Code')
+  await pool.query("UPDATE users SET address_postcode = '10115', address_country = 'DE' WHERE id = 'aa-pc'")
+  expect((await (await get('users', 'aa-rev', '', 'aa-pc')).json()).data.address).toEqual({ street: null, postcode: '10115', city: null, country: 'DE' })
+})
+
 it('suspension and published-again emails go to published profiles only; the cron still clears every ended suspension', async () => {
   const until = new Date(Date.now() + 86_400_000).toISOString()
   await seedProvider('aa-sdraft', { name: 'Draft Sus', categoryId, status: 'draft' })

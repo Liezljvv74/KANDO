@@ -1,5 +1,4 @@
 import type { Me, Photo } from '@kando/contract'
-import { router } from 'expo-router'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -9,9 +8,11 @@ import { API_URL, ApiError, updateMe } from '@/api/client'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { LanguageSwitch } from '@/components/language-switch'
+import { useFlash } from '@/hooks/use-flash'
 import { loadMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
+import { startOffering } from '@/lib/start-offering'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -23,6 +24,7 @@ export default function AccountScreen() {
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [saved, showSaved, hideSaved] = useFlash()
 
   const load = useCallback(async () => {
     try {
@@ -30,7 +32,7 @@ export default function AccountScreen() {
       setMe(m)
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
-      setAddress(m.address ?? EMPTY_ADDRESS)
+      setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
     } catch {
       // The form stays hidden; the next visit loads again.
     }
@@ -39,15 +41,25 @@ export default function AccountScreen() {
     load()
   }, [load])
 
+  async function offer() {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    setError(await startOffering())
+    setBusy(false)
+  }
+
   async function save() {
     const addr = toAddress(address, me?.address?.country)
     if (!firstName.trim() || !lastName.trim()) return setError(t('auth.fillAll'))
     if (addr === undefined) return setError(t('auth.addressIncomplete'))
     setBusy(true)
     setError(null)
+    hideSaved()
     try {
       await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr })
       await load()
+      showSaved()
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))
     }
@@ -63,14 +75,15 @@ export default function AccountScreen() {
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
-              <Field label={t('auth.firstName')} value={firstName} onChangeText={setFirstName} autoComplete="given-name" />
-              <Field label={t('auth.lastName')} value={lastName} onChangeText={setLastName} autoComplete="family-name" />
-              <AddressFields value={address} onChange={setAddress} />
+              <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy} />
+              <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy} />
+              <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy} />
               <ErrorText text={error} />
               <Button label={t('common.save')} onPress={save} busy={busy} />
+              {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}
-          <LinkText label={t('account.offerServices')} onPress={() => router.navigate('/my-profile')} />
+          <LinkText label={t('account.offerServices')} onPress={offer} />
           <LanguageSwitch />
         </View>
         <Button label={t('auth.logOut')} onPress={signOut} />
@@ -91,6 +104,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 12 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
   title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
+  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
   email: { fontSize: 16, color: '#14352E' },
   link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#0E8A6B', textDecorationLine: 'underline' },
 })

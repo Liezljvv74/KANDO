@@ -13,3 +13,15 @@ test('a loadMe in flight at sign-out never fills the store for the next account'
   await loading
   expect(currentMe()).toBeNull()
 })
+
+test('the newest loadMe wins: an older, slower response never overwrites a newer one', async () => {
+  const resolvers: ((m: unknown) => void)[] = []
+  jest.mocked(getMe).mockImplementation(() => new Promise((r) => resolvers.push(r)) as never)
+  const older = loadMe()
+  const newer = loadMe()
+  resolvers[1]({ id: 'new', notifications: [] })
+  await newer
+  resolvers[0]({ id: 'old', notifications: [] })
+  await older
+  expect(currentMe()?.id).toBe('new')
+})

@@ -6,7 +6,7 @@ import { notifySuspension } from '../notifications'
 import type { AfterCommit } from '../app-request'
 import { fail } from '../providers/http'
 import { photoUrl } from '../storage'
-import type { StaffUser } from '../users'
+import { addressOf, type StaffUser } from '../users'
 import { filterOf, like, notFound, ok, orderOf, pageOf, textOf } from './common'
 
 /** "First Last" for searching in SQL. */
@@ -16,9 +16,7 @@ export const toAdminUser = (r: typeof users.$inferSelect, picture: { id: string;
   id: r.id,
   firstName: r.firstName,
   lastName: r.lastName,
-  address: r.addressStreet && r.addressCountry
-    ? { street: r.addressStreet, postcode: r.addressPostcode ?? '', city: r.addressCity ?? '', country: r.addressCountry }
-    : null,
+  address: addressOf(r),
   photoUrl: picture ? photoUrl(picture.key) : null,
   photoId: picture?.id ?? null,
   email: r.email,
