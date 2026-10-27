@@ -35,8 +35,8 @@ ALTER TABLE "users" ADD COLUMN "address_country" text;--> statement-breakpoint
 ALTER TABLE "providers" DROP COLUMN "display_name";--> statement-breakpoint
 ALTER TABLE "providers" DROP COLUMN "photo_id";--> statement-breakpoint
 ALTER TABLE "providers" ADD COLUMN "suspended_until" timestamp with time zone;--> statement-breakpoint
--- A suspended provider must not become public again: carry the end date over (no date known: suspended without end), then drop the flag.
-UPDATE "providers" SET "suspended_until" = COALESCE((SELECT u.suspended_until FROM users u WHERE u.id = providers.owner_id), 'infinity') WHERE "suspended";--> statement-breakpoint
+-- A suspended provider must not become public again: carry the end date over (no date known: suspended until the year 9999, a finite date every reader can parse), then drop the flag.
+UPDATE "providers" SET "suspended_until" = COALESCE((SELECT u.suspended_until FROM users u WHERE u.id = providers.owner_id), '9999-12-31 00:00:00+00') WHERE "suspended";--> statement-breakpoint
 ALTER TABLE "providers" DROP COLUMN "suspended";--> statement-breakpoint
 -- Published needs the owner's names and picture, and the migration just removed pictures and never had names: back to draft, so autosave does not answer 409 for ever.
 UPDATE "providers" SET "status" = 'draft' WHERE "status" = 'published' AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = providers.owner_id AND u.first_name IS NOT NULL AND u.last_name IS NOT NULL AND EXISTS (SELECT 1 FROM photos p WHERE p.owner_id = u.id AND p.kind = 'profile'));--> statement-breakpoint

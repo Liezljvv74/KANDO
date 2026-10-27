@@ -2,9 +2,11 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator'
+import { sql } from 'drizzle-orm'
 import { expect, it } from 'vitest'
 import { assertTestDatabase } from '@kando/db/src/test/guard'
-import { applyRls, classifyTables, db, migrate, pool } from '@kando/db'
+import { applyRls, asUser, classifyTables, db, migrate, pool } from '@kando/db'
+import { adminGet, getMyProfile } from '@kando/domain'
 
 it('migrates an empty database and classifies every table', async () => {
   assertTestDatabase(pool.options.connectionString!)
@@ -93,6 +95,18 @@ it('0008 on a database with data: a suspended provider stays hidden, a published
   expect(by['m8-susnodate'].for_good).toBe(true) // no date known: still hidden
   expect(by['m8-pub'].suspended_until).toBeNull()
   expect(rows.map((r) => r.status)).toEqual(['draft', 'draft', 'draft', 'draft']) // no names, no pictures after the migration
+  // the legacy rows go through the domain mappers: a date Node cannot read would throw here
+  for (const id of ['m8-sus', 'm8-susnodate']) {
+    expect((await asUser(id, (tx) => getMyProfile(tx, id)))!.suspendedUntil).toEqual(expect.any(String))
+    const pid = (await pool.query('SELECT id FROM providers WHERE owner_id = $1', [id])).rows[0].id
+    const res = await db.transaction((tx) => adminGet(tx, 'providers', pid) as Promise<Response>)
+    expect(res.status).toBe(200)
+    expect(new Date((await res.json()).data.suspendedUntil).getTime()).toBeGreaterThan(Date.now())
+  }
+  // still suspended: published and complete it stays hidden from the public, an unsuspended one is visible
+  await pool.query("UPDATE providers SET status = 'published', slug = owner_id WHERE owner_id IN ('m8-pub', 'm8-sus', 'm8-susnodate')")
+  const visible = await asUser(null, (tx) => tx.execute(sql`SELECT slug FROM providers WHERE owner_id LIKE 'm8-%'`))
+  expect(visible.rows.map((r) => r.slug)).toEqual(['m8-pub'])
   await pool.query("DELETE FROM providers WHERE owner_id LIKE 'm8-%'")
   await pool.query("DELETE FROM users WHERE id LIKE 'm8-%'")
 }, 60_000)
