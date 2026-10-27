@@ -60,7 +60,7 @@ One screen, "My service profile", made of cards in this order. Each card holds o
 
 1. **Header**: the account picture with a pencil (changing it here changes the account picture), the name as customers will see it (derived, see 4), and the status: Draft, Live, or Live with services waiting for a check.
 2. **Services**: one block per service: category (dropdown, compulsory), title (if left empty it is filled with the category name on save), description, price type, price. "Add another service" at the bottom of the card. Each block has a "Remove" link. A service whose document is not yet approved shows "waiting for the document check" in its block, as today.
-3. **About you**: individual or business (a business adds business name and legal notice text), about you (optional), strengths, skills (tags, compulsory, at least one), experience (compulsory), postcode (prefilled from the address once, when the draft is created; editable here because a provider may work from somewhere else), service radius, "also works remotely".
+3. **About you**: individual or business (a business adds business name and legal notice text), about you (optional), strengths, skills (tags, compulsory, at least one), experience (compulsory), postcode (prefilled from the address once, when the draft is created; editable here at any time, for a provider who works from somewhere else or moves to a new area), service radius, "also works remotely".
 4. **Past jobs**: unchanged (card with +, up to the current limit).
 5. **Portfolio**: unchanged (card with +).
 6. **Documents**: shown only when at least one service's category requires a document. Red-shaded. Text: "The service you provide requires verification documentation. Please add the following documents:" then one line per required document across all services (two categories that need the same certificate produce one line), each with its status (needed, waiting for check, approved, rejected with the staff note) and an "Add" button offering upload file, choose from gallery, take picture (the three options the app has today).
@@ -87,6 +87,21 @@ When a staff approval makes the last hidden service of a published provider visi
 - an in-app notification: a banner at the top of My service profile, "Your profile is live. Tell people about it." with the Share button, shown until dismissed, and a dot on the Account tab until seen.
 
 Rejections keep today's email with the staff note; the Documents card shows the note and the Add button again.
+
+**Every email says what actually happened.** The wording follows the real state of the profile at that moment (owner decision, 27 October):
+
+| Event | Email to the provider |
+| --- | --- |
+| Document approved, profile live, nothing else pending | "Your document is approved and your profile is live." with the public link and the invitation to share. |
+| Document approved, profile live, other documents still pending | "Your document is approved. Your [category] service is now visible." |
+| Document approved, profile offline (taken offline by the provider) | "Your document is approved. Your profile is offline at the moment; the service becomes visible as soon as you publish again." |
+| Document approved, profile suspended | "Your document is approved. Your profile is suspended until [date]; the service becomes visible when the suspension ends." |
+| Document rejected | Today's email with the staff note and what to upload again. |
+| Staff suspend the profile | "Your profile was suspended for [reason]. It will be published again on [date]." (the date chosen by staff) |
+| Suspension ends, by date or lifted by staff | "Your profile has been published again and customers can book your services again. Good and prompt service rewards you with more customers." |
+| Staff warning (no-show) | "You received a warning: [reason]. A second warning suspends your profile for 30 days." (text per the foundation design) |
+
+For this to be true, **a suspension ends by itself at its end date** (my call, replacing the Stage 1 rule "until staff lift it"): search, the public page and publishing treat an expired suspension as over, staff can still lift early, and the "lift pending" state in the back office disappears. The "published again" email is sent when the date passes (a daily check) or when staff lift it. All texts in both languages.
 
 Notifications are stored in a small table (user, kind, created, seen, payload with the link), so later kinds (booking requests, messages) reuse it. Push delivery is added in the bookings stage.
 
@@ -138,7 +153,8 @@ New texts in German and English: the sign-up tick, the address labels, "Let's se
 ## My calls (strike any that are wrong)
 
 - Provider type sits once in About you, not after each service's price.
-- Postcode on the provider page is its own field, prefilled from the address once.
+- Postcode on the provider page is its own field, prefilled from the address once, editable any time (a move is the normal reason).
+- A suspension ends by itself at its end date, so the suspension email can promise the date; staff can lift earlier.
 - Title auto-fill uses the category name in the provider's language at the time of saving.
 - Taking a profile offline keeps the existing control; Publish is only for going live.
 - Notifications get their own table now, so the bookings stage reuses it.
