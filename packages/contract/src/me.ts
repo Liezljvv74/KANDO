@@ -4,9 +4,9 @@ import { LangSchema, requiredText, text } from './common'
 
 /** The person's private address (country defaults to 'DE'; country-ready for later markets). */
 export const AddressSchema = z.object({
-  street: text(120),
-  postcode: text(16),
-  city: text(80),
+  street: requiredText(120),
+  postcode: requiredText(16),
+  city: requiredText(80),
   country: z.string().length(2),
 })
 export type Address = z.infer<typeof AddressSchema>

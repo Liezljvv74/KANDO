@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import {
+  AddressSchema,
   AdminListQuerySchema,
   DocumentsListSchema,
   OwnServicesListSchema,
@@ -85,5 +86,22 @@ describe('list envelopes', () => {
       ReferenceInputSchema.safeParse({ ...ref, year: new Date().getFullYear() + 1 }).success,
     ).toBe(false)
     expect(ReferenceInputSchema.safeParse({ ...ref, year: 2020 }).success).toBe(true)
+  })
+})
+
+describe('address', () => {
+  const ok = { street: 'Weg 1', postcode: '10115', city: 'Berlin', country: 'DE' }
+  it('street, postcode and city are required (no empty or blank parts)', () => {
+    expect(AddressSchema.safeParse(ok).success).toBe(true)
+    for (const k of ['street', 'postcode', 'city']) {
+      expect(AddressSchema.safeParse({ ...ok, [k]: '' }).success, k).toBe(false)
+      expect(AddressSchema.safeParse({ ...ok, [k]: '  ' }).success, k).toBe(false)
+    }
+  })
+})
+
+describe('service input as the app sends it', () => {
+  it('a category alone is valid (the server fills currency and title)', () => {
+    expect(ServiceInputSchema.safeParse({ categoryId: service.categoryId }).success).toBe(true)
   })
 })
