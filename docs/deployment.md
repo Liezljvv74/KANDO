@@ -44,6 +44,16 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `ALLOW_PRODUCTION` | no | seeds only | Never set on Vercel. See Seeds. |
 | `NEON_DEV_ENDPOINT_ID` | no | seeds only (optional) | The dev branch's endpoint id, only if `kando-dev` is recreated and gets a new one. Empty or unset means `ep-steep-scene-b9p4f2v6`. Never set on Vercel. |
 
+## First staff account (owner)
+
+Staff roles are set in the database, never through the app. To make the first Administrator: sign up in the app with the email you want to use, confirm the code, then run against that branch's database:
+
+```sql
+UPDATE users SET staff_role = 'admin' WHERE email = 'you@example.com';
+```
+
+Further staff accounts are created the same way; the Administrator can change roles in the back office afterwards. For the browser checks on `kando-dev`, the seeded customer `kunde.berlin@example.com` can be made Administrator with the same statement.
+
 ## Neon Auth: trusted domains
 
 Login only works from origins the branch trusts. Add each one on the branch:
