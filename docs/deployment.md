@@ -5,6 +5,7 @@ How KANDO goes live. Nothing here has been done yet except the Neon dev branch. 
 ## Pieces
 
 - **Website, back office and API:** one Next.js app in `apps/web`, on Vercel, region `fra1` (Frankfurt; set in `apps/web/vercel.json`).
+- **Daily check:** Vercel Cron (`crons` in `apps/web/vercel.json`) calls `/api/cron/suspensions` at 06:00 UTC with `Authorization: Bearer $CRON_SECRET`; it ends suspensions whose date has passed and sends the "published again" email. Needs `CRON_SECRET` set in Vercel (Production and Preview).
 - **Database, login and files:** Neon project `SkillWeb` in AWS Frankfurt (Postgres, Neon Auth, Object Storage).
 - **Branches:** `kando-dev` exists now (endpoint `ep-steep-scene-b9p4f2v6`). `kando-main` is created at cutover. The old `main` and `dev` branches belong to the old Payload app and stay untouched until then.
 
@@ -38,7 +39,7 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
-| `RESEND_API_KEY` | yes | web | Approval and rejection emails. Required in production: without it no email is sent, only one line is logged. |
+| `RESEND_API_KEY` | yes | web | Approval, rejection, suspension and "profile is live" emails. Required in production: without it no email is sent, only one line is logged. |
 | `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. |
 | `NEXT_PUBLIC_SERVER_URL` | no | web | Public address of the site (links, sitemaps, canonical). |
 | `VERCEL_PROJECT_PRODUCTION_URL` | no | web | Set by Vercel itself; do not add it by hand. |
@@ -73,6 +74,7 @@ The app API refuses every account whose email is not confirmed yet (answer 403 `
 
 - `neon deploy` (reads `neon.ts` in the repository root) applies the Neon settings, including Auth, to a branch.
 - `pnpm db:migrate` changes the database schema. Run it against production only when the owner says so, with `DATABASE_URL_UNPOOLED` pointing at the target branch. Take a Neon branch of production first.
+- Migration `0008` (registration and provider setup) renames and drops columns: `users.name` becomes `first_name`, `last_name` and a private address; `providers.display_name`, `providers.suspended` and `providers.photo_id` are dropped (`suspended_until` replaces `suspended`); old `profile` photos are deleted (the picture now belongs to the person). Nobody uses the app yet, so nothing is preserved. Run it with `pnpm db:migrate` (it applies the row-level security afterwards); dev is already migrated. On any real database: Neon branch first, then migrate.
 - Every migration that creates tables must end with the row-level security statements for them (see the design, section on security).
 
 ## Cutover: preparing `kando-main`
@@ -99,7 +101,7 @@ Proposal, not yet agreed: the owner decides when and whether.
 There are three seeds. Each one checks two things: `NEON_BRANCH` names a dev branch (`kando-dev` or `dev`) and `DATABASE_URL` points at the dev endpoint. They print the database host before they start.
 
 - `pnpm db:seed:categories` (also `pnpm db:seed`; in `packages/db`): the 14 categories. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` set (PowerShell: `$env:ALLOW_PRODUCTION='1'`; needed once at cutover, step 3).
-- `pnpm db:seed:test-users` (in `packages/domain`): customers and published providers, all verified. The account list and password are in the git-ignored `packages/domain/seed-data/test-users.json` (`test-users.example.json` is the committed starter). Dev branch only, no way around it. A run that stopped half-way can simply be run again.
+- `pnpm db:seed:test-users` (in `packages/domain`): customers and published providers, all verified. Each person has `firstName` and `lastName` (no display name; the public name is built from the names). The account list and password are in the git-ignored `packages/domain/seed-data/test-users.json` (`test-users.example.json` is the committed starter). Dev branch only, no way around it. A run that stopped half-way can simply be run again.
 - `pnpm db:seed:placeholder-photos` (in `packages/domain`): a generated photo for every published provider without one. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` and a typed `yes`.
 
 ## CI
