@@ -27,6 +27,7 @@ beforeAll(async () => {
   setStorageForTests(store)
   ;({ categoryId, docCategoryId } = await seedBase())
   for (const u of USERS) await call(profileRoute.PUT, u, 'PUT', profile)
+  await pool.query("UPDATE users SET first_name = 'Rea', last_name = 'View' WHERE id = ANY($1)", [USERS])
 })
 afterAll(async () => {
   setStorageForTests(undefined)

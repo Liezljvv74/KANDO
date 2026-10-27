@@ -35,6 +35,7 @@ it('slugify transliterates umlauts and strips the rest', () => {
 
 const setup = async (uid: string, businessName: string) => {
   await call(profileRoute.GET, uid)
+  await pool.query("UPDATE users SET first_name = 'Nora', last_name = 'Nord' WHERE id = $1", [uid])
   const p = { providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115', skills: ['a'], experience: '1 Jahr' }
   expect((await call(profileRoute.PUT, uid, 'PUT', p)).status).toBe(201)
   await givePhoto(uid)
@@ -54,13 +55,17 @@ it('public name and slug are unique and stable', async () => {
   expect(await slugOf('pn1')).toBe('tischlerei-nord')
 })
 
-it('an individual without names has an empty public name and the fallback slug', async () => {
+it('an individual without names cannot publish; with names the public name follows', async () => {
   await call(profileRoute.GET, 'pn3')
   expect((await call(profileRoute.PUT, 'pn3', 'PUT', profile)).status).toBe(201)
   await givePhoto('pn3')
   await call(services.POST, 'pn3', 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
+  const refused = await call(publish.POST, 'pn3', 'POST')
+  expect(refused.status).toBe(409)
+  expect((await refused.json()).missing).toEqual(['name'])
+  await pool.query("UPDATE users SET first_name = 'Pia', last_name = 'Neu' WHERE id = 'pn3'")
   expect((await call(publish.POST, 'pn3', 'POST')).status).toBe(200)
-  expect(await slugOf('pn3')).toMatch(/^profile(-\d+)?$/)
+  expect(await slugOf('pn3')).toBe('pia-n')
 })
 
 it('first contact does not copy the session name: the person sets their own names', async () => {
