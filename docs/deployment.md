@@ -39,6 +39,7 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
 | `RESEND_API_KEY` | yes | web | Approval and rejection emails. Required in production: without it no email is sent, only one line is logged. |
+| `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. |
 | `NEXT_PUBLIC_SERVER_URL` | no | web | Public address of the site (links, sitemaps, canonical). |
 | `VERCEL_PROJECT_PRODUCTION_URL` | no | web | Set by Vercel itself; do not add it by hand. |
 | `ALLOW_PRODUCTION` | no | seeds only | Never set on Vercel. See Seeds. |

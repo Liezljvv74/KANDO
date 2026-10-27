@@ -1,7 +1,8 @@
-import { and, count, desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm'
-import { photos, providers, users, type Tx } from '@kando/db'
+import { and, count, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-orm'
+import { db, photos, providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { isLang } from '@kando/i18n'
+import { notifySuspension } from '../notifications'
 import { fail } from '../providers/http'
 import { photoUrl } from '../storage'
 import type { StaffUser } from '../users'
@@ -77,4 +78,20 @@ export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: {
   if (!row) return notFound()
   await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id))
   return ok((await withPictures(tx, [row]))[0])
+}
+
+/** The daily check: ends every suspension whose date has passed (as a lift does), then emails "published again". Returns the user ids. */
+export async function endExpiredSuspensions(exec: typeof db): Promise<string[]> {
+  const ended = await exec.transaction(async (tx) => {
+    const rows = await tx
+      .update(users)
+      .set({ suspendedUntil: null, suspendedReason: null, updatedAt: new Date() })
+      .where(lte(users.suspendedUntil, sql`now()`))
+      .returning({ id: users.id })
+    const ids = rows.map((r) => r.id)
+    if (ids.length) await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids))
+    return ids
+  })
+  for (const id of ended) await notifySuspension(id, { until: null, reason: '' })
+  return ended
 }

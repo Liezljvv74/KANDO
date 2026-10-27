@@ -119,3 +119,11 @@ it('offerableServiceIds: services whose required documents are all approved', as
   await pool.query("UPDATE documents SET status = 'approved' WHERE owner_id = 'pf1' AND key = 'k1'")
   expect((await ids()).sort()).toEqual([plain, needy].sort())
 })
+
+it('a user suspension that has ended no longer blocks publishing; a running one does', async () => {
+  await pool.query("UPDATE providers SET suspended_until = NULL, status = 'draft' WHERE owner_id = 'pf2'")
+  await pool.query("UPDATE users SET suspended_until = now() + interval '1 day', suspended_reason = 'x' WHERE id = 'pf2'")
+  expect((await call(publish.POST, 'pf2', 'POST')).status).toBe(409)
+  await pool.query("UPDATE users SET suspended_until = now() - interval '1 minute' WHERE id = 'pf2'")
+  expect((await call(publish.POST, 'pf2', 'POST')).status).toBe(200)
+})

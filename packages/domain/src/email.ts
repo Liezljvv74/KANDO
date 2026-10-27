@@ -5,7 +5,8 @@ const FROM = 'SkillWeb <noreply@skillweb.space>'
 const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skillweb://my-profile'
 
-export type Template = 'document-approved' | 'document-rejected'
+export type Template = 'document-approved' | 'document-rejected' | 'suspended' | 'published-again'
+type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
 
 const outbox: Mail[] = []
@@ -16,10 +17,17 @@ export const clearOutbox = () => {
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-function compose(lang: Lang, template: Template, params: { requirement: string; note?: string | null }) {
-  const key = template === 'document-approved' ? 'email.documentApproved' : 'email.documentRejected'
-  const document = t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1])
-  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '' })}\n\n${APP_LINK}`
+const KEY: Record<Template, string> = {
+  'document-approved': 'email.documentApproved',
+  'document-rejected': 'email.documentRejected',
+  suspended: 'email.suspended',
+  'published-again': 'email.publishedAgain',
+}
+
+function compose(lang: Lang, template: Template, params: Params) {
+  const key = KEY[template]
+  const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
+  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '' })}\n\n${APP_LINK}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   return { subject: t(lang, `${key}.subject` as Parameters<typeof t>[1]), text, html }
 }
@@ -27,7 +35,7 @@ function compose(lang: Lang, template: Template, params: { requirement: string; 
 let client: Resend | undefined
 
 /** Sends through Resend; with no RESEND_API_KEY it logs one line (and in tests records the mail in the outbox). Never throws. */
-export async function sendEmail(args: { to: string; lang: Lang; template: Template; params: { requirement: string; note?: string | null } }): Promise<void> {
+export async function sendEmail(args: { to: string; lang: Lang; template: Template; params: Params }): Promise<void> {
   try {
     const mail: Mail = { to: args.to, from: FROM, replyTo: REPLY_TO, ...compose(args.lang, args.template, args.params) }
     const key = process.env.RESEND_API_KEY
