@@ -26,7 +26,7 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
 const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
 // Suspensions end by their date: a past suspended_until counts as none.
 const NOT_SUSPENDED = '(suspended_until IS NULL OR suspended_until <= now())'
-const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now()))`
+const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND ${NOT_SUSPENDED})`
 
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
 export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: string }> = {
@@ -37,7 +37,7 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
   // The picture is public once the owner's provider is live; users is private, so this reads providers only.
   photos: {
     owner: `owner_id = app_current_user_id() AND (provider_id IS NULL OR ${OWN_SERVICE})`,
-    publicRead: `${LIVE_SERVICE} OR (kind = 'profile' AND EXISTS (SELECT 1 FROM providers p WHERE p.owner_id = photos.owner_id AND p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())))`,
+    publicRead: `${LIVE_SERVICE} OR (kind = 'profile' AND EXISTS (SELECT 1 FROM providers p WHERE p.owner_id = photos.owner_id AND p.status = 'published' AND ${NOT_SUSPENDED}))`,
   },
 }
 
