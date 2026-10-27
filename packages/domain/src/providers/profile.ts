@@ -95,6 +95,7 @@ const COLUMN: Record<string, string> = {
   basePostcode: 'base_postcode',
   serviceRadiusKm: 'service_radius_km',
   worksRemotely: 'works_remotely',
+  country: 'country',
 }
 
 // Raw SQL naming only the editable columns: Drizzle lists every column (as DEFAULT), and app_user holds no INSERT
@@ -121,9 +122,9 @@ async function ensure(tx: Tx, userId: string): Promise<{ profile: MyProfile; cre
   let row = await ownProvider(tx, userId)
   const created = !row
   if (!row) {
-    const u = (await tx.select({ postcode: users.addressPostcode }).from(users).where(eq(users.id, userId)))[0]
-    const known = u?.postcode ? await lookupPostcode('DE', u.postcode, tx) : null // an unknown one stays NULL so `postcode` is missing
-    await insertProvider(tx, userId, { ...(known && { basePostcode: u!.postcode }), serviceRadiusKm: 25 })
+    const u = (await tx.select({ postcode: users.addressPostcode, country: users.addressCountry }).from(users).where(eq(users.id, userId)))[0]
+    const known = u?.postcode ? await lookupPostcode(u.country ?? 'DE', u.postcode, tx) : null // an unknown one stays NULL so `postcode` is missing
+    await insertProvider(tx, userId, { ...(known && { basePostcode: u!.postcode }), ...(u?.country && { country: u.country }), serviceRadiusKm: 25 })
     await tx.update(users).set({ isProvider: true }).where(eq(users.id, userId))
     row = (await ownProvider(tx, userId))!
     await syncIdentity(tx, userId, row)

@@ -40,7 +40,7 @@ export default function AccountScreen() {
   }, [load])
 
   async function save() {
-    const addr = toAddress(address)
+    const addr = toAddress(address, me?.address?.country)
     if (!firstName.trim() || !lastName.trim()) return setError(t('auth.fillAll'))
     if (addr === undefined) return setError(t('auth.addressIncomplete'))
     setBusy(true)
@@ -62,7 +62,7 @@ export default function AccountScreen() {
           {user && <Text style={styles.email}>{user.email}</Text>}
           {me && (
             <>
-              <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={load} />
+              <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
               <Field label={t('auth.firstName')} value={firstName} onChangeText={setFirstName} autoComplete="given-name" />
               <Field label={t('auth.lastName')} value={lastName} onChangeText={setLastName} autoComplete="family-name" />
               <AddressFields value={address} onChange={setAddress} />

@@ -242,3 +242,19 @@ it('a provider whose names are missing cannot publish: missing lists name', asyn
   expect(res.status).toBe(409)
   expect((await res.json()).missing).toEqual(['name'])
 })
+
+it("the draft's postcode lookup uses the owner's stored country", async () => {
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern) VALUES ('ZZ', 'Testland', 'Testland', '^[0-9]{4}$') ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO postcodes (country, code, place, state, location) VALUES ('ZZ', '2000', 'Testburg', 'Test', ST_SetSRID(ST_MakePoint(28.0, -26.2), 4326)) ON CONFLICT DO NOTHING")
+  try {
+    await call(me.GET, 'pp-zz')
+    await pool.query("UPDATE users SET address_street = 'Main 1', address_postcode = '2000', address_city = 'Testburg', address_country = 'ZZ' WHERE id = 'pp-zz'")
+    const draft = MyProfileSchema.parse(await (await call(POST, 'pp-zz', 'POST')).json())
+    expect(draft.basePostcode).toBe('2000')
+    expect((await pool.query("SELECT country FROM providers WHERE owner_id = 'pp-zz'")).rows[0].country).toBe('ZZ')
+  } finally {
+    await pool.query("DELETE FROM providers WHERE owner_id = 'pp-zz'")
+    await pool.query("DELETE FROM postcodes WHERE country = 'ZZ'")
+    await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
+  }
+})

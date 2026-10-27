@@ -132,8 +132,6 @@ export function AboutCard({ initial, onSaved, stamp }: { initial: MyProfile; onS
         value={postcode.value}
         onChangeText={postcode.setValue}
         onBlur={postcode.flush}
-        keyboardType="number-pad"
-        maxLength={5}
         error={unknownPostcode ? errorText('Unknown postcode') : null}
       />
       {unknownPostcode ? null : problem('basePostcode', postcode)}
