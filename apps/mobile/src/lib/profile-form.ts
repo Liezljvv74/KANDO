@@ -17,6 +17,10 @@ export function serverFieldErrors(e: ApiError): Errors {
   return out
 }
 
+/** Published and not suspended right now: when the profile shows in search (same rule as the server's listServices). */
+export const isLive = (p: { status: string; suspendedUntil: string | null }, now = new Date()) =>
+  p.status === 'published' && !(p.suspendedUntil && new Date(p.suspendedUntil) > now)
+
 /** `list` with `text` (trimmed) added; unchanged when blank or already there. For skills and strengths. */
 export function withItem(list: string[], text: string): string[] {
   const s = text.trim()

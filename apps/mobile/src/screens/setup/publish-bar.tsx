@@ -10,6 +10,7 @@ import { Card, SmallButton } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { canShare } from '@/lib/documents'
 import { errorText, getLang, missingText, t } from '@/i18n'
+import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
 
 /**
@@ -52,8 +53,8 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
     const waiting = waitingServices.length
     return (
       <Card>
-        <Text style={styles.live}>{waiting > 0 ? t('setup.liveWaiting', { count: waiting }) : t('setup.live')}</Text>
-        {justPublished && (
+        {isLive(profile) ? <Text style={styles.live}>{waiting > 0 ? t('setup.liveWaiting', { count: waiting }) : t('setup.live')}</Text> : <ErrorText text={errorText('Profile suspended')} />}
+        {justPublished && isLive(profile) && (
           <>
             <Text style={styles.live}>{waiting > 0 ? t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title }) : t('setup.liveMessage')}</Text>
             {canShare(services) && profile.slug ? <SmallButton label={t('setup.share')} onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())} /> : null}

@@ -72,7 +72,7 @@ export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCo
     )[0]!.n
     if (n >= MAX_PORTFOLIO_PHOTOS) return fail(409, { error: 'Photo limit reached' })
   }
-  const key = p.kind === 'profile' ? `users/${userId}/${randomUUID()}.jpg` : `providers/${profile!.id}/${randomUUID()}.jpg`
+  const key = p.kind === 'profile' ? `people/${randomUUID()}/${randomUUID()}.jpg` : `providers/${profile!.id}/${randomUUID()}.jpg`
   await storage().put(mediaBucket(), key, p.data, 'image/jpeg')
   try {
     if (p.kind === 'profile') {

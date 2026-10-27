@@ -1,7 +1,7 @@
 import { ApiError } from '@/api/client'
 import { missingText, setLang } from '@/i18n'
 
-import { needsFormError, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
+import { isLive, needsFormError, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
@@ -63,4 +63,12 @@ test('the service body names the category by id and the currency, as the server 
 
 test('a 400 "Invalid input" marks each named field', () => {
   expect(serverFieldErrors(new ApiError(400, 'Invalid input', undefined, ['bio']))).toEqual({ bio: 'form.invalid' })
+})
+
+test('live means published and not suspended now (the server rule of listServices)', () => {
+  const now = new Date('2026-10-27T12:00:00Z')
+  expect(isLive({ status: 'published', suspendedUntil: null }, now)).toBe(true)
+  expect(isLive({ status: 'published', suspendedUntil: '2026-10-27T11:00:00Z' }, now)).toBe(true)
+  expect(isLive({ status: 'published', suspendedUntil: '2026-10-28T11:00:00Z' }, now)).toBe(false)
+  expect(isLive({ status: 'draft', suspendedUntil: null }, now)).toBe(false)
 })

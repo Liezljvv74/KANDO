@@ -26,6 +26,7 @@ beforeAll(async () => {
   setStorageForTests(store)
   await seedBase()
   for (const u of ['fl1', 'fl2', 'fl3']) await call(profileRoute.PUT, u, 'PUT', profile)
+  await pool.query("UPDATE users SET first_name = 'Fia', last_name = 'Lang' WHERE id IN ('fl1', 'fl2', 'fl3')")
 })
 afterAll(async () => {
   setStorageForTests(undefined)
@@ -57,7 +58,8 @@ it('a profile photo is re-encoded to JPEG at most 1600 px and returned in contra
   expect(list.docs.map((d) => d.id)).toEqual([body.id])
   const row = (await pool.query('SELECT provider_id FROM photos WHERE id = $1', [body.id])).rows[0]
   expect(row.provider_id).toBeNull() // the picture belongs to the person
-  expect(keys('media')[0]).toMatch(/^media\/users\/fl1\/[0-9a-f-]{36}\.jpg$/)
+  expect(keys('media')[0]).toMatch(/^media\/people\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/) // a random folder: the account id is not in the public URL
+  expect(keys('media')[0]).not.toContain('fl1')
 })
 
 it('a new profile photo replaces the old one and deletes its object', async () => {
