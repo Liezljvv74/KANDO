@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { and, desc, eq, sql } from 'drizzle-orm'
+import sharp from 'sharp'
 import { documents, privateFiles, type Tx } from '@kando/db'
 import type { Document } from '@kando/contract'
 import { fail } from './providers/http'
@@ -12,24 +13,50 @@ export const MAX_PENDING_UPLOADS = 10
 export const REQUIREMENTS = ['police-certificate', 'permit']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Reads and checks the PDF (by its leading bytes, not the declared type). Runs before the transaction. */
-export async function preparePdf(request: Request): Promise<Buffer> {
+const MAX_PIXELS = 40_000_000 // decompression-bomb cap, as for photos
+const MAX_SIDE = 2400
+const IMAGE: Record<string, { type: string; ext: string }> = {
+  jpeg: { type: 'image/jpeg', ext: 'jpg' },
+  png: { type: 'image/png', ext: 'png' },
+  webp: { type: 'image/webp', ext: 'webp' },
+}
+
+export type PreparedDocument = { data: Buffer; type: string; ext: string }
+
+/**
+ * Reads and checks the document by its leading bytes, never the declared type or name: a PDF is kept as is; a JPEG,
+ * PNG or WEBP (a scan or a photo of a certificate) is turned upright, re-encoded in its own format at most 2400 px,
+ * without metadata (EXIF, GPS). Anything else is 400. Runs before the transaction.
+ */
+export async function prepareDocument(request: Request): Promise<PreparedDocument> {
   const form = await request.formData().catch(() => new FormData())
   const file = form.get('file')
   if (!(file instanceof File)) return fail(400, { error: 'Missing file' })
   if (file.size > MAX_DOCUMENT_BYTES) return fail(413, { error: 'File too large' })
   const bytes = Buffer.from(await file.arrayBuffer())
-  if (bytes.subarray(0, 5).toString('latin1') !== '%PDF-') return fail(400, { error: 'Unsupported file type' })
-  return bytes
+  if (bytes.subarray(0, 5).toString('latin1') === '%PDF-') return { data: bytes, type: 'application/pdf', ext: 'pdf' }
+  try {
+    const img = sharp(bytes, { limitInputPixels: MAX_PIXELS }) // sharp tells the format from the leading bytes
+    const format = (await img.metadata()).format ?? ''
+    if (!IMAGE[format]) throw new Error('format')
+    const data = await img
+      .rotate()
+      .resize(MAX_SIDE, MAX_SIDE, { fit: 'inside', withoutEnlargement: true })
+      .toFormat(format as keyof sharp.FormatEnum)
+      .toBuffer()
+    return { data, ...IMAGE[format] }
+  } catch {
+    return fail(400, { error: 'Unsupported file type' })
+  }
 }
 
-/** Stores the PDF in the private bucket (object first; a failed insert removes it). */
-export async function uploadFile(tx: Tx, userId: string, pdf: Buffer): Promise<{ id: string }> {
+/** Stores the document in the private bucket with its own type (object first; a failed insert removes it). */
+export async function uploadFile(tx: Tx, userId: string, doc: PreparedDocument): Promise<{ id: string }> {
   await lockProfile(tx, userId) // per user: concurrent uploads cannot pass the cap together
   const pending = (await tx.select({ n: sql<number>`count(*)::int` }).from(privateFiles).where(eq(privateFiles.ownerId, userId)))[0]!.n
   if (pending >= MAX_PENDING_UPLOADS) return fail(409, { error: 'Too many pending uploads' })
-  const key = `documents/${userId}/${randomUUID()}.pdf`
-  await storage().put(documentsBucket(), key, pdf, 'application/pdf')
+  const key = `documents/${userId}/${randomUUID()}.${doc.ext}`
+  await storage().put(documentsBucket(), key, doc.data, doc.type)
   try {
     const [row] = await tx.insert(privateFiles).values({ ownerId: userId, key }).returning({ id: privateFiles.id })
     return { id: row!.id }

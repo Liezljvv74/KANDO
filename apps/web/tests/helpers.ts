@@ -58,13 +58,16 @@ export const profile = {
   worksRemotely: false,
 }
 
-/** In-memory object store: `objects` maps "bucket/key" to the bytes. Tests never touch S3. */
-export function memoryStorage(): Storage & { objects: Map<string, Buffer> } {
+/** In-memory object store: `objects` maps "bucket/key" to the bytes, `types` to the content type. Tests never touch S3. */
+export function memoryStorage(): Storage & { objects: Map<string, Buffer>; types: Map<string, string> } {
   const objects = new Map<string, Buffer>()
+  const types = new Map<string, string>()
   return {
     objects,
-    async put(bucket, key, body) {
+    types,
+    async put(bucket, key, body, contentType) {
       objects.set(`${bucket}/${key}`, body)
+      types.set(`${bucket}/${key}`, contentType)
     },
     getSignedUrl: async (bucket, key, seconds) => `https://signed.test/${bucket}/${key}?expires=${seconds}`,
     async delete(bucket, key) {

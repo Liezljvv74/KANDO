@@ -4,9 +4,10 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { DocumentSchema, DocumentsListSchema, PhotosListSchema } from '@kando/contract'
 import { setStorageForTests, uploadFile } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase } from './helpers'
+import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, seedUser } from './helpers'
 
-vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
+vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
+const adminItem = await import('../app/api/admin/[resource]/[id]/route')
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
 const publish = await import('../app/app-api/v1/provider-profile/publish/route')
 const services = await import('../app/app-api/v1/services/route')
@@ -150,8 +151,56 @@ it('files: a PDF goes to the private bucket, a non-PDF is 400, another user gets
   expect(keys('documents')).toHaveLength(0)
 })
 
+it('documents also take JPEG, PNG and WEBP photos: re-encoded without metadata, at most 2400 px, stored with their type', async () => {
+  const exif = { IFD0: { Copyright: 'secret-owner' } }
+  const jpeg = await sharp({ create: { width: 3000, height: 1000, channels: 3, background: '#36c' } }).jpeg().withExifMerge(exif).toBuffer()
+  expect((await sharp(jpeg).metadata()).exif).toBeDefined() // the input does carry EXIF
+  const pngDoc = await png(40, 30)
+  const webp = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#3c6' } }).webp().toBuffer()
+  for (const [bytes, type, ext] of [[jpeg, 'image/jpeg', 'jpg'], [pngDoc, 'image/png', 'png'], [webp, 'image/webp', 'webp']] as const) {
+    store.objects.clear()
+    store.types.clear()
+    const res = await upload(files.POST, 'fl1', bytes)
+    expect(res.status).toBe(201)
+    const [key] = keys('documents')
+    expect(key).toMatch(new RegExp(`^documents/documents/fl1/[0-9a-f-]{36}\\.${ext}$`))
+    expect(store.types.get(key!)).toBe(type)
+    const meta = await sharp(store.objects.get(key!)!).metadata()
+    expect(meta.format).toBe(ext === 'jpg' ? 'jpeg' : ext)
+    expect(meta.exif).toBeUndefined()
+    if (ext === 'jpg') expect([meta.width, meta.height]).toEqual([2400, 800])
+    await call(file.DELETE, 'fl1', 'DELETE', undefined, { id: (await res.json()).id })
+  }
+  const pdf = await upload(files.POST, 'fl1', PDF)
+  expect(store.types.get(keys('documents').find((k) => k.endsWith('.pdf'))!)).toBe('application/pdf')
+  await call(file.DELETE, 'fl1', 'DELETE', undefined, { id: (await pdf.json()).id })
+})
+
+it('a GIF and a text file renamed to .pdf are refused as documents', async () => {
+  const gif = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#000' } }).gif().toBuffer()
+  for (const bytes of [gif, Buffer.from('just some text, not a pdf')]) {
+    const res = await upload(files.POST, 'fl1', bytes)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'Unsupported file type' })
+  }
+  expect(keys('documents')).toHaveLength(0)
+})
+
+it('staff open an image document through the same signed link; it is served as an image', async () => {
+  await seedUser('fl-staff', 'reviewer')
+  const id = (await (await upload(files.POST, 'fl3', await png(20, 20))).json()).id as string
+  const doc = await call(verifications.POST, 'fl3', 'POST', { requirement: 'permit', document: id })
+  expect(doc.status).toBe(201)
+  const docId = (await doc.json()).id as string
+  const res = await adminCall(adminItem.GET, 'fl-staff', 'GET', `/api/admin/documents/${docId}`, undefined, { resource: 'documents', id: docId })
+  expect(res.status).toBe(200)
+  const { link } = (await res.json()).data
+  expect(link).toMatch(/^https:\/\/signed\.test\/documents\/documents\/fl3\/[0-9a-f-]{36}\.png\?expires=300$/)
+  expect(store.types.get(new URL(link).pathname.slice(1))).toBe('image/png')
+})
+
 it('a failed file insert removes the uploaded object', async () => {
-  await expect(asUser('fl1', (tx) => uploadFile(tx, 'someone-else', PDF))).rejects.toThrow()
+  await expect(asUser('fl1', (tx) => uploadFile(tx, 'someone-else', { data: PDF, type: 'application/pdf', ext: 'pdf' }))).rejects.toThrow()
   expect(keys('documents')).toHaveLength(0)
 })
 
