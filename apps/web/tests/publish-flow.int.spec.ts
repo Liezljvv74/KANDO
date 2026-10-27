@@ -3,7 +3,7 @@ import { asUser, pool } from '@kando/db'
 import { MyProfileSchema } from '@kando/contract'
 import { offerableServiceIds } from '@kando/domain'
 import { sql } from 'drizzle-orm'
-import { call, givePhoto, cleanupUsers, profile, seedBase } from './helpers'
+import { call, EMAIL, givePhoto, cleanupUsers, profile, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -15,6 +15,11 @@ let categoryId: string
 let docCategoryId: string
 beforeAll(async () => {
   ;({ categoryId, docCategoryId } = await seedBase())
+  for (const u of ['pf1', 'pf2', 'pf3'])
+    await pool.query(
+      "INSERT INTO users (id, email, first_name, last_name) VALUES ($1, $2, 'Pia', 'Fuchs') ON CONFLICT (id) DO UPDATE SET first_name = 'Pia', last_name = 'Fuchs'",
+      [u, EMAIL(u)],
+    )
 })
 afterAll(cleanupUsers)
 

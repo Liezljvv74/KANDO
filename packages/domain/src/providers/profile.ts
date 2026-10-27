@@ -42,9 +42,11 @@ export function completeness(
   row: Row,
   services: { categoryId: string | null; priceType: string | null; price: string | null }[],
   hasPhoto: boolean,
+  hasName: boolean,
 ): Missing[] {
   const biz = row.type === 'business'
   const m: [Missing, boolean][] = [
+    ['name', !hasName],
     ['photo', !hasPhoto],
     ['service', !services.some((s) => s.categoryId && s.priceType && (s.priceType === 'on-request' || s.price !== null))],
     ['providerType', row.type === null],
@@ -62,7 +64,8 @@ export function completeness(
 async function view(tx: Tx, userId: string, row: Row): Promise<MyProfile> {
   const svc = await tx.select({ categoryId: services.categoryId, priceType: services.priceType, price: services.price }).from(services).where(eq(services.providerId, row.id))
   const pic = (await tx.select({ id: photos.id }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
-  return toMyProfile(row, completeness(row, svc, !!pic))
+  const person = (await tx.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId)))[0]
+  return toMyProfile(row, completeness(row, svc, !!pic, !!person?.first?.trim() && !!person?.last?.trim()))
 }
 
 export async function getMyProfile(tx: Tx, userId: string): Promise<MyProfile | null> {
@@ -156,7 +159,10 @@ export async function upsertMyProfile(
   }
   await tx.update(providers).set({ ...values, updatedAt: new Date() }).where(eq(providers.id, existing.id))
   await syncIdentity(tx, userId, (await ownProvider(tx, userId))!)
-  return { profile: (await getMyProfile(tx, userId))!, created }
+  const profile = (await getMyProfile(tx, userId))!
+  // a live profile stays complete: the throw rolls the update back
+  if (existing.status === 'published' && profile.missing.length) fail(409, { error: 'Profile incomplete', missing: profile.missing })
+  return { profile, created }
 }
 
 /** Publishes the caller's profile: 404 without one, 409 when suspended or incomplete (`missing` lists what). */

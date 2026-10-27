@@ -116,6 +116,7 @@ export const en: Record<Key, string> = {
   'setup.pendingMessage': 'Your profile is live. Your {category} service goes live once we have checked your document.',
   'setup.share': 'Share',
   'setup.shareText': 'Find me on {brand}: {url}',
+  'missing.name': 'your name',
   'missing.photo': 'Profile picture',
   'missing.service': 'a service with a price type',
   'missing.providerType': 'individual or business',

@@ -129,7 +129,7 @@ it('POST creates a draft with the postcode prefilled; again returns the same id;
   expect(a.status).toBe(200)
   const draft = MyProfileSchema.parse(await a.json())
   expect(draft).toMatchObject({ status: 'draft', providerType: null, basePostcode: '10115', serviceRadiusKm: 25 })
-  expect(draft.missing).toEqual(['photo', 'service', 'providerType', 'skills', 'experience'])
+  expect(draft.missing).toEqual(['name', 'photo', 'service', 'providerType', 'skills', 'experience'])
   expect(MyProfileSchema.parse(await (await call(POST, 'dr1', 'POST')).json()).id).toBe(draft.id)
   const m = await (await call(me.GET, 'dr1')).json()
   expect(m.isProvider).toBe(true)
@@ -138,11 +138,11 @@ it('POST creates a draft with the postcode prefilled; again returns the same id;
 it('missing: the empty draft lists the person-independent items, business adds two, saves shrink it, PUT carries it', async () => {
   await call(me.GET, 'dr2')
   const empty = await missingOf(await call(POST, 'dr2', 'POST'))
-  expect(empty).toEqual(['photo', 'service', 'providerType', 'skills', 'experience', 'postcode'])
+  expect(empty).toEqual(['name', 'photo', 'service', 'providerType', 'skills', 'experience', 'postcode'])
   const biz = await missingOf(await call(PUT, 'dr2', 'PUT', { providerType: 'business' }))
-  expect(biz).toEqual(['photo', 'service', 'businessName', 'impressum', 'skills', 'experience', 'postcode'])
+  expect(biz).toEqual(['name', 'photo', 'service', 'businessName', 'impressum', 'skills', 'experience', 'postcode'])
   const next = await missingOf(await call(PUT, 'dr2', 'PUT', { businessName: 'Nord', basePostcode: '10115', skills: ['a'] }))
-  expect(next).toEqual(['photo', 'service', 'impressum', 'experience'])
+  expect(next).toEqual(['name', 'photo', 'service', 'impressum', 'experience'])
 })
 
 it('publish of an incomplete draft is 409 with the list; complete publishes with public name Lena F.', async () => {
@@ -205,4 +205,40 @@ it('the draft prefills the postcode only when it is a known one', async () => {
   const good = MyProfileSchema.parse(await (await call(POST, 'dr7', 'POST')).json())
   expect(good.basePostcode).toBe('10115')
   expect(good.missing).not.toContain('postcode')
+})
+
+it('a live profile cannot be emptied by a save: 409 with the missing list, nothing changed', async () => {
+  const { categoryId } = await seedBase()
+  await call(me.GET, 'lv1')
+  await pool.query("UPDATE users SET first_name = 'Lena', last_name = 'Fischer' WHERE id = 'lv1'")
+  await call(PUT, 'lv1', 'PUT', profile)
+  await call(servicesRoute.POST, 'lv1', 'POST', { categoryId, priceType: 'on-request', currency: 'EUR' })
+  await givePhoto('lv1')
+  expect((await call(publishRoute.POST, 'lv1', 'POST')).status).toBe(200)
+  const before = (await pool.query("SELECT type, skills, experience, base_postcode FROM providers WHERE owner_id = 'lv1'")).rows[0]
+  for (const [body, missing] of [
+    [{ skills: [] }, 'skills'],
+    [{ experience: null }, 'experience'],
+    [{ basePostcode: null }, 'postcode'],
+    [{ providerType: 'business' }, 'businessName'],
+  ] as const) {
+    const res = await call(PUT, 'lv1', 'PUT', body)
+    expect(res.status).toBe(409)
+    const json = await res.json()
+    expect(json.error).toBe('Profile incomplete')
+    expect(json.missing).toContain(missing)
+  }
+  expect((await pool.query("SELECT type, skills, experience, base_postcode FROM providers WHERE owner_id = 'lv1'")).rows[0]).toEqual(before)
+  expect((await call(PUT, 'lv1', 'PUT', { bio: 'ok' })).status).toBe(200) // a harmless edit still saves
+})
+
+it('a provider whose names are missing cannot publish: missing lists name', async () => {
+  const { categoryId } = await seedBase()
+  await call(me.GET, 'nm1')
+  await call(PUT, 'nm1', 'PUT', profile)
+  await call(servicesRoute.POST, 'nm1', 'POST', { categoryId, priceType: 'on-request', currency: 'EUR' })
+  await givePhoto('nm1')
+  const res = await call(publishRoute.POST, 'nm1', 'POST')
+  expect(res.status).toBe(409)
+  expect((await res.json()).missing).toEqual(['name'])
 })

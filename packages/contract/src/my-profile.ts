@@ -5,7 +5,7 @@ import { AmountSchema, CurrencySchema, docsOf, PriceTypeSchema, requiredText, te
 export const ProviderTypeSchema = z.enum(['individual', 'business'])
 
 /** What a provider still lacks before Publish (filled by the server). */
-export const MissingSchema = z.enum(['photo', 'service', 'providerType', 'businessName', 'impressum', 'skills', 'experience', 'postcode', 'radius'])
+export const MissingSchema = z.enum(['name', 'photo', 'service', 'providerType', 'businessName', 'impressum', 'skills', 'experience', 'postcode', 'radius'])
 export type Missing = z.infer<typeof MissingSchema>
 
 export const MyProfileSchema = z.object({

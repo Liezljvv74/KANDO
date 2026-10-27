@@ -45,7 +45,7 @@ test('every missing item the publish route can return has de and en text', () =>
   // German only: several English texts equal the item name ("experience"); key sets of de and en are tested in packages/i18n.
   for (const lang of ['de'] as const) {
     setLang(lang)
-    for (const item of ['photo', 'service', 'providerType', 'businessName', 'impressum', 'skills', 'experience', 'postcode', 'radius']) expect(missingText(item)).not.toBe(item)
+    for (const item of ['name', 'photo', 'service', 'providerType', 'businessName', 'impressum', 'skills', 'experience', 'postcode', 'radius']) expect(missingText(item)).not.toBe(item)
   }
   expect(missingText('unheard-of')).toBe('unheard-of')
 })

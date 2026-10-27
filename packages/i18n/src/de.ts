@@ -115,6 +115,7 @@ export const de = {
   'setup.pendingMessage': 'Dein Profil ist online. Deine Leistung {category} geht online, sobald wir dein Dokument geprüft haben.',
   'setup.share': 'Teilen',
   'setup.shareText': 'Finde mich bei {brand}: {url}',
+  'missing.name': 'Vor- und Nachname',
   'missing.photo': 'Profilbild',
   'missing.service': 'eine Leistung mit Preisart',
   'missing.providerType': 'Privat oder Unternehmen',
