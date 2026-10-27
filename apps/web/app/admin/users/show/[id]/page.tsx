@@ -5,11 +5,12 @@ import { useCustomMutation, useGetIdentity, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, DatePicker, Descriptions, Input, Space } from 'antd'
 import type { Dayjs } from 'dayjs'
-import { at } from '../../../../../lib/admin/t'
+import { useAt } from '../../../../../lib/admin/t'
 
 type User = { id: string; email: string; name: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; liftPending: boolean; createdAt: string }
 
 export default function UserShow() {
+  const at = useAt()
   const { query, result } = useShow<User>()
   const { data: me } = useGetIdentity<{ staffRole: string }>()
   const [until, setUntil] = useState<Dayjs | null>(null)

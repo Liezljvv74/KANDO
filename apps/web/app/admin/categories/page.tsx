@@ -3,9 +3,10 @@
 import { EditButton, List, useTable } from '@refinedev/antd'
 import { Table } from 'antd'
 import { SearchForm, searchByText } from '../../../components/admin/search-form'
-import { at } from '../../../lib/admin/t'
+import { useAt } from '../../../lib/admin/t'
 
 export default function CategoriesList() {
+  const at = useAt()
   const { tableProps, searchFormProps } = useTable({ syncWithLocation: true, onSearch: searchByText })
   return (
     <List title={at('admin.resource.categories')}>

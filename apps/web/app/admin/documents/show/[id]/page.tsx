@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { useCustomMutation, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, Descriptions, Input, Space, Tag } from 'antd'
-import { at } from '../../../../../lib/admin/t'
+import { useAt } from '../../../../../lib/admin/t'
 
 type Doc = { id: string; ownerEmail: string; requirement: string; status: string; note: string | null; reviewedAt: string | null; link: string }
 
 export default function DocumentShow() {
+  const at = useAt()
   const { query, result } = useShow<Doc>()
   const [note, setNote] = useState('')
   const review = useCustomMutation()
