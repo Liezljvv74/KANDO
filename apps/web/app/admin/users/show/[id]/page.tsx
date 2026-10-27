@@ -5,11 +5,14 @@ import { useCustomMutation, useGetIdentity, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, DatePicker, Descriptions, Input, Space } from 'antd'
 import type { Dayjs } from 'dayjs'
-import { at } from '../../../../../lib/admin/t'
+import { LOCALE } from '@kando/i18n'
+import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
 type User = { id: string; email: string; name: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; liftPending: boolean; createdAt: string }
 
 export default function UserShow() {
+  const at = useAt()
+  const lang = useAdminLang()
   const { query, result } = useShow<User>()
   const { data: me } = useGetIdentity<{ staffRole: string }>()
   const [until, setUntil] = useState<Dayjs | null>(null)
@@ -25,7 +28,7 @@ export default function UserShow() {
             <Descriptions.Item label={at('admin.field.email')}>{result.email}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.name')}>{result.name}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.role')}>{result.staffRole && at(result.staffRole === 'admin' ? 'admin.role.administrator' : 'admin.role.reviewer')}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.suspendedUntil')}>{result.suspendedUntil && new Date(result.suspendedUntil).toLocaleString('de-DE')}{result.liftPending && ` (${at('admin.suspension.expired')})`}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.suspendedUntil')}>{result.suspendedUntil && new Date(result.suspendedUntil).toLocaleString(LOCALE[lang])}{result.liftPending && ` (${at('admin.suspension.expired')})`}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.reason')}>{result.suspendedReason}</Descriptions.Item>
           </Descriptions>
           {me?.staffRole === 'admin' && (

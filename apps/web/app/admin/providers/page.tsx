@@ -3,9 +3,10 @@
 import { List, ShowButton, useTable } from '@refinedev/antd'
 import { Table, Tag } from 'antd'
 import { SearchForm, searchByText } from '../../../components/admin/search-form'
-import { at } from '../../../lib/admin/t'
+import { useAt } from '../../../lib/admin/t'
 
 export default function ProvidersList() {
+  const at = useAt()
   const { tableProps, searchFormProps } = useTable({ syncWithLocation: true, onSearch: searchByText })
   return (
     <List title={at('admin.resource.providers')}>

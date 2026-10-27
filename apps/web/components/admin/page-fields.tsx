@@ -1,9 +1,10 @@
 'use client'
 
 import { Form, Input, Select, Switch } from 'antd'
-import { at } from '../../lib/admin/t'
+import { useAt } from '../../lib/admin/t'
 
 export function PageFields() {
+  const at = useAt()
   return (
     <>
       <Form.Item label={at('admin.field.slug')} name="slug" rules={[{ required: true, pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/ }]}>

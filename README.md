@@ -25,6 +25,8 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 Stage 1 is built on branch `stage-1`: database with row-level security, login (Neon Auth), the app API, photo and document storage, the translate button, document review, the staff back office under `/admin`, the website, the phone app and the seeds. A final review of the whole branch found 3 important and 10 minor points; all important ones and 8 minor ones are fixed, the other 2 wait for the South Africa work (see Known gaps). All automated tests pass (204 web, 85 app, 16 in the shared packages, 305 in total); typecheck and lint are clean. Report: `Reports/Stage-1-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`.
 
+The back office is in German and English: the language comes from the `admin-lang` cookie, else the browser language, and a button in the header switches it.
+
 Nothing has been checked on a phone or in a browser yet.
 
 ### Pick up here
@@ -47,4 +49,4 @@ Nothing has been checked on a phone or in a browser yet.
 - No security scan of the whole project yet (row-level security, Next.js routes, Vercel settings); needed before launch.
 - Placeholder graphics (app icon, splash, home page pictures) are still to be replaced.
 - The legal pages (Impressum, Datenschutz, AGB, Ranking) are records that staff must write and publish in the back office.
-- Before South Africa (not needed for Germany): the website footer links to the German legal pages `/impressum` and `/datenschutz` directly, and the website language switch shows only one other language, so it assumes exactly two. Both get fixed with the South Africa work.
+- Before South Africa (not needed for Germany): the website footer links to the German legal pages `/impressum` and `/datenschutz` directly, and the website language switch shows only one other language, so it assumes exactly two (the back office switch does the same). Both get fixed with the South Africa work.

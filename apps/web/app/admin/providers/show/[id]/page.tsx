@@ -3,7 +3,7 @@
 import { useCustomMutation, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, Descriptions, Image, Popconfirm, Space } from 'antd'
-import { at } from '../../../../../lib/admin/t'
+import { useAt } from '../../../../../lib/admin/t'
 
 type Provider = {
   id: string
@@ -16,6 +16,7 @@ type Provider = {
 }
 
 export default function ProviderShow() {
+  const at = useAt()
   const { query, result } = useShow<Provider>()
   const remove = useCustomMutation()
   return (

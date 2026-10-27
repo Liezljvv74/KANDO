@@ -4,9 +4,10 @@ import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLogin, useLogout } from '@refinedev/core'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
-import { at } from '../../../lib/admin/t'
+import { useAt } from '../../../lib/admin/t'
 
 function SignIn() {
+  const at = useAt()
   const denied = useSearchParams().get('denied') === '1'
   const login = useLogin<{ email: string; password: string }>()
   const logout = useLogout()
