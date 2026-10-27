@@ -66,6 +66,9 @@ it('the dev guard needs the dev branch AND the dev database host', () => {
   expect(() => assertDevTarget(DEV)).not.toThrow()
   expect(() => assertDevTarget({ ...DEV, NEON_BRANCH: 'dev' })).not.toThrow()
   expect(() => assertDevTarget({ ...PROD, NEON_BRANCH: 'dev', NEON_DEV_ENDPOINT_ID: 'ep-other-prod-12345678' })).not.toThrow()
+  // an empty override falls back to the dev endpoint instead of matching every host
+  expect(() => assertDevTarget({ ...PROD, NEON_BRANCH: 'kando-dev', NEON_DEV_ENDPOINT_ID: '' })).toThrow(/Dev branch only/)
+  expect(() => assertDevTarget({ ...DEV, NEON_DEV_ENDPOINT_ID: '' })).not.toThrow()
   expect(TEST_PASSWORD).toBe('TestPass123')
 })
 

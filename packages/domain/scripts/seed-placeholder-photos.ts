@@ -1,7 +1,7 @@
 // A generated photo for every published profile without one. Dev branch at once; elsewhere ALLOW_PRODUCTION=1 and a typed yes.
 import { createInterface } from 'node:readline/promises'
 
-process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL
+process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL
 const { hostOf } = await import('@kando/db/src/seed/guard')
 const { confirmedOrDev } = await import('../src/seed/placeholder-photos')
 console.log(`Database host: ${hostOf(process.env.DATABASE_URL)}\nStorage host: ${hostOf(process.env.AWS_ENDPOINT)}\nNEON_BRANCH: ${process.env.NEON_BRANCH}`)
