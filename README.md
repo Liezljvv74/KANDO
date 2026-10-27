@@ -31,7 +31,7 @@ Stage 1 is built (database with row-level security, login, the app API, photo an
 - **Suspensions end by their date.** Staff choose the end date; the provider gets an email when it starts and again when the profile is published again. A daily check at 06:00 UTC ends suspensions whose date has passed.
 - The public name is now first name plus the first letter of the surname (or the business name); it follows a rename.
 
-All automated tests pass (246 web, 106 app, 21 in the shared packages, 373 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. A review of the whole branch is still to come.
+All automated tests pass (254 web, 107 app, 21 in the shared packages, 382 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. The whole-branch review is done and its fixes are in; a scoped re-review follows.
 
 The back office is in German and English: the language comes from the `admin-lang` cookie, else the browser language, and a button in the header switches it.
 
@@ -48,7 +48,7 @@ Nothing has been checked on a phone or in a browser yet.
    3. Add a service and upload its document; press Publish and read the list of what is missing.
    4. Approve the document in the back office; check the email, the banner, the Share sheet and the dot on the Account tab.
    5. Check the home nudge and that it can be dismissed.
-5. **Whole-branch review**, then owner review of the pull request, then merge.
+5. **Scoped re-review** of the final fixes, then owner review of the pull request, then merge.
 
 ### Test accounts (dev branch only)
 
@@ -58,7 +58,7 @@ Nothing has been checked on a phone or in a browser yet.
 
 - Refine's own button labels (Save, Create, Edit, Delete) are still English in the back office.
 - Push notifications come with bookings; until then the banner and the email are the only signals.
-- Small parked points from the reviews of the registration work are listed in the "Open Items" sheet of `Reports/Registration-Setup-Test-Report.xlsx` (for example: lifting a suspension on a user who is not suspended still sends "published again"; end dates in emails use the server time zone; the cron sends its emails one by one).
+- Small parked points from the reviews of the registration work are listed in the "Open Items" sheet of `Reports/Registration-Setup-Test-Report.xlsx` (for example: end dates in emails use the server time zone; the cron sends its emails one by one).
 - No thumbnail sizes: the photo grid and the cards load full-size images.
 - Documents over 4.5 MB cannot be uploaded through Vercel; the fix is to upload straight from the phone to storage.
 - No "Delete my account" in the app (GDPR erasure and data export come later).
