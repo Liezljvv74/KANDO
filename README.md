@@ -40,7 +40,7 @@ Nothing has been checked on a phone or in a browser yet.
 
 ## Known gaps
 
-- Suspensions do not expire by themselves: the end date is informational and a suspension stays in force until a staff member lifts it. Automatic expiry is a Stage 2 job.
+- Suspensions do not expire by themselves: the end date is informational and a suspension stays in force until a staff member lifts it. Automatic expiry is a Stage 2 job. A user suspended before having a provider profile is blocked from publishing even after the end date, and the back office shows no "lift" hint for them; lift the suspension on the user.
 - No thumbnail sizes: the photo grid and the cards load full-size images.
 - Documents over 4.5 MB cannot be uploaded through Vercel; the fix is to upload straight from the phone to storage.
 - No "Delete my account" in the app (GDPR erasure and data export come later).

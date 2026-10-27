@@ -70,7 +70,7 @@ Proposal, not yet agreed: the owner decides when and whether.
 
 1. Create `kando-main` in the `SkillWeb` project (from `kando-dev` without data, or empty).
 2. Run `neon deploy` on it, then `pnpm db:migrate` against it (owner instruction).
-3. Import postcodes (`pnpm db:import:postcodes`) and categories (`ALLOW_PRODUCTION=1 pnpm db:seed:categories`; the categories seed refuses any database but the dev one without it). Test accounts and placeholder photos are never seeded on `kando-main`.
+3. Import postcodes (`pnpm db:import:postcodes`) and categories (`$env:ALLOW_PRODUCTION='1'; pnpm db:seed:categories` in PowerShell, `ALLOW_PRODUCTION=1 pnpm db:seed:categories` in bash; the categories seed refuses any database but the dev one without it). Test accounts and placeholder photos are never seeded on `kando-main`.
 4. Import real users and providers from the old database (not part of Stage 1).
 5. Create the buckets and keys, set the Production variables in Vercel (including `RESEND_API_KEY`), add the production domain as trusted, and decide whether to turn on "Require email verification" in Neon Auth (see above).
 6. Point the domain at the new Vercel project.
@@ -87,7 +87,7 @@ Proposal, not yet agreed: the owner decides when and whether.
 
 There are three seeds. Each one checks two things: `NEON_BRANCH` names a dev branch (`kando-dev` or `dev`) and `DATABASE_URL` points at the dev endpoint. They print the database host before they start.
 
-- `pnpm db:seed:categories` (also `pnpm db:seed`; in `packages/db`): the 14 categories. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` (needed once at cutover, step 3).
+- `pnpm db:seed:categories` (also `pnpm db:seed`; in `packages/db`): the 14 categories. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` set (PowerShell: `$env:ALLOW_PRODUCTION='1'`; needed once at cutover, step 3).
 - `pnpm db:seed:test-users` (in `packages/domain`): customers and published providers, all verified, password `TestPass123`. The account list is in `packages/domain/src/seed/test-users.ts`. Dev branch only, no way around it. A run that stopped half-way can simply be run again.
 - `pnpm db:seed:placeholder-photos` (in `packages/domain`): a generated photo for every published provider without one. Anywhere but the dev branch only with `ALLOW_PRODUCTION=1` and a typed `yes`.
 
