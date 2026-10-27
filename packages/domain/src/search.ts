@@ -105,10 +105,11 @@ export async function search(
         await tx.execute<{
           provider_id: string
           price: string | null
+          currency: string
           slug: string
           category_id: string
         }>(sql`
-          SELECT s.provider_id, s.price, c.slug, c.id AS category_id FROM services s JOIN categories c ON c.id = s.category_id
+          SELECT s.provider_id, s.price, s.currency, c.slug, c.id AS category_id FROM services s JOIN categories c ON c.id = s.category_id
           WHERE s.provider_id IN (${sql.join(
             pageRows.map(({ p }) => sql`${p.id}::uuid`),
             sql`, `,
@@ -120,18 +121,19 @@ export async function search(
   const items: SearchItem[] = pageRows.map(({ p, distance }) => {
     const own = svc.filter((s) => s.provider_id === p.id)
     const counted = cat ? own.filter((s) => s.category_id === cat.id) : own
-    const prices = counted.flatMap((s) => (s.price === null ? [] : [Number(s.price)]))
+    const priced = counted.filter((s) => s.price !== null).sort((a, b) => Number(a.price) - Number(b.price))
     return {
       slug: p.slug,
       displayName: p.display_name,
       publicName: p.public_name,
       photoUrl: p.photo_key ? photoUrl(p.photo_key) : null,
       categories: [...new Set(own.map((s) => s.slug))],
-      fromPrice: prices.length ? Math.min(...prices) : null,
+      fromPrice: priced.length ? Number(priced[0]!.price) : null,
       // Whole km, at least 1: coarse enough not to pinpoint the base postcode.
       distanceKm: distance == null ? null : Math.max(1, Math.round(distance)),
       worksRemotely: p.works_remotely,
-      currency: 'EUR',
+      // The currency of the cheapest service, else of any shown one ('EUR' only if they vanished between the two queries).
+      currency: ((priced[0] ?? own[0])?.currency ?? 'EUR') as SearchItem['currency'],
       isNew: true, // Until ratings exist (Stage 6).
     }
   })

@@ -34,7 +34,7 @@ export const ProfileInputSchema = z
     strengths: text(1000).nullable(),
     skills: z.array(z.string().trim().min(1).max(50)).max(20),
     experience: text(500).nullable(),
-    basePostcode: text(5).nullable(),
+    basePostcode: text(16).nullable(), // the country's postcode lookup is the real check
     serviceRadiusKm: z.number().int().min(1).max(200),
     worksRemotely: z.boolean(),
   })

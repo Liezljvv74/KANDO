@@ -41,8 +41,8 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   if (!ids.length) return null // same rule as search: no page until a service may be offered
 
   const [services, references, photos, place] = await Promise.all([
-    tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null }>(sql`
-      SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price FROM services s JOIN categories c ON c.id = s.category_id
+    tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
+      SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
       WHERE s.provider_id = ${p.id} AND s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
       ORDER BY s.sort, s.created_at, s.id`),
     tx.execute<{ id: string; client_name: string; description: string; year: number | null }>(sql`
@@ -75,7 +75,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
       description: s.description,
       priceType: s.price_type as 'fixed' | 'hourly' | 'from' | 'on-request',
       price: s.price === null ? null : Number(s.price),
-      currency: 'EUR',
+      currency: s.currency as ProviderDetail['services'][number]['currency'],
     })),
     references: references.rows.map((r) => ({ id: r.id, clientName: r.client_name, description: r.description, year: r.year })),
     // Without a description of its own, a photo is described by the current public name (it follows renames).
