@@ -1,4 +1,5 @@
 import { createNeonAuth } from '@neondatabase/auth/next/server'
+import type { Session } from '@kando/domain'
 
 type Auth = ReturnType<typeof createNeonAuth>
 let _auth: Auth | undefined
@@ -16,7 +17,7 @@ export function getAuth(): Auth {
  * in-process (cookie cache first, upstream otherwise), so it works for any Request, including a hand-built one;
  * auth.getSession() only reads the cookies of the current Next.js request scope.
  */
-export async function sessionFromRequest(request: Request): Promise<{ id: string; email: string } | null> {
+export async function sessionFromRequest(request: Request): Promise<Session | null> {
   const cookie = request.headers.get('cookie')
   if (!cookie) return null
   const res = await getAuth()
@@ -25,6 +26,7 @@ export async function sessionFromRequest(request: Request): Promise<{ id: string
       params: Promise.resolve({ path: ['get-session'] }),
     })
   if (!res.ok) return null
-  const body = (await res.json().catch(() => null)) as { user?: { id?: string; email?: string } } | null
-  return body?.user?.id && body.user.email ? { id: body.user.id, email: body.user.email } : null
+  const body = (await res.json().catch(() => null)) as { user?: { id?: string; email?: string; emailVerified?: boolean; name?: string } } | null
+  const u = body?.user
+  return u?.id && u.email ? { id: u.id, email: u.email, emailVerified: u.emailVerified === true, name: u.name } : null
 }

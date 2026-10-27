@@ -4,10 +4,10 @@ import { pool } from '@kando/db'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
 import { createAppRequest } from '@kando/domain'
 
-// Fake session source: cookie "uid=<id>:<email>" is a session, anything else is not.
+// Fake session source: cookie "uid=<id>:<email>" is a (confirmed) session, anything else is not.
 const appRequest = createAppRequest(async (request) => {
   const m = /uid=([^:;]+):([^;]+)/.exec(request.headers.get('cookie') ?? '')
-  return m ? { id: m[1]!, email: m[2]! } : null
+  return m ? { id: m[1]!, email: m[2]!, emailVerified: true } : null
 })
 const ctx = { params: Promise.resolve({}) }
 const as = (id: string) =>
@@ -71,6 +71,16 @@ it('required auth without a cookie is 401', async () => {
 it('optional auth without a cookie runs with no user', async () => {
   const h = appRequest({ auth: 'optional' }, async ({ user }) => Response.json({ user }))
   expect(await (await h(new Request('http://localhost/x'), ctx)).json()).toEqual({ user: null })
+})
+
+it('an unconfirmed email: 403 where auth is required, signed out where optional; never a users row', async () => {
+  const unconfirmed = createAppRequest(async () => ({ id: 'u-unv', email: 'u-unv@test.skilled.invalid', emailVerified: false }))
+  const required = await unconfirmed({ auth: 'required' }, async () => Response.json({ ran: true }))(new Request('http://localhost/x'), ctx)
+  expect(required.status).toBe(403)
+  expect(await required.json()).toEqual({ error: 'EMAIL_NOT_VERIFIED' })
+  const optional = unconfirmed({ auth: 'optional' }, async ({ user }) => Response.json({ user }))
+  expect(await (await optional(new Request('http://localhost/x'), ctx)).json()).toEqual({ user: null })
+  expect((await pool.query("SELECT 1 FROM users WHERE id = 'u-unv'")).rows).toHaveLength(0)
 })
 
 it('a handler error rolls back and returns 500', async () => {

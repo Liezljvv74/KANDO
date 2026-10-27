@@ -2,7 +2,9 @@ import { asUser, type Tx } from '@kando/db'
 import { EmailConflictError, ensureUser, type SessionUser } from './users'
 
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
-export type SessionResolver = (request: Request) => Promise<{ id: string; email: string } | null>
+/** The signed-in account as the auth server knows it; `name` is the account name given at sign-up. */
+export type Session = { id: string; email: string; emailVerified: boolean; name?: string }
+export type SessionResolver = (request: Request) => Promise<Session | null>
 export type AfterCommit = (fn: () => Promise<void>) => void
 type Opts<P> = {
   auth: 'required' | 'optional'
@@ -23,14 +25,20 @@ type Handler<P> = (ctx: {
 /**
  * Builds the app request wrapper around a session source (the web app passes the Neon Auth one):
  * session check, body-size limit, first-contact users row, one transaction as app_user, rollback on error.
+ * An unconfirmed email is refused (403 EMAIL_NOT_VERIFIED) where auth is required and counts as signed out where it
+ * is optional: it never gets a users row.
  */
 export function createAppRequest(getSession: SessionResolver) {
   return <P = undefined>(opts: Opts<P>, handler: Handler<P>): RouteHandler =>
     async (request, ctx) => {
       const requestId = crypto.randomUUID()
       try {
-        const session = await getSession(request)
-        if (!session && opts.auth === 'required') return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        const found = await getSession(request)
+        if (!found && opts.auth === 'required') return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        if (found && !found.emailVerified && opts.auth === 'required') {
+          return Response.json({ error: 'EMAIL_NOT_VERIFIED' }, { status: 403 })
+        }
+        const session = found?.emailVerified ? found : null
         if (opts.maxBodyBytes !== undefined) {
           const declared = Number(request.headers.get('content-length') ?? 0)
           if (declared > opts.maxBodyBytes) return Response.json({ error: 'Payload too large' }, { status: 413 })

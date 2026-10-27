@@ -11,7 +11,7 @@ describe.skipIf(!enabled)('auth cookie flow', () => {
     await pool.query('DELETE FROM users WHERE email = $1', [email]) // the Neon Auth user stays on the dev branch
   })
 
-  it('signs up by REST, captures the cookie, and the cookie authenticates /app-api/v1/me', async () => {
+  it('signs up by REST, captures the cookie; /app-api/v1/me knows the session but refuses it until the email is confirmed', async () => {
     const { POST, GET } = await import('../app/api/auth/[...path]/route')
     const { GET: me } = await import('../app/app-api/v1/me/route')
     const ctx = (path: string) => ({ params: Promise.resolve({ path: path.split('/') }) })
@@ -33,8 +33,10 @@ describe.skipIf(!enabled)('auth cookie flow', () => {
     const res = await me(new Request('http://localhost/app-api/v1/me', { headers: { cookie } }), {
       params: Promise.resolve({}),
     })
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ email, language: 'de', staffRole: null })
+    // The session is real (not 401) but the email is not confirmed yet: 403 and no users row.
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'EMAIL_NOT_VERIFIED' })
+    expect((await pool.query('SELECT 1 FROM users WHERE email = $1', [email])).rows).toHaveLength(0)
 
     // the same cookie also works against get-session through the catch-all
     const gs = await GET(new Request('http://localhost/api/auth/get-session', { headers: { cookie } }), ctx('get-session'))

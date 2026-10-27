@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MyProfileSchema } from '@kando/contract'
-import { call, cleanupUsers, profile } from './helpers'
+import { call, cleanupUsers, EMAIL, profile } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const { GET, PUT } = await import('../app/app-api/v1/provider-profile/route')
+const me = await import('../app/app-api/v1/me/route')
 
 beforeAll(async () => {
   await pool.query(
@@ -66,4 +67,23 @@ it('an invalid body is 400 with the contract error', async () => {
   const res = await call(PUT, 'pp2', 'PUT', { serviceRadiusKm: 500 })
   expect(res.status).toBe(400)
   expect((await res.json()).error).toBe('Invalid input')
+})
+
+it('an unconfirmed email gets 403 EMAIL_NOT_VERIFIED from PUT provider-profile and GET /me, and no users row', async () => {
+  // fakeSession: the cookie "verified=0" makes the session unconfirmed.
+  const unverified = (method: string, body?: unknown) =>
+    new Request('http://localhost/app-api/v1/x', {
+      method,
+      headers: { cookie: `uid=pp-unv:${EMAIL('pp-unv')}; verified=0`, 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  const ctx = { params: Promise.resolve({}) }
+  for (const res of [await PUT(unverified('PUT', profile), ctx), await me.GET(unverified('GET'), ctx)]) {
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'EMAIL_NOT_VERIFIED' })
+  }
+  expect((await pool.query("SELECT 1 FROM users WHERE id = 'pp-unv'")).rows).toHaveLength(0)
+  // a confirmed session still passes
+  expect((await call(me.GET, 'pp-ver')).status).toBe(200)
+  expect((await call(PUT, 'pp-ver', 'PUT', profile)).status).toBe(201)
 })

@@ -1,10 +1,13 @@
 import { pool } from '@kando/db'
 import type { Storage } from '@kando/domain'
 
-// Fake session: cookie "uid=<id>:<email>" is a session (each test file mocks lib/auth/server with `fakeSession`).
+// Fake session: cookie "uid=<id>:<email>" is a confirmed session, plus "verified=0" an unconfirmed one and "name=<name>"
+// the account name (each test file mocks lib/auth/server with `fakeSession`).
 export const fakeSession = async (request: Request) => {
-  const m = /uid=([^:;]+):([^;]+)/.exec(request.headers.get('cookie') ?? '')
-  return m ? { id: m[1]!, email: m[2]! } : null
+  const cookie = request.headers.get('cookie') ?? ''
+  const m = /uid=([^:;]+):([^;]+)/.exec(cookie)
+  const name = /(?:^|; )name=([^;]*)/.exec(cookie)?.[1]
+  return m ? { id: m[1]!, email: m[2]!, emailVerified: !/(?:^|; )verified=0/.test(cookie), name: name === undefined ? undefined : decodeURIComponent(name) } : null
 }
 
 export const EMAIL = (id: string) => `${id}@test.skilled.invalid`
