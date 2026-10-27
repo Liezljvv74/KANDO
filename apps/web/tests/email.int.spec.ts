@@ -21,7 +21,7 @@ it('approval: one email in the user language with the document name and the deep
   expect(m).toMatchObject({ to: 'a@test.skilled.invalid', from: 'SkillWeb <noreply@skillweb.space>', replyTo: 'info@skillweb.space' })
   expect(m!.subject).toBe('Your document has been approved')
   expect(m!.text).toContain('Police certificate')
-  expect(m!.text).toContain('skillweb://my-profile')
+  expect(m!.text).toContain('skilled://my-profile')
   expect(m!.html).toContain('Police certificate')
 })
 

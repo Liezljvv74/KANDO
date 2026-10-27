@@ -3,7 +3,7 @@ import { t, type Lang } from '@kando/i18n'
 
 const FROM = 'SkillWeb <noreply@skillweb.space>'
 const REPLY_TO = 'info@skillweb.space'
-const APP_LINK = 'skillweb://my-profile'
+const APP_LINK = 'skilled://my-profile'
 
 export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again'
 type Params = Record<string, string | null | undefined>
