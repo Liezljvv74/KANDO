@@ -4,13 +4,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { getMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card } from '@/components/form-ui'
 import { Select } from '@/components/select'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
+import { loadMe } from '@/hooks/use-me'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
@@ -35,7 +35,7 @@ function PictureNudge() {
   const [show, setShow] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   useEffect(() => {
-    Promise.all([getMe(), SecureStore.getItemAsync(NUDGE_KEY)])
+    Promise.all([loadMe(), SecureStore.getItemAsync(NUDGE_KEY)])
       .then(([me, dismissed]) => setShow(!me.photoUrl && !dismissed))
       .catch(() => {})
   }, [])

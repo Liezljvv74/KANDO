@@ -4,12 +4,13 @@ import { Alert, StyleSheet, Text, View } from 'react-native'
 import type { PickedFile } from '@/api/client'
 import { documentsApi } from '@/api/my-profile'
 import { ErrorText } from '@/components/auth-ui'
-import { Card, IconButton, SectionHeader } from '@/components/form-ui'
+import { SectionHeader, SmallButton } from '@/components/form-ui'
 import { docText, errorText, t } from '@/i18n'
 import type { DocumentRow } from '@/lib/documents'
 import { pickDocument, pickPhoto, tooLarge, uploadErrorCode } from '@/lib/pick'
-import { DeniedNotice } from './denied-notice'
+import { DeniedNotice } from '../my-profile/denied-notice'
 
+/** The red card: one line per required document across all services, with its status and an Add button. */
 export function DocumentsCard({ rows, onChanged }: { rows: DocumentRow[]; onChanged: () => void }) {
   const [busy, setBusy] = useState(false) // one submit at a time across the whole card
   const [problem, setProblem] = useState<string | null>(null)
@@ -43,31 +44,28 @@ export function DocumentsCard({ rows, onChanged }: { rows: DocumentRow[]; onChan
     ])
 
   return (
-    <Card>
-      <SectionHeader title={t('myProfile.docsTitle')} />
-      <Text style={styles.intro}>{t('myProfile.docsIntro')}</Text>
+    <View style={styles.card}>
+      <SectionHeader title={t('setup.documents.title')} />
+      <Text style={styles.text}>{t('setup.documents.body')}</Text>
       <ErrorText text={problem} />
       {denied && <DeniedNotice />}
       {rows.map((r) => (
-        // Not a nested card: the document name sits flush left and stands out, so it cannot be missed.
         <View key={r.requirement} style={styles.row}>
-          <View style={styles.docRow}>
-            <Text style={styles.doc}>{docText(r.requirement)}</Text>
-            {(r.state === 'none' || r.state === 'rejected') && (
-              <IconButton icon="cloud-upload-outline" label={`${t('myProfile.docsUpload')}: ${docText(r.requirement)}`} onPress={() => choose(r.requirement)} busy={busy} />
-            )}
-          </View>
-          <Text>{t(`myProfile.docs.${r.state}`)}</Text>
-          {r.state === 'rejected' && r.note ? <ErrorText text={r.note} /> : null}
+          <Text style={[styles.text, styles.doc]}>{docText(r.requirement)}</Text>
+          <Text style={styles.text}>{t(`myProfile.docs.${r.state}`)}</Text>
+          {r.state === 'rejected' && r.note ? <Text style={styles.text}>{r.note}</Text> : null}
+          {(r.state === 'none' || r.state === 'rejected') && (
+            <SmallButton label={t('setup.documents.add')} accessibilityLabel={`${t('setup.documents.add')}: ${docText(r.requirement)}`} onPress={() => choose(r.requirement)} busy={busy} />
+          )}
         </View>
       ))}
-    </Card>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  intro: { fontSize: 15, lineHeight: 21, color: '#14352E' },
-  row: { gap: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E1F4EE' },
-  docRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  doc: { flex: 1, fontSize: 17, fontWeight: '700', color: '#0E8A6B' },
+  card: { backgroundColor: '#FDECEC', borderRadius: 16, padding: 12, gap: 6 },
+  text: { fontSize: 15, lineHeight: 21, color: '#8A1C1C' },
+  doc: { fontSize: 17, fontWeight: '700' },
+  row: { gap: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F2C4C4' },
 })

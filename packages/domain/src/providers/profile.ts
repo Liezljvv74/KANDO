@@ -21,6 +21,7 @@ const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
   serviceRadiusKm: r.serviceRadiusKm,
   worksRemotely: r.worksRemotely,
   status: r.status === 'published' ? 'published' : 'draft',
+  slug: r.slug,
   suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
   missing,
 })

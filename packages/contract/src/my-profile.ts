@@ -22,6 +22,8 @@ export const MyProfileSchema = z.object({
   serviceRadiusKm: z.number().int().nullish(),
   worksRemotely: z.boolean().nullish(),
   status: z.enum(['draft', 'published']),
+  /** The public page's address part; set once the profile has been published. */
+  slug: z.string().nullish(),
   suspendedUntil: z.string().nullable(),
   missing: z.array(MissingSchema),
 })

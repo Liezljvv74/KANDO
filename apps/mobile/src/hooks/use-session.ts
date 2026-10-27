@@ -5,6 +5,7 @@ import { File } from 'expo-file-system'
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
+import { clearMe } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
 import { clearPending, loadPending, savePending, type PendingSignup } from '@/lib/pending-signup'
 
@@ -108,6 +109,7 @@ export async function verify(email: string, code: string) {
 }
 
 export async function signOut() {
+  clearMe()
   set({ user: null, loading: false, offline: false })
   await auth.signOut()
 }
@@ -132,7 +134,7 @@ export function chooseLanguage(lang: Lang) {
 export const getSession = () => state
 
 // The server no longer accepts the session: back to the login (Stack.Protected follows `user`).
-setOnUnauthorized(() => set({ user: null, loading: false, offline: false }))
+setOnUnauthorized(() => (clearMe(), set({ user: null, loading: false, offline: false })))
 
 /** Test helper. */
 export const resetSession = () => {

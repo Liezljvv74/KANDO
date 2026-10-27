@@ -1,30 +1,27 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import type { MyProfile } from '@kando/contract'
+import type { MyProfile, OwnService } from '@kando/contract'
 
 import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
-import { ErrorText, Info } from '@/components/auth-ui'
-import { Card, FormScreen, SectionHeader } from '@/components/form-ui'
+import { ErrorText } from '@/components/auth-ui'
+import { Card, FormScreen } from '@/components/form-ui'
+import { NotificationBanner } from '@/components/notification-banner'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
+import { dismissNotification, loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { documentRows } from '@/lib/documents'
-import { formatPrice } from '@/lib/format'
-import { DocumentsCard } from '../my-profile/documents-card'
+import { createStaleGuard } from '@/lib/stale-guard'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
 import { AboutCard } from './about-card'
+import { DocumentsCard } from './documents-card'
 import { PublishBar } from './publish-bar'
 import { ReferencesCard } from './references-card'
-
-async function loadAll() {
-  const profile = (await getMyProfile()) ?? (await ensureDraft())
-  const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
-  return { profile, services, references, photos, verifications }
-}
+import { ServicesCard } from './services-card'
 
 /** The one-page "My service profile". */
 export default function SetupScreen() {
@@ -37,22 +34,55 @@ export default function SetupScreen() {
   }, [params.welcome])
   useFocusEffect(useCallback(() => () => setWelcome(false), []))
 
+  // Every load and every save stamps itself; an answer older than one already applied never replaces the held profile.
+  const stamp = useRef(createStaleGuard()).current
+  const loadAll = useCallback(async () => {
+    const fresh = stamp()
+    const profile = (await getMyProfile()) ?? (await ensureDraft())
+    const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
+    // Opening the page marks the notifications seen; a /me failure must not hold the page back.
+    loadMe().then(markNotificationsSeen).catch(() => {})
+    return { profile, services, references, photos, verifications, fresh }
+  }, [stamp])
   const { done, data, error, retry } = useLoad(loadAll)
   const { categories } = useCategories()
-  // The latest profile the server sent: a load or any field save replaces it (the Publish bar reads its `missing`).
+  const me = useMe()
+  // The latest profile the server sent (the Publish bar reads its missing list) and the live services list.
   const [profile, setProfile] = useState<MyProfile | null>(null)
+  const [services, setServices] = useState<OwnService[] | null>(null)
   useEffect(() => {
-    if (data) setProfile(data.profile)
+    if (!data || !data.fresh()) return
+    setProfile(data.profile)
+    setServices(data.services)
   }, [data])
 
+  // A service change can change what is missing (a service with a price type): ask for the profile again.
+  const refreshProfile = () => {
+    const fresh = stamp()
+    getMyProfile()
+      .then((p) => p && fresh() && setProfile(p))
+      .catch(() => {})
+  }
+  const onService = (s: OwnService) => {
+    const before = services?.find((x) => x.id === s.id)
+    setServices((list) => (list?.some((x) => x.id === s.id) ? list.map((x) => (x.id === s.id ? s : x)) : [...(list ?? []), s]))
+    if (!before || before.category !== s.category || before.priceType !== s.priceType) refreshProfile()
+  }
+  const onServiceRemoved = (id: string) => {
+    setServices((list) => list?.filter((x) => x.id !== id) ?? null)
+    refreshProfile()
+  }
+
   const title = welcome ? t('setup.welcome') : t('setup.title')
-  if (!done || !data || !profile) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
-  const { services, references, photos, verifications } = data
+  if (!done || !data || !profile || !services) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
+  const { references, photos, verifications } = data
   const name = profile.publicName ?? ''
   const docRows = documentRows(services, categories ?? [], verifications)
+  const banner = me?.notifications.find((n) => n.kind === 'profile-live' && !n.dismissedAt)
 
   return (
     <FormScreen title={title} back={false}>
+      {banner && <NotificationBanner notification={banner} onDismiss={() => dismissNotification(banner.id).catch(() => {})} />}
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />
@@ -66,19 +96,9 @@ export default function SetupScreen() {
 
       <PublishBar profile={profile} services={services} onChanged={retry} />
 
-      <AboutCard initial={data.profile} onSaved={setProfile} />
+      <ServicesCard services={services} docRows={docRows} onService={onService} onRemoved={onServiceRemoved} />
 
-      {/* Task 8 replaces this read-only list with the Services card. */}
-      <Card>
-        <SectionHeader title={t('myProfile.services')} />
-        {services.length === 0 && <Info text={t('myProfile.noServices')} />}
-        {services.map((s) => (
-          <View key={s.id}>
-            <Text style={styles.name}>{s.title}</Text>
-            <Text style={styles.status}>{s.priceType ? formatPrice({ ...s, priceType: s.priceType }) : ''}</Text>
-          </View>
-        ))}
-      </Card>
+      <AboutCard initial={data.profile} onSaved={setProfile} stamp={stamp} />
 
       <ReferencesCard references={references} />
       <PortfolioCard photos={photos.filter((p) => p.kind === 'portfolio')} name={name} onChanged={retry} />

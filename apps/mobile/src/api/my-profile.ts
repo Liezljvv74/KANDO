@@ -52,3 +52,7 @@ export const documentsApi = {
     }
   },
 }
+
+export const notificationsApi = {
+  mark: (id: string, body: { seen?: true; dismissed?: true }) => api<unknown>(`/app-api/v1/notifications/${id}`, json('PATCH', body)),
+}

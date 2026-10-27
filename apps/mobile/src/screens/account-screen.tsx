@@ -5,10 +5,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { API_URL, ApiError, getMe, updateMe } from '@/api/client'
+import { API_URL, ApiError, updateMe } from '@/api/client'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { LanguageSwitch } from '@/components/language-switch'
+import { loadMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
@@ -25,7 +26,7 @@ export default function AccountScreen() {
 
   const load = useCallback(async () => {
     try {
-      const m = await getMe()
+      const m = await loadMe()
       setMe(m)
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
