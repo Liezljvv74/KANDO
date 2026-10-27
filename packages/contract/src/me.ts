@@ -10,4 +10,6 @@ export const MeSchema = z.object({
 })
 export type Me = z.infer<typeof MeSchema>
 
-export const MeUpdateSchema = z.object({ name: z.string().trim().min(1).max(100) })
+/** PATCH /me: the account name and/or the language of emails; both optional. */
+export const MePatchSchema = z.object({ name: z.string().trim().min(1).max(100), language: LangSchema }).partial()
+export type MePatch = z.infer<typeof MePatchSchema>

@@ -67,7 +67,7 @@ export async function signOut() {
   await auth.signOut()
 }
 
-/** Saves the account name; the session user follows. Errors (e.g. 400 'Invalid name') are thrown to the form. */
+/** Saves the account name; the session user follows. Errors (e.g. 400 'Invalid input' naming the field) are thrown to the form. */
 export async function updateName(name: string) {
   await updateMe({ name })
   try {

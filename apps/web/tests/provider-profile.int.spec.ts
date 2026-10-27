@@ -87,3 +87,16 @@ it('an unconfirmed email gets 403 EMAIL_NOT_VERIFIED from PUT provider-profile a
   expect((await call(me.GET, 'pp-ver')).status).toBe(200)
   expect((await call(PUT, 'pp-ver', 'PUT', profile)).status).toBe(201)
 })
+
+it('PATCH /me checks its body with the contract: 400 Invalid input names the field; a valid patch saves', async () => {
+  for (const [body, field] of [[{ name: 'x'.repeat(101) }, 'name'], [{ name: '   ' }, 'name'], [{ language: 'fr' }, 'language']] as const) {
+    const res = await call(me.PATCH, 'pp-me', 'PATCH', body)
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error).toBe('Invalid input')
+    expect(json.issues[0].path).toEqual([field])
+  }
+  const ok = await call(me.PATCH, 'pp-me', 'PATCH', { name: '  Anna Schmidt ', language: 'en' })
+  expect(ok.status).toBe(200)
+  expect(await ok.json()).toEqual({ id: 'pp-me', name: 'Anna Schmidt', language: 'en' })
+})

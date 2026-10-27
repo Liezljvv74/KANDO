@@ -104,7 +104,7 @@ test('updateName saves the account name in both places and updates the session u
   expect(api.updateMe).toHaveBeenCalledWith({ name: 'Anna Berg' })
   expect(a.updateUserName).toHaveBeenCalledWith('Anna Berg')
   expect(getSession().user).toEqual({ ...user, name: 'Anna Berg' })
-  api.updateMe.mockRejectedValueOnce(new client.ApiError(400, 'Invalid name'))
+  api.updateMe.mockRejectedValueOnce(new client.ApiError(400, 'Invalid input', undefined, ['name']))
   await expect(updateName('')).rejects.toMatchObject({ status: 400 })
   expect(getSession().user?.name).toBe('Anna Berg')
 })
