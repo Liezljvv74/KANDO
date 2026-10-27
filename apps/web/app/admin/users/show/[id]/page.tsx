@@ -3,12 +3,12 @@
 import { useState } from 'react'
 import { useCustomMutation, useGetIdentity, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
-import { Button, DatePicker, Descriptions, Image, Input, Space } from 'antd'
+import { Button, DatePicker, Descriptions, Image, Input, Popconfirm, Space } from 'antd'
 import type { Dayjs } from 'dayjs'
 import { LOCALE } from '@kando/i18n'
 import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
-type User = { id: string; email: string; firstName: string | null; lastName: string | null; address: { street: string; postcode: string; city: string; country: string } | null; photoUrl: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
+type User = { id: string; email: string; firstName: string | null; lastName: string | null; address: { street: string; postcode: string; city: string; country: string } | null; photoUrl: string | null; photoId: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
 
 export default function UserShow() {
   const at = useAt()
@@ -18,6 +18,7 @@ export default function UserShow() {
   const [until, setUntil] = useState<Dayjs | null>(null)
   const [reason, setReason] = useState('')
   const suspend = useCustomMutation()
+  const remove = useCustomMutation()
   const send = (u: string | null) =>
     suspend.mutate({ url: `/api/admin/users/${result?.id}/suspend`, method: 'post', values: { until: u, reason } }, { onSuccess: () => query.refetch() })
   return (
@@ -33,6 +34,13 @@ export default function UserShow() {
             </Descriptions.Item>
             <Descriptions.Item label={at('admin.field.picture')}>
               {result.photoUrl && <Image src={result.photoUrl} alt="" width={96} />}
+              {result.photoId && (
+                <Popconfirm title={at('admin.action.deletePhoto')} onConfirm={() => remove.mutate({ url: `/api/admin/photos/${result.photoId}`, method: 'delete', values: {} }, { onSuccess: () => query.refetch() })}>
+                  <Button danger size="small" style={{ marginLeft: 8 }}>
+                    {at('admin.action.deletePhoto')}
+                  </Button>
+                </Popconfirm>
+              )}
             </Descriptions.Item>
             <Descriptions.Item label={at('admin.field.role')}>{result.staffRole && at(result.staffRole === 'admin' ? 'admin.role.administrator' : 'admin.role.reviewer')}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.suspendedUntil')}>{result.suspendedUntil && new Date(result.suspendedUntil).toLocaleString(LOCALE[lang])}</Descriptions.Item>

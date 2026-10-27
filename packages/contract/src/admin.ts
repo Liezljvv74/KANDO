@@ -30,6 +30,7 @@ export const AdminUserSchema = z.object({
   lastName: z.string().nullable(),
   address: AddressSchema.nullable(),
   photoUrl: z.string().nullable(),
+  photoId: z.string().nullable(),
   email: z.string(),
   language: LangSchema.nullable(),
   staffRole: StaffRoleSchema.nullable(),

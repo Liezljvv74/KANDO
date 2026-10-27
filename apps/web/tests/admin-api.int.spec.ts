@@ -125,7 +125,7 @@ it('suspending a user hides the provider from search and the public page; liftin
 })
 
 it('a user suspended before having a profile cannot create one and publish it (409)', async () => {
-  await seedUser('aa-early')
+  await seedUser('aa-early', null, 'Early Bird')
   const until = new Date(Date.now() + 7 * 86_400_000).toISOString()
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until, reason: 'Fraud' }, { id: 'aa-early' })).status).toBe(200)
   expect((await call(profileRoute.PUT, 'aa-early', 'PUT', profile)).status).toBe(201)
@@ -213,6 +213,16 @@ it('providers are readable; a Reviewer deletes a photo (object removed, publishe
   const prof = (await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('aa-owner', 'profile', 'users/aa/p.jpg', 1, 1) RETURNING id")).rows[0].id
   expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: prof })).status).toBe(204)
   expect((await pool.query('SELECT status FROM providers WHERE id = $1', [providerId])).rows[0].status).toBe('draft')
+})
+
+it("staff see a person's picture on the provider page and the user page, and delete it", async () => {
+  const pic = (await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('aa-owner', 'profile', 'users/aa/q.jpg', 1, 1) RETURNING id")).rows[0].id
+  const shown = (await get('providers', 'aa-rev', '', providerId).then((r) => r.json())).data
+  expect(shown.photos.map((p: { id: string }) => p.id)).toContain(pic)
+  expect((await (await get('users', 'aa-rev', '', 'aa-owner')).json()).data.photoId).toBe(pic)
+  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: pic })).status).toBe(204)
+  expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [pic])).rowCount).toBe(0)
+  expect((await (await get('users', 'aa-rev', '', 'aa-owner')).json()).data.photoId).toBeNull()
 })
 
 it('GET /me returns the staff user; unknown resources are 404', async () => {

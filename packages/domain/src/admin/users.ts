@@ -11,14 +11,15 @@ import { filterOf, like, notFound, ok, orderOf, pageOf, textOf } from './common'
 /** "First Last" for searching in SQL. */
 export const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
 
-export const toAdminUser = (r: typeof users.$inferSelect, pictureKey: string | null = null): AdminUser => ({
+export const toAdminUser = (r: typeof users.$inferSelect, picture: { id: string; key: string } | null = null): AdminUser => ({
   id: r.id,
   firstName: r.firstName,
   lastName: r.lastName,
   address: r.addressStreet
     ? { street: r.addressStreet, postcode: r.addressPostcode ?? '', city: r.addressCity ?? '', country: r.addressCountry ?? 'DE' }
     : null,
-  photoUrl: pictureKey ? photoUrl(pictureKey) : null,
+  photoUrl: picture ? photoUrl(picture.key) : null,
+  photoId: picture?.id ?? null,
   email: r.email,
   language: isLang(r.language) ? r.language : null,
   staffRole: r.staffRole === 'admin' || r.staffRole === 'reviewer' ? r.staffRole : null,
@@ -31,9 +32,9 @@ export const toAdminUser = (r: typeof users.$inferSelect, pictureKey: string | n
 /** The users with their pictures (the person's profile photo), one query for the page. */
 export async function withPictures(tx: Tx, rows: (typeof users.$inferSelect)[]): Promise<AdminUser[]> {
   const pics = rows.length
-    ? await tx.select({ ownerId: photos.ownerId, key: photos.key }).from(photos).where(and(eq(photos.kind, 'profile'), inArray(photos.ownerId, rows.map((r) => r.id))))
+    ? await tx.select({ ownerId: photos.ownerId, id: photos.id, key: photos.key }).from(photos).where(and(eq(photos.kind, 'profile'), inArray(photos.ownerId, rows.map((r) => r.id))))
     : []
-  return rows.map((r) => toAdminUser(r, pics.find((p) => p.ownerId === r.id)?.key ?? null))
+  return rows.map((r) => toAdminUser(r, pics.find((p) => p.ownerId === r.id) ?? null))
 }
 
 /** Search by email or name; filter `suspended: true` lists active suspensions only (a suspension ends by its date). */

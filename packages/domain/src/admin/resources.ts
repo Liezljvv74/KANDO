@@ -68,7 +68,8 @@ async function getProvider(tx: Tx, id: string) {
     ? await tx.select({ provider: providers, ownerEmail: users.email }).from(providers).innerJoin(users, eq(users.id, providers.ownerId)).where(eq(providers.id, id))
     : []
   if (!p) return notFound()
-  const pics = await tx.select().from(photos).where(eq(photos.providerId, id)).orderBy(asc(photos.sort), asc(photos.createdAt))
+  // the provider's own photos and the person's picture (it belongs to the person, not the profile)
+  const pics = await tx.select().from(photos).where(or(eq(photos.providerId, id), and(eq(photos.ownerId, p.provider.ownerId), eq(photos.kind, 'profile')))).orderBy(asc(photos.sort), asc(photos.createdAt))
   const { location, ...rest } = p.provider
   void location
   return ok({
