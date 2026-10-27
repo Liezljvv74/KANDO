@@ -1,9 +1,21 @@
 import * as auth from '@/api/auth'
 import * as client from '@/api/client'
+import * as profile from '@/api/my-profile'
+import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
 
 import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, updateName, verify } from './use-session'
 
 jest.mock('@/api/auth')
+jest.mock('@/api/my-profile', () => ({ photosApi: { add: jest.fn() } }))
+jest.mock('expo-secure-store', () => {
+  const store = new Map<string, string>()
+  return {
+    // Plain functions: beforeEach's resetAllMocks would wipe jest.fn implementations.
+    getItemAsync: async (k: string) => store.get(k) ?? null,
+    setItemAsync: async (k: string, v: string) => void store.set(k, v),
+    deleteItemAsync: async (k: string) => void store.delete(k),
+  }
+})
 jest.mock('@/i18n', () => ({ getLang: () => 'en', setLang: jest.fn() }))
 jest.mock('@/api/client', () => ({
   setOnUnauthorized: jest.fn(),
@@ -17,10 +29,16 @@ const unverified = { ...user, emailVerified: false }
 // Registered once at import, before beforeEach resets the mocks.
 const onUnauthorized = api.setOnUnauthorized.mock.calls[0][0]!
 
-beforeEach(() => {
+const photos = jest.mocked(profile.photosApi)
+const address = { street: 'Weg 1', postcode: '10115', city: 'Berlin', country: 'DE' }
+const pending = { firstName: 'Anna', lastName: 'Berg', offerServices: true, pictureUri: 'file:///p.jpg', address }
+
+beforeEach(async () => {
   resetSession()
   jest.resetAllMocks()
   api.updateMe.mockResolvedValue({})
+  photos.add.mockResolvedValue({} as never)
+  await clearPending()
 })
 
 test('loading -> signed in -> signed out', async () => {
@@ -116,4 +134,39 @@ test('switching the language also saves it for emails, but only while signed in'
   await signIn('a@b.de', 'secret123')
   chooseLanguage('en')
   expect(api.updateMe).toHaveBeenCalledWith({ language: 'en' })
+})
+
+test('verify finishes the sign-up: names and address, then the picture, then the record is cleared; returns the tick', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await expect(verify('a@b.de', '123456')).resolves.toBe(true)
+  expect(api.updateMe).toHaveBeenCalledWith({ firstName: 'Anna', lastName: 'Berg', language: 'en', address })
+  expect(photos.add).toHaveBeenCalledWith({ uri: 'file:///p.jpg', name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
+  expect(api.updateMe.mock.invocationCallOrder[0]).toBeLessThan(photos.add.mock.invocationCallOrder[0])
+  expect(await loadPending()).toBeNull()
+})
+
+test('a failed upload keeps the record; loadSession retries it once and clears it', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  photos.add.mockRejectedValueOnce(new client.ApiError(0, 'network'))
+  await verify('a@b.de', '123456')
+  expect(getSession().user).toEqual(user)
+  expect(await loadPending()).toEqual(pending)
+  a.session.mockResolvedValueOnce(user)
+  await loadSession()
+  await new Promise((r) => setTimeout(r, 0))
+  expect(api.updateMe).toHaveBeenCalledTimes(2)
+  expect(photos.add).toHaveBeenCalledTimes(2)
+  expect(await loadPending()).toBeNull()
+})
+
+test('loadSession without a record or while signed out does not finish a sign-up', async () => {
+  a.session.mockResolvedValueOnce(user)
+  await loadSession()
+  await savePending(pending)
+  a.session.mockResolvedValueOnce(null)
+  await loadSession()
+  await new Promise((r) => setTimeout(r, 0))
+  expect(api.updateMe).not.toHaveBeenCalled()
 })

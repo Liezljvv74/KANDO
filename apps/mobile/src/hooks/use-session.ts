@@ -2,7 +2,9 @@ import { useEffect, useSyncExternalStore } from 'react'
 
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
+import { photosApi } from '@/api/my-profile'
 import { getLang, setLang, type Lang } from '@/i18n'
+import { clearPending, loadPending } from '@/lib/pending-signup'
 
 type User = auth.SessionUser
 type State = { user: User | null; loading: boolean; offline: boolean }
@@ -24,7 +26,9 @@ export async function loadSession() {
   started = true
   set({ user: null, loading: true, offline: false })
   try {
-    signedIn(await auth.session())
+    const user = await auth.session()
+    signedIn(user)
+    if (user?.emailVerified) completeSignup().catch(() => {}) // a sign-up the last launch could not finish
   } catch (e) {
     set({ user: null, loading: false, offline: e instanceof ApiError && e.status === 0 })
   }
@@ -55,11 +59,27 @@ export async function signUp(name: string, email: string, password: string) {
   await auth.sendVerificationCode(email)
 }
 
-/** A correct code signs in; the account name and app language go to the app's own record (public name, email language). */
+/** Saves what the sign-up form collected: names and address, then the picture. A failed step keeps the record; loadSession retries it. */
+export async function completeSignup() {
+  const p = await loadPending()
+  if (!p) return
+  try {
+    await updateMe({ firstName: p.firstName, lastName: p.lastName, language: getLang(), ...(p.address && { address: p.address }) })
+    if (p.pictureUri) await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
+    await clearPending()
+  } catch {
+    // Kept for the next launch.
+  }
+}
+
+/** A correct code signs in and finishes the sign-up; true when the person ticked "offer services" (the screen then opens the provider page). */
 export async function verify(email: string, code: string) {
   const user = await auth.verifyEmail(email, code)
+  const pending = await loadPending()
   signedIn(user)
-  updateMe({ name: user.name, language: getLang() }).catch(() => {})
+  if (pending) await completeSignup()
+  else updateMe({ name: user.name, language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
+  return !!pending?.offerServices
 }
 
 export async function signOut() {
