@@ -31,7 +31,7 @@ Stage 1 is built (database with row-level security, login, the app API, photo an
 - **Suspensions end by their date.** Staff choose the end date; the provider gets an email when it starts and again when the profile is published again. A daily check at 06:00 UTC ends suspensions whose date has passed.
 - The public name is now first name plus the first letter of the surname (or the business name); it follows a rename.
 
-All automated tests pass (254 web, 107 app, 21 in the shared packages, 382 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. The whole-branch review is done and its fixes are in; a scoped re-review follows.
+All automated tests pass (257 web, 108 app, 23 in the shared packages, 388 in total); typecheck, lint and the Android bundle build are clean. Report: `Reports/Registration-Setup-Test-Report.xlsx`. Deployment steps: `docs/deployment.md`. The whole-branch review is done and both fix waves are in; a scoped re-review follows.
 
 The back office is in German and English: the language comes from the `admin-lang` cookie, else the browser language, and a button in the header switches it.
 
