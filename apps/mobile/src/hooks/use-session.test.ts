@@ -1,11 +1,13 @@
 import * as auth from '@/api/auth'
 import * as client from '@/api/client'
 import * as profile from '@/api/my-profile'
+import { loadMe } from '@/hooks/use-me'
 import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
 
-import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, updateName, verify } from './use-session'
+import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, verify } from './use-session'
 
 jest.mock('@/api/auth')
+jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn() }))
 let mockFileExists = true
 jest.mock('expo-file-system', () => ({ File: class { get exists() { return mockFileExists } } }))
 jest.mock('@/api/my-profile', () => ({ photosApi: { add: jest.fn() } }))
@@ -39,6 +41,7 @@ beforeEach(async () => {
   resetSession()
   jest.resetAllMocks()
   api.updateMe.mockResolvedValue({})
+  jest.mocked(loadMe).mockResolvedValue({} as never)
   photos.add.mockResolvedValue({} as never)
   await clearPending()
   mockFileExists = true
@@ -84,7 +87,7 @@ test('sign-up creates the account and sends the code; the right code signs in an
   await verify('a@b.de', '123456')
   expect(a.verifyEmail).toHaveBeenCalledWith('a@b.de', '123456')
   expect(getSession().user).toMatchObject({ name: 'Anna' })
-  expect(api.updateMe).toHaveBeenCalledWith({ name: 'Anna', language: 'en' })
+  expect(api.updateMe).toHaveBeenCalledWith({ language: 'en' }) // the auth name is never split into first and last
 })
 
 test('a wrong code throws and keeps signed out', async () => {
@@ -116,18 +119,6 @@ test('onUnauthorized from the API client signs the user out', async () => {
   await signIn('a@b.de', 'secret123')
   onUnauthorized()
   expect(getSession()).toEqual({ user: null, loading: false, offline: false })
-})
-
-test('updateName saves the account name in both places and updates the session user; a failure keeps the old one', async () => {
-  a.signIn.mockResolvedValueOnce(user)
-  await signIn('a@b.de', 'secret123')
-  await updateName('Anna Berg')
-  expect(api.updateMe).toHaveBeenCalledWith({ name: 'Anna Berg' })
-  expect(a.updateUserName).toHaveBeenCalledWith('Anna Berg')
-  expect(getSession().user).toEqual({ ...user, name: 'Anna Berg' })
-  api.updateMe.mockRejectedValueOnce(new client.ApiError(400, 'Invalid input', undefined, ['name']))
-  await expect(updateName('')).rejects.toMatchObject({ status: 400 })
-  expect(getSession().user?.name).toBe('Anna Berg')
 })
 
 test('switching the language also saves it for emails, but only while signed in', async () => {
@@ -222,4 +213,16 @@ test('sign-up keeps the record for the code step; a failed sign-up leaves none',
   a.signUp.mockRejectedValueOnce(new client.ApiError(422, 'USER_ALREADY_EXISTS'))
   await expect(signUp('Anna Berg', 'a@b.de', 'secret123', pending)).rejects.toBeDefined()
   expect(await loadPending()).toBeNull()
+})
+
+test('finishing a sign-up reloads /me so the home nudge sees the new picture; nothing to finish, nothing to reload', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(loadMe).toHaveBeenCalledTimes(1)
+  expect(photos.add.mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadMe).mock.invocationCallOrder[0])
+  jest.mocked(loadMe).mockClear()
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(loadMe).not.toHaveBeenCalled()
 })

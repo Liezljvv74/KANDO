@@ -13,6 +13,7 @@ import { useCategories } from '@/hooks/use-categories'
 import { loadMe } from '@/hooks/use-me'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
+import { pictureNudgeKey } from '@/lib/picture-nudge'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 
 /** [title, text] per card. */
@@ -28,20 +29,23 @@ const SAFETY: [Key, Key][] = [
   ['home.safetyEu', 'home.safetyEuText'],
 ]
 const STEPS = [1, 2, 3] as const
-const NUDGE_KEY = 'skilled.pictureNudgeDismissed'
 
 /** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
 function PictureNudge() {
   const [show, setShow] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  const [key, setKey] = useState('')
   useEffect(() => {
-    Promise.all([loadMe(), SecureStore.getItemAsync(NUDGE_KEY)])
-      .then(([me, dismissed]) => setShow(!me.photoUrl && !dismissed))
+    loadMe()
+      .then(async (me) => {
+        setKey(pictureNudgeKey(me.id))
+        setShow(!me.photoUrl && !(await SecureStore.getItemAsync(pictureNudgeKey(me.id))))
+      })
       .catch(() => {})
   }, [])
   const dismiss = () => {
     setShow(false)
-    SecureStore.setItemAsync(NUDGE_KEY, '1').catch(() => {})
+    SecureStore.setItemAsync(key, '1').catch(() => {})
   }
   const add = useCallback(async (source: 'camera' | 'library') => {
     setProblem(null)

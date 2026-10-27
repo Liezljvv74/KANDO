@@ -5,7 +5,7 @@ import { File } from 'expo-file-system'
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
-import { clearMe } from '@/hooks/use-me'
+import { clearMe, loadMe } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
 import { clearPending, loadPending, savePending, type PendingSignup } from '@/lib/pending-signup'
 
@@ -82,6 +82,11 @@ async function pendingFor(user: User) {
 export async function completeSignup(user: User) {
   const p = await pendingFor(user)
   if (!p) return
+  await finish(p)
+  await loadMe().catch(() => {}) // the home picture nudge must not show for a picture just saved
+}
+
+async function finish(p: PendingSignup) {
   try {
     if (p.firstName && p.lastName) {
       await updateMe({ firstName: p.firstName, lastName: p.lastName, language: getLang(), ...(p.address && { address: p.address }) })
@@ -104,7 +109,7 @@ export async function verify(email: string, code: string) {
   const pending = await pendingFor(user)
   signedIn(user)
   if (pending) await completeSignup(user)
-  else updateMe({ name: user.name, language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
+  else updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
   return !!pending?.offerServices
 }
 
@@ -112,17 +117,6 @@ export async function signOut() {
   clearMe()
   set({ user: null, loading: false, offline: false })
   await auth.signOut()
-}
-
-/** Saves the account name; the session user follows. Errors (e.g. 400 'Invalid input' naming the field) are thrown to the form. */
-export async function updateName(name: string) {
-  await updateMe({ name })
-  try {
-    await auth.updateUserName(name)
-  } catch {
-    // The auth account's copy is what the next app start shows; a failure only shows the old name there until the next save.
-  }
-  if (state.user) set({ ...state, user: { ...state.user, name } })
 }
 
 /** Switches the app language; signed in, the account follows so emails come in the same language. */
@@ -150,5 +144,5 @@ export function useSession() {
   useEffect(() => {
     if (!started) loadSession()
   }, [])
-  return { ...s, signIn, signUp, verify, signOut, updateName, retry: loadSession }
+  return { ...s, signIn, signUp, verify, signOut, retry: loadSession }
 }
