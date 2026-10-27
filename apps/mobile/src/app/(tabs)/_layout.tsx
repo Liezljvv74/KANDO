@@ -4,6 +4,7 @@ import { AppState } from 'react-native'
 
 import { loadMe, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
+import { showProfileTab } from '@/lib/profile-tab'
 
 export default function TabsLayout() {
   useLang()
@@ -19,7 +20,7 @@ export default function TabsLayout() {
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#0E8A6B', tabBarInactiveTintColor: '#5C7A72' }}>
       <Tabs.Screen name="index" options={{ title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ title: t('tab.search') }} />
-      <Tabs.Screen name="my-profile" options={{ title: t('tab.myProfile') }} />
+      <Tabs.Screen name="my-profile" options={{ title: t('tab.myProfile'), href: showProfileTab(me) ? undefined : null }} />
       <Tabs.Screen name="account" options={{ title: t('tab.account'), tabBarBadge: unseen ? '' : undefined }} />
     </Tabs>
   )
