@@ -1,5 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { categories, providerReferences, providers, services, type Tx } from '@kando/db'
+import { categories, categoryTexts, providerReferences, providers, services, users, type Tx } from '@kando/db'
+import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
@@ -35,6 +36,13 @@ async function assertCategory(tx: Tx, id: string) {
   if (!ok) fail(400, { error: 'Unknown category' })
 }
 
+/** The category's name in the user's language (default language when missing): the title of a service saved without one. */
+async function categoryTitle(tx: Tx, userId: string, categoryId: string): Promise<string> {
+  const lang = (await tx.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l ?? DEFAULT_LANG
+  const names = await tx.select({ lang: categoryTexts.lang, name: categoryTexts.name }).from(categoryTexts).where(eq(categoryTexts.categoryId, categoryId))
+  return (names.find((n) => n.lang === lang) ?? names.find((n) => n.lang === DEFAULT_LANG))?.name ?? ''
+}
+
 /** The caller's services, newest first, each with whether it shows in search and which documents it waits for. */
 export async function listServices(tx: Tx, userId: string): Promise<OwnService[]> {
   const profile = await ownProvider(tx, userId)
@@ -62,7 +70,7 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
     .values({
       providerId: profile.id, // always the caller's own profile, never from the body
       categoryId: input.categoryId,
-      title: input.title ?? '', // a service may exist with a category alone until Publish
+      title: input.title?.trim() || (await categoryTitle(tx, userId, input.categoryId)), // a category alone is enough until Publish
       description: input.description?.trim() || null,
       priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
@@ -95,7 +103,7 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
     .update(services)
     .set({
       ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
-      ...(patch.title !== undefined && { title: patch.title }),
+      ...(patch.title !== undefined && { title: patch.title.trim() || (await categoryTitle(tx, userId, patch.categoryId ?? existing.categoryId)) }),
       ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
       ...(patch.currency !== undefined && { currency: patch.currency }),
       priceType,

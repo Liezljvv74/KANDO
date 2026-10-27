@@ -1,5 +1,5 @@
 import { parseBody, ProfileInputSchema } from '@kando/contract'
-import { getMyProfile, upsertMyProfile } from '@kando/domain'
+import { ensureDraft, getMyProfile, upsertMyProfile } from '@kando/domain'
 import { appRequest } from '../../../../lib/app-request'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) =>
@@ -11,3 +11,5 @@ export const PUT = appRequest({ auth: 'required', maxBodyBytes: 16_384 }, async 
   const { profile, created } = await upsertMyProfile(tx, user!.id, input)
   return Response.json(profile, { status: created ? 201 : 200 })
 })
+
+export const POST = appRequest({ auth: 'required' }, async ({ tx, user }) => Response.json(await ensureDraft(tx, user!.id)))

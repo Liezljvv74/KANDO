@@ -1,14 +1,20 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
-import { updateMe } from '@kando/domain'
+import { setStorageForTests, updateMe } from '@kando/domain'
 import { MeSchema, type MePatch, MyProfileSchema } from '@kando/contract'
-import { call, cleanupUsers, EMAIL, profile } from './helpers'
+import { call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
-const { GET, PUT } = await import('../app/app-api/v1/provider-profile/route')
+const { GET, PUT, POST } = await import('../app/app-api/v1/provider-profile/route')
+const publishRoute = await import('../app/app-api/v1/provider-profile/publish/route')
+const servicesRoute = await import('../app/app-api/v1/services/route')
+const serviceRoute = await import('../app/app-api/v1/services/[id]/route')
+const searchRoute = await import('../app/app-api/v1/providers/route')
+const sitemap = await import('../app/(site)/providers-sitemap.xml/route')
 const me = await import('../app/app-api/v1/me/route')
 
 beforeAll(async () => {
+  setStorageForTests(memoryStorage())
   await pool.query(
     `INSERT INTO postcodes (country, code, place, state, location) VALUES
      ('DE', '10115', 'Berlin', 'Berlin', ST_SetSRID(ST_MakePoint(13.3, 52.5), 4326)) ON CONFLICT DO NOTHING`,
@@ -28,7 +34,7 @@ it('PUT creates (201) and a later PUT edits (200); responses fit the contract', 
   const created = await call(PUT, 'pp2', 'PUT', profile)
   expect(created.status).toBe(201)
   const body = MyProfileSchema.parse(await created.json())
-  expect(body).toMatchObject({ status: 'draft', publicName: 'Anna-Lena H.', suspendedUntil: null, missing: [] })
+  expect(body).toMatchObject({ status: 'draft', publicName: 'Anna-Lena H.', suspendedUntil: null })
   const edited = await call(PUT, 'pp2', 'PUT', { bio: 'Hallo', skills: ['Kochen'] })
   expect(edited.status).toBe(200)
   expect(MyProfileSchema.parse(await edited.json())).toMatchObject({ id: body.id, bio: 'Hallo', skills: ['Kochen'] })
@@ -44,14 +50,9 @@ it('an unknown postcode is 400 and changes nothing', async () => {
   expect(MyProfileSchema.parse(await (await call(GET, 'pp2')).json()).basePostcode).toBe('10115')
 })
 
-it('first save needs providerType; a business needs a business name', async () => {
-  let res = await call(PUT, 'pp3', 'PUT', { bio: 'x' })
-  expect(res.status).toBe(400)
-  expect(await res.json()).toEqual({ error: 'Invalid fields', fields: ['providerType'] })
-  res = await call(PUT, 'pp3', 'PUT', { providerType: 'business' })
-  expect(res.status).toBe(400)
-  expect(await res.json()).toEqual({ error: 'Invalid fields', fields: ['businessName'] })
-  expect((await call(PUT, 'pp3', 'PUT', { providerType: 'business', businessName: 'Nord GmbH' })).status).toBe(201)
+it('a partial first save never fails on business rules', async () => {
+  expect((await call(PUT, 'pp3', 'PUT', { bio: 'x' })).status).toBe(201)
+  expect((await call(PUT, 'pp3', 'PUT', { providerType: 'business' })).status).toBe(200)
 })
 
 it('status, slug and suspended in the body are ignored', async () => {
@@ -117,4 +118,80 @@ it('PATCH /me stores names and a private address (country stored as sent); GET /
   expect(MeSchema.parse(await cleared.json()).address).toBeNull()
   const row = (await pool.query("SELECT address_street, address_postcode, address_city, address_country FROM users WHERE id = 'pp-addr'")).rows[0]
   expect(row).toEqual({ address_street: null, address_postcode: null, address_city: null, address_country: null })
+})
+
+const missingOf = async (res: Response) => MyProfileSchema.parse(await res.json()).missing
+const ALL = ['photo', 'service', 'providerType', 'skills', 'experience', 'postcode', 'radius']
+
+it('POST creates a draft with the postcode prefilled; again returns the same id; GET /me is fine', async () => {
+  await call(me.GET, 'dr1')
+  await pool.query("UPDATE users SET address_postcode = '10115', address_street = 's', address_city = 'c' WHERE id = 'dr1'")
+  const a = await call(POST, 'dr1', 'POST')
+  expect(a.status).toBe(200)
+  const draft = MyProfileSchema.parse(await a.json())
+  expect(draft).toMatchObject({ status: 'draft', providerType: null, basePostcode: '10115', serviceRadiusKm: 25 })
+  expect(draft.missing).toEqual(['photo', 'service', 'providerType', 'skills', 'experience'])
+  expect(MyProfileSchema.parse(await (await call(POST, 'dr1', 'POST')).json()).id).toBe(draft.id)
+  const m = await (await call(me.GET, 'dr1')).json()
+  expect(m.isProvider).toBe(true)
+})
+
+it('missing: the empty draft lists the person-independent items, business adds two, saves shrink it, PUT carries it', async () => {
+  await call(me.GET, 'dr2')
+  const empty = await missingOf(await call(POST, 'dr2', 'POST'))
+  expect(empty).toEqual(['photo', 'service', 'providerType', 'skills', 'experience', 'postcode'])
+  const biz = await missingOf(await call(PUT, 'dr2', 'PUT', { providerType: 'business' }))
+  expect(biz).toEqual(['photo', 'service', 'businessName', 'impressum', 'skills', 'experience', 'postcode'])
+  const next = await missingOf(await call(PUT, 'dr2', 'PUT', { businessName: 'Nord', basePostcode: '10115', skills: ['a'] }))
+  expect(next).toEqual(['photo', 'service', 'impressum', 'experience'])
+  expect(ALL).toContain('radius')
+})
+
+it('publish of an incomplete draft is 409 with the list; complete publishes with public name Lena F.', async () => {
+  const { categoryId } = await seedBase()
+  await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenarbeit'), ($1, 'en', 'Gardening') ON CONFLICT DO NOTHING", [categoryId])
+  await call(me.GET, 'dr3')
+  await pool.query("UPDATE users SET first_name = 'Lena', last_name = 'Fischer' WHERE id = 'dr3'")
+  await call(POST, 'dr3', 'POST')
+  const refused = await call(publishRoute.POST, 'dr3', 'POST')
+  expect(refused.status).toBe(409)
+  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['photo', 'service', 'providerType', 'skills', 'experience', 'postcode'] })
+
+  // a service with a category alone: title = category name in the user's language, no price type, not offerable
+  const created = await call(servicesRoute.POST, 'dr3', 'POST', { categoryId, currency: 'EUR' })
+  expect(created.status).toBe(201)
+  expect(await created.json()).toMatchObject({ title: 'Gartenarbeit', priceType: null, price: null })
+  const sid = (await pool.query("SELECT id FROM services WHERE provider_id = (SELECT id FROM providers WHERE owner_id = 'dr3')")).rows[0].id
+  expect((await pool.query("SELECT count(*)::int AS n FROM offerable_service_ids((SELECT id FROM providers WHERE owner_id = 'dr3'))")).rows[0].n).toBe(0)
+  expect(await missingOf(await call(PUT, 'dr3', 'PUT', {}))).toContain('service')
+  await pool.query("UPDATE users SET language = 'en' WHERE id = 'dr3'")
+  const en = await call(servicesRoute.POST, 'dr3', 'POST', { categoryId, title: '  ', currency: 'EUR' })
+  expect((await en.json()).title).toBe('Gardening')
+  const blank = await call(serviceRoute.PATCH, 'dr3', 'PATCH', { title: '' }, { id: sid })
+  expect((await blank.json()).title).toBe('Gardening')
+  await call(serviceRoute.PATCH, 'dr3', 'PATCH', { priceType: 'on-request', currency: 'EUR' }, { id: sid })
+  expect(await missingOf(await call(PUT, 'dr3', 'PUT', {}))).not.toContain('service')
+
+  await givePhoto('dr3')
+  await call(PUT, 'dr3', 'PUT', { providerType: 'individual', skills: ['a'], experience: '5 Jahre', basePostcode: '10115' })
+  const ok = await call(publishRoute.POST, 'dr3', 'POST')
+  expect(ok.status).toBe(200)
+  expect(MyProfileSchema.parse(await ok.json())).toMatchObject({ status: 'published', publicName: 'Lena F.', missing: [] })
+})
+
+it('a draft with every nullable field null is invisible in search and the sitemap', async () => {
+  await call(me.GET, 'dr4')
+  const id = MyProfileSchema.parse(await (await call(POST, 'dr4', 'POST')).json()).id
+  const res = await searchRoute.GET(new Request('http://localhost/app-api/v1/providers?postcode=10115'), { params: Promise.resolve({}) })
+  expect(res.status).toBe(200)
+  expect(JSON.stringify(await res.json())).not.toContain(id)
+  expect(await (await sitemap.GET()).text()).not.toContain(id)
+  expect((await pool.query('SELECT 1 FROM providers WHERE id = $1 AND status = $2 AND slug IS NULL', [id, 'draft'])).rows).toHaveLength(1)
+})
+
+it('a draft created during a suspension cannot be published', async () => {
+  await call(POST, 'dr5', 'POST')
+  await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'dr5'")
+  const res = await call(publishRoute.POST, 'dr5', 'POST')
+  expect(res.status).toBe(409)
 })

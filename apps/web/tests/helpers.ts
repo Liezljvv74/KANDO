@@ -54,6 +54,8 @@ export async function cleanupUsers(): Promise<void> {
 }
 
 export const profile = {
+  skills: ['Gartenarbeit'],
+  experience: '5 Jahre',
   providerType: 'individual',
   basePostcode: '10115',
   serviceRadiusKm: 25,

@@ -94,3 +94,12 @@ it('references are capped at 2 (409), can be patched and deleted', async () => {
   expect((await call(reference.DELETE, 'sr1', 'DELETE', undefined, { id: a.id })).status).toBe(204)
   expect((await call(references.POST, 'sr1', 'POST', ref)).status).toBe(201)
 })
+
+it('a service with a category alone is saved, not offerable, and a patch accepts the partial shape', async () => {
+  const res = await call(services.POST, 'sr1', 'POST', { categoryId, currency: 'EUR' })
+  expect(res.status).toBe(201)
+  const s = OwnServiceSchema.parse(await res.json())
+  expect(s).toMatchObject({ priceType: null, price: null })
+  const patched = await call(service.PATCH, 'sr1', 'PATCH', { description: 'x', currency: 'EUR' }, { id: s.id })
+  expect(OwnServiceSchema.parse(await patched.json())).toMatchObject({ priceType: null, description: 'x' })
+})
