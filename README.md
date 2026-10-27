@@ -87,16 +87,41 @@ Nothing has been checked on a phone or in a real browser yet; every "Not yet don
 
 ### Retiring the old Payload stack
 
-KANDO contains no Payload code. What remains is the old repository and its running parts, and the owner decides when:
+KANDO contains no Payload code. What remains is the old repository and its running parts. The owner chose to go ahead (28 October); steps 2 to 4 are done or half done, see "Cutover progress" below.
 
 1. Finish the tests above and fix what they find.
-2. Production holds only test data, so no data is moved. Confirm that once.
-3. Create the production Neon branch `kando-main`, run `neon deploy` and `pnpm db:migrate` on it, import the postcodes, seed the categories (steps in `docs/deployment.md`).
-4. Production settings in Vercel for `kando-web` (today Production also uses `kando-dev`): production database, storage buckets and keys, `RESEND_API_KEY` with a verified sending domain, `OPENROUTER_API_KEY`, `CRON_SECRET` (done), Neon Auth with custom email sending and the production domain as trusted, and the "Require email verification" setting. Vercel Pro before launch.
-5. Write the legal pages in the back office (Impressum, Datenschutz, AGB, Ranking); replace the placeholder graphics.
-6. Move the domain skillweb.space from the old Vercel project to `kando-web`; build the app for the stores with `EXPO_PUBLIC_API_URL` set to that domain (same package `space.skillweb.app`).
+2. Production holds only test data, so no data is moved. **Confirmed by the owner.**
+3. Production Neon branch `kando-main`. **Done** (see below).
+4. Production settings in Vercel for `kando-web`. **Partly done** (see below).
+5. Write the legal pages in the back office (Impressum, Datenschutz, AGB, Ranking); replace the placeholder graphics. **Not started: needs the owner's input.**
+6. Host the new site on skillweb.space (there is no new domain): move it from the old Vercel project `skillweb` to `kando-web`; build the app for the stores with `EXPO_PUBLIC_API_URL=https://skillweb.space` (same package `space.skillweb.app`). **Not done.**
 7. In the old repository: close the open pull requests (#15 translate button, whose work is already here, and #16 design), archive it on GitHub, and copy its git-ignored `Marketing/` folder somewhere safe first. Delete the old Vercel project and, after a waiting period, the old Neon branches `main` and `dev`.
 8. Then remove the "Payload" wording from this README and from `docs/deployment.md`.
+
+### Cutover progress (28 October 2026)
+
+**Done**
+
+- Neon branch `kando-main` (endpoint `ep-empty-sound-b948a10w`) was created as a copy of `kando-dev` (schema-only copies are not available on this project). All test data was then removed from it: every user, login account and session, all providers, services, photos, references, documents and notifications, and the login signing key. It holds the 14 categories, the 10,815 postcodes, Germany and the euro, and migrations 0000 to 0008 are applied (`pnpm db:migrate` ran clean, row-level security applied).
+- Neon Auth on `kando-main` has its own address; `https://skillweb.space` and `https://kando-web.vercel.app` are trusted there. The storage buckets `media` and `documents` exist on it.
+- Vercel `kando-web`, **Production** now uses `kando-main`: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH=kando-main`, `NEON_AUTH_BASE_URL`, a new `NEON_AUTH_COOKIE_SECRET`, and `NEXT_PUBLIC_SERVER_URL=https://skillweb.space`. **Preview** still uses `kando-dev`. `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `TRANSLATE_MODEL` and `CRON_SECRET` were already set for both. (The old project's key values are hidden by Vercel and cannot be read back, so nothing was copied from it; the keys in `kando-web` were already in place.)
+
+**Not done yet**
+
+- **Production has not been redeployed**, so the live site still runs on the old values. Redeploy `kando-web` in Vercel (Deployments, the latest one, Redeploy), then open https://kando-web.vercel.app and check it works against the empty `kando-main`.
+- **The first staff account on production.** Sign up on the live site with your own email, confirm the code, then run the one SQL statement in `docs/deployment.md` against `kando-main` (the connection string is in Vercel under `DATABASE_URL_UNPOOLED`; the Neon console SQL editor works too).
+- **Storage keys:** Production still uses the project's default storage key, the same one `kando-dev` uses. A separate key for production was not created (the tool was blocked from creating one). Recommended before launch: create one in the Neon console for `kando-main` (read and write storage) and replace `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for Production only.
+- **Move skillweb.space** to `kando-web` (Vercel: remove the domain from project `skillweb`, add it to `kando-web`). Do this only after the redeploy above checks out; the old site goes offline at that moment. The old branches stay untouched as a fallback.
+- Resend: confirm the sending domain used by the old project is verified for the address KANDO sends from, and send a test email from production.
+- Neon Auth for production: custom email sending (shared sending is for development only) and the "Require email verification" setting, as in `docs/deployment.md`.
+- Vercel Pro before launch.
+
+**To decide, to continue tomorrow**
+
+1. **Impressum and Datenschutz content:** I need the legal details (company or person name, address, contact, VAT number if any, who is responsible for content); I will not make them up. AGB and Ranking text: write them yourself or have a lawyer do it; I can prepare drafts to review.
+2. **Graphics:** app icon, splash screen, home page pictures: supply the files, or tell me the style and I prepare options.
+3. When to move the domain (after a successful production test), and how long to keep the old `main` and `dev` branches before deleting them.
+4. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
 
 ### Next features
 
