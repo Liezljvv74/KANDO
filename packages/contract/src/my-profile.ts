@@ -66,7 +66,7 @@ const serviceFields = {
   description: text(2000).nullish(),
   priceType: PriceTypeSchema.optional(),
   price: AmountSchema.nullish(),
-  currency: CurrencySchema,
+  currency: CurrencySchema.optional(), // the server fills it (EUR) when the app sends a category alone
 }
 
 /** A service may be saved with a category alone; once a price type is set, everything but "on request" needs a price. */

@@ -52,13 +52,16 @@ export async function listServices(tx: Tx, userId: string): Promise<OwnService[]
     .from(services)
     .where(eq(services.providerId, profile.id))
     .orderBy(desc(services.createdAt), desc(services.id))
-  const live = profile.status === 'published' && (!profile.suspendedUntil || profile.suspendedUntil <= new Date())
   const out: OwnService[] = []
-  for (const { s } of rows) {
-    const waitingFor = await missingRequirements(tx, profile.id, s.id)
-    out.push({ ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false })
-  }
+  for (const { s } of rows) out.push(await withState(tx, profile, s))
   return out
+}
+
+/** One service with whether it shows in search and which documents it waits for: the same answer from list, add and update. */
+async function withState(tx: Tx, profile: NonNullable<Awaited<ReturnType<typeof ownProvider>>>, s: ServiceRow): Promise<OwnService> {
+  const live = profile.status === 'published' && (!profile.suspendedUntil || profile.suspendedUntil <= new Date())
+  const waitingFor = await missingRequirements(tx, profile.id, s.id)
+  return { ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false }
 }
 
 export async function addService(tx: Tx, userId: string, input: ServiceInput): Promise<OwnService> {
@@ -74,10 +77,10 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
       description: input.description?.trim() || null,
       priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
-      currency: input.currency,
+      currency: input.currency ?? 'EUR', // ponytail: EUR only in v1; derive from the provider's country when a second currency exists
     })
     .returning()
-  return toService(row!)
+  return withState(tx, profile, row!)
 }
 
 const ownServiceRow = async (tx: Tx, userId: string, id: string) =>
@@ -95,6 +98,7 @@ const ownServiceRow = async (tx: Tx, userId: string, id: string) =>
 export async function updateService(tx: Tx, userId: string, id: string, patch: ServicePatch): Promise<OwnService | null> {
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return null
+  const profile = (await ownProvider(tx, userId))!
   const priceType = patch.priceType ?? (existing.priceType as ServicePatch['priceType'] | null)
   // the type and the price save one field at a time: keep a sent price whatever the type is (completeness decides later)
   const price = priceType === 'on-request' ? null : patch.price !== undefined ? patch.price : existing.price === null ? null : Number(existing.price)
@@ -111,7 +115,7 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
     })
     .where(eq(services.id, id))
     .returning()
-  return toService(row!)
+  return withState(tx, profile, row!)
 }
 
 export async function deleteService(tx: Tx, userId: string, id: string): Promise<boolean> {

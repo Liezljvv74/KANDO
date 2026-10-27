@@ -131,3 +131,26 @@ it('a fixed service without a price is not offerable, with a price it is; on-req
   expect((await pool.query('SELECT price FROM services WHERE id = $1', [s.id])).rows[0].price).toBeNull()
   expect(await offerable('sr2')).toBe(1)
 })
+
+it('the app sends a category alone, then one field per save: currency defaults to EUR, title to the category name', async () => {
+  await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenpflege'), ($1, 'en', 'Gardening')", [categoryId])
+  const res = await call(services.POST, 'sr1', 'POST', { categoryId })
+  expect(res.status).toBe(201)
+  const created = OwnServiceSchema.parse(await res.json())
+  expect(created).toMatchObject({ currency: 'EUR', priceType: null, price: null })
+  expect(['Gartenpflege', 'Gardening']).toContain(created.title)
+  const type = await call(service.PATCH, 'sr1', 'PATCH', { priceType: 'fixed' }, { id: created.id })
+  expect(type.status).toBe(200)
+  const price = await call(service.PATCH, 'sr1', 'PATCH', { price: 50 }, { id: created.id })
+  expect(price.status).toBe(200)
+  expect(OwnServiceSchema.parse(await price.json())).toMatchObject({ priceType: 'fixed', price: 50, currency: 'EUR' })
+})
+
+it('add and update answer with waitingFor and visibleInSearch, like the list', async () => {
+  const add = OwnServiceSchema.parse(await (await call(services.POST, 'sr2', 'POST', { categoryId: docCategoryId })).json())
+  expect(add.waitingFor).toEqual(['police-certificate'])
+  const patched = OwnServiceSchema.parse(
+    await (await call(service.PATCH, 'sr2', 'PATCH', { title: 'Neu' }, { id: add.id })).json(),
+  )
+  expect(patched).toMatchObject({ title: 'Neu', waitingFor: ['police-certificate'], visibleInSearch: false })
+})

@@ -67,3 +67,9 @@ test('sharing is allowed only while no service waits for a document', () => {
   expect(canShare([w([]), w()])).toBe(true)
   expect(canShare([])).toBe(true)
 })
+
+test('saving a waiting service keeps Share hidden: the server answer carries waitingFor', () => {
+  const list = [{ id: 'a', waitingFor: ['police-certificate'] }, { id: 'b', waitingFor: [] }] as OwnService[]
+  const saved = { id: 'a', title: 'Neu', waitingFor: ['police-certificate'], visibleInSearch: false } as OwnService
+  expect(canShare(list.map((s) => (s.id === saved.id ? saved : s)))).toBe(false)
+})
