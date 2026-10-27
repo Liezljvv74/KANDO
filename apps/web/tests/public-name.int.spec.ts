@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MyProfileSchema } from '@kando/contract'
 import { publicNameFor, slugify } from '@kando/domain'
-import { call, givePhoto, cleanupUsers, seedBase } from './helpers'
+import { call, givePhoto, cleanupUsers, EMAIL, profile, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -50,4 +50,27 @@ it('public name and slug are unique and stable', async () => {
   expect(MyProfileSchema.parse(await renamed.json()).publicName).toBe('Tischlerei Nord GmbH')
   expect((await call(publish.POST, 'pn1', 'POST')).status).toBe(200) // republish
   expect(await slugOf('pn1')).toBe('tischlerei-nord')
+})
+
+it('an individual without an account name gets a slug from the display name, never "profile"', async () => {
+  await call(profileRoute.GET, 'pn3')
+  await pool.query("UPDATE users SET name = '' WHERE id = 'pn3'")
+  expect((await call(profileRoute.PUT, 'pn3', 'PUT', profile)).status).toBe(201)
+  await givePhoto('pn3')
+  await call(services.POST, 'pn3', 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
+  expect((await call(publish.POST, 'pn3', 'POST')).status).toBe(200)
+  expect(await slugOf('pn3')).toBe('babysitting-am-abend')
+})
+
+it('first contact copies the account name from the session; a later contact does not overwrite it', async () => {
+  const as = (name: string) =>
+    new Request('http://localhost/app-api/v1/x', {
+      method: 'PUT',
+      headers: { cookie: `uid=pn4:${EMAIL('pn4')}; name=${encodeURIComponent(name)}`, 'content-type': 'application/json' },
+      body: JSON.stringify(profile),
+    })
+  const created = await profileRoute.PUT(as('Anna Schmidt'), { params: Promise.resolve({}) })
+  expect(MyProfileSchema.parse(await created.json()).publicName).toBe('Anna S.')
+  await profileRoute.PUT(as('Someone Else'), { params: Promise.resolve({}) })
+  expect((await pool.query("SELECT name FROM users WHERE id = 'pn4'")).rows[0].name).toBe('Anna Schmidt')
 })

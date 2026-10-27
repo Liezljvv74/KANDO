@@ -137,7 +137,7 @@ export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
   if (missing.length) fail(409, { error: 'Profile incomplete', missing })
   await syncIdentity(tx, userId, row)
   const fresh = (await ownProvider(tx, userId))!
-  const slugBase = slugify(fresh.publicName ?? fresh.displayName)
+  const slugBase = slugify(fresh.publicName || fresh.displayName) // '' (no account name) falls back too
   const ok = (await tx.execute<{ ok: boolean }>(sql`SELECT set_provider_published(true, ${slugBase}) AS ok`)).rows[0]!.ok
   if (!ok) fail(409, { error: 'Profile suspended' })
   return toMyProfile((await ownProvider(tx, userId))!)

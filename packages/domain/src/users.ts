@@ -24,12 +24,15 @@ export function requestLang(request: Request): Lang {
   return DEFAULT_LANG
 }
 
-/** First contact creates the users row (owner connection); later calls return the stored row. */
-export async function ensureUser(session: { id: string; email: string }, request: Request): Promise<SessionUser> {
+/**
+ * First contact creates the users row (owner connection) with the account name from the session, so the public name
+ * does not depend on the app's own name save; later calls return the stored row and never overwrite the name.
+ */
+export async function ensureUser(session: { id: string; email: string; name?: string }, request: Request): Promise<SessionUser> {
   try {
     await db
       .insert(users)
-      .values({ id: session.id, email: session.email, language: requestLang(request) })
+      .values({ id: session.id, email: session.email, name: session.name?.trim().slice(0, 100) || null, language: requestLang(request) })
       .onConflictDoUpdate({ target: users.id, set: { email: session.email } }) // keeps a Neon Auth email change in sync
   } catch (error) {
     const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
