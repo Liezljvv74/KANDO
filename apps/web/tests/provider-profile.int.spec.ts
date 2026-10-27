@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { asUser, pool } from '@kando/db'
-import { setStorageForTests, updateMe } from '@kando/domain'
-import { MeSchema, type MePatch, MyProfileSchema } from '@kando/contract'
+import { pool } from '@kando/db'
+import { setStorageForTests } from '@kando/domain'
+import { MeSchema, MyProfileSchema } from '@kando/contract'
 import { call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -103,28 +103,18 @@ it('PATCH /me checks its body with the contract: 400 Invalid input names the fie
   expect(MeSchema.parse(await ok.json())).toMatchObject({ id: 'pp-me', firstName: 'Anna', lastName: 'Schmidt', language: 'en', address: null, notifications: [] })
 })
 
-it('updateMe stores country DE when the address carries none (the HTTP contract always sends one)', async () => {
-  await call(me.GET, 'pp-dflt')
-  const patch = { address: { street: 'Weg 2', postcode: '10115', city: 'Berlin' } } as unknown as MePatch
-  expect((await asUser('pp-dflt', (tx) => updateMe(tx, 'pp-dflt', patch))).address?.country).toBe('DE')
-})
-
-it('PATCH /me stores names and a private address (country stored as sent); GET /me returns them; null clears the address', async () => {
-  const set = await call(me.PATCH, 'pp-addr', 'PATCH', { firstName: 'Anna', lastName: 'Schmidt', address: { street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin', country: 'DE' } })
-  expect(set.status).toBe(200)
-  const got = MeSchema.parse(await (await call(me.GET, 'pp-addr')).json())
-  expect(got).toMatchObject({ firstName: 'Anna', lastName: 'Schmidt', address: { street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin', country: 'DE' }, photoUrl: null })
-  const cleared = await call(me.PATCH, 'pp-addr', 'PATCH', { address: null })
-  expect(MeSchema.parse(await cleared.json()).address).toBeNull()
-  const row = (await pool.query("SELECT address_street, address_postcode, address_city, address_country FROM users WHERE id = 'pp-addr'")).rows[0]
-  expect(row).toEqual({ address_street: null, address_postcode: null, address_city: null, address_country: null })
+it('a user without an address still gets a draft (the provider row default country applies)', async () => {
+  await call(me.GET, 'pp-noaddr')
+  const res = await call(POST, 'pp-noaddr', 'POST')
+  expect(MyProfileSchema.parse(await res.json())).toMatchObject({ status: 'draft', basePostcode: null })
+  expect((await pool.query("SELECT country FROM providers WHERE owner_id = 'pp-noaddr'")).rows[0].country).toBe('DE')
 })
 
 const missingOf = async (res: Response) => MyProfileSchema.parse(await res.json()).missing
 
 it('POST creates a draft with the postcode prefilled; again returns the same id; GET /me is fine', async () => {
   await call(me.GET, 'dr1')
-  await pool.query("UPDATE users SET address_postcode = '10115', address_street = 's', address_city = 'c' WHERE id = 'dr1'")
+  await pool.query("UPDATE users SET address_postcode = '10115', address_street = 's', address_city = 'c', address_country = 'DE' WHERE id = 'dr1'")
   const a = await call(POST, 'dr1', 'POST')
   expect(a.status).toBe(200)
   const draft = MyProfileSchema.parse(await a.json())
@@ -196,12 +186,12 @@ it('a draft created during a suspension cannot be published', async () => {
 
 it('the draft prefills the postcode only when it is a known one', async () => {
   await call(me.GET, 'dr6')
-  await pool.query("UPDATE users SET address_postcode = '00000' WHERE id = 'dr6'")
+  await pool.query("UPDATE users SET address_postcode = '00000', address_country = 'DE' WHERE id = 'dr6'")
   const bad = MyProfileSchema.parse(await (await call(POST, 'dr6', 'POST')).json())
   expect(bad.basePostcode).toBeNull()
   expect(bad.missing).toContain('postcode')
   await call(me.GET, 'dr7')
-  await pool.query("UPDATE users SET address_postcode = '10115' WHERE id = 'dr7'")
+  await pool.query("UPDATE users SET address_postcode = '10115', address_country = 'DE' WHERE id = 'dr7'")
   const good = MyProfileSchema.parse(await (await call(POST, 'dr7', 'POST')).json())
   expect(good.basePostcode).toBe('10115')
   expect(good.missing).not.toContain('postcode')

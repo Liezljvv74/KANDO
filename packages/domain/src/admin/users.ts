@@ -16,8 +16,8 @@ export const toAdminUser = (r: typeof users.$inferSelect, picture: { id: string;
   id: r.id,
   firstName: r.firstName,
   lastName: r.lastName,
-  address: r.addressStreet
-    ? { street: r.addressStreet, postcode: r.addressPostcode ?? '', city: r.addressCity ?? '', country: r.addressCountry ?? 'DE' }
+  address: r.addressStreet && r.addressCountry
+    ? { street: r.addressStreet, postcode: r.addressPostcode ?? '', city: r.addressCity ?? '', country: r.addressCountry }
     : null,
   photoUrl: picture ? photoUrl(picture.key) : null,
   photoId: picture?.id ?? null,

@@ -53,8 +53,8 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   language: isLang(row.language) ? row.language : DEFAULT_LANG,
   isProvider: row.isProvider,
   photoUrl: pictureKey ? photoUrl(pictureKey) : null,
-  address: row.addressStreet
-    ? { street: row.addressStreet, postcode: row.addressPostcode ?? '', city: row.addressCity ?? '', country: row.addressCountry ?? 'DE' }
+  address: row.addressStreet && row.addressCountry
+    ? { street: row.addressStreet, postcode: row.addressPostcode ?? '', city: row.addressCity ?? '', country: row.addressCountry }
     : null,
   notifications,
 })
@@ -79,7 +79,7 @@ export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<
         addressStreet: a?.street ?? null,
         addressPostcode: a?.postcode ?? null,
         addressCity: a?.city ?? null,
-        addressCountry: a ? a.country || 'DE' : null,
+        addressCountry: a?.country ?? null,
       }),
       updatedAt: new Date(),
     })
