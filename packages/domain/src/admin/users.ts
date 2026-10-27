@@ -79,9 +79,9 @@ export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: {
     .where(eq(users.id, id))
     .returning()
   if (!row) return notFound()
-  const hidden = await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id)).returning({ id: providers.id })
-  // the email speaks of the profile: only a person with one is told, and of a lift only when one was suspended
-  if (hidden.length && (until || was)) afterCommit(() => notifySuspension(id, { until, reason: input.reason }))
+  const hidden = await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id)).returning({ status: providers.status })
+  // the email speaks of the live profile: only a published one is told, and of a lift only when one was suspended
+  if (hidden.some((h) => h.status === 'published') && (until || was)) afterCommit(() => notifySuspension(id, { until, reason: input.reason }))
   return ok((await withPictures(tx, [row]))[0])
 }
 
@@ -94,9 +94,9 @@ export async function endExpiredSuspensions(exec: typeof db): Promise<string[]> 
       .where(lte(users.suspendedUntil, sql`now()`))
       .returning({ id: users.id })
     const ids = rows.map((r) => r.id)
-    const hidden = ids.length ? await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids)).returning({ owner: providers.ownerId }) : []
-    return { ids, withProfile: hidden.map((h) => h.owner) }
+    const hidden = ids.length ? await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids)).returning({ owner: providers.ownerId, status: providers.status }) : []
+    return { ids, withProfile: hidden.filter((h) => h.status === 'published').map((h) => h.owner) }
   })
-  for (const id of ended.withProfile) await notifySuspension(id, { until: null, reason: '' }) // the email speaks of the profile
+  for (const id of ended.withProfile) await notifySuspension(id, { until: null, reason: '' }) // the email speaks of the live profile
   return ended.ids
 }

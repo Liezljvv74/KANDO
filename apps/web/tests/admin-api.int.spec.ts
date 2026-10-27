@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
+import { endExpiredSuspensions } from '@kando/domain'
 import { clearOutbox, outboxForTests } from '@kando/domain'
 import { adminCall, call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -270,3 +271,31 @@ it('GET users/[id] carries names, the private address and the picture; the list 
   const listed = (await (await get('users', 'aa-rev', `?filter=${encodeURIComponent(JSON.stringify({ q: 'Anna Schm' }))}`)).json()).data
   expect(listed.map((u: { id: string }) => u.id)).toContain('aa-me1') // the name search works on "First Last"
 }) 
+
+it('suspension and published-again emails go to published profiles only; the cron still clears every ended suspension', async () => {
+  const until = new Date(Date.now() + 86_400_000).toISOString()
+  await seedProvider('aa-sdraft', { name: 'Draft Sus', categoryId, status: 'draft' })
+  await seedProvider('aa-spub', { name: 'Pub Sus', categoryId })
+  const suspendUser = (id: string, u: string | null) => adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: u, reason: u ? 'Spam' : '' }, { id })
+  clearOutbox()
+  await suspendUser('aa-sdraft', until)
+  expect(outboxForTests()).toEqual([])
+  await suspendUser('aa-sdraft', null)
+  expect(outboxForTests()).toEqual([])
+  await suspendUser('aa-spub', until)
+  expect(outboxForTests()).toHaveLength(1)
+  await suspendUser('aa-spub', null)
+  expect(outboxForTests()).toHaveLength(2)
+
+  // the cron: both ended, only the published one is told
+  await seedUser('aa-scust')
+  for (const id of ['aa-sdraft', 'aa-spub', 'aa-scust']) {
+    await pool.query("UPDATE users SET suspended_until = now() - interval '1 minute', suspended_reason = 'x' WHERE id = $1", [id])
+    await pool.query("UPDATE providers SET suspended_until = now() - interval '1 minute' WHERE owner_id = $1", [id])
+  }
+  clearOutbox()
+  const ended = await endExpiredSuspensions(db)
+  expect(ended).toEqual(expect.arrayContaining(['aa-sdraft', 'aa-spub', 'aa-scust']))
+  expect(outboxForTests()).toHaveLength(1)
+  expect((await pool.query("SELECT count(*)::int AS n FROM users WHERE id LIKE 'aa-s%' AND suspended_until IS NOT NULL")).rows[0].n).toBe(0)
+})
