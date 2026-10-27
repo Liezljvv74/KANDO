@@ -28,8 +28,11 @@ const fakeAuth = {
   },
 }
 
+// Dropped at the end only if this file created it (the test database never has the real one, but do not assume).
+let createdNeonAuth = false
 beforeAll(async () => {
   setStorageForTests(storage)
+  createdNeonAuth = !(await pool.query("SELECT to_regnamespace('neon_auth') AS s")).rows[0].s
   await pool.query('CREATE SCHEMA IF NOT EXISTS neon_auth; CREATE TABLE IF NOT EXISTS neon_auth."user" (id text PRIMARY KEY, email text, "emailVerified" boolean)')
   await importPostcodes('DE', file)
 })
@@ -39,7 +42,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM photos WHERE ${OWNED}`)
   await pool.query(`DELETE FROM providers WHERE ${OWNED}`)
   await pool.query("DELETE FROM users WHERE email LIKE '%@example.com'")
-  await pool.query('DROP SCHEMA neon_auth CASCADE')
+  if (createdNeonAuth) await pool.query('DROP SCHEMA neon_auth CASCADE')
 })
 
 it('categories seed is idempotent: 14 categories, both names, babysitting needs a police certificate', async () => {
@@ -94,6 +97,16 @@ it('builds the test users through the domain: published providers with photo, se
   expect(await seedTestUsers(fakeAuth, DEV)).toEqual({ created: 0, skipped: 14 })
   expect(await count('SELECT count(*) n FROM neon_auth."user" WHERE "emailVerified"')).toBe(14)
   expect(await count(`SELECT count(*) n FROM providers WHERE ${OWNED}`)).toBe(9)
+})
+
+it('a run that crashed after the services (no photo, not published) resumes without adding the services twice', async () => {
+  const owner = "(SELECT id FROM users WHERE email = 'anbieter.foto.berlin@example.com')"
+  await pool.query(`UPDATE providers SET status = 'draft', photo_id = NULL WHERE owner_id = ${owner}`)
+  await pool.query(`DELETE FROM photos WHERE owner_id = ${owner}`)
+  expect(await seedTestUsers(fakeAuth, DEV)).toEqual({ created: 1, skipped: 13 })
+  expect(await count(`SELECT count(*) n FROM services WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(14)
+  expect(await count(`SELECT count(*) n FROM provider_references WHERE provider_id IN (SELECT id FROM providers WHERE ${OWNED})`)).toBe(2)
+  expect(await count(`SELECT count(*) n FROM providers WHERE status = 'published' AND photo_id IS NOT NULL AND owner_id = ${owner}`)).toBe(1)
 })
 
 it('placeholder photos: gives a published profile without a photo one; elsewhere needs the typed yes', async () => {

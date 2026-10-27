@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import type { ProfileInput, ReferenceInput } from '@kando/contract'
-import { asUser, categories, db, providers, users } from '@kando/db'
+import { asUser, categories, db, providers, services, users } from '@kando/db'
 import { assertDevTarget } from '@kando/db/src/seed/guard'
 import { addReference, addService } from '../providers/items'
 import { publish, upsertMyProfile } from '../providers/profile'
@@ -156,7 +156,10 @@ export async function buildTestUser(auth: TestAuth, a: Account | Provider, categ
   if (!existing) await db.insert(users).values({ id, email: a.email, name: a.name, language: a.language ?? 'de' })
   if (!('profile' in a)) return true
   await asUser(id, async (tx) => {
-    await upsertMyProfile(tx, id, a.profile)
+    const { profile } = await upsertMyProfile(tx, id, a.profile)
+    // Services and references are added in this one transaction: a provider that has services has both (a run that
+    // crashed later, at the photo, resumes from there).
+    if ((await tx.select({ id: services.id }).from(services).where(eq(services.providerId, profile.id)).limit(1)).length) return
     for (const s of a.services) {
       await addService(tx, id, {
         categoryId: categoryIds.get(s.category)!,

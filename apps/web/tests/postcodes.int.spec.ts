@@ -12,7 +12,7 @@ it('imports the German file and looks up 01053 Dresden', async () => {
   expect(hit).toMatchObject({ code: '01053', place: 'Dresden', state: 'Sachsen' })
   expect(hit?.lat).toBeCloseTo(51.0562, 3)
   expect(hit?.lng).toBeCloseTo(13.7323, 3)
-})
+}, 30_000) // two full imports: over 5 s once on a busy machine
 
 it('rejects a four-digit German code and an unknown one', async () => {
   expect(await isPostcode('DE', '1011')).toBe(false)
