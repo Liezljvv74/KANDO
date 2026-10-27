@@ -42,7 +42,12 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
     return { template: 'document-approved-visible', params: { category } }
   }
   const url = providerUrl(provider.slug!, lang)
-  await createNotification(db, userId, 'profile-live', { url })
+  try {
+    await createNotification(db, userId, 'profile-live', { url })
+  } catch (e) {
+    // The email must still go out when the in-app message cannot be stored.
+    console.error('[notify] profile-live notification failed', e instanceof Error ? e.message : 'unknown')
+  }
   return { template: 'profile-live', params: { url } }
 }
 

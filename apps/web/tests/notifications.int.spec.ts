@@ -27,10 +27,11 @@ afterAll(async () => {
 })
 
 /** A provider with a service needing the police certificate; approves it the way the review does, then runs the after-commit mail. */
-async function decide(uid: string, o: { status?: string; suspended?: boolean; lang?: string; extra?: boolean; earlier?: boolean; decision?: 'approved' | 'rejected' } = {}) {
+async function decide(uid: string, o: { status?: string; suspended?: boolean; lang?: string; extra?: boolean; onlyMulti?: boolean; earlier?: boolean; decision?: 'approved' | 'rejected' } = {}) {
   await seedProvider(uid, { name: uid, categoryId: docCategoryId, status: o.status, suspended: o.suspended })
   await pool.query('UPDATE users SET language = $2 WHERE id = $1', [uid, o.lang ?? 'de'])
   if (o.extra) await pool.query("INSERT INTO services (provider_id, category_id, title, price_type) SELECT id, $2, 'Two', 'on-request' FROM providers WHERE owner_id = $1", [uid, multiId])
+  if (o.onlyMulti) await pool.query('DELETE FROM services WHERE category_id = $1 AND provider_id = (SELECT id FROM providers WHERE owner_id = $2)', [docCategoryId, uid])
   if (o.earlier) await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ($1, 'police-certificate', 'k0', 'approved')", [uid])
   const d = o.decision ?? 'approved'
   await pool.query("INSERT INTO documents (owner_id, requirement, key, status, note) VALUES ($1, 'police-certificate', 'k1', $2, $3)", [uid, d, d === 'rejected' ? 'blurry' : null])
@@ -52,12 +53,20 @@ it('the link of a German provider has no lang parameter', async () => {
 
 it('live but another document is still missing: says the category service is visible, no notification', async () => {
   await decide('nt-more', { lang: 'en', extra: true })
+  expect(outboxForTests()[0]!.subject).toBe('Your document is approved and your service is visible')
   expect(outboxForTests()[0]!.text).toContain('Your Care service is now visible.')
   expect(await rows('nt-more')).toEqual([])
 })
 
+it('the approved requirement is not enough for any service: plain approval, no notification', async () => {
+  expect(await decide('nt-hidden', { lang: 'en', extra: true, onlyMulti: true })).toEqual(['Your document has been approved'])
+  expect(outboxForTests()[0]!.text).toContain('Police certificate')
+  expect(await rows('nt-hidden')).toEqual([])
+})
+
 it('draft profile: offline text, no notification', async () => {
   await decide('nt-draft', { status: 'draft', lang: 'en' })
+  expect(outboxForTests()[0]!.subject).toBe('Your document is approved, your profile is offline')
   expect(outboxForTests()[0]!.text).toContain('Your profile is offline at the moment')
   expect(await rows('nt-draft')).toEqual([])
 })
@@ -65,6 +74,7 @@ it('draft profile: offline text, no notification', async () => {
 it('suspended profile: suspended text with the date, no notification', async () => {
   await decide('nt-susp', { suspended: true, lang: 'en' })
   const date = new Date(Date.now() + 86400000).toLocaleDateString('en-GB')
+  expect(outboxForTests()[0]!.subject).toBe('Your document is approved, your profile is suspended')
   expect(outboxForTests()[0]!.text).toContain(`suspended until ${date}`)
   expect(await rows('nt-susp')).toEqual([])
 })
