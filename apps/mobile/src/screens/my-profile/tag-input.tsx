@@ -7,7 +7,7 @@ import { withItem } from '@/lib/profile-form'
 
 /**
  * A short list (skills, strengths): type, then "Add" or the keyboard's Done; each tag shows as a chip, tap to remove.
- * The typed text lives in the parent so Save can include a tag that was typed but not added yet.
+ * The typed text lives in the parent; leaving the field adds a tag that was typed but not added yet.
  */
 export function TagInput({
   label,
@@ -43,6 +43,7 @@ export function TagInput({
         maxLength={maxLength}
         onSubmitEditing={add}
         submitBehavior="submit"
+        onBlur={() => text.trim() && add()}
         returnKeyType="done"
         error={error}
       />

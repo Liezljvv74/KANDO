@@ -13,6 +13,8 @@ export async function getMyProfile(): Promise<MyProfile | null> {
     throw e
   }
 }
+/** Creates the draft profile when there is none (the server answers with the existing one otherwise). */
+export const ensureDraft = () => api<MyProfile>('/app-api/v1/provider-profile', json('POST', {}))
 export const saveMyProfile = (body: object) => api<MyProfile>('/app-api/v1/provider-profile', json('PUT', body))
 export const publishProfile = () => api<MyProfile>('/app-api/v1/provider-profile/publish', json('POST'))
 export const unpublishProfile = () => api<MyProfile>('/app-api/v1/provider-profile/unpublish', json('POST'))

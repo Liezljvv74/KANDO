@@ -1,0 +1,155 @@
+import { useState } from 'react'
+import { StyleSheet, View } from 'react-native'
+
+import type { MyProfile } from '@kando/contract'
+
+import { ApiError } from '@/api/client'
+import { saveMyProfile } from '@/api/my-profile'
+import { ErrorText, Field } from '@/components/auth-ui'
+import { Card, SectionHeader, SmallButton, SwitchRow } from '@/components/form-ui'
+import { Select } from '@/components/select'
+import { useFieldSave } from '@/hooks/use-field-save'
+import { errorText, t } from '@/i18n'
+import { MAX_SKILLS, MAX_SKILL_LENGTH } from '@/lib/profile-form'
+import { TagInput } from '../my-profile/tag-input'
+
+const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split('\n').map((x) => x.trim()).filter(Boolean))]
+const validRadius = (s: string) => /^\d{1,3}$/.test(s.trim()) && +s >= 1 && +s <= 200
+
+/**
+ * One field = one useFieldSave = one request. Every response replaces the held profile (`onSaved`, for the Publish bar);
+ * a typed value is never taken from a response, so a slow save cannot revert what the user typed since.
+ * `initial` is read once: the card is mounted after the first load and keeps its own values from then on.
+ */
+export function AboutCard({ initial, onSaved }: { initial: MyProfile; onSaved: (p: MyProfile) => void }) {
+  const [code, setCode] = useState<Record<string, string>>({})
+  // Binds a field to the profile: `toBody` makes the one-field PUT body, null skips the request.
+  function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null) {
+    return useFieldSave<V>(initialValue, async (v) => {
+      const body = toBody(v)
+      if (!body) return
+      try {
+        onSaved(await saveMyProfile(body))
+        setCode((c) => (c[key] ? { ...c, [key]: '' } : c))
+      } catch (e) {
+        setCode((c) => ({ ...c, [key]: e instanceof ApiError ? e.code : 'network' }))
+        throw e
+      }
+    })
+  }
+
+  const type = useField<'individual' | 'business' | null>('providerType', initial.providerType ?? null, (v) => (v ? { providerType: v } : null))
+  const businessName = useField('businessName', initial.businessName ?? '', (v) => ({ businessName: v.trim() }))
+  const impressum = useField('impressum', initial.impressum ?? '', (v) => ({ impressum: v.trim() }))
+  const bio = useField('bio', initial.bio ?? '', (v) => ({ bio: v.trim() }))
+  const strengths = useField('strengths', splitLines(initial.strengths), (v) => ({ strengths: v.join('\n') }))
+  const skills = useField('skills', initial.skills ?? [], (v) => ({ skills: v }))
+  const experience = useField('experience', initial.experience ?? '', (v) => ({ experience: v.trim() }))
+  const postcode = useField('basePostcode', initial.basePostcode ?? '', (v) => ({ basePostcode: v.trim() }))
+  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), (v) => (validRadius(v) ? { serviceRadiusKm: Number(v) } : null))
+  const remote = useField('worksRemotely', !!initial.worksRemotely, (v) => ({ worksRemotely: v }))
+  const [skillText, setSkillText] = useState('')
+  const [strengthText, setStrengthText] = useState('')
+
+  // A failed save keeps the value and says why, with a retry.
+  const problem = (key: string, f: { status: string; retry: () => void }) =>
+    f.status === 'error' && code[key] ? (
+      <View>
+        <ErrorText text={errorText(code[key])} />
+        <SmallButton label={t('common.retry')} onPress={f.retry} />
+      </View>
+    ) : null
+  const unknownPostcode = postcode.status === 'error' && code.basePostcode === 'Unknown postcode'
+
+  return (
+    <Card>
+      <SectionHeader title={t('setup.aboutYou')} />
+      <Select
+        label={t('f.type')}
+        value={type.value}
+        onChange={(v) => {
+          type.setValue(v)
+          type.flush()
+        }}
+        options={[
+          { value: 'individual', label: t('f.individual') },
+          { value: 'business', label: t('f.business') },
+        ]}
+      />
+      {problem('providerType', type)}
+      {type.value === 'business' && (
+        <>
+          <Field label={t('f.businessName')} value={businessName.value} onChangeText={businessName.setValue} onBlur={businessName.flush} maxLength={120} />
+          {problem('businessName', businessName)}
+          <Field label={t('provider.impressum')} value={impressum.value} onChangeText={impressum.setValue} onBlur={impressum.flush} multiline maxLength={1000} style={styles.multi} />
+          {problem('impressum', impressum)}
+        </>
+      )}
+      <Field label={t('f.bio')} value={bio.value} onChangeText={bio.setValue} onBlur={bio.flush} multiline maxLength={2000} style={styles.multi} />
+      {problem('bio', bio)}
+      <TagInput
+        label={t('provider.strengths')}
+        items={strengths.value}
+        onItems={(v) => {
+          strengths.setValue(v)
+          strengths.flush()
+        }}
+        text={strengthText}
+        onText={setStrengthText}
+        max={MAX_SKILLS}
+        maxLength={MAX_SKILL_LENGTH}
+        addLabel={t('f.strengthAdd')}
+      />
+      {problem('strengths', strengths)}
+      <TagInput
+        label={t('provider.skills')}
+        items={skills.value}
+        onItems={(v) => {
+          skills.setValue(v)
+          skills.flush()
+        }}
+        text={skillText}
+        onText={setSkillText}
+        max={MAX_SKILLS}
+        maxLength={MAX_SKILL_LENGTH}
+        addLabel={t('f.skillAdd')}
+      />
+      {problem('skills', skills)}
+      <Field label={t('provider.experience')} hint={t('f.experienceHint')} value={experience.value} onChangeText={experience.setValue} onBlur={experience.flush} multiline maxLength={500} style={styles.multi} />
+      {problem('experience', experience)}
+      <Field
+        label={t('search.postcode')}
+        value={postcode.value}
+        onChangeText={postcode.setValue}
+        onBlur={postcode.flush}
+        keyboardType="number-pad"
+        maxLength={5}
+        error={unknownPostcode ? errorText('Unknown postcode') : null}
+      />
+      {unknownPostcode ? null : problem('basePostcode', postcode)}
+      <Field
+        label={t('f.radius')}
+        value={radius.value}
+        onChangeText={radius.setValue}
+        onBlur={radius.flush}
+        keyboardType="number-pad"
+        maxLength={3}
+        error={validRadius(radius.value) ? null : t('f.radiusError')}
+      />
+      {problem('serviceRadiusKm', radius)}
+      <SwitchRow
+        label={t('f.remote')}
+        value={remote.value}
+        onChange={(v) => {
+          remote.setValue(v)
+          remote.flush()
+        }}
+      />
+      {problem('worksRemotely', remote)}
+    </Card>
+  )
+}
+
+const styles = StyleSheet.create({
+  multi: { minHeight: 72, paddingTop: 10, textAlignVertical: 'top' },
+})

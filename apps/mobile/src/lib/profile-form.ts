@@ -1,113 +1,12 @@
-import type { MyProfile } from '@kando/contract'
-
 import type { ApiError } from '@/api/client'
 import type { Key } from '@/i18n'
 
 // Same limits as the server (packages/contract: ProfileInputSchema, ServiceInputSchema, ReferenceInputSchema).
 export const MAX_SKILLS = 20
 export const MAX_SKILL_LENGTH = 50
-/** Mirrors the server's strengths maxLength (the list is saved one per line). */
-export const MAX_STRENGTHS_TEXT = 1000
-
-export type ProfileForm = {
-  /** The account name (first and last name), saved with PATCH /me, not with the profile. */
-  name: string
-  providerType: 'individual' | 'business'
-  businessName: string
-  impressum: string
-  bio: string
-  strengths: string[]
-  skills: string[]
-  /** Free text in the provider's words, e.g. "Seit 2010 selbstständig". */
-  experience: string
-  basePostcode: string
-  serviceRadiusKm: string
-  worksRemotely: boolean
-}
 
 /** Error message key per field name. */
 export type Errors = Record<string, Key>
-
-export const emptyProfile: ProfileForm = {
-  name: '',
-  providerType: 'individual',
-  businessName: '',
-  impressum: '',
-  bio: '',
-  strengths: [],
-  skills: [],
-  experience: '',
-  basePostcode: '',
-  serviceRadiusKm: '25',
-  worksRemotely: false,
-}
-
-const LIMITS: [keyof ProfileForm, number][] = [
-  ['name', 100],
-  ['businessName', 120],
-  ['impressum', 1000],
-  ['bio', 2000],
-  ['experience', 500],
-]
-
-const whole = (text: string, min: number, max: number) => /^\d{1,4}$/.test(text) && +text >= min && +text <= max
-
-export function validateProfile(f: ProfileForm): Errors {
-  const e: Errors = {}
-  if (!f.name.trim()) e.name = 'form.required'
-  if (f.providerType === 'business' && !f.businessName.trim()) e.businessName = 'form.required'
-  for (const [name, max] of LIMITS) if (!e[name] && (f[name] as string).trim().length > max) e[name] = 'form.tooLong'
-  const badList = (l: string[]) => l.length > MAX_SKILLS || l.some((s) => !s.length || s.length > MAX_SKILL_LENGTH)
-  if (badList(f.skills)) e.skills = 'f.skillsError'
-  // Strengths follow the skills limits and are saved one per line in a 1000-character text field (line breaks count).
-  if (badList(f.strengths)) e.strengths = 'f.strengthsError'
-  else if (f.strengths.join('\n').length > MAX_STRENGTHS_TEXT) e.strengths = 'form.tooLong'
-  if (f.basePostcode.trim() && !/^\d{5}$/.test(f.basePostcode.trim())) e.basePostcode = 'search.postcodeInvalid'
-  if (!whole(f.serviceRadiusKm.trim(), 1, 200)) e.serviceRadiusKm = 'f.radiusError'
-  return e
-}
-
-/** PUT body. Empty text is sent as '' (the server clears the field). */
-export function profileBody(f: ProfileForm) {
-  return {
-    providerType: f.providerType,
-    businessName: f.providerType === 'business' ? f.businessName.trim() : '',
-    impressum: f.providerType === 'business' ? f.impressum.trim() : '',
-    bio: f.bio.trim(),
-    // Stored one per line in the existing text field.
-    strengths: f.strengths.join('\n'),
-    skills: f.skills,
-    experience: f.experience.trim(),
-    basePostcode: f.basePostcode.trim(),
-    serviceRadiusKm: Number(f.serviceRadiusKm),
-    worksRemotely: f.worksRemotely,
-  }
-}
-
-/** The trimmed new account name, or null when it did not change. */
-export function nameChange(f: ProfileForm, current: string): string | null {
-  const name = f.name.trim()
-  return name === current ? null : name
-}
-
-/** `accountName` is the session user's name (the form's first field). */
-export function profileFromDoc(d: Partial<MyProfile> | null, accountName = ''): ProfileForm {
-  if (!d) return { ...emptyProfile, name: accountName }
-  return {
-    name: accountName,
-    providerType: d.providerType === 'business' ? 'business' : 'individual',
-    businessName: d.businessName ?? '',
-    impressum: d.impressum ?? '',
-    bio: d.bio ?? '',
-    // Unique: staff may have typed a line twice in the admin panel.
-    strengths: [...new Set<string>((d.strengths ?? '').split('\n').map((s: string) => s.trim()).filter(Boolean))],
-    skills: Array.isArray(d.skills) ? d.skills.filter((s: unknown) => typeof s === 'string') : [],
-    experience: d.experience ?? '',
-    basePostcode: d.basePostcode ?? '',
-    serviceRadiusKm: String(d.serviceRadiusKm ?? 25),
-    worksRemotely: !!d.worksRemotely,
-  }
-}
 
 /** Server 400 -> field errors: 'Invalid fields'/'Invalid input' list names, 'Unknown postcode' belongs to the postcode field. */
 export function serverFieldErrors(e: ApiError): Errors {

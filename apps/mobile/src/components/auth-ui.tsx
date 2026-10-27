@@ -33,15 +33,15 @@ export const Field = ({ label, error, style, hint, ...props }: TextInputProps & 
   </View>
 )
 
-export const Button = ({ label, onPress, busy }: { label: string; onPress: () => void; busy?: boolean }) => (
+export const Button = ({ label, onPress, busy, disabled }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean }) => (
   <Pressable
     onPress={onPress}
-    disabled={busy}
+    disabled={busy || disabled}
     accessibilityRole="button"
     accessibilityLabel={label}
-    accessibilityState={{ busy: !!busy, disabled: !!busy }}
+    accessibilityState={{ busy: !!busy, disabled: !!(busy || disabled) }}
     // Dims while pressed, so a tap is visible.
-    style={({ pressed }) => [styles.button, busy && styles.busy, pressed && styles.pressed]}>
+    style={({ pressed }) => [styles.button, (busy || disabled) && styles.busy, pressed && styles.pressed]}>
     {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonLabel}>{label}</Text>}
   </Pressable>
 )
