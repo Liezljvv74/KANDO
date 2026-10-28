@@ -127,3 +127,7 @@ There are three seeds. Each one checks two things: `NEON_BRANCH` names a dev bra
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`) needs two repository secrets, `NEON_AUTH_BASE_URL` and `NEON_AUTH_COOKIE_SECRET`. Owner: add them under Settings, Secrets and variables, Actions. Not done yet.
+
+## Document requirements per category
+
+Each category has required documents (needed to go live) and optional documents (a slot; an approved one shows as a badge). The seed sets both lists only when it creates a category, so a re-seed never overwrites what staff edited in the back office. A database seeded before this table existed keeps its old lists until staff edit them or the table is applied once: run `pnpm --filter @kando/db apply:required-documents` with the target `DATABASE_URL` (and `ALLOW_PRODUCTION=1` outside the dev branch). It overwrites both lists of the 14 seeded categories.

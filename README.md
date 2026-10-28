@@ -63,6 +63,10 @@ Scan the QR code or enter the printed address (starting `https://`) under "Enter
 
 ## Outstanding
 
+### Reminder: revisit before launch
+
+- **Liability insurance is optional for now** in every category (decision of 28 October 2026), so private persons are not blocked. Decide before launch whether it becomes required again for cleaning, gardening, moving, assembly, small repairs, catering and dog walking. The same goes for the trade registration (optional for now) and the craft qualification (optional for Small repairs). Change it in the back office (Categories) or in `packages/db/src/seed/categories.ts`.
+
 ### Tests that must still be done
 
 Nothing has been checked on a phone or in a real browser yet; every "Not yet done" row in the reports' Other Checks sheets is on this list.

@@ -65,6 +65,7 @@ export const CategoryInputSchema = z.object({
   slug,
   sort: z.number().int().min(0).max(10_000).optional(),
   requiredDocuments: z.array(z.string().max(50)).max(10).optional(),
+  optionalDocuments: z.array(z.string().max(50)).max(10).optional(),
   names: z.object({ de: requiredText(100), en: z.string().trim().max(100).optional() }),
 })
 export const CategoryUpdateSchema = CategoryInputSchema.partial()

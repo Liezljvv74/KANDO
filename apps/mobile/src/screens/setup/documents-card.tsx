@@ -11,7 +11,7 @@ import { deleteBodyKey, submittedDocs, type DocumentRow } from '@/lib/documents'
 import { pickDocument, pickPhoto, tooLarge, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '../my-profile/denied-notice'
 
-/** The red card: one line per required document across all services, with its status and an Add button. */
+/** The red card: one line per required or optional document across all services, with its status and an Add button. */
 export function DocumentsCard({ rows, verifications, onChanged }: { rows: DocumentRow[]; verifications: Document[]; onChanged: () => void }) {
   const [busy, setBusy] = useState(false) // one submit at a time across the whole card
   const [problem, setProblem] = useState<string | null>(null)
@@ -72,6 +72,7 @@ export function DocumentsCard({ rows, verifications, onChanged }: { rows: Docume
       {rows.map((r) => (
         <View key={r.requirement} style={styles.row}>
           <Text style={[styles.text, styles.doc]}>{docText(r.requirement)}</Text>
+          {r.optional && <Text style={styles.text}>{t('doc.optional')}</Text>}
           <Text style={styles.text}>{t(`myProfile.docs.${r.state}`)}</Text>
           {r.state === 'rejected' && r.note ? <Text style={styles.text}>{r.note}</Text> : null}
           {(r.state === 'none' || r.state === 'rejected') && (

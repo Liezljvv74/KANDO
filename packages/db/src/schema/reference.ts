@@ -38,6 +38,8 @@ export const categories = pgTable('categories', {
   country: text().notNull().default('DE').references(() => countries.code),
   sort: integer().notNull().default(0),
   requiredDocuments: text('required_documents').array().notNull().default(sql`'{}'`),
+  // A slot a provider may fill; an approved one shows as a badge. Never part of the publish gate in rls.ts.
+  optionalDocuments: text('optional_documents').array().notNull().default(sql`'{}'`),
 })
 
 export const categoryTexts = pgTable(

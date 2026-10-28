@@ -1,24 +1,32 @@
-import type { Category, Document, OwnService } from '@kando/contract'
+import { DOCUMENT_TYPES, type Category, type Document, type OwnService } from '@kando/contract'
 import type { Key } from '@/i18n'
 
-/** Mirrors VERIFICATION_REQUIREMENTS on the server (display order). */
-export const VERIFICATION_REQUIREMENTS = ['police-certificate', 'permit']
+export type DocumentRow = { requirement: string; optional: boolean; state: 'none' | 'pending' | 'approved' | 'rejected'; note: string | null }
 
-export type DocumentRow = { requirement: string; state: 'none' | 'pending' | 'approved' | 'rejected'; note: string | null }
-
-/** One row per document the services' categories require. Pending wins; else the latest reviewed check decides, like `approvedDocuments` on the server. */
+/**
+ * One row per document the services' categories ask for, required ones first (a type required by any service counts as
+ * required), then optional; each group in DOCUMENT_TYPES order, unknown codes last. Pending wins; else the latest reviewed
+ * check decides, like `approvedDocuments` on the server.
+ */
 export function documentRows(services: OwnService[], categories: Category[], verifications: Document[]): DocumentRow[] {
-  const needed = new Set<string>()
-  for (const s of services) for (const r of categories.find((c) => c.id === s.category)?.requiredDocuments ?? []) needed.add(r)
+  const required = new Set<string>()
+  const optional = new Set<string>()
+  for (const s of services) {
+    const c = categories.find((c) => c.id === s.category)
+    for (const r of c?.requiredDocuments ?? []) required.add(r)
+    for (const r of c?.optionalDocuments ?? []) optional.add(r)
+  }
   const reviewed = verifications
     .filter((v): v is Document & { status: 'approved' | 'rejected' } => v.status !== 'pending')
     .sort((a, b) => (b.reviewedAt ?? '').localeCompare(a.reviewedAt ?? '') || b.createdAt.localeCompare(a.createdAt))
-  const known = VERIFICATION_REQUIREMENTS.filter((r) => needed.has(r))
-  return [...known, ...[...needed].filter((r) => !VERIFICATION_REQUIREMENTS.includes(r))].map((requirement): DocumentRow => {
-    if (verifications.some((v) => v.requirement === requirement && v.status === 'pending')) return { requirement, state: 'pending', note: null }
+  const rank = (r: string) => (DOCUMENT_TYPES as readonly string[]).indexOf(r) >>> 0 // unknown (-1) sorts last
+  const inOrder = (set: Set<string>) => [...set].sort((a, b) => rank(a) - rank(b))
+  const row = (requirement: string, isOptional: boolean): DocumentRow => {
+    if (verifications.some((v) => v.requirement === requirement && v.status === 'pending')) return { requirement, optional: isOptional, state: 'pending', note: null }
     const latest = reviewed.find((v) => v.requirement === requirement)
-    return { requirement, state: latest?.status ?? 'none', note: latest?.note ?? null }
-  })
+    return { requirement, optional: isOptional, state: latest?.status ?? 'none', note: latest?.note ?? null }
+  }
+  return [...inOrder(required).map((r) => row(r, false)), ...inOrder(optional).filter((r) => !required.has(r)).map((r) => row(r, true))]
 }
 
 /** A hidden service's note: 'needed' while a document it waits for is missing or rejected, else 'waiting' (in staff review). */

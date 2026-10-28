@@ -3,6 +3,7 @@ import { categories, categoryTexts, pages, notSuspendedSql, pageTexts, photos, p
 import {
   CategoryInputSchema,
   CategoryUpdateSchema,
+  DOCUMENT_TYPES,
   PageInputSchema,
   PageUpdateSchema,
   StaffInputSchema,
@@ -10,7 +11,6 @@ import {
   type AdminListQuery,
 } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
-import { REQUIREMENTS } from '../documents'
 import { fail } from '../providers/http'
 import { mediaBucket, photoUrl, removeObject } from '../storage'
 import { activeAdmins, lockAdmins, type StaffRole } from '../users'
@@ -108,6 +108,7 @@ async function withNames(tx: Tx, rows: (typeof categories.$inferSelect)[]) {
     slug: r.slug,
     sort: r.sort,
     requiredDocuments: r.requiredDocuments,
+    optionalDocuments: r.optionalDocuments,
     names: { de: name(r.id, 'de'), en: name(r.id, 'en') },
   }))
 }
@@ -133,7 +134,15 @@ async function getCategory(tx: Tx, id: string) {
   return row ? ok((await withNames(tx, [row]))[0]) : notFound()
 }
 
-const unknownDocs = (docs?: string[]) => !!docs?.some((d) => !REQUIREMENTS.includes(d))
+const unknownDocs = (docs?: string[]) => !!docs?.some((d) => !(DOCUMENT_TYPES as readonly string[]).includes(d))
+
+/** 400 for a type outside DOCUMENT_TYPES, or one listed as both required and optional; null when fine. */
+const docListsError = (b: { requiredDocuments?: string[]; optionalDocuments?: string[] }) =>
+  unknownDocs(b.requiredDocuments) || unknownDocs(b.optionalDocuments)
+    ? fail(400, { error: 'Unknown required document' })
+    : b.requiredDocuments?.some((d) => b.optionalDocuments?.includes(d))
+      ? fail(400, { error: 'A document cannot be both required and optional' })
+      : null
 
 async function writeNames(tx: Tx, id: string, names: { de: string; en?: string }) {
   await tx.delete(categoryTexts).where(eq(categoryTexts.categoryId, id))
@@ -142,10 +151,11 @@ async function writeNames(tx: Tx, id: string, names: { de: string; en?: string }
 
 async function createCategory(tx: Tx, request: Request) {
   const b = await parseBody(CategoryInputSchema, request)
-  if (unknownDocs(b.requiredDocuments)) return fail(400, { error: 'Unknown required document' })
+  const bad = docListsError(b)
+  if (bad) return bad
   const [row] = await tx
     .insert(categories)
-    .values({ slug: b.slug, sort: b.sort ?? 0, requiredDocuments: b.requiredDocuments ?? [] })
+    .values({ slug: b.slug, sort: b.sort ?? 0, requiredDocuments: b.requiredDocuments ?? [], optionalDocuments: b.optionalDocuments ?? [] })
     .returning({ id: categories.id })
     .catch(slugTaken)
   await writeNames(tx, row!.id, b.names)
@@ -155,9 +165,10 @@ async function createCategory(tx: Tx, request: Request) {
 
 async function updateCategory(tx: Tx, id: string, request: Request) {
   const b = await parseBody(CategoryUpdateSchema, request)
-  if (unknownDocs(b.requiredDocuments)) return fail(400, { error: 'Unknown required document' })
+  const bad = docListsError(b)
+  if (bad) return bad
   if (!isUuid(id) || !(await tx.select({ id: categories.id }).from(categories).where(eq(categories.id, id))).length) return notFound()
-  const set = { ...(b.slug !== undefined && { slug: b.slug }), ...(b.sort !== undefined && { sort: b.sort }), ...(b.requiredDocuments && { requiredDocuments: b.requiredDocuments }) }
+  const set = { ...(b.slug !== undefined && { slug: b.slug }), ...(b.sort !== undefined && { sort: b.sort }), ...(b.requiredDocuments && { requiredDocuments: b.requiredDocuments }), ...(b.optionalDocuments && { optionalDocuments: b.optionalDocuments }) }
   if (Object.keys(set).length) await tx.update(categories).set(set).where(eq(categories.id, id)).catch(slugTaken)
   if (b.names) await writeNames(tx, id, b.names)
   return getCategory(tx, id)

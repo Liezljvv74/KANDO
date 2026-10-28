@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import sharp from 'sharp'
 import { db, documents, pendingObjectDeletes, privateFiles, type Tx } from '@kando/db'
-import type { Document } from '@kando/contract'
+import { DOCUMENT_TYPES, type Document } from '@kando/contract'
 import { flushPendingObjects } from './account'
 import { fail } from './providers/http'
 import { lockProfile } from './providers/profile'
@@ -11,7 +11,6 @@ import { documentsBucket, removeObject, storage } from './storage'
 
 export const MAX_DOCUMENT_BYTES = 4_500_000
 export const MAX_PENDING_UPLOADS = 10
-export const REQUIREMENTS = ['police-certificate', 'permit']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const MAX_PIXELS = 40_000_000 // decompression-bomb cap, as for photos
@@ -106,7 +105,7 @@ export async function listDocuments(tx: Tx, userId: string): Promise<Document[]>
  * pending: then the file is removed (that answer is returned, not thrown, so the removal commits).
  */
 export async function submitDocument(tx: Tx, userId: string, requirement: string, fileId: string, afterCommit: AfterCommit): Promise<Response | Document> {
-  if (!REQUIREMENTS.includes(requirement)) return fail(400, { error: 'Invalid requirement' })
+  if (!(DOCUMENT_TYPES as readonly string[]).includes(requirement)) return fail(400, { error: 'Invalid requirement' })
   await lockProfile(tx, userId) // per user: a double tap cannot pass the pending check twice
   const file = UUID.test(fileId)
     ? (await tx.select().from(privateFiles).where(and(eq(privateFiles.id, fileId), eq(privateFiles.ownerId, userId))))[0]

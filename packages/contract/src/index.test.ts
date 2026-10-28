@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   AddressSchema,
   AdminListQuerySchema,
+  DOCUMENT_TYPES,
   DocumentsListSchema,
   OwnServicesListSchema,
   parseBody,
@@ -103,5 +104,21 @@ describe('address', () => {
 describe('service input as the app sends it', () => {
   it('a category alone is valid (the server fills currency and title)', () => {
     expect(ServiceInputSchema.safeParse({ categoryId: service.categoryId }).success).toBe(true)
+  })
+})
+
+describe('DOCUMENT_TYPES', () => {
+  it('lists the nine types once each, in display order', () => {
+    expect([...DOCUMENT_TYPES]).toEqual([
+      'id-document',
+      'trade-registration',
+      'liability-insurance',
+      'police-certificate',
+      'hygiene-certificate',
+      'food-business-registration',
+      'permit',
+      'craft-qualification',
+      'first-aid-certificate',
+    ])
   })
 })

@@ -243,3 +243,7 @@ it('the profile photo is private to its owner: another user cannot see it and ge
   const kinds = async () => PhotosListSchema.parse(await (await call(photos.GET, 'fl1')).json()).docs.map((d) => d.kind)
   expect((await kinds())[0]).toBe('profile')
 })
+
+it('every one of the nine document types can be submitted, optional ones included', async () => {
+  for (const type of ['first-aid-certificate', 'id-document']) expect((await submit('fl1', type, await newFile('fl1'))).status).toBe(201)
+})
