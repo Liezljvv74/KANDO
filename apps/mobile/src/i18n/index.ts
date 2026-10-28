@@ -3,6 +3,8 @@ import { getLocales } from 'expo-localization'
 import * as SecureStore from 'expo-secure-store'
 import { useSyncExternalStore } from 'react'
 
+import app from '../../app.json'
+
 // The texts live in the shared catalogue (@kando/i18n); this module only keeps the app's current language.
 export type { Key, Lang }
 
@@ -38,7 +40,8 @@ export const useLang = () =>
   )
 
 /** The catalogue text in the current language; `{name}` placeholders come from `params`. */
-export const SUPPORT_EMAIL = 'info@skillweb.space'
+// The support address is one setting, in app.json (expo.extra.supportEmail), like the product name: never typed into a text.
+export const SUPPORT_EMAIL = app.expo.extra.supportEmail
 export const t = (key: Key, params?: Record<string, string | number>) => translate(lang, key, { contact: SUPPORT_EMAIL, ...params })
 
 export const errorKeys: Record<string, Key> = {
