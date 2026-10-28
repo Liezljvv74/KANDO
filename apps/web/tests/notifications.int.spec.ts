@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MeSchema } from '@kando/contract'
 import { clearOutbox, notifyDocumentDecision, outboxForTests } from '@kando/domain'
+import { TIME_ZONE } from '@kando/i18n'
 import { call, cleanupUsers, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -46,6 +47,15 @@ it('live and nothing else pending: "profile is live" email with the link, and on
   expect(await rows('nt-live')).toEqual([{ kind: 'profile-live', payload: { url: 'https://kando.example/providers/nt-live-slug?lang=en' } }])
 })
 
+it('two documents approved at the same moment: one "profile is live" email and one notification', async () => {
+  await seedProvider('nt-race', { name: 'nt-race', categoryId: multiId })
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status, reviewed_at) VALUES ('nt-race', 'police-certificate', 'r1', 'approved', now()), ('nt-race', 'permit', 'r2', 'approved', now())")
+  // both approvals have committed before either email is decided
+  await Promise.all(['police-certificate', 'permit'].map((requirement) => notifyDocumentDecision('nt-race', { id: 'x', requirement, status: 'approved', note: null })))
+  expect(outboxForTests().map((m) => m.subject).sort()).toEqual(['Dein Dokument wurde freigegeben', 'Dein Profil ist online'].sort())
+  expect(await rows('nt-race')).toHaveLength(1)
+})
+
 it('the link of a German provider has no lang parameter', async () => {
   await decide('nt-de')
   expect((await rows('nt-de'))[0].payload.url).toBe('https://kando.example/providers/nt-de-slug')
@@ -73,7 +83,7 @@ it('draft profile: offline text, no notification', async () => {
 
 it('suspended profile: suspended text with the date, no notification', async () => {
   await decide('nt-susp', { suspended: true, lang: 'en' })
-  const date = new Date(Date.now() + 86400000).toLocaleDateString('en-GB')
+  const date = new Date(Date.now() + 86400000).toLocaleDateString('en-GB', { timeZone: TIME_ZONE })
   expect(outboxForTests()[0]!.subject).toBe('Your document is approved, your profile is suspended')
   expect(outboxForTests()[0]!.text).toContain(`suspended until ${date}`)
   expect(await rows('nt-susp')).toEqual([])

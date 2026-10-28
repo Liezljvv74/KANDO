@@ -1,7 +1,8 @@
-import { and, count, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-orm'
-import { db, photos, providers, users, type Tx } from '@kando/db'
+import { and, count, desc, eq, ilike, inArray, lte, or, sql } from 'drizzle-orm'
+import { db, notSuspendedSql, photos, providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { isLang } from '@kando/i18n'
+import { inBatches } from '../batches'
 import { notifySuspension } from '../notifications'
 import type { AfterCommit } from '../app-request'
 import { fail } from '../providers/http'
@@ -42,7 +43,7 @@ export async function listUsers(tx: Tx, q: AdminListQuery) {
   const text = textOf(f.q)
   const where = and(
     text ? or(ilike(users.email, like(text)), ilike(fullName, like(text))) : undefined,
-    f.suspended === true ? gt(users.suspendedUntil, sql`now()`) : undefined,
+    f.suspended === true ? sql`NOT ${notSuspendedSql('users')}` : undefined,
   )
   const total = (await tx.select({ n: count() }).from(users).where(where))[0]!.n
   const rows = await tx
@@ -78,7 +79,8 @@ export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: {
     .returning()
   if (!row) return notFound()
   const hidden = await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id)).returning({ status: providers.status })
-  // the email speaks of the live profile: only a published one is told, and of a lift only when one was suspended
+  // the email speaks of the live profile: only a published one is told, and of a lift only when the column was still set
+  // (an ended date the daily check has not cleared yet counts: clearing it here removes the check's only chance to tell them)
   if (hidden.some((h) => h.status === 'published') && (until || was)) afterCommit(() => notifySuspension(id, { until, reason: input.reason }))
   return ok((await withPictures(tx, [row]))[0])
 }
@@ -95,6 +97,6 @@ export async function endExpiredSuspensions(exec: typeof db): Promise<string[]> 
     const hidden = ids.length ? await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids)).returning({ owner: providers.ownerId, status: providers.status }) : []
     return { ids, withProfile: hidden.filter((h) => h.status === 'published').map((h) => h.owner) }
   })
-  for (const id of ended.withProfile) await notifySuspension(id, { until: null, reason: '' }) // the email speaks of the live profile
+  await inBatches(ended.withProfile, 5, (id) => notifySuspension(id, { until: null, reason: '' })) // the email speaks of the live profile
   return ended.ids
 }

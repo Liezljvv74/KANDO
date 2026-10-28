@@ -48,5 +48,5 @@ describe.skipIf(!enabled)('auth cookie flow', () => {
       { params: Promise.resolve({}) },
     )
     expect(forged.status).toBe(401)
-  })
+  }, 20_000) // real Neon Auth sign-up over the network: the 5 s default timed out about 1 run in 8
 })

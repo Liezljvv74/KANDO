@@ -25,7 +25,14 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
 
 const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
 // Suspensions end by their date: a past suspended_until counts as none.
-const NOT_SUSPENDED = '(suspended_until IS NULL OR suspended_until <= now())'
+// The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
+export const notSuspended = (alias = ''): string => {
+  const c = `${alias ? `${alias}.` : ''}suspended_until`
+  return `(${c} IS NULL OR ${c} <= now())`
+}
+/** The same condition as a SQL fragment for Drizzle queries: the alias is a constant, never input (this file is on the raw-SQL allow-list). */
+export const notSuspendedSql = (alias = '') => sql.raw(notSuspended(alias))
+const NOT_SUSPENDED = notSuspended()
 const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND ${NOT_SUSPENDED})`
 
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
@@ -152,7 +159,7 @@ const PROVIDER_FUNCTIONS = [
     BEGIN
       SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;
       IF NOT FOUND THEN RETURN false; END IF;
-      IF p_published AND ((r.suspended_until IS NOT NULL AND r.suspended_until > now()) OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND u.suspended_until > now())) THEN
+      IF p_published AND (NOT ${notSuspended('r')} OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND NOT ${notSuspended('u')})) THEN
         RETURN false;
       END IF;
       IF p_published AND r.slug IS NULL THEN
@@ -178,7 +185,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = p_provider_id
         AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL)
-        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
           WHERE NOT EXISTS (
@@ -193,7 +200,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
       WHERE s.id = p_service_id AND s.provider_id = p_provider_id
-        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
         ) $$`,
