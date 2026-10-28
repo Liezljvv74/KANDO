@@ -8,7 +8,7 @@ type Handler = (ctx: { tx: Tx; staff: StaffUser; request: Request; params: Recor
 /**
  * Wrapper for every /api/admin route: staff check first (401/403, nothing runs without it), then the handler in one
  * transaction on the owner connection (staff-only columns are written here, not as app_user). `role` may depend on
- * the route params and method (the generic `[resource]` routes).
+ * the route params and method (the generic `[resource]` routes). Every successful non-GET request leaves one audit line.
  */
 export function adminRequest(role: Role | ((params: Record<string, string>, method: string) => Role), handler: Handler): RouteHandler {
   return async (request, ctx) => {
@@ -19,6 +19,10 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
       const staff = await requireStaff(typeof role === 'function' ? role(params, request.method) : role)
       const queue: (() => Promise<void>)[] = []
       const response = await db.transaction((tx) => handler({ tx, staff, request, params, afterCommit: (fn) => void queue.push(fn) }))
+      // Audit trail: one line per successful staff write, ids only (no bodies, no personal data); read in the Vercel logs.
+      if (request.method !== 'GET' && response.status < 400) {
+        console.log(JSON.stringify({ audit: 'staff-action', time: new Date().toISOString(), staffId: staff.id, method: request.method, path: new URL(request.url).pathname, targetId: params.id ?? null }))
+      }
       for (const fn of queue) await Promise.resolve().then(fn).catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed`, e))
       return response
     } catch (error) {

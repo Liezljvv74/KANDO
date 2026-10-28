@@ -35,3 +35,20 @@ it('the configured site address counts as the same site', async () => {
   expect((await adminRoute(req('PATCH', 'https://other.example'), ctx)).status).toBe(403)
 })
 
+
+it('a successful staff write leaves one audit line with ids only; reads and failures leave none', async () => {
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  staff.id = 'oc-user'
+  const route = adminRequest('any', async ({ request }) => new Response(null, { status: request.headers.get('x-fail') ? 409 : 200 }))
+  const call = (method: string, headers: Record<string, string> = {}) =>
+    route(new Request('http://localhost:3000/api/admin/users/u-7/suspend?secret=1', { method, headers, body: method === 'GET' ? undefined : '{"reason":"Anna Muster"}' }), { params: Promise.resolve({ id: 'u-7' }) })
+  await call('GET')
+  await call('POST', { 'x-fail': '1' })
+  expect(log).not.toHaveBeenCalled()
+  await call('POST')
+  expect(log).toHaveBeenCalledTimes(1)
+  const line = String(log.mock.calls[0]![0])
+  expect(JSON.parse(line)).toEqual({ audit: 'staff-action', time: expect.any(String), staffId: 'oc-user', method: 'POST', path: '/api/admin/users/u-7/suspend', targetId: 'u-7' })
+  expect(line).not.toMatch(/Anna|secret/)
+  log.mockRestore()
+})
