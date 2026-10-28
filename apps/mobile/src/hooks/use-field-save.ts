@@ -71,6 +71,7 @@ export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>
     },
     status,
     retry: () => void saver.current!.retry(),
-    flush: () => void saver.current!.flush(),
+    /** Resolves when the request it started has ended (or at once when one is already running). */
+    flush: () => saver.current!.flush(),
   }
 }

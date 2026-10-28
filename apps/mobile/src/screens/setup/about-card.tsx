@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
@@ -10,7 +10,8 @@ import { Card, SectionHeader, SmallButton, SwitchRow } from '@/components/form-u
 import { Select } from '@/components/select'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { errorText, t } from '@/i18n'
-import { MAX_SKILLS, MAX_SKILL_LENGTH } from '@/lib/profile-form'
+import { registerPendingTags } from '@/lib/pending-tags'
+import { MAX_SKILLS, MAX_SKILL_LENGTH, withItem } from '@/lib/profile-form'
 import { TagInput } from '../my-profile/tag-input'
 
 const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split('\n').map((x) => x.trim()).filter(Boolean))]
@@ -55,6 +56,34 @@ export function AboutCard({ initial, onSaved, stamp }: { initial: MyProfile; onS
   const [skillText, setSkillText] = useState('')
   const [strengthText, setStrengthText] = useState('')
   const [strengthsTooLong, setStrengthsTooLong] = useState(false)
+
+  // Typed but not yet added tags are added and saved when the page is left or Publish is pressed (see lib/pending-tags).
+  const typed = useRef({ skills: skills.value, skillText, strengths: strengths.value, strengthText })
+  typed.current = { skills: skills.value, skillText, strengths: strengths.value, strengthText }
+  useEffect(() => {
+    const flushTyped = () => {
+      const now = typed.current
+      const jobs: Promise<void>[] = []
+      if (now.skillText.trim()) {
+        skills.setValue(withItem(now.skills, now.skillText))
+        setSkillText('')
+        jobs.push(skills.flush())
+      }
+      const joined = withItem(now.strengths, now.strengthText)
+      if (now.strengthText.trim() && joined.join('\n').length <= MAX_STRENGTHS_TEXT) {
+        strengths.setValue(joined)
+        setStrengthText('')
+        jobs.push(strengths.flush())
+      }
+      return Promise.all(jobs)
+    }
+    const off = registerPendingTags(flushTyped)
+    return () => {
+      off()
+      void flushTyped() // the card is going away
+    }
+    // runs once: reads the latest values through `typed`, the setters are stable
+  }, [])
 
   // A failed save keeps the value and says why, with a retry.
   const problem = (key: string, f: { status: string; retry: () => void }) =>
