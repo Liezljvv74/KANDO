@@ -100,7 +100,7 @@ function requireSecret(): string {
  */
 export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, headers: Pick<Headers, 'get'>): string {
   if (user) return `user:${user.id}`
-  const ip = (request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-real-ip'))?.split(',')[0]?.trim() || 'unknown'
+  const ip = (headers.get('x-vercel-forwarded-for') || headers.get('x-real-ip'))?.split(',')[0]?.trim() || 'unknown'
   const hash = createHash('sha256').update(`${requireSecret()}${ip}`).digest('hex')
   return `ip:${hash.slice(0, 32)}`
 }
