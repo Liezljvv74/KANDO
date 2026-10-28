@@ -106,3 +106,10 @@ describe('acceptLang', () => {
     [undefined, undefined],
   ] as const)('%s -> %s', (header, lang) => expect(acceptLang(header)).toBe(lang))
 })
+
+it('the optional street and city labels say so in both languages', () => {
+  for (const [lang, word] of [['de', 'optional'], ['en', 'optional']] as const) {
+    expect(t(lang, 'address.street')).toContain(`(${word})`)
+    expect(t(lang, 'address.city')).toContain(`(${word})`)
+  }
+})
