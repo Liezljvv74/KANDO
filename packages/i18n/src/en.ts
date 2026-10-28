@@ -139,6 +139,8 @@ export const en: Record<Key, string> = {
   'myProfile.photoTake': 'Take photo',
   'myProfile.photoChoose': 'Choose photo',
   'myProfile.photoRemove': 'Remove picture',
+  'myProfile.photoRemoveTitle': 'Remove picture?',
+  'myProfile.photoRemoveBody': 'Your profile picture will be deleted. You can add a new one at any time.',
   'myProfile.photoEdit': 'Change profile photo',
   'myProfile.denied': 'Allow access to the camera/photos in Settings.',
   'myProfile.openSettings': 'Open Settings',

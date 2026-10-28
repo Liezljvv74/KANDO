@@ -138,6 +138,8 @@ export const de = {
   'myProfile.photoTake': 'Foto aufnehmen',
   'myProfile.photoChoose': 'Foto auswählen',
   'myProfile.photoRemove': 'Foto entfernen',
+  'myProfile.photoRemoveTitle': 'Bild entfernen?',
+  'myProfile.photoRemoveBody': 'Dein Profilbild wird gelöscht. Du kannst jederzeit ein neues hinzufügen.',
   'myProfile.photoEdit': 'Profilfoto ändern',
   'myProfile.denied': 'Erlaube den Zugriff auf Kamera/Fotos in den Einstellungen.',
   'myProfile.openSettings': 'Einstellungen öffnen',
