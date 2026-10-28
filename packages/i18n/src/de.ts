@@ -390,4 +390,8 @@ export const de = {
   'account.exportCsv': 'Als CSV exportieren',
   'error.badFormat': 'Dieses Exportformat kennen wir nicht.',
   'account.deleteUnconfirmed': 'Wir konnten die Löschung nicht bestätigen. Dein Konto gibt es vielleicht noch: Prüfe deine Verbindung und versuche es noch einmal oder wende dich an {contact}.',
+  'error.replacementFirst': 'Dieses Dokument lässt sich noch nicht löschen, weil es dein einziges für diese Prüfung ist. Lade zuerst das neue Dokument hoch, dann kannst du das alte löschen.',
+  'myProfile.docDeleteTitle': 'Dokument löschen?',
+  'myProfile.docDeleteBody': 'Die alte Datei wird endgültig entfernt. Dein anderes Dokument für diese Prüfung bleibt und wird wie gewohnt geprüft.',
+  'myProfile.docDeleteBody.approved': 'Dieses Dokument ist freigegeben. Wenn du es löschst, gehen die Leistungen, die es brauchen, offline, bis dein neues Dokument freigegeben ist. Die alte Datei wird endgültig entfernt.',
 }

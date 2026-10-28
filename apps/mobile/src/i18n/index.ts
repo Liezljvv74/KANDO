@@ -67,6 +67,7 @@ export const errorKeys: Record<string, Key> = {
   BAD_FORMAT: 'error.badFormat',
   EMAIL_MISMATCH: 'account.emailMismatch',
   LAST_ADMIN: 'account.lastAdmin',
+  REPLACEMENT_FIRST: 'error.replacementFirst',
   // Auth server (`code`)
   INVALID_EMAIL_OR_PASSWORD: 'error.invalidLogin',
   USER_ALREADY_EXISTS: 'error.emailTaken',

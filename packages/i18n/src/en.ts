@@ -391,4 +391,8 @@ export const en: Record<Key, string> = {
   'account.exportCsv': 'Export as CSV',
   'error.badFormat': 'This export format is not known.',
   'account.deleteUnconfirmed': 'We could not confirm the deletion. Your account may still exist: check your connection and try again, or contact {contact}.',
+  'error.replacementFirst': 'This document cannot be deleted yet, because it is your only one for this check. Add the new document first, then you can delete the old one.',
+  'myProfile.docDeleteTitle': 'Delete this document?',
+  'myProfile.docDeleteBody': 'The old file is removed for good. Your other document for this check stays and is checked as usual.',
+  'myProfile.docDeleteBody.approved': 'This document is approved. If you delete it, the services that need it go offline until your new document is approved. The old file is removed for good.',
 }
