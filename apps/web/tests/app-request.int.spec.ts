@@ -170,3 +170,16 @@ it('a thrown 400 Response is returned unchanged', async () => {
   expect(body.error).toBe('Invalid input')
   expect(body.issues.length).toBeGreaterThan(0)
 })
+
+it('a suspended person: writes are 403 SUSPENDED, reads work, an expired date is not suspended', async () => {
+  const write = appRequest({ auth: 'required' }, async () => Response.json({ ran: true }))
+  const req = (id: string, method: string) => new Request('http://localhost/x', { method, headers: { cookie: `uid=${id}:${id}@test.skilled.invalid` } })
+  await me(as('usus'), ctx)
+  await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usus'")
+  const blocked = await write(req('usus', 'POST'), ctx)
+  expect(blocked.status).toBe(403)
+  expect(await blocked.json()).toEqual({ error: 'SUSPENDED' })
+  expect((await write(req('usus', 'GET'), ctx)).status).toBe(200)
+  await pool.query("UPDATE users SET suspended_until = now() - interval '1 day' WHERE id = 'usus'")
+  expect((await write(req('usus', 'POST'), ctx)).status).toBe(200)
+})

@@ -33,6 +33,7 @@ export const en: Record<Key, string> = {
   'error.profileSuspended': 'Your profile is suspended. Please contact support.',
   'error.createProfileFirst': 'Create your profile first.',
   'error.unverifiedEmail': 'Please confirm your email address first. Check your inbox.',
+  'error.accountSuspended': 'Your account is suspended. You cannot make changes. Please contact support.',
   'error.invalidLogin': 'Email or password is incorrect.',
   'error.locked': 'Too many failed attempts. Your account is locked for 10 minutes.',
   'error.network': 'Cannot reach the server. Please check your internet connection.',

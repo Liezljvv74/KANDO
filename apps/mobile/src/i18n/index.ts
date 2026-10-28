@@ -47,6 +47,7 @@ const errorKeys: Record<string, Key> = {
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',
   'Profile suspended': 'error.profileSuspended',
+  SUSPENDED: 'error.accountSuspended',
   'Create your profile first': 'error.createProfileFirst',
   'Not found': 'error.notFound',
   'Reference limit reached': 'error.referenceLimit',

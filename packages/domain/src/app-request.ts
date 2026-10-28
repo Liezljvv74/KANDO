@@ -26,7 +26,8 @@ type Handler<P> = (ctx: {
  * Builds the app request wrapper around a session source (the web app passes the Neon Auth one):
  * session check, body-size limit, first-contact users row, one transaction as app_user, rollback on error.
  * An unconfirmed email is refused (403 EMAIL_NOT_VERIFIED) where auth is required and counts as signed out where it
- * is optional: it never gets a users row.
+ * is optional: it never gets a users row. A suspended person (users.suspended_until in the future) gets 403 SUSPENDED
+ * on every write; reads still work.
  */
 export function createAppRequest(getSession: SessionResolver) {
   return <P = undefined>(opts: Opts<P>, handler: Handler<P>): RouteHandler =>
@@ -49,6 +50,10 @@ export function createAppRequest(getSession: SessionResolver) {
         }
         const prepared = (opts.prepare ? await opts.prepare(request) : undefined) as P
         const user = session ? await ensureUser(session, request) : null
+        // A suspended person can still read their account (GET), never write; an expired date counts as not suspended.
+        if (user?.suspendedUntil && user.suspendedUntil > new Date() && request.method !== 'GET') {
+          return Response.json({ error: 'SUSPENDED' }, { status: 403 })
+        }
         const params = await ctx.params
         const queue: (() => Promise<void>)[] = []
         const afterCommit: AfterCommit = (fn) => void queue.push(fn)

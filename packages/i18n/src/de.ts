@@ -32,6 +32,7 @@ export const de = {
   'error.profileSuspended': 'Dein Profil ist gesperrt. Bitte wende dich an den Support.',
   'error.createProfileFirst': 'Lege zuerst dein Profil an.',
   'error.unverifiedEmail': 'Bitte bestätige zuerst deine E-Mail-Adresse. Schau in dein Postfach.',
+  'error.accountSuspended': 'Dein Konto ist gesperrt. Du kannst nichts ändern. Bitte wende dich an den Support.',
   'error.invalidLogin': 'E-Mail oder Passwort ist falsch.',
   'error.locked': 'Zu viele Fehlversuche. Dein Konto ist für 10 Minuten gesperrt.',
   'error.network': 'Keine Verbindung zum Server. Bitte prüfe deine Internetverbindung.',
