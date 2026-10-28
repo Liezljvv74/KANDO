@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { clearOutbox, outboxForTests } from '@kando/domain'
+import { clearOutbox, inBatches, outboxForTests } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
 
 const cron = await import('../app/api/cron/suspensions/route')
@@ -40,4 +40,31 @@ it('ends a past suspension once: both columns cleared, one email; a future one i
   expect((await pool.query("SELECT suspended_until FROM providers WHERE owner_id = 'cr-future'")).rows[0].suspended_until).not.toBeNull()
   expect(await (await get('Bearer s3cret')).json()).toEqual({ ended: [] })
   expect(outboxForTests()).toHaveLength(1)
+})
+
+it('inBatches runs at most 5 at a time, and all of them', async () => {
+  let running = 0
+  let most = 0
+  const done: number[] = []
+  await inBatches([...Array(12).keys()], 5, async (n) => {
+    most = Math.max(most, ++running)
+    await new Promise((r) => setTimeout(r, 5))
+    running--
+    done.push(n)
+  })
+  expect(most).toBe(5)
+  expect(done.sort((a, b) => a - b)).toEqual([...Array(12).keys()])
+})
+
+it('the daily check emails every ended profile (more than one batch)', async () => {
+  const { categoryId } = await seedBase()
+  const ids = Array.from({ length: 7 }, (_, i) => `cr-many${i}`)
+  for (const id of ids) {
+    await seedProvider(id, { name: id, categoryId })
+    await pool.query("UPDATE users SET suspended_until = now() - interval '1 hour', suspended_reason = 'old' WHERE id = $1", [id])
+    await pool.query("UPDATE providers SET suspended_until = now() - interval '1 hour' WHERE owner_id = $1", [id])
+  }
+  clearOutbox()
+  expect(((await (await get('Bearer s3cret')).json()) as { ended: string[] }).ended.sort()).toEqual(ids)
+  expect(outboxForTests().map((m) => m.to).sort()).toEqual(ids.map(EMAIL).sort())
 })

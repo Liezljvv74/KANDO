@@ -2,6 +2,7 @@ import { and, count, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-
 import { db, photos, providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { isLang } from '@kando/i18n'
+import { inBatches } from '../batches'
 import { notifySuspension } from '../notifications'
 import type { AfterCommit } from '../app-request'
 import { fail } from '../providers/http'
@@ -95,6 +96,6 @@ export async function endExpiredSuspensions(exec: typeof db): Promise<string[]> 
     const hidden = ids.length ? await tx.update(providers).set({ suspendedUntil: null, updatedAt: sql`now()` }).where(inArray(providers.ownerId, ids)).returning({ owner: providers.ownerId, status: providers.status }) : []
     return { ids, withProfile: hidden.filter((h) => h.status === 'published').map((h) => h.owner) }
   })
-  for (const id of ended.withProfile) await notifySuspension(id, { until: null, reason: '' }) // the email speaks of the live profile
+  await inBatches(ended.withProfile, 5, (id) => notifySuspension(id, { until: null, reason: '' })) // the email speaks of the live profile
   return ended.ids
 }
