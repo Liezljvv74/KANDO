@@ -4,7 +4,7 @@ import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
-import { lockProfile, ownProvider } from './profile'
+import { getMyProfile, lockProfile, ownProvider } from './profile'
 
 /** Owner decision: customer ratings matter more than self-listed references. */
 export const MAX_PROVIDER_REFERENCES = 2
@@ -121,7 +121,11 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
 export async function deleteService(tx: Tx, userId: string, id: string): Promise<boolean> {
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return false
+  await lockProfile(tx, userId) // serialises with publish and the other edits
   await tx.delete(services).where(eq(services.id, id))
+  // a live profile stays complete: the throw rolls the delete back
+  const profile = (await getMyProfile(tx, userId))!
+  if (profile.status === 'published' && profile.missing.length) fail(409, { error: 'Profile incomplete', missing: profile.missing })
   return true
 }
 

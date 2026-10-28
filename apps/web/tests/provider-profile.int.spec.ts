@@ -238,6 +238,24 @@ it('a live profile cannot be emptied by a save: 409 with the missing list, nothi
   expect((await call(PUT, 'lv1', 'PUT', { bio: 'ok' })).status).toBe(200) // a harmless edit still saves
 })
 
+it('a live profile cannot delete its last complete service: 409, nothing deleted; another service makes it fine', async () => {
+  const { categoryId } = await seedBase()
+  await call(me.GET, 'lv2')
+  await pool.query("UPDATE users SET first_name = 'Lena', last_name = 'Fischer' WHERE id = 'lv2'")
+  await call(PUT, 'lv2', 'PUT', profile)
+  const first = await (await call(servicesRoute.POST, 'lv2', 'POST', { categoryId, priceType: 'on-request', currency: 'EUR' })).json()
+  await givePhoto('lv2')
+  expect((await call(publishRoute.POST, 'lv2', 'POST')).status).toBe(200)
+  const drop = (id: string) => call(serviceRoute.DELETE, 'lv2', 'DELETE', undefined, { id })
+  const refused = await drop(first.id)
+  expect(refused.status).toBe(409)
+  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service'] })
+  expect((await pool.query("SELECT count(*)::int AS n FROM services WHERE id = $1", [first.id])).rows[0].n).toBe(1)
+  const second = await (await call(servicesRoute.POST, 'lv2', 'POST', { categoryId, priceType: 'on-request', currency: 'EUR' })).json()
+  expect((await drop(first.id)).status).toBe(204)
+  expect((await drop(second.id)).status).toBe(409)
+})
+
 it('a provider whose names are missing cannot publish: missing lists name', async () => {
   const { categoryId } = await seedBase()
   await call(me.GET, 'nm1')
