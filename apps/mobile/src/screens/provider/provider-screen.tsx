@@ -10,7 +10,7 @@ import { getProvider, getTranslation, photoSrc } from '@/api/providers'
 import { Avatar } from '@/components/avatar'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
-import { getLang, t, useLang } from '@/i18n'
+import { getLang, t, useLang, type Key } from '@/i18n'
 import { formatPrice } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
 
@@ -65,6 +65,7 @@ export default function ProviderScreen() {
   const skills = Array.isArray(p.skills) ? p.skills.filter((s): s is string => typeof s === 'string') : []
   // Stored one per line; shown as tags like the skills. Unique: a line typed twice in the admin panel would repeat.
   const strengths = [...new Set((p.strengths ?? '').split('\n').map((s) => s.trim()).filter(Boolean))]
+  const checkedLine = `${t('provider.checkedDocuments')}: ${(p.checkedDocuments ?? []).map((d) => t(`doc.short.${d}` as Key)).join(', ')}`
   return (
     <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingBottom: 16 + bottom }]}>
       {options}
@@ -78,6 +79,7 @@ export default function ProviderScreen() {
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
           {!!p.worksRemotely && <Text style={styles.small}>{t('provider.remote')}</Text>}
+          {(p.checkedDocuments?.length ?? 0) > 0 && <Text style={styles.small}>{checkedLine}</Text>}
         </View>
       </View>
 

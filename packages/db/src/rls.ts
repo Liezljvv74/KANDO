@@ -204,8 +204,18 @@ const ELIGIBILITY_FUNCTIONS = [
         AND NOT EXISTS (
           SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
         ) $$`,
-  `REVOKE ALL ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid) FROM PUBLIC`,
-  `GRANT EXECUTE ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid) TO ${APP_ROLE}`,
+  // The public "checked documents" line: type keys only (no files, notes or dates), for a published, non-suspended provider.
+  // Per type the latest reviewed check decides (a later rejection removes it); pending checks do not count.
+  `CREATE OR REPLACE FUNCTION public_checked_documents(p_provider_id uuid) RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT coalesce(array_agg(l.requirement ORDER BY l.requirement), '{}') FROM (
+        SELECT DISTINCT ON (d.requirement) d.requirement, d.status
+        FROM documents d JOIN providers p ON p.owner_id = d.owner_id
+        WHERE p.id = p_provider_id AND p.status = 'published' AND ${notSuspended('p')} AND d.status IN ('approved', 'rejected')
+        ORDER BY d.requirement, d.reviewed_at DESC NULLS LAST, d.created_at DESC, d.id DESC
+      ) l WHERE l.status = 'approved' $$`,
+  `REVOKE ALL ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid), public_checked_documents(uuid) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid), public_checked_documents(uuid) TO ${APP_ROLE}`,
 ]
 
 // app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.

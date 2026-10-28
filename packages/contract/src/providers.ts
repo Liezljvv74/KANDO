@@ -71,6 +71,8 @@ export const ProviderDetailSchema = z.object({
   photos: z.array(
     z.object({ id: z.string(), url: z.string().nullable(), alt: z.string().nullable() }),
   ),
+  /** Document type keys that staff approved (DOCUMENT_TYPES order); names only, never files or dates. */
+  checkedDocuments: z.array(z.string()).default([]),
   isNew: z.boolean(),
   /** True when the page texts are not in the reader's language, so the translate button shows. */
   translatable: z.boolean(),

@@ -144,6 +144,12 @@ export default async function ProviderPage({ params, searchParams }: Args) {
           {p.place && <p className="opacity-70">{p.place}</p>}
           <p className="opacity-70">{categoryNames.join(' · ')}</p>
           {p.worksRemotely && <p className="text-sm">{tt('provider.remote')}</p>}
+          {p.checkedDocuments.length > 0 && (
+            <p className="text-sm">
+              {tt('provider.checkedDocuments')}:{' '}
+              {p.checkedDocuments.map((d) => tt(`doc.short.${d}` as Key)).join(', ')}
+            </p>
+          )}
         </div>
       </header>
 
