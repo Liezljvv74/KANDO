@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { describeError } from './log-error'
 import { getSignedUrl as presign } from '@aws-sdk/s3-request-presigner'
 
 export interface Storage {
@@ -50,4 +51,4 @@ export const photoUrl = (key: string): string => storage().publicUrl(key)
 export const removeObject = (bucket: string, key: string): Promise<void> =>
   storage()
     .delete(bucket, key)
-    .catch((e) => console.error(`[storage] could not delete ${bucket}/${key}`, e))
+    .catch((e) => console.error(`[storage] could not delete ${bucket}/${key} ${describeError(e)}`))

@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { describeError } from './log-error'
 import { t, type Lang } from '@kando/i18n'
 
 const FROM = 'SkillWeb <noreply@skillweb.space>'
@@ -53,6 +54,6 @@ export async function sendEmail(args: { to: string; lang: Lang; template: Templa
     const { error } = await client.emails.send({ from: mail.from, to: mail.to, replyTo: mail.replyTo, subject: mail.subject, text: mail.text, html: mail.html })
     if (error) console.error('[email] send failed', error.name)
   } catch (e) {
-    console.error('[email] send failed', e instanceof Error ? e.message : 'unknown')
+    console.error(`[email] send failed ${describeError(e)}`)
   }
 }
