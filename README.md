@@ -1,12 +1,54 @@
 # KANDO: SkillWeb rebuilt
 
-The new home of SkillWeb, a service marketplace for Germany: households book trusted, verified local helpers and small businesses, pay when the job is done, and get the paperwork included. This repository replaces the earlier Payload-based repository (`SkillWeb`), which still runs the live site at skillweb.space until the cutover described under "Retiring the old Payload stack" below.
+The new home of SkillWeb, a service marketplace for Germany: households book trusted, verified local helpers and small businesses, pay when the job is done, and get the paperwork included. This repository replaced the earlier Payload-based repository (`SkillWeb`). Since 28 October 2026 https://skillweb.space (and `www`) is served by this project; the old repository, Vercel project and local folder are being deleted (see "Retiring the old Payload stack").
 
 - **Design:** `docs/specs/2026-10-26-kando-foundation-design.md` (what the first release does, the decided stack, the rules, the stages). The registration and provider-setup design is `docs/specs/2026-10-27-registration-and-provider-setup-design.md`; its plan is in `docs/plans/`.
 - **Stack today:** Expo app (`apps/mobile`); Next.js on Vercel for the website, the staff back office (Refine, German and English) and the API (`apps/web`); Neon Postgres with PostGIS and row-level security, Neon Auth and Neon Object Storage; Drizzle (`packages/db`); business rules in `packages/domain`; shared input rules in `packages/contract`; one text catalogue in German and English (`packages/i18n`); Resend for email; OpenRouter for the translate button. **Planned, not built yet:** Inngest for background work, Stripe behind a payments interface, Neon Realtime for chat.
-- **Rules for this project:** every change through a pull request merged by the owner (use "Squash and merge" and delete the branch); a test report in `Reports/` after every stage and every big change; no competitor names anywhere; no AI co-author or "Generated with" lines; every user-facing text exists in German and English; South Africa follows later, so no new Germany-only assumptions.
+- **Rules for this project:** every change through a pull request merged by the owner (use "Squash and merge" and delete the branch); a test report in `Reports/` after every stage and every big change; no competitor names anywhere; commit co-author trailers from Claude are tolerated for now (owner, 28 October 2026; the earlier rule was none), pull request descriptions carry no "Generated with" line; every user-facing text exists in German and English; South Africa follows later, so no new Germany-only assumptions.
 
 Layout: `apps/mobile`, `apps/web`, `packages/db`, `packages/contract`, `packages/i18n`, `packages/domain`, `Reports/`, `docs/`.
+
+## START HERE: next steps to finish the app for submission (most important first)
+
+Written 28 October 2026 so that a new session can continue at once. Status in one line: the app and website work on the new stack and are live at https://skillweb.space on an empty production database; what is missing is mostly owner decisions, legal texts, store requirements and a phone test.
+
+**A. Do these first (they block everything else)**
+
+1. **Merge the open pull request** (#20, the profile page rework) if it is still open: `gh pr list`. No database change is needed for it. (PR #19 needed one: `pnpm db:migrate` also applies `rls.ts`; it was run on `kando-dev` and `kando-main` on 28 October.)
+2. **Decide what version 1 contains.** Stage 2 (requests, quotes, booking, payments with Stripe Connect, ratings, chat, push notifications) is not built. The app today: sign-up and login, search, public provider pages, provider profiles with services, past jobs, portfolio and verified documents, a translate button, account export and deletion, and the back office. Decide: submit this as version 1 (honest store text: find and contact verified local helpers), or build Stage 2 first. Everything below assumes the first option; the store text and the legal pages must match whatever you choose.
+3. **Create the first administrator on production.** Sign up on https://skillweb.space with your own email, confirm the code, then run the one SQL statement in `docs/deployment.md` against `kando-main` (or ask the assistant to do it). Then walk through the back office once.
+4. **Phone-test everything** against production (checklist under "Tests that must still be done") and fix what it finds. Nothing from pull requests #14 to #20 has been seen on a screen yet.
+
+**B. Legal and policy (the stores refuse apps without these)**
+
+5. **Legal pages.** Finish and publish Impressum, Datenschutz (privacy policy), AGB (terms) and Ranking in the back office, in German and English. Drafts: `docs/legal-drafts/legal-pages-drafts.md`. Missing: Amplivine's legal form and postal address, register entry, the small-business VAT rule (tax adviser), free or paid for now, AGB notice period and jurisdiction, the competent data protection authority, retention periods, signed processing agreements (Neon, Vercel, Resend, OpenRouter). Then a lawyer's check and the German versions. Both stores need the privacy policy address.
+6. **Sign-up consent.** Build the sign-up tick "I am 18 or older and accept the terms and privacy policy" (not built yet).
+7. **Ask a lawyer and a tax adviser:** keeping trader documents 6 months after account deletion (switch: `DELETE_RETENTION_MONTHS`, 0 = off); whether private persons need a trade registration (optional for now); whether the EU Digital Services Act "know your trader" duty applies to Amplivine.
+
+**C. Store requirements (find out early, they cause the longest delays)**
+
+8. **Developer accounts:** Apple Developer Program (bundle id `space.skillweb.app`) and Google Play Console (package `space.skillweb.app`). Registration can take days.
+9. **Account deletion on the web.** Google Play requires a web address where people can request deletion of their account and data, in addition to the in-app button (which exists). Needs a small public page or form; not built.
+10. **User-generated content rules.** Apple and Google expect a way to report a profile or photo, to block, and a moderation contact. Provider texts and portfolio photos count. Check the current rules and build "Report this profile" if required (not built).
+11. **Store listing:** app icon, splash screen, screenshots in the required phone sizes, short and long descriptions in German and English, category, age rating, support address (info@skillweb.space), data-safety (Google) and privacy-label (Apple) answers. The placeholder graphics are still in the app: send the files or the style and the assistant prepares options.
+12. **Reviewer access:** both stores need a working demo account and notes for the reviewer (one customer and one published provider on production).
+13. **Production build:** `EXPO_PUBLIC_API_URL=https://skillweb.space` is already in `apps/mobile/eas.json` for the `preview` and `production` profiles. Build with EAS, install the build on a real phone, test again, then submit (Android internal test first, iOS through TestFlight).
+
+**D. Production hardening before real users**
+
+14. **Separate production keys** (they are shared with the test branch today): a production storage key for `kando-main` in the Neon console, and separate `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `CRON_SECRET` for Production only in Vercel.
+15. **Email:** verify the Resend sending domain for the address KANDO sends from and send a test email from production; in Neon Auth turn on custom email sending and "Require email verification" (`docs/deployment.md`).
+16. **Vercel Pro** (the free plan is for non-commercial use), and check that the first daily 06:00 UTC suspension job ran.
+17. **Security scan** of the whole project (row-level security, routes, Vercel settings) just before launch.
+18. **Known gaps worth fixing before launch:** documents over 4.5 MB cannot be uploaded through Vercel (upload straight to storage), photos load at full size (thumbnails), and real deletion of a Neon Auth account was only tested against a stand-in.
+
+**E. Can wait until after the first release**
+
+19. **AI-assisted document checks** (about 90% automatic, never an automatic rejection, a person re-checks 10% and the first approvals): needs the data protection impact assessment signed (`docs/legal-drafts/dpia-ai-document-checks-draft.md`), an EU provider chosen (recommendation: Mistral; confirm data location, processing agreement, no training) and a lawyer's confirmation. Staff review documents by hand until then.
+20. **Revisit the "optional for now" decisions** (the owner asked to be reminded): liability insurance, trade registration, craft qualification.
+21. **Clean-up:** delete the old GitHub repository `SkillWeb`, the old Vercel project `skillweb`, the local folder `Skilled\skill-web`, and later the old Neon branches `main` and `dev`; then remove the "Payload" wording from this README and `docs/deployment.md`.
+
+**How a new session starts:** open the session in this folder, read this section, run `gh pr list`, then `git pull`. Local tests need Docker (`docker compose up -d --wait db`), see "Run it". Test reports are Excel files in `Reports/` (copy the layout of `Reports/Stage-1-Test-Report.xlsx`); a test report for pull requests #18 to #20 is still to be written.
 
 ## Run it
 
@@ -24,7 +66,7 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (28 October 2026)
 
-Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 434 (280 web, 130 app, 24 in the shared packages); typecheck, lint and the Android bundle build are clean.
+Everything below is merged into `main` except the open pull request named in "START HERE". The site is live at https://skillweb.space (also https://kando-web.vercel.app); Vercel project `kando-web`, root `apps/web`. **Production** runs on the Neon branch `kando-main` (empty apart from categories, postcodes and the staff you add); **Preview** and the test accounts run on `kando-dev`. Migrations 0000 to 0011 and `rls.ts` are applied on both. Automated tests at pull request #19: web 337 (1 skipped), app 156, contract 10, i18n 15; typecheck is clean.
 
 ### What was built, in order
 
@@ -34,10 +76,19 @@ Everything below is merged into `main` and live at https://kando-web.vercel.app 
 - **Registration and one-page provider setup (PRs #6 to #8, #10).** Report: `Reports/Registration-Setup-Test-Report.xlsx`. See "How it works now".
 - **Phone-test fixes (PR #11).** A postcode alone now saves as an address; a "Saved" message appears after saving in Account; "Offer services" and "Become a provider" open the profile page directly; the provider card moved under "Find help now" on Home. Report: `Reports/PR-11-Phone-Test-Fixes-Test-Report.xlsx`.
 
+- **Review fixes and security headers (PR #14), second security fixes (PR #15).** Row-level security helper `notSuspendedSql`, security headers, a suspended person can still delete their own data, picture optional and removable, "Camera" in the picture menu, cross-site write check, daily limit on the translate button. Report: `Reports/PRs-14-15-16-Review-Fixes-Test-Report.xlsx`.
+- **Delete my account and export my data (PR #16).** See "How it works now". Migrations 0009 and 0010.
+- **Documents, legal and planning papers (PRs #12, #13, #17).** English legal page drafts, the data protection impact assessment draft (`docs/legal-drafts/dpia-ai-document-checks-draft.md` and `.docx`), the required documents list (`docs/required-documents-draft.md` and `.xlsx`).
+- **Document requirements per category (PR #18).** Nine document types, a required and an optional list per category, editable in the back office (Categories); seeded from the owner's table. Migration 0011.
+- **Checked documents on the public profile (PR #19).** "Checked documents: Photo ID, ..." on every public profile (app and website), from approved documents only (names, never files). Needs the SQL function `public_checked_documents` from `rls.ts`.
+- **Profile page rework (PR #20).** Compact cards with their own edit screens, stars and lead texts, card colours, new compulsory fields. See "How it works now".
+
 ### How it works now
 
 - **Sign-up** asks for first name, surname, email, password, an optional picture (with the reason: providers see who they work for, which is safer), an optional address and one tick, "I also want to offer services". Only the postcode of the address is required if you give one; street and city are optional and stay private. The answers are kept on the phone until the email code is confirmed, and only ever applied to the account they were made for.
-- **My service profile is one page.** Opening it creates an empty draft. Every field saves as you type, so nothing is lost if the app closes. It holds services (category compulsory, title filled from the category when left empty, price type, price, "Add another service"), About you, past jobs, portfolio, and a red card listing the documents a category needs. The **Publish** button lists what is still missing until the profile is complete; a live profile cannot be edited into an incomplete state.
+- **My service profile** (after PR #20). Opening it creates an empty draft; every field saves as you type. The page holds compact cards that work like Past jobs and Portfolio (card name, add or edit button, short rows, editing on its own screen): Services (category compulsory, price type and price), About you, Past jobs, Portfolio and Verification documents. A card with all its compulsory information is green with green text; a card lacking something stays white. **Compulsory fields** carry a "*" and a short lead text: a service with a price type; in About you provider type, at least one strength, at least one skill, postcode and service radius (default 25 km); a business also needs a business name and a legal notice. Experience is optional. The **Publish** button is grey (no list of what is missing) until the profile is complete; a live profile cannot be edited into an incomplete state. Skills and strengths are typed in a narrow field with a "+" button; at 20 entries the "+" disappears and a note says the maximum is reached.
+- **Documents.** Each category has required documents (to go live) and optional ones (a slot; an approved optional document shows as a badge). Photo ID is the only document every category requires; catering adds hygiene certificate and food business registration, dog walking the permit, babysitting the police certificate; trade registration, liability insurance, craft qualification and the others are optional for now (table: `docs/required-documents-draft.xlsx`, live values in the back office under Categories). In the app only compulsory documents are mentioned under the category selection; the Verification documents card lists all of them: a compulsory document that is not approved is red, an optional one orange, an approved one green. A faulty document is replaced by adding the new one first and then deleting the old one. Staff approve or reject by hand.
+- **Public profile.** Shows the services, past jobs, portfolio and one line "Checked documents: Photo ID, Liability insurance" (names of approved documents only).
 - **After Publish** the provider sees "Your profile is live. Tell people about it." with a Share button. If a document check is still pending, the message says the service goes live after the check and there is no Share button.
 - **The My profile tab is for providers only.** A customer opens the same page through Account, Offer services (or the card on Home), which creates the draft, makes them a provider and then shows the tab.
 - **Emails say what really happened:** document approved (profile live, service visible, profile offline, profile suspended), document rejected with the staff note, profile suspended with reason and end date, profile published again. When the last pending document is approved there is also a banner with Share and a dot on the Account tab.
@@ -47,15 +98,15 @@ Everything below is merged into `main` and live at https://kando-web.vercel.app 
 
 ### Phone testing
 
-The app is the development build "SkillWeb (Development Build)" installed from the EAS build page. To test against the live test site:
+The app is the development build "SkillWeb (Development Build)" installed from the EAS build page (Expo project `b66a6d0d-2214-47e3-85be-cd5501e24f6c`, owner `liezljvv74`). It talks to the server named in `EXPO_PUBLIC_API_URL`. To test against production (https://skillweb.space; note that this is the real `kando-main` database, so sign up with your own email):
 
 ```
 cd apps/mobile
-# .env holds EXPO_PUBLIC_API_URL=https://kando-web.vercel.app (git-ignored)
+# .env holds EXPO_PUBLIC_API_URL=https://skillweb.space (git-ignored; copy .env.example)
 npx expo start --dev-client --tunnel
 ```
 
-Scan the QR code or enter the printed address (starting `https://`) under "Enter URL manually" in the development app. A different server address must first be added with `neon neon-auth domain add <address> --project-id <id> --branch kando-dev`. Stop the server when you are done.
+Scan the QR code with the development app's own "Scan QR Code" button, or type the printed address under "Enter URL manually". The address must start with `https://` (turn `exp+skilled://host` into `https://host`; the camera app cannot open it). The tunnel only lives while the server runs. A different server address must first be added to Neon Auth with `neon neon-auth domain add <address> --project-id withered-wave-83432300 --branch <branch>`. To test without touching production, point the app at a Preview deployment (uses `kando-dev`). Stop the server when you are done; when the computer is short of memory Claude Code stops it by itself.
 
 ### Test accounts (dev branch only)
 
@@ -74,12 +125,13 @@ Nothing has been checked on a phone or in a real browser yet; every "Not yet don
 1. **Customer sign-up** with your own email: names, picture, postcode only; confirm the code; Home shows no My profile tab; the picture nudge disappears once a picture is added.
 2. **Account, Offer services** (and Home, Become a provider) opens the profile page directly, the tab then appears. Airplane mode: an error shows and you stay put. A second tap does nothing.
 3. **Sign-up with the provider tick** lands on "Let's set up your service profile"; nothing from a previous account carries over after sign-out and sign-in as someone else.
-4. **The profile page:** fill it, close the app halfway and reopen (typing must be there), add a second service, check the keyboard never hides a field, upload a document by file, gallery and camera; Publish is grey with a list until complete.
+4. **The profile page:** fill it, close the app halfway and reopen (typing must be there), add a second service, check the keyboard never hides a field, upload a document by file, gallery and camera; Publish is grey (no list) until complete; compulsory fields have a star and a lead text; cards turn green when complete; documents: compulsory red, optional orange; the skills and strengths "+" and the limit note.
 5. **Publish and Share:** the Share sheet opens; with a pending document check there is no Share button.
-6. **Back office in a browser** (https://kando-web.vercel.app/admin): approve and reject a document (emails, banner, dot), suspend and lift a user (emails, search, public page), categories, pages (publish an Impressum and see it on the site), staff roles, the language switch, no crash page.
+6. **Back office in a browser** (https://skillweb.space/admin): approve and reject a document (emails, banner, dot), suspend and lift a user (emails, search, public page), categories, pages (publish an Impressum and see it on the site), staff roles, the language switch, no crash page.
 7. **Account tab:** a postcode alone saves, "Saved" appears and goes, a badly formed postcode shows its message, fields lock while saving.
 8. **Older checks never done on a phone with this app:** password reset by code, a wrong sign-up code, the translate button, Live switch off and on, profile and portfolio photos, the 7-day session (open the app a day later and still be signed in), the daily suspension check at 06:00 UTC (first run), email delivery from Resend.
-9. **Security scan** of the whole project (row-level security, routes, Vercel settings) before launch.
+9. **New since the last list:** a public profile shows "Checked documents" only for approved documents (approve, reject, check); delete my account on a throw-away account on `kando-dev` (then check the Neon Auth tables and both storage buckets); export as JSON and CSV opens the share sheet and the CSV opens in a spreadsheet; suspended person deleting a document or photo; security headers live; the first 06:00 UTC suspension run.
+10. **Security scan** of the whole project (row-level security, routes, Vercel settings) before launch.
 
 ### Small points parked from the reviews
 
@@ -90,47 +142,34 @@ Nothing has been checked on a phone or in a real browser yet; every "Not yet don
 
 ### Retiring the old Payload stack
 
-KANDO contains no Payload code. What remains is the old repository and its running parts. The owner chose to go ahead (28 October); steps 2 to 4 are done or half done, see "Cutover progress" below.
+KANDO contains no Payload code. The owner decided on 28 October 2026 to delete the old project completely; there are no live users and production held only test data. Status:
 
-1. Finish the tests above and fix what they find.
-2. Production holds only test data, so no data is moved. **Confirmed by the owner.**
-3. Production Neon branch `kando-main`. **Done** (see below).
-4. Production settings in Vercel for `kando-web`. **Partly done** (see below).
-5. Write the legal pages in the back office (Impressum, Datenschutz, AGB, Ranking); replace the placeholder graphics. **Not started: needs the owner's input.**
-6. Host the new site on skillweb.space (there is no new domain): move it from the old Vercel project `skillweb` to `kando-web`; build the app for the stores with `EXPO_PUBLIC_API_URL=https://skillweb.space` (same package `space.skillweb.app`). **Not done.**
-7. In the old repository: close the open pull requests (#15 translate button, whose work is already here, and #16 design), archive it on GitHub, and copy its git-ignored `Marketing/` folder somewhere safe first. Delete the old Vercel project and, after a waiting period, the old Neon branches `main` and `dev`.
-8. Then remove the "Payload" wording from this README and from `docs/deployment.md`.
+1. Production data was not moved. **Done.**
+2. Production Neon branch `kando-main`. **Done.**
+3. Production settings in Vercel for `kando-web`. **Done** (see below).
+4. Host the new site on skillweb.space. **Done on 28 October:** `skillweb.space` and `www.skillweb.space` were removed from the old project `skillweb` and added to `kando-web`; `NEXT_PUBLIC_SERVER_URL=https://skillweb.space`; Production redeployed. Neon Auth trusts both addresses.
+5. Still to do, owner: delete the old GitHub repository `SkillWeb` (its open pull request #16 is the design document, already in `docs/specs/`; GitHub restores a deleted repository for 90 days), delete the old Vercel project `skillweb`, delete the local folder `Skilled\skill-web` (its `.env` files hold the old keys and exist only on that PC: copy them elsewhere first if a backup is wanted; the `Marketing/` folder named in older notes no longer exists), and decide how long to keep the old Neon branches `main` and `dev` before deleting them.
+6. Then remove the "Payload" wording from this README and from `docs/deployment.md`.
+
+### Where things are on the owner's PC
+
+This project moved to `C:\Users\Liezl\Documents\APPS FOR BUSINESS\KANDO`. Earlier working copies in `...\Skilled\` (`KANDO-del`, `KANDO-docs`, `KANDO-req`, `KANDO-sf2`, `KANDO-int`, `KANDO-ui`, `KANDO-pub`) are git worktrees of this project or throw-away copies; after the move run `git worktree repair <path>` for any you still need, or delete them (`git worktree remove --force <path>`; every branch worth keeping is on GitHub). Local test databases in Docker (`kando-db-1`, port 5433): `kando`, `kando_sf2`, `kando_req`, `kando_pub`, `kando_ui`. A notes file `.work/HANDOFF.md` and report scripts `.work/scripts/` exist only on this PC (git-ignored).
 
 ### Cutover progress (28 October 2026)
 
 **Done**
 
-- Neon branch `kando-main` (endpoint `ep-empty-sound-b948a10w`) was created as a copy of `kando-dev` (schema-only copies are not available on this project). All test data was then removed from it: every user, login account and session, all providers, services, photos, references, documents and notifications, and the login signing key. It holds the 14 categories, the 10,815 postcodes, Germany and the euro, and migrations 0000 to 0008 are applied (`pnpm db:migrate` ran clean, row-level security applied).
-- Neon Auth on `kando-main` has its own address; `https://skillweb.space` and `https://kando-web.vercel.app` are trusted there. The storage buckets `media` and `documents` exist on it.
-- Vercel `kando-web`, **Production** now uses `kando-main`: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH=kando-main`, `NEON_AUTH_BASE_URL`, a new `NEON_AUTH_COOKIE_SECRET`, and `NEXT_PUBLIC_SERVER_URL=https://skillweb.space`. **Preview** still uses `kando-dev`. `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `TRANSLATE_MODEL` and `CRON_SECRET` were already set for both. (The old project's key values are hidden by Vercel and cannot be read back, so nothing was copied from it; the keys in `kando-web` were already in place.)
+- Neon branch `kando-main` (endpoint `ep-empty-sound-b948a10w`) was created as a copy of `kando-dev` and emptied of all users and data; it holds the 14 categories (with the document lists), the 10,815 postcodes, Germany and the euro. Migrations 0000 to 0011 and `rls.ts` are applied on `kando-main` and `kando-dev`.
+- Neon Auth on `kando-main` has its own address; `https://skillweb.space` and `https://kando-web.vercel.app` are trusted on both branches. Storage buckets `media` and `documents` exist.
+- Vercel `kando-web`: **Production** uses `kando-main`; **Preview** uses `kando-dev`. Variables are in place for both (database, Neon Auth, storage keys and buckets, `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `TRANSLATE_MODEL`, `CRON_SECRET`); the secret values cannot be read back. The domain was moved and Production redeployed (see above).
 
-**Not done yet**
+**Not done yet:** see "START HERE" (sections A to D). In short: first administrator, phone test, legal pages, store requirements, separate production keys, email setup, Vercel Pro, security scan.
 
-- **Production has not been redeployed**, so the live site still runs on the old values. Redeploy `kando-web` in Vercel (Deployments, the latest one, Redeploy), then open https://kando-web.vercel.app and check it works against the empty `kando-main`.
-- **The first staff account on production.** Sign up on the live site with your own email, confirm the code, then run the one SQL statement in `docs/deployment.md` against `kando-main` (the connection string is in Vercel under `DATABASE_URL_UNPOOLED`; the Neon console SQL editor works too).
-- **Storage keys:** Production still uses the project's default storage key, the same one `kando-dev` uses. A separate key for production was not created (the tool was blocked from creating one). Recommended before launch: create one in the Neon console for `kando-main` (read and write storage) and replace `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for Production only.
-- **Move skillweb.space** to `kando-web` (Vercel: remove the domain from project `skillweb`, add it to `kando-web`). Do this only after the redeploy above checks out; the old site goes offline at that moment. The old branches stay untouched as a fallback.
-- Resend: confirm the sending domain used by the old project is verified for the address KANDO sends from, and send a test email from production.
-- Neon Auth for production: custom email sending (shared sending is for development only) and the "Require email verification" setting, as in `docs/deployment.md`.
-- Vercel Pro before launch.
+**Decisions made on 28 October 2026 (owner)**
 
-**To decide, to continue tomorrow**
-
-1. **Legal pages, review and follow up.** English drafts of Impressum, Ranking, AGB and Datenschutz are in `docs/legal-drafts/legal-pages-drafts.md`. Known so far: company Amplivine, email info@skillweb.space, person responsible Liezl Fourie, no VAT number. Still needed: Amplivine's legal form and postal address, register entry if any, the small-business VAT rule (ask a tax adviser), free or paid for now, notice period and place of jurisdiction for the AGB, the competent data protection authority, retention periods, signed processing agreements with Neon, Vercel, Resend and OpenRouter. Then: your review, a lawyer or legal-text check, the German versions, and entering the four pages in the back office.
-2. **Graphics:** app icon, splash screen, home page pictures: supply the files, or tell me the style and I prepare options.
-3. **First admin (owner, next).** Open https://kando-web.vercel.app (skillweb.space after the domain move), sign up with your own email and confirm the code, then tell me. I make the account an Administrator on `kando-main`; if the permission system blocks me, I give you the one command to run with `!`.
-4. **Quick production check (after the admin exists).** Sign in and walk through the back office on the live site.
-5. **Domain.** Move skillweb.space from the old Vercel project `skillweb` to `kando-web` only after the production check (the old site goes offline at that moment). Then decide how long to keep the old `main` and `dev` Neon branches before deleting them.
-6. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
-
-**AI-assisted document checks (decide, then build).** Research done 28 October 2026. Outcome: AI advises, the staff member still decides (GDPR Art. 22). Stage A (about 0.01 EUR per document): after upload a background job sends the file to an EU-hosted vision model that returns fixed fields (document type, name on it, issuer, dates, expiry, name match) plus simple automatic checks (not expired, police certificate younger than 3 months, VAT number through VIES); the reviewer sees a pre-filled checklist next to the document, stored apart from the verdict. Stripe Connect already verifies identity and business of paid providers, so no separate ID service. Open source tools on GitHub (Docling and others) and forgery detection are not worth it now. Needs from the owner: AI provider and region (a French or EU-region provider; the OpenRouter route has no EU guarantee), whether police certificates and ID copies may be sent to an AI at all (suggestion: start with trade and insurance documents), a data protection impact assessment and lawyer review, retention of the AI output (suggestion: deleted with the document), and a list of required documents per category (the app only knows two document types today).
-
-**Trader documents and the EU Digital Services Act.** Decided 28 October: submitted documents are kept while the account exists; a provider can replace a faulty document by adding the new one first and then deleting the old one; after account deletion the documents and basic trader details are kept for 6 months and then deleted by the daily check (`DELETE_RETENTION_MONTHS`, 0 switches it off). Lawyer to confirm the duty applies to Amplivine (micro enterprise exemption).
+- Documents: see "How it works now". Photo ID for everyone; trade registration, liability insurance and craft qualification optional for now (revisit before launch); police certificate required for babysitting, optional for cleaning and dog walking; documents are kept while the account exists and 6 months after deletion (legal review pending; `DELETE_RETENTION_MONTHS`, 0 switches it off); a faulty document is replaced by adding the new one first.
+- AI document checks: about 90% decided by the AI, never an automatic rejection, a person re-checks about 10% of automatic approvals, a provider's first approvals are checked by a person. The data protection impact assessment draft records this. Provider and region: all of the EU, provider not chosen (recommendation Mistral). Not built; blocked on sign-off, provider contract and a lawyer.
+- Legal pages: company Amplivine, email info@skillweb.space, person responsible Liezl Fourie, no VAT number; drafts in English, German after approval.
 
 ### Next features
 
