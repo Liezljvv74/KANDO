@@ -207,3 +207,10 @@ test('updateMe sends the one-field name as first and last name, split at the las
     { language: 'en' },
   ])
 })
+
+test('text mode reads a successful answer as text and still parses an error as JSON', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(), text: async () => 'a,b' } as unknown as Response)
+  await expect(api('/app-api/v1/me/export?format=csv', { text: true })).resolves.toBe('a,b')
+  fetchMock.mockResolvedValueOnce(json(400, { error: 'BAD_FORMAT' }))
+  await expect(api('/app-api/v1/me/export?format=x', { text: true })).rejects.toMatchObject({ status: 400, code: 'BAD_FORMAT' })
+})

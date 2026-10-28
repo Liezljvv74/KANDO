@@ -52,3 +52,32 @@ export async function exportMyData(tx: Tx, userId: string) {
     ],
   }
 }
+
+type Export = Awaited<ReturnType<typeof exportMyData>>
+
+const cell = (v: unknown): string => (v == null ? '' : v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v))
+
+/** One row per field of every record: section, record (1, 2, ...), field, value. Nested objects (the address) become `address.street`. */
+export function exportRows(data: Export): string[][] {
+  const rows: string[][] = []
+  const add = (section: string, record: number, obj: Record<string, unknown>, prefix = '') => {
+    for (const [k, v] of Object.entries(obj)) {
+      if (v && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)) add(section, record, v as Record<string, unknown>, `${prefix}${k}.`)
+      else rows.push([section, String(record), prefix + k, cell(v)])
+    }
+  }
+  add('export', 1, { exportedAt: data.exportedAt })
+  if (data.user) add('user', 1, data.user)
+  if (data.provider) add('provider', 1, data.provider)
+  for (const section of ['services', 'references', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
+    data[section].forEach((r, i) => add(section, i + 1, r))
+  }
+  data.notes.forEach((n, i) => rows.push(['notes', String(i + 1), 'text', n]))
+  return rows
+}
+
+const quote = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s)
+
+/** RFC 4180 text (CRLF lines) with a UTF-8 byte order mark, so spreadsheet programs show umlauts correctly. */
+export const exportCsv = (data: Export): string =>
+  '\uFEFF' + [['section', 'record', 'field', 'value'], ...exportRows(data)].map((r) => r.map(quote).join(',')).join('\r\n') + '\r\n'

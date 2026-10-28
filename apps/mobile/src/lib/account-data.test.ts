@@ -12,3 +12,9 @@ test('the export text is readable JSON of the whole document', () => {
   expect(text).toContain('\n  "user"')
   expect(JSON.parse(text)).toEqual({ user: { email: 'a@b.de' } })
 })
+
+
+test('a CSV export is shared as it is', () => {
+  const csv = 'section,record\r\nuser,1'
+  expect(exportText(csv)).toBe(csv)
+})

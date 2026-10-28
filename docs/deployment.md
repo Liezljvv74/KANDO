@@ -70,6 +70,10 @@ neon neon-auth domain add <origin>
 
 `DELETE /app-api/v1/me` runs on the owner connection (the app role may not delete from several tables), so it needs no setting of its own. It also deletes the person's rows in the `neon_auth` schema (every table with a `userId`, `user_id` or `inviterId` column, the confirmation codes by email, then the user); the database owner role must be allowed to write there. Objects in the media and documents buckets are removed after the commit with the same storage keys as uploads. Before the first real use, try it once on a throw-away account on the `kando-dev` branch and check that the person is gone from the `neon_auth` tables.
 
+## Exporting an account
+
+`GET /app-api/v1/me/export` (JSON) and `?format=csv` (CSV) need no setting. Document and file links in the export are signed for 5 minutes with the storage keys, so the storage variables above must work on the server. The support address shown in the app error texts is `info@skillweb.space`.
+
 ## Neon Auth: confirmed emails
 
 The app API refuses every account whose email is not confirmed yet (answer 403 `EMAIL_NOT_VERIFIED`), so nobody can use someone else's email address. On top of that, Neon Auth's own setting "Require email verification" may also be turned on for `kando-main`; then an unconfirmed account cannot even sign in. The app handles both: it asks for the code that was emailed.

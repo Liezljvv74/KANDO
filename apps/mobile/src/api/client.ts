@@ -80,9 +80,9 @@ async function mergeCookies(res: Response) {
 }
 
 /** `detached`: send this cookie instead of the stored one and leave the store alone (the sign-out call after the local clear). */
-type Init = { method?: string; body?: unknown; timeLimit?: boolean; detached?: string }
+type Init = { method?: string; body?: unknown; timeLimit?: boolean; detached?: string; text?: boolean }
 
-async function send(path: string, { method = 'GET', body, timeLimit = method === 'GET', detached }: Init, cookie: string | null) {
+async function send(path: string, { method = 'GET', body, timeLimit = method === 'GET', detached, text }: Init, cookie: string | null) {
   // Better Auth refuses cookie-carrying writes without a trusted Origin; the app names the API's own origin.
   const headers: Record<string, string> = { Accept: 'application/json', Origin: ORIGIN }
   const form = body instanceof FormData
@@ -105,7 +105,8 @@ async function send(path: string, { method = 'GET', body, timeLimit = method ===
     if (timer) clearTimeout(timer)
   }
   if (detached === undefined) await storeCookies(res)
-  const data = await res.json().catch(() => null)
+  // `text`: a successful answer is read as text (the CSV export); errors are always JSON.
+  const data = text && res.ok ? await res.text().catch(() => null) : await res.json().catch(() => null)
   return { res, data }
 }
 
