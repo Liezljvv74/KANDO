@@ -377,7 +377,7 @@ export const de = {
   'account.exportHint': 'Hol dir alles, was wir über dich gespeichert haben, als ein Dokument (JSON oder CSV für eine Tabellenkalkulation) und schick es dir über das Teilen-Menü selbst oder speichere es.',
   'account.deleteOpen': 'Mein Konto löschen',
   'account.deleteHeading': 'Konto löschen?',
-  'account.deleteWarning': 'Das löscht dein Konto, dein Profil mit Leistungen und Referenzen, deine Fotos, deine hochgeladenen Dokumente und deine Nachrichten. Es passiert sofort und lässt sich nicht rückgängig machen. Wir schicken dir eine Bestätigung per E-Mail.',
+  'account.deleteWarning': 'Das löscht dein Konto, dein Profil mit Leistungen und Referenzen, deine Fotos, deine hochgeladenen Dateien und deine Nachrichten. Es passiert sofort und lässt sich nicht rückgängig machen. Wir schicken dir eine Bestätigung per E-Mail.',
   'account.deleteType': 'Gib zur Bestätigung deine E-Mail-Adresse ein',
   'account.deleteConfirm': 'Endgültig löschen',
   'account.deleteCancel': 'Konto behalten',
@@ -394,4 +394,7 @@ export const de = {
   'myProfile.docDeleteTitle': 'Dokument löschen?',
   'myProfile.docDeleteBody': 'Die alte Datei wird endgültig entfernt. Dein anderes Dokument für diese Prüfung bleibt und wird wie gewohnt geprüft.',
   'myProfile.docDeleteBody.approved': 'Dieses Dokument ist freigegeben. Wenn du es löschst, gehen die Leistungen, die es brauchen, offline, bis dein neues Dokument freigegeben ist. Die alte Datei wird endgültig entfernt.',
+  'email.accountDeleted.retained.subject': 'Dein Konto wurde gelöscht: was wir aufbewahren und wie lange',
+  'email.accountDeleted.retained.body': 'Dein Konto und Deine Daten wurden gelöscht, so wie Du es gewünscht hast. Das lässt sich nicht rückgängig machen. Wegen einer gesetzlichen Pflicht bewahren wir Deine Prüfdokumente und Deine Grunddaten als Anbieter noch {months} Monate auf, bis zum {date}, und löschen sie dann automatisch. Wenn Du das nicht warst, schreib uns bitte sofort.',
+  'account.deleteRetention': 'Wenn du ein Anbieterprofil hast oder Prüfdokumente geschickt hast, müssen wir diese Dokumente und deine Grunddaten als Anbieter wegen einer gesetzlichen Pflicht 6 Monate aufbewahren. Danach werden sie automatisch gelöscht.',
 }

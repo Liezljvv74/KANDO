@@ -32,6 +32,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.stubEnv('RESEND_API_KEY', '')
   vi.stubEnv('CRON_SECRET', 's3cret')
+  vi.stubEnv('DELETE_RETENTION_MONTHS', '0') // these tests are about the immediate delete; retention is in account-retention.int.spec.ts
   clearOutbox()
   store.objects.clear()
 })

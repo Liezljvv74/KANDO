@@ -378,7 +378,7 @@ export const en: Record<Key, string> = {
   'account.exportHint': 'Get everything we hold about you as one document (JSON, or CSV for a spreadsheet) and send it to yourself or save it with the share menu.',
   'account.deleteOpen': 'Delete my account',
   'account.deleteHeading': 'Delete your account?',
-  'account.deleteWarning': 'This deletes your account, your profile with its services and references, your photos, your uploaded documents and your messages. It happens at once and cannot be undone. We send you a confirmation email.',
+  'account.deleteWarning': 'This deletes your account, your profile with its services and references, your photos, your uploaded files and your messages. It happens at once and cannot be undone. We send you a confirmation email.',
   'account.deleteType': 'To confirm, type your email address',
   'account.deleteConfirm': 'Delete permanently',
   'account.deleteCancel': 'Keep my account',
@@ -395,4 +395,7 @@ export const en: Record<Key, string> = {
   'myProfile.docDeleteTitle': 'Delete this document?',
   'myProfile.docDeleteBody': 'The old file is removed for good. Your other document for this check stays and is checked as usual.',
   'myProfile.docDeleteBody.approved': 'This document is approved. If you delete it, the services that need it go offline until your new document is approved. The old file is removed for good.',
+  'email.accountDeleted.retained.subject': 'Your account has been deleted: what we keep, and for how long',
+  'email.accountDeleted.retained.body': 'Your account and your data have been deleted, as you asked. This cannot be undone. Because of a legal duty we keep your verification documents and your basic trader details for {months} months, until {date}, and then delete them automatically. If this was not you, please write to us at once.',
+  'account.deleteRetention': 'If you have a provider profile or sent verification documents, we must keep these documents and your basic trader details for 6 months because of a legal duty. They are then deleted automatically.',
 }

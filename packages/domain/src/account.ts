@@ -1,6 +1,6 @@
-import { asc, eq, inArray, sql } from 'drizzle-orm'
-import { db, documents, notifications, pendingObjectDeletes, photos, privateFiles, providerReferences, providers, services, users, type Tx } from '@kando/db'
-import { DEFAULT_LANG, isLang } from '@kando/i18n'
+import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
+import { db, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, services, users, type Tx } from '@kando/db'
+import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
 import { fail } from './providers/http'
@@ -39,6 +39,16 @@ async function deleteAuthRecords(tx: Tx, id: string, email: string) {
 const BATCH = 200
 
 /**
+ * How many months the verification documents and basic trader details of a deleted provider are kept (a legal duty under
+ * review). DELETE_RETENTION_MONTHS overrides it; 0 switches the retention off (everything is deleted at once). Unset or
+ * not a whole number: 6.
+ */
+export function retentionMonths(): number {
+  const raw = process.env.DELETE_RETENTION_MONTHS
+  return raw !== undefined && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : 6
+}
+
+/**
  * Deletes the objects named by pending_object_deletes rows (the given ids, else the oldest batch) and clears the rows of
  * those that are gone. A failure leaves its row for the next try and logs only the count and the error name (keys carry
  * the person's id). Returns how many of this batch are still waiting.
@@ -66,7 +76,8 @@ export async function flushPendingObjects(ids?: string[]): Promise<number> {
  * The shared translations cache and the rate-limit rows keyed by an ip hash are not the person's data and stay.
  */
 export async function deleteAccount(userId: string, confirmEmail: string, afterCommit: AfterCommit): Promise<void> {
-  const { email, language, tombstones } = await db.transaction(async (tx) => {
+  const months = retentionMonths()
+  const { email, language, tombstones, keepUntil } = await db.transaction(async (tx) => {
     // Lock order everywhere: the Administrator set (by id) first, then the person's own row.
     const admins = await lockAdmins(tx)
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).for('update')
@@ -77,6 +88,33 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))
     const docs = await tx.select({ key: documents.key }).from(documents).where(eq(documents.ownerId, userId))
+    // A provider or a person with submitted documents is a trader: basic details and the document metadata are kept for the
+    // retention period, and the document objects stay in storage until then (everything else is deleted as before).
+    const [provider] = await tx.select().from(providers).where(eq(providers.ownerId, userId))
+    const docRows = await tx.select().from(documents).where(eq(documents.ownerId, userId))
+    let keepUntil: Date | null = null
+    if (months > 0 && (provider || docRows.length)) {
+      const [record] = await tx
+        .insert(retainedRecords)
+        .values({
+          formerUserId: userId,
+          details: {
+            name: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
+            businessName: provider?.businessName ?? null,
+            email: user.email,
+            address: { street: user.addressStreet, postcode: user.addressPostcode, city: user.addressCity, country: user.addressCountry },
+            legalStatus: provider?.legalStatus ?? null,
+            vatId: provider?.vatId ?? null,
+            providerType: provider?.type ?? null,
+            impressum: provider?.impressum ?? null,
+            deletedAt: new Date().toISOString(),
+          },
+          documents: docRows.map((d) => ({ bucket: documentsBucket(), key: d.key, requirement: d.requirement, status: d.status, staffNote: d.note, reviewedAt: d.reviewedAt?.toISOString() ?? null, uploadedAt: d.createdAt.toISOString() })),
+          deleteAfter: sql`now() + make_interval(months => ${months})`,
+        })
+        .returning({ deleteAfter: retainedRecords.deleteAfter })
+      keepUntil = record!.deleteAfter
+    }
     await tx.update(documents).set({ reviewedBy: null }).where(eq(documents.reviewedBy, userId)) // a staff reviewer: their id is personal data on others' documents
     await tx.delete(notifications).where(eq(notifications.userId, userId))
     await tx.delete(documents).where(eq(documents.ownerId, userId))
@@ -91,11 +129,41 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     await deleteAuthRecords(tx, userId, user.email)
     const owed = [
       ...media.map((m) => ({ bucket: mediaBucket(), key: m.key })),
-      ...[...files, ...docs].map((f) => ({ bucket: documentsBucket(), key: f.key })),
+      // The submitted documents' objects stay while they are retained.
+      ...[...files, ...(keepUntil ? [] : docs)].map((f) => ({ bucket: documentsBucket(), key: f.key })),
     ]
     const tombstones = owed.length ? (await tx.insert(pendingObjectDeletes).values(owed).returning({ id: pendingObjectDeletes.id })).map((r) => r.id) : []
-    return { email: user.email, language: user.language, tombstones }
+    return { email: user.email, language: user.language, tombstones, keepUntil }
   })
   afterCommit(async () => void (await flushPendingObjects(tombstones)))
-  afterCommit(() => sendEmail({ to: email, lang: isLang(language) ? language : DEFAULT_LANG, template: 'account-deleted', params: {} }))
+  const lang = isLang(language) ? language : DEFAULT_LANG
+  afterCommit(() =>
+    sendEmail({
+      to: email,
+      lang,
+      template: keepUntil ? 'account-deleted-retained' : 'account-deleted',
+      params: keepUntil ? { date: keepUntil.toLocaleDateString(LOCALE[lang], { timeZone: 'Europe/Berlin' }), months: String(months) } : {},
+    }),
+  )
+}
+
+/**
+ * Removes the objects of retained records whose time is up, then the records (a bounded batch). An object that cannot be
+ * deleted is handed to pending_object_deletes, so the record can go and the retry job takes over. Returns how many records went.
+ */
+export async function purgeExpiredRetained(limit = 50): Promise<number> {
+  const due = await db.select().from(retainedRecords).where(lte(retainedRecords.deleteAfter, new Date())).orderBy(asc(retainedRecords.deleteAfter)).limit(limit)
+  let owed = 0
+  for (const record of due) {
+    const objects = record.documents as { bucket: string; key: string }[]
+    const results = await Promise.allSettled(objects.map((o) => storage().delete(o.bucket, o.key)))
+    const failed = objects.filter((_, i) => results[i]!.status === 'rejected')
+    owed += failed.length
+    await db.transaction(async (tx) => {
+      if (failed.length) await tx.insert(pendingObjectDeletes).values(failed.map((o) => ({ bucket: o.bucket, key: o.key })))
+      await tx.delete(retainedRecords).where(eq(retainedRecords.id, record.id))
+    })
+  }
+  if (owed) console.error(`[account] ${owed} retained objects could not be removed now, left for the retry`)
+  return due.length
 }

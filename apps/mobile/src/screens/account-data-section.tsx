@@ -59,6 +59,7 @@ export function AccountDataSection() {
         <>
           <Text style={styles.danger}>{t('account.deleteHeading')}</Text>
           <Text style={styles.text}>{t('account.deleteWarning')}</Text>
+          <Text style={styles.text}>{t('account.deleteRetention')}</Text>
           <Field label={t('account.deleteType')} value={typed} onChangeText={setTyped} placeholder={user?.email} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} editable={!busy} />
           <ErrorText text={error} />
           <Button label={t('account.deleteConfirm')} danger onPress={remove} busy={busy === 'delete'} disabled={!user || !emailMatches(typed, user.email) || (!!busy && busy !== 'delete')} />

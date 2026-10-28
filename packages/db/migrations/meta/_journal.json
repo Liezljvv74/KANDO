@@ -71,6 +71,13 @@
       "when": 1793181347607,
       "tag": "0009_pending_object_deletes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793183236679,
+      "tag": "0010_retained_records",
+      "breakpoints": true
     }
   ]
 }
