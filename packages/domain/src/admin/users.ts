@@ -79,8 +79,9 @@ export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: {
     .returning()
   if (!row) return notFound()
   const hidden = await tx.update(providers).set({ suspendedUntil: until, updatedAt: sql`now()` }).where(eq(providers.ownerId, id)).returning({ status: providers.status })
-  // the email speaks of the live profile: only a published one is told, and of a lift only when a suspension was still running
-  if (hidden.some((h) => h.status === 'published') && (until || (was && was > new Date()))) afterCommit(() => notifySuspension(id, { until, reason: input.reason }))
+  // the email speaks of the live profile: only a published one is told, and of a lift only when the column was still set
+  // (an ended date the daily check has not cleared yet counts: clearing it here removes the check's only chance to tell them)
+  if (hidden.some((h) => h.status === 'published') && (until || was)) afterCommit(() => notifySuspension(id, { until, reason: input.reason }))
   return ok((await withPictures(tx, [row]))[0])
 }
 

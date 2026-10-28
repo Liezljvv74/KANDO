@@ -140,13 +140,13 @@ it('suspension emails: none for a customer without a profile, none for a lift of
   expect(outboxForTests()).toEqual([])
 })
 
-it('a lift of a suspension that already ran out sends no "published again" email', async () => {
+it('a lift of a suspension that already ran out but was not yet cleared by the daily check still sends "published again"', async () => {
   await seedUser('aa-lapsed')
   await seedProvider('aa-lapsed', { name: 'Lapsed', categoryId })
   await pool.query("UPDATE users SET suspended_until = now() - interval '1 hour', suspended_reason = 'old' WHERE id = 'aa-lapsed'")
   clearOutbox()
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-lapsed' })).status).toBe(200)
-  expect(outboxForTests()).toEqual([])
+  expect(outboxForTests()).toHaveLength(1)
 })
 
 it('the end date in the suspension email is the Berlin date, whatever the server time zone', async () => {
