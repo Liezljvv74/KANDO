@@ -97,6 +97,12 @@ Proposal, not yet agreed: the owner decides when and whether.
 2. When the owner is satisfied that the new site runs cleanly, take a final Neon branch of old `main` named `old-main-final`, then delete the old `dev` branch and the old `main` branch.
 3. Archive the old repository `skill-web`.
 
+## Known limits of the safety checks
+
+- **Translate daily caps are soft under concurrency.** Each call counts first and inserts after, so several simultaneous calls can pass the cap together and overshoot it by a few. They never grow without bound.
+- **The `unknown` anonymous bucket.** Anonymous visitors are counted by the address Vercel sets (`x-vercel-forwarded-for`, else `x-real-ip`). Outside Vercel (local, another host) neither exists and all anonymous visitors share one `unknown` bucket.
+- **Origin check.** A write from a browser is accepted only when its `Origin` is the request's own origin or `NEXT_PUBLIC_SERVER_URL`. Set `NEXT_PUBLIC_SERVER_URL` in Vercel Production to the canonical host, `https://skillweb.space`. An extra alias host (for example one staff use) must be added there first; until then its writes get 403.
+
 ## Seeds
 
 There are three seeds. Each one checks two things: `NEON_BRANCH` names a dev branch (`kando-dev` or `dev`) and `DATABASE_URL` points at the dev endpoint. They print the database host before they start.
