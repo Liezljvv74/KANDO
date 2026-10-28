@@ -139,6 +139,15 @@ it('suspension emails: none for a customer without a profile, none for a lift of
   expect(outboxForTests()).toEqual([])
 })
 
+it('a lift of a suspension that already ran out sends no "published again" email', async () => {
+  await seedUser('aa-lapsed')
+  await seedProvider('aa-lapsed', { name: 'Lapsed', categoryId })
+  await pool.query("UPDATE users SET suspended_until = now() - interval '1 hour', suspended_reason = 'old' WHERE id = 'aa-lapsed'")
+  clearOutbox()
+  expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-lapsed' })).status).toBe(200)
+  expect(outboxForTests()).toEqual([])
+})
+
 it('a user suspended before having a profile cannot create one and publish it (409)', async () => {
   await seedUser('aa-early', null, 'Early Bird')
   const until = new Date(Date.now() + 7 * 86_400_000).toISOString()
