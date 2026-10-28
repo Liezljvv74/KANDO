@@ -124,7 +124,6 @@ export const de = {
   'setup.noPrice': 'Noch kein Preis',
   'setup.aboutEmpty': 'Erzähl den Kunden, wer du bist.',
   'setup.aboutStrengths': 'Stärken: {n}',
-  'setup.documentAdd': 'Dokument hinzufügen',
   'setup.documentsExtra': 'Überlege, zusätzliche Dokumente einzureichen, wie unten vorgeschlagen, um deine Chancen zu verbessern. Deine Dokumente werden auf Echtheit geprüft, aber nie jemandem gezeigt. Interessierte Kunden sehen nur eine Liste der Dokumente, die du eingereicht hast.',
   'missing.photo': 'Profilbild',
   'setup.share': 'Teilen',

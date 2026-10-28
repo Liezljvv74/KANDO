@@ -125,7 +125,6 @@ export const en: Record<Key, string> = {
   'setup.noPrice': 'No price yet',
   'setup.aboutEmpty': 'Tell customers who you are.',
   'setup.aboutStrengths': 'Strengths: {n}',
-  'setup.documentAdd': 'Add document',
   'setup.documentsExtra': 'Consider submitting additional documents, as proposed below to improve your marketability. Your documents will be vetted for authenticity, but will never be shown to anyone. Potential customers will see a list of the documents you submitted.',
   'missing.photo': 'Profile picture',
   'setup.share': 'Share',
