@@ -62,8 +62,8 @@ it('categories seed is idempotent: 14 categories, both names, babysitting needs 
 
 // Counts from the "Per category" sheet of required-documents-draft.xlsx: [required, optional] per category.
 const TABLE: Record<string, [number, number]> = {
-  photography: [1, 2], dj: [1, 2], catering: [4, 1], 'digital-services': [1, 2], marketing: [1, 2], 'management-consulting': [1, 2], 'dog-walking': [3, 2],
-  babysitting: [2, 3], cleaning: [2, 2], 'moving-clearance': [2, 1], assembly: [2, 1], gardening: [2, 1], 'small-repairs': [2, 2], 'other-services': [1, 2],
+  photography: [1, 2], dj: [1, 2], catering: [3, 2], 'digital-services': [1, 2], marketing: [1, 2], 'management-consulting': [1, 2], 'dog-walking': [2, 3],
+  babysitting: [2, 3], cleaning: [1, 3], 'moving-clearance': [1, 2], assembly: [1, 2], gardening: [1, 2], 'small-repairs': [1, 3], 'other-services': [1, 2],
 }
 
 it('the seeded requirement table matches the sheet: everyone needs an ID, the trade registration is optional, lists never overlap', async () => {
