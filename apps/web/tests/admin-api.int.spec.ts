@@ -61,6 +61,18 @@ it('lists documents with the pending ones first, with owner email', async () => 
   expect(one.data.link).toContain('signed.test')
 })
 
+it('the review time comes from the database clock, whatever the app server clock says', async () => {
+  const id = await doc('aa-owner')
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(Date.now() + 3_600_000) // the app server runs an hour ahead
+  try {
+    expect((await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'rejected', note: 'skew' }, { id })).status).toBe(200)
+  } finally {
+    vi.useRealTimers()
+  }
+  expect((await pool.query('SELECT reviewed_at <= now() AS ok FROM documents WHERE id = $1', [id])).rows[0].ok).toBe(true)
+})
+
 it('approving a document makes the service offerable and records the reviewer', async () => {
   const id = await doc('aa-owner')
   const before = await offerableServiceIds(db, providerId)
