@@ -1,6 +1,6 @@
 # Deployment
 
-How KANDO goes live. Nothing here has been done yet except the Neon dev branch. The owner runs the steps marked "owner".
+How KANDO is deployed. As of 28 October 2026 the steps below are done: the site runs on Vercel (`kando-web`) at https://skillweb.space on the Neon branch `kando-main`, and Preview deployments use `kando-dev`. What is still open is listed in the README under "START HERE". The owner runs the steps marked "owner".
 
 ## Pieces
 
