@@ -42,6 +42,7 @@ Everything below is merged into `main` and live at https://kando-web.vercel.app 
 - **The My profile tab is for providers only.** A customer opens the same page through Account, Offer services (or the card on Home), which creates the draft, makes them a provider and then shows the tab.
 - **Emails say what really happened:** document approved (profile live, service visible, profile offline, profile suspended), document rejected with the staff note, profile suspended with reason and end date, profile published again. When the last pending document is approved there is also a banner with Share and a dot on the Account tab.
 - **Suspensions end by their date.** A daily check at 06:00 UTC (`/api/cron/suspensions`, protected by `CRON_SECRET`) ends the ones whose date has passed; staff can lift earlier. Emails only go to people whose profile was live.
+- **Export and delete (Account tab, below Log out).** "Export my data" fetches one JSON document of the person's own data (profile, services, references, photo links, documents and files with 5-minute signed links, messages, and a list of what is not included) and opens the phone's share sheet. "Delete my account" asks the person to type their own email, then deletes everything at once and for good, in one database transaction: messages, documents, uploaded files, photos, the provider profile with services and references (the client names go with it), the person, their translation rate-limit rows and their Neon Auth records. The files in storage are removed after the commit (a failure is only logged with a count, never fails the request, and leaves orphaned objects), then a confirmation email goes to the old address in the saved language. The only remaining Administrator gets "409 LAST_ADMIN" until another exists. The shared translations cache is not touched (a separate clean-up job comes later). Routes: `GET /app-api/v1/me/export`, `DELETE /app-api/v1/me`.
 - The public name is first name plus the first letter of the surname (or the business name) and follows a rename.
 
 ### Phone testing
@@ -131,7 +132,7 @@ Stage 2 of the design: requests, quotes, direct booking, payments with Stripe Co
 
 - No thumbnail sizes: the photo grid and the cards load full-size images.
 - Documents over 4.5 MB cannot be uploaded through Vercel; the fix is to upload straight from the phone to storage.
-- No "Delete my account" in the app (GDPR erasure and data export come later).
+- Delete my account removes Neon Auth records by looking for their user columns; it has only been tested against a stand-in schema, not against the real Neon Auth tables. A session cookie cached on a device may keep working for a few minutes after deletion.
 - Placeholder graphics (app icon, splash, home page pictures) are still to be replaced.
 - The legal pages are records that staff must write and publish in the back office.
 - Push notifications come with bookings; until then the banner and the email are the only signals.
