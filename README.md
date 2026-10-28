@@ -118,10 +118,12 @@ KANDO contains no Payload code. What remains is the old repository and its runni
 
 **To decide, to continue tomorrow**
 
-1. **Impressum and Datenschutz content:** I need the legal details (company or person name, address, contact, VAT number if any, who is responsible for content); I will not make them up. AGB and Ranking text: write them yourself or have a lawyer do it; I can prepare drafts to review.
+1. **Legal pages, review and follow up.** English drafts of Impressum, Ranking, AGB and Datenschutz are in `docs/legal-drafts/legal-pages-drafts.md`. Known so far: company Amplivine, email info@skillweb.space, person responsible Liezl Fourie, no VAT number. Still needed: Amplivine's legal form and postal address, register entry if any, the small-business VAT rule (ask a tax adviser), free or paid for now, notice period and place of jurisdiction for the AGB, the competent data protection authority, retention periods, signed processing agreements with Neon, Vercel, Resend and OpenRouter. Then: your review, a lawyer or legal-text check, the German versions, and entering the four pages in the back office.
 2. **Graphics:** app icon, splash screen, home page pictures: supply the files, or tell me the style and I prepare options.
-3. When to move the domain (after a successful production test), and how long to keep the old `main` and `dev` branches before deleting them.
-4. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
+3. **First admin (owner, next).** Open https://kando-web.vercel.app (skillweb.space after the domain move), sign up with your own email and confirm the code, then tell me. I make the account an Administrator on `kando-main`; if the permission system blocks me, I give you the one command to run with `!`.
+4. **Quick production check (after the admin exists).** Sign in and walk through the back office on the live site.
+5. **Domain.** Move skillweb.space from the old Vercel project `skillweb` to `kando-web` only after the production check (the old site goes offline at that moment). Then decide how long to keep the old `main` and `dev` Neon branches before deleting them.
+6. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
 
 ### Next features
 
