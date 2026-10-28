@@ -25,17 +25,17 @@ R = required, O = optional (shown as a badge when approved, not needed to go liv
 | --- | --- | --- | --- | --- | --- |
 | Photography | R | O | O | – | – |
 | DJ | R | O | O | – | – |
-| Catering | R | O | R | – | R hygiene-certificate; R food-business-registration |
+| Catering | R | O | O | – | R hygiene-certificate; R food-business-registration |
 | Digital services | R | O | O | – | – |
 | Marketing | R | O | O | – | – |
 | Management & consulting | R | O | O | – | – |
-| Dog walking | R | O | R | O (recommended) | R permit where the local authority requires one (provider confirms in the form; staff check) |
+| Dog walking | R | O | O | O (recommended) | R permit where the local authority requires one (provider confirms in the form; staff check) |
 | Babysitting | R | O (or freelance proof) | O | R (extended, §30a) | O first-aid course certificate |
-| Cleaning | R | O | R | O (recommended) | – |
-| Moving & house clearance | R | O | R | – | – |
-| Assembly | R | O | R | – | – |
-| Gardening | R | O | R | – | – |
-| Small repairs | R | O | R | – | O craft-qualification (optional for now, to be made compulsory later) |
+| Cleaning | R | O | O | O (recommended) | – |
+| Moving & house clearance | R | O | O | – | – |
+| Assembly | R | O | O | – | – |
+| Gardening | R | O | O | – | – |
+| Small repairs | R | O | O | – | O craft-qualification (optional for now, to be made compulsory later) |
 | Other services | R | O | O | – | Staff may ask for more case by case |
 
 ## 3. Owner decisions (28 October 2026)
@@ -45,6 +45,7 @@ R = required, O = optional (shown as a badge when approved, not needed to go liv
 3. **Optional documents:** get a slot. An approved optional document shows as a badge on the profile; it is not needed to go live. (Changed from "leave out".)
 4. **Police certificate for cleaning and dog walking:** recommended, as an optional slot with a badge.
 5. **Craft trades:** the craft qualification (for example a Meisterbrief) is optional for Small repairs for now and can be made compulsory later. (Changed from compulsory.)
+6. **Liability insurance:** optional for now in every category (changed from required for the physical trades). To be revisited before launch.
 
 ## 4. What changes in the app if you approve
 

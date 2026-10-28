@@ -85,7 +85,7 @@ it('a re-seed keeps the lists staff edited, but keeps the sort current; the one-
   const { rows } = await pool.query("SELECT required_documents, optional_documents, sort FROM categories WHERE slug = 'gardening'")
   expect(rows[0]).toEqual({ required_documents: ['permit'], optional_documents: ['id-document'], sort: 12 })
   await applyDocumentLists()
-  expect((await pool.query("SELECT required_documents FROM categories WHERE slug = 'gardening'")).rows[0].required_documents).toEqual(['id-document', 'liability-insurance'])
+  expect((await pool.query("SELECT required_documents FROM categories WHERE slug = 'gardening'")).rows[0].required_documents).toEqual(['id-document'])
 })
 
 it('postcode import upserts: a second run leaves the same count', async () => {
