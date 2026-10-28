@@ -1,5 +1,5 @@
 import { db, type Tx } from '@kando/db'
-import type { AfterCommit, RouteHandler, StaffRole, StaffUser } from '@kando/domain'
+import { isCrossSiteWrite, type AfterCommit, type RouteHandler, type StaffRole, type StaffUser } from '@kando/domain'
 import { requireStaff } from './require-staff'
 
 type Role = StaffRole | 'any'
@@ -14,6 +14,7 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
   return async (request, ctx) => {
     const requestId = crypto.randomUUID()
     try {
+      if (isCrossSiteWrite(request)) return Response.json({ error: 'Forbidden' }, { status: 403 }) // a write from another site
       const params = await ctx.params
       const staff = await requireStaff(typeof role === 'function' ? role(params, request.method) : role)
       const queue: (() => Promise<void>)[] = []

@@ -1,4 +1,5 @@
 import { asUser, type Tx } from '@kando/db'
+import { isCrossSiteWrite } from './origin'
 import { EmailConflictError, ensureUser, type SessionUser } from './users'
 
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
@@ -34,6 +35,7 @@ export function createAppRequest(getSession: SessionResolver) {
     async (request, ctx) => {
       const requestId = crypto.randomUUID()
       try {
+        if (isCrossSiteWrite(request)) return Response.json({ error: 'Forbidden' }, { status: 403 })
         const found = await getSession(request)
         if (!found && opts.auth === 'required') return Response.json({ error: 'Unauthorized' }, { status: 401 })
         if (found && !found.emailVerified && opts.auth === 'required') {
