@@ -13,6 +13,8 @@ type Opts<P> = {
   maxBodyBytes?: number
   /** Reads and checks the body (an upload) after the session and size checks, before the transaction opens. */
   prepare?: (request: Request) => Promise<P>
+  /** A suspended person may still call this route (taking their own profile offline). DELETE is always allowed. */
+  allowWhenSuspended?: boolean
 }
 type Handler<P> = (ctx: {
   tx: Tx
@@ -29,7 +31,7 @@ type Handler<P> = (ctx: {
  * session check, body-size limit, first-contact users row, one transaction as app_user, rollback on error.
  * An unconfirmed email is refused (403 EMAIL_NOT_VERIFIED) where auth is required and counts as signed out where it
  * is optional: it never gets a users row. A suspended person (users.suspended_until in the future) gets 403 SUSPENDED
- * on every write; reads still work.
+ * on every create or edit (POST, PUT, PATCH); reads and DELETE (erasing their own data) still work.
  */
 export function createAppRequest(getSession: SessionResolver) {
   return <P = undefined>(opts: Opts<P>, handler: Handler<P>): RouteHandler =>
@@ -53,8 +55,8 @@ export function createAppRequest(getSession: SessionResolver) {
         }
         const prepared = (opts.prepare ? await opts.prepare(request) : undefined) as P
         const user = session ? await ensureUser(session, request) : null
-        // A suspended person can still read their account (GET), never write; an expired date counts as not suspended.
-        if (user?.suspendedUntil && user.suspendedUntil > new Date() && request.method !== 'GET') {
+        // A suspended person can still read (GET) and erase their own data (DELETE), never create or edit; an expired date counts as not suspended.
+        if (user?.suspendedUntil && user.suspendedUntil > new Date() && !['GET', 'DELETE'].includes(request.method) && !opts.allowWhenSuspended) {
           return Response.json({ error: 'SUSPENDED' }, { status: 403 })
         }
         const params = await ctx.params

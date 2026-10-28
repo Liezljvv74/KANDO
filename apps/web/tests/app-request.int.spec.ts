@@ -183,3 +183,15 @@ it('a suspended person: writes are 403 SUSPENDED, reads work, an expired date is
   await pool.query("UPDATE users SET suspended_until = now() - interval '1 day' WHERE id = 'usus'")
   expect((await write(req('usus', 'POST'), ctx)).status).toBe(200)
 })
+
+it('a suspended person can still erase their own data (DELETE) and use a route marked allowWhenSuspended, never create or edit', async () => {
+  const run = async () => Response.json({ ran: true })
+  const plain = appRequest({ auth: 'required' }, run)
+  const open = appRequest({ auth: 'required', allowWhenSuspended: true }, run)
+  const req = (method: string) => new Request('http://localhost/x', { method, headers: { cookie: 'uid=usdel:usdel@test.skilled.invalid' } })
+  await me(as('usdel'), ctx)
+  await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usdel'")
+  expect((await plain(req('DELETE'), ctx)).status).toBe(200)
+  for (const m of ['POST', 'PUT', 'PATCH']) expect((await plain(req(m), ctx)).status).toBe(403)
+  expect((await open(req('POST'), ctx)).status).toBe(200)
+})
