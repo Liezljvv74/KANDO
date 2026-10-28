@@ -122,10 +122,11 @@ export async function deleteService(tx: Tx, userId: string, id: string): Promise
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return false
   await lockProfile(tx, userId) // serialises with publish and the other edits
+  const before = (await getMyProfile(tx, userId))!.missing
   await tx.delete(services).where(eq(services.id, id))
-  // a live profile stays complete: the throw rolls the delete back
+  // a live profile stays complete as far as this delete goes: only a newly missing service rolls it back (the throw)
   const profile = (await getMyProfile(tx, userId))!
-  if (profile.status === 'published' && profile.missing.length) fail(409, { error: 'Profile incomplete', missing: profile.missing })
+  if (profile.status === 'published' && profile.missing.includes('service') && !before.includes('service')) fail(409, { error: 'Profile incomplete', missing: profile.missing })
   return true
 }
 

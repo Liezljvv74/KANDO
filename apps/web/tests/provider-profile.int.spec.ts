@@ -256,6 +256,23 @@ it('a live profile cannot delete its last complete service: 409, nothing deleted
   expect((await drop(second.id)).status).toBe(409)
 })
 
+it('deleting a service is not blocked by an unrelated missing item, only by "service" newly missing', async () => {
+  const { categoryId } = await seedBase()
+  await call(me.GET, 'lv3')
+  await pool.query("UPDATE users SET first_name = 'Lena', last_name = 'Fischer' WHERE id = 'lv3'")
+  await call(PUT, 'lv3', 'PUT', profile)
+  const first = await (await call(servicesRoute.POST, 'lv3', 'POST', { categoryId, priceType: 'on-request', currency: 'EUR' })).json()
+  const second = await (await call(servicesRoute.POST, 'lv3', 'POST', { categoryId, priceType: 'on-request', currency: 'EUR' })).json()
+  await givePhoto('lv3')
+  expect((await call(publishRoute.POST, 'lv3', 'POST')).status).toBe(200)
+  await pool.query("UPDATE providers SET skills = '{}' WHERE owner_id = 'lv3'") // already incomplete for another reason
+  const drop = (id: string) => call(serviceRoute.DELETE, 'lv3', 'DELETE', undefined, { id })
+  expect((await drop(first.id)).status).toBe(204)
+  const refused = await drop(second.id)
+  expect(refused.status).toBe(409) // the last service: "service" is newly missing
+  expect((await refused.json()).missing).toContain('service')
+})
+
 it('a provider whose names are missing cannot publish: missing lists name', async () => {
   const { categoryId } = await seedBase()
   await call(me.GET, 'nm1')
