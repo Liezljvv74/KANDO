@@ -25,7 +25,8 @@ function s3Storage(): Storage {
     async put(Bucket, Key, Body, ContentType) {
       await client.send(new PutObjectCommand({ Bucket, Key, Body, ContentType }))
     },
-    getSignedUrl: (Bucket, Key, expiresIn) => presign(client, new GetObjectCommand({ Bucket, Key }), { expiresIn }),
+    // Documents (the only signed links) are saved, never shown inside the page: the response override makes browsers download them.
+    getSignedUrl: (Bucket, Key, expiresIn) => presign(client, new GetObjectCommand({ Bucket, Key, ResponseContentDisposition: 'attachment' }), { expiresIn }),
     async delete(Bucket, Key) {
       await client.send(new DeleteObjectCommand({ Bucket, Key }))
     },
