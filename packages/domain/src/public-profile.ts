@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
-import type { ProviderDetail } from '@kando/contract'
+import { DOCUMENT_TYPES, type ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
 import type { Lang } from '@kando/i18n'
 import { photoUrl } from './storage'
@@ -39,7 +39,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   const ids = await offerableServiceIds(tx, p.id)
   if (!ids.length) return null // same rule as search: no page until a service may be offered
 
-  const [services, references, photos, place] = await Promise.all([
+  const [services, references, photos, place, checked] = await Promise.all([
     tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
       SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
       WHERE s.provider_id = ${p.id} AND s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
@@ -50,7 +50,9 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     tx.execute<{ id: string; key: string; alt: string | null }>(sql`
       SELECT id, key, alt FROM photos WHERE provider_id = ${p.id} AND kind = 'portfolio' ORDER BY sort, created_at, id`),
     p.base_postcode ? lookupPostcode(p.country, p.base_postcode, tx) : null,
+    tx.execute<{ docs: string[] }>(sql`SELECT public_checked_documents(${p.id}) AS docs`), // SECURITY DEFINER: type keys only
   ])
+  const approved = new Set(checked.rows[0]?.docs ?? [])
 
   const detail: ProviderDetail = {
     slug: p.slug,
@@ -78,6 +80,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     references: references.rows.map((r) => ({ id: r.id, clientName: r.client_name, description: r.description, year: r.year })),
     // Without a description of its own, a photo is described by the current public name (it follows renames).
     photos: photos.rows.map((ph) => ({ id: ph.id, url: photoUrl(ph.key), alt: ph.alt || p.public_name })),
+    checkedDocuments: DOCUMENT_TYPES.filter((d) => approved.has(d)),
     isNew: true, // Until ratings exist (Stage 6).
     translatable: false,
   }

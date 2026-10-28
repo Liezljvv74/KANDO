@@ -17,6 +17,7 @@ const base: ProviderDetail = {
   ],
   references: [{ id: 'r5', clientName: 'Max', description: 'Gut', year: 2024 }],
   photos: [{ id: 'p9', url: 'https://x.test/p.jpg', alt: null }],
+  checkedDocuments: [],
   isNew: false,
   translatable: true,
 }
