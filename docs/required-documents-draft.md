@@ -1,6 +1,6 @@
 # Required documents per category: draft for review
 
-Status: DRAFT of 28 October 2026, for the owner to approve or change. Not legal advice: have the German rules checked (trade law, craft regulations, child protection) before launch. Today the app only knows two document types (`police-certificate`, `permit`) and only Babysitting requires one.
+Status: owner decisions of 28 October 2026 recorded (section 3); the table in section 2 shows the result. The Excel version `required-documents-draft.xlsx` is the working copy. Not legal advice: have the German rules checked (trade law, craft regulations, child protection) before launch. Today the app only knows two document types (`police-certificate`, `permit`) and only Babysitting requires one.
 
 How it works in the app: each category lists the documents a provider must submit before a service in that category can go live. A provider with services in several categories submits each needed document once. Staff (later helped by AI, see the README) approve or reject each document.
 
@@ -19,35 +19,36 @@ How it works in the app: each category lists the documents a provider must submi
 
 ## 2. Proposed requirements per category
 
-R = required, O = optional (shown as a badge when approved, not needed to go live), – = not needed.
+R = required, – = not needed. Optional documents are left out for launch (decision 3).
 
 | Category | id-document | trade-registration | liability-insurance | police-certificate | other |
 | --- | --- | --- | --- | --- | --- |
-| Photography | R | R | O | – | – |
-| DJ | R | R | O | – | – |
+| Photography | R | R | – | – | – |
+| DJ | R | R | – | – | – |
 | Catering | R | R | R | – | R hygiene-certificate; R food-business-registration |
-| Digital services | R | R | O | – | – |
-| Marketing | R | R | O | – | – |
-| Management & consulting | R | R | O | – | – |
-| Dog walking | R | R | R | O | R permit where the local authority requires one (provider confirms in the form; staff check) |
-| Babysitting | R | R (or freelance proof) | O | R (extended, §30a) | O first-aid course certificate |
-| Cleaning | R | R | R | O | – |
+| Digital services | R | R | – | – | – |
+| Marketing | R | R | – | – | – |
+| Management & consulting | R | R | – | – | – |
+| Dog walking | R | R | R | – (recommended: hint in the app) | R permit where the local authority requires one (provider confirms in the form; staff check) |
+| Babysitting | R | R (or freelance proof) | – | R (extended, §30a) | – |
+| Cleaning | R | R | R | – (recommended: hint in the app) | – |
 | Moving & house clearance | R | R | R | – | – |
 | Assembly | R | R | R | – | – |
 | Gardening | R | R | R | – | – |
-| Small repairs | R | R | R | – | R craft-qualification only if the work is a craft trade that needs a Meisterbrief by law (electrics, gas, water, heating); otherwise not needed |
-| Other services | R | R | O | – | Staff may ask for more case by case |
+| Small repairs | R | R | R | – | R craft-qualification (proof of certification is compulsory) |
+| Other services | R | R | – | – | Staff may ask for more case by case |
 
-## 3. Points that need your decision
+## 3. Owner decisions (28 October 2026)
 
-1. **ID document for everyone?** It supports the know-your-trader record (and is the most sensitive document). Alternative: rely on Stripe's identity check for providers who get paid, and request the ID only from providers without payouts. My suggestion: require it from everyone at the start, because Stripe is not built yet.
-2. **Private persons.** A private person who babysits or walks dogs occasionally may not have a trade registration. Proposal: "trade-registration" accepts either a Gewerbeanmeldung or a short written declaration of being a private person (staff decide). Confirm with a tax adviser how occasional work should be handled before launch.
-3. **Optional documents (O).** They would need a new "optional" kind in the app (badge when approved). Skip them for launch if you prefer the simplest version: everything marked O is then "not needed".
-4. **Police certificate for cleaning and dog walking** (access to homes and keys): optional badge or required? Customers value it, but it raises the barrier for providers.
-5. **Craft trades.** Electrical, gas, water and heating work needs a Meisterbrief by law. Small repairs as a category invites such jobs. Either add a rule in the service description ("no craft trades that need a master qualification") or add a category later.
+1. **Photo ID:** required from every provider.
+2. **Private persons:** submit their ID (in the trade-registration slot) for now; to be confirmed with the tax adviser before launch.
+3. **Optional documents:** left out for launch. Everything that was marked optional is now "not needed".
+4. **Police certificate for cleaning and dog walking:** recommended, not required. The app shows a hint on the profile page; there is no document slot for it at launch.
+5. **Craft trades:** proof of certification (craft qualification, for example a Meisterbrief) is compulsory for Small repairs. Note: this also applies to simple handyman jobs offered under Small repairs; if that is too strict, such jobs can be offered under Assembly or Other services, or the category can be split later.
 
 ## 4. What changes in the app if you approve
 
-- A requirement table per category (replaces the two hard-coded types), editable by staff in the back office.
+- A requirement table per category (replaces the two hard-coded types), editable by staff in the back office. No optional kind is needed.
+- A hint on the profile page for the recommended police certificate (cleaning, dog walking).
 - The profile page's Documents card lists, per service, the documents still needed.
 - The AI-assisted check (Stage A in the README) reads each document type with its own fixed list of fields and checks.
