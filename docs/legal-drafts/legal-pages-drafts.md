@@ -68,8 +68,8 @@ You must be at least 18 years old and able to enter into contracts. You need an 
 Browsing providers is free. You use provider contact and offer information only to arrange services. [Free for customers: please confirm.]
 
 **4. Providers**
-- You can switch on "I want to offer services" in the app and set up a service profile.
-- Your profile shows your public name (first name and the first letter of your surname, or your business name), your texts, photos, services, prices, service area and references. Your address, email and uploaded documents are not public.
+- You can switch on "I want to offer services" in the app and set up a service profile. A profile picture is optional.
+- Your profile shows your public name (first name and the first letter of your surname, or your business name), your texts, photos, services, prices, service area and references. Your private address, email and uploaded documents are not public. Text you enter in your legal notice (Impressum) and the client names you list as references are public as soon as your profile is published.
 - Your information must be true, current and lawful, and you must hold any permits, qualifications or registrations your services require. You are responsible for your own taxes, insurance and legal notice.
 - You may not publish content that is illegal, misleading, discriminatory or violates the rights of others, and you may only upload photos and texts you have the right to use. You give us a non-exclusive right to show this content on SkillWeb and in our app, and to translate it automatically, for as long as your profile is published.
 - Fees: [none at present / to be decided when payments are added].
@@ -78,7 +78,7 @@ Browsing providers is free. You use provider contact and offer information only 
 For some services you must upload documents (for example proof of qualification). Our staff check them. A profile is published only when it is complete and the documents needed for at least one service are approved; we may reject documents that are unreadable, incomplete or doubtful. A check is not a guarantee of quality or of the provider's reliability. We do not check every statement a provider makes.
 
 **6. Suspension and ending your account**
-We may switch a profile off, suspend it until a set date, or close an account if you break these terms, give false information, endanger others, or the law requires it. Where possible we tell you why by email. You can stop using SkillWeb at any time. [Deleting an account inside the app is not available yet; for now write to info@skillweb.space.]
+We may switch a profile off, suspend it until a set date, or close an account if you break these terms, give false information, endanger others, or the law requires it. Where possible we tell you why by email. You can stop using SkillWeb at any time. You can delete your account yourself in the app under Account. Your data is then deleted, except the verification documents and trader details, which we keep for 6 months because of a legal duty and then delete.
 
 **7. Agreements between customers and providers**
 Any contract for a service is made only between the customer and the provider. We are not responsible for the quality, safety, timing or price of a service, or for payment between them. We recommend writing down what has been agreed.
@@ -109,12 +109,16 @@ Amplivine, [address], Germany. Email: info@skillweb.space. [Data protection offi
 | Email address, password (stored only as a protected hash by our login service), confirmation code | Create and secure your account | Art. 6(1)(b) contract |
 | First and last name | Your account; for providers, the public name is built from it | Art. 6(1)(b) |
 | Address: postcode (required), street and city (optional), country | Show you nearby providers; for providers, set the base location and service area. Street and city are never shown to others. | Art. 6(1)(b) |
-| Profile picture | Shown with a provider's profile once it is published; an optional safety feature for customers | Art. 6(1)(b); for the picture, your consent (Art. 6(1)(a)), which you can withdraw by removing it |
-| Provider profile: business name, type, texts, services, prices, service area, references, photos | Publish your public profile | Art. 6(1)(b) |
-| Documents you upload for checks | Staff verify qualifications; stored privately, visible only to you and our staff, never public | Art. 6(1)(b), and our legitimate interest in trust and safety, Art. 6(1)(f) |
+| Profile picture (optional) | Shown with a provider's profile once it is published; for customers it is a safety feature for providers | Your consent (Art. 6(1)(a)), given by uploading it. You can remove it at any time in the app, also while your profile is published |
+| Provider profile: business name, type, texts, services, prices, service area, references, photos, legal status, VAT number (if entered), the text of your legal notice (Impressum) | Publish your public profile. The text of your legal notice and the client names you enter as references are public as soon as your profile is published, so only enter names with the client's permission | Art. 6(1)(b); client names: Art. 6(1)(f) |
+| Documents you upload for checks, with our staff note and the date of each decision | Staff verify qualifications and identity as a trader; stored privately, visible only to you and our staff, never public. Kept while your account exists, so that providers can be identified (trader traceability) | Art. 6(1)(b), Art. 6(1)(c) (duty to know our traders) and Art. 6(1)(f) (trust and safety) |
+| Suspension: end date and reason (if your account or profile is suspended) | Protect users and run the service | Art. 6(1)(b) and (f) |
+| Notifications in the app (for example "profile is live") | Tell you what happened to your account | Art. 6(1)(b) |
 | Notifications and emails about your account (approval, rejection, suspension, "profile is live") | Run the service | Art. 6(1)(b) |
-| Language setting, login sessions, technical logs (IP address, time, requested page) | Operate and secure the service; sessions last up to 7 days | Art. 6(1)(f) |
-| Texts sent to the translation function | Translate profile texts when you press the translate button (see section 4) | Art. 6(1)(f) |
+| Language setting, login sessions | Keep you logged in; the login service stores sessions. [Confirm the session length in Neon Auth.] | Art. 6(1)(b) |
+| Technical server logs (IP address, time, requested page) kept by our hosting provider Vercel, and a salted hash of your IP address kept 24 hours to limit translation requests | Operate and secure the service | Art. 6(1)(f) |
+| Camera and photo library access on your phone | Only when you choose to take or pick a picture or document; pictures are uploaded only when you confirm | Your choice; consent in the phone's permission dialog |
+| Provider texts sent to the translation function, and the translations we store | Translate public profile texts when a visitor presses the translate button (see section 4). Stored translations are not linked to your account | Art. 6(1)(f) |
 
 We do not use advertising, tracking or analytics cookies. We use only what is needed to keep you logged in. [Confirm when the website gets analytics: then add a consent banner.]
 
@@ -131,27 +135,27 @@ We do not use advertising, tracking or analytics cookies. We use only what is ne
 - Authorities, where the law requires it.
 
 **4. Translation**
-When a visitor presses the translate button, the public texts of that page (not names, emails or documents) are sent to an AI language model through OpenRouter and the translated text is returned. Nothing else is sent. [Confirm with OpenRouter's terms that the chosen model does not train on the data, and whether some data leaves the EU; if so add transfer safeguards (standard contractual clauses).]
+When a visitor presses the translate button, the public texts of that provider's profile (biography, strengths, experience, skills, service titles and descriptions, and reference descriptions, loaded from our database, not from the visitor's device) are sent to an AI language model through OpenRouter (which forwards them to the model provider) and the translated text is returned. Names, emails, addresses and documents are never sent. Translations are stored and reused for other visitors. Texts you write in these fields may contain names of other people, so please do not enter personal data of third parties there. [Confirm with OpenRouter's terms that the chosen model does not train on the data, and whether some data leaves the EU; if so add transfer safeguards (standard contractual clauses).]
 
 **5. Transfers outside the EU**
 Our main servers are in Germany. Some processors may process data in other countries (for example the United States). Where this happens we rely on an adequacy decision or standard contractual clauses. [Confirm per processor.]
 
 **6. How long we keep data**
-- Account and profile data: until you delete your account, then deleted within [30] days, except where the law requires us to keep records.
-- Documents: deleted when you delete them or your account; rejected documents [after 90 days].
-- Technical logs: [30 days].
-
-[These periods are my proposal; please confirm or change.]
+- Account and profile data: until you delete your account. Deleting your account in the app removes your data immediately and for good: profile, photos, services, references, notifications and login, apart from what is listed in the next point.
+- Documents: kept while your account exists. You can replace a document by adding the new one first and then deleting the old one. When you delete your account, the verification documents you submitted, together with your basic trader details (name, business name, email, address, legal status, VAT number and legal notice), are kept for 6 months because of our legal duty to be able to identify traders, and then deleted automatically. During this time they are used for nothing else. [Legal review pending: if this duty does not apply to Amplivine, this point is removed and everything is deleted immediately.]
+- Documents you uploaded but did not submit, and notifications: deleted with the account.
+- Technical logs: kept by Vercel for [its retention period, to be confirmed]; the hashed IP address for translation limits: 24 hours.
+- Emails we send are processed by Resend, which keeps them for [period to be confirmed].
 
 **7. Your rights**
-You may ask for access to your data, correction, deletion, restriction of processing, a copy in a common format (data portability), and you may object to processing based on legitimate interest. Where processing relies on consent you can withdraw it at any time. Write to info@skillweb.space. [An export and "delete my account" function inside the app is planned but not built yet; until then we handle requests by email within one month.]
+You may ask for access to your data, correction, deletion, restriction of processing, a copy in a common format (data portability), and you may object to processing based on legitimate interest. Where processing relies on consent you can withdraw it at any time. You can do most of this yourself in the app, under Account: "Export my data" gives you a copy of your data (JSON or CSV) and "Delete my account" erases it, as described under retention. For anything else write to info@skillweb.space; we answer within one month and may ask you to write from your registered email address.
 You can complain to a data protection authority, in particular in your country or federal state of residence or at our seat: [competent authority for Amplivine's state].
 
-**8. Security**
-Data is transmitted encrypted (HTTPS). Private data such as your address and documents is protected by access rules in the database so each person can only reach their own data, and staff accounts are limited by role.
+**8. Security and data breaches**
+Data is transmitted encrypted (HTTPS). Private data such as your address and documents is protected by access rules in the database so each person can only reach their own data. Our staff can see addresses and documents to do their checks; staff accounts are limited by role and their changes are logged. Published pictures and portfolio photos are stored in a public storage location and are reachable by their web address. If a breach puts your rights at risk we tell you without delay and inform the data protection authority within 72 hours. Report security problems to info@skillweb.space.
 
 **9. Children**
-SkillWeb is not meant for people under 18.
+SkillWeb is not meant for people under 18, and by registering you confirm that you are at least 18.
 
 **10. Changes**
 We update this policy when the service changes. The date is shown below. Last updated: [date].
@@ -162,5 +166,5 @@ We update this policy when the service changes. The date is shown below. Last up
 
 1. Impressum: legal form, postal address, register entry (if any), small-business VAT rule (ask your tax adviser), optional phone.
 2. AGB: is SkillWeb free for customers and providers for now? Notice period for changes (I wrote 30 days). Place of jurisdiction.
-3. Privacy: which data protection authority applies (depends on the state of Amplivine's seat); retention periods; confirm the processing agreements are signed with Neon, Vercel, Resend, OpenRouter; confirm OpenRouter's data use and location.
+3. Privacy: which data protection authority applies (depends on the state of Amplivine's seat); confirm the Vercel and Resend log retention periods and the Neon Auth session length; confirm the processing agreements are signed with Neon, Vercel, Resend, OpenRouter; confirm OpenRouter's data use and location; the 6-month retention of trader documents after deletion (EU Digital Services Act, know-your-trader duty) needs the lawyer's confirmation, including whether Amplivine is exempt as a micro enterprise. A sign-up checkbox confirming age 18 and acceptance of the Terms and Privacy Policy is not built yet.
 4. All: a lawyer or legal-text check before launch, and the German versions after you approve the English.
