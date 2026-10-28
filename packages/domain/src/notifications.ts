@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { categories, categoryTexts, db, documents, providers, services, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE, type Lang } from '@kando/i18n'
 import { sendEmail, type Template } from './email'
+import { describeError } from './log-error'
 import { createNotification } from './notifications-store'
 import { offerableServiceIds } from './providers/eligibility'
 
@@ -46,7 +47,7 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
     await createNotification(db, userId, 'profile-live', { url })
   } catch (e) {
     // The email must still go out when the in-app message cannot be stored.
-    console.error('[notify] profile-live notification failed', e instanceof Error ? e.message : 'unknown')
+    console.error('[notify] profile-live notification failed', describeError(e))
   }
   return { template: 'profile-live', params: { url } }
 }
@@ -66,7 +67,7 @@ export async function notifyDocumentDecision(userId: string, document: DocumentD
     await sendEmail({ to: user.email, lang, template, params })
   } catch (e) {
     // After commit: a failure here must never reach the request.
-    console.error('[notify] document decision email failed', e instanceof Error ? e.message : 'unknown')
+    console.error('[notify] document decision email failed', describeError(e))
   }
 }
 
@@ -83,6 +84,6 @@ export async function notifySuspension(userId: string, s: { until: Date | null; 
       params: { reason: s.reason, date: s.until?.toLocaleDateString(LOCALE[lang]) },
     })
   } catch (e) {
-    console.error('[notify] suspension email failed', e instanceof Error ? e.message : 'unknown')
+    console.error('[notify] suspension email failed', describeError(e))
   }
 }

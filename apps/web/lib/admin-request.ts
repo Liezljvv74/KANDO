@@ -1,5 +1,5 @@
 import { db, type Tx } from '@kando/db'
-import { isCrossSiteWrite, type AfterCommit, type RouteHandler, type StaffRole, type StaffUser } from '@kando/domain'
+import { describeError, isCrossSiteWrite, type AfterCommit, type RouteHandler, type StaffRole, type StaffUser } from '@kando/domain'
 import { requireStaff } from './require-staff'
 
 type Role = StaffRole | 'any'
@@ -23,12 +23,12 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
       if (request.method !== 'GET' && response.status < 400) {
         console.log(JSON.stringify({ audit: 'staff-action', time: new Date().toISOString(), staffId: staff.id, method: request.method, path: new URL(request.url).pathname, targetId: params.id ?? null }))
       }
-      for (const fn of queue) await Promise.resolve().then(fn).catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed`, e))
+      for (const fn of queue) await Promise.resolve().then(fn).catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed ${describeError(e)}`))
       return response
     } catch (error) {
       // A thrown Response (401/403 from requireStaff, 400/409 from the domain) is the answer, as is; the transaction rolled back.
       if (error instanceof Response) return error
-      console.error(`[admin-request ${requestId}] ${request.method} ${new URL(request.url).pathname}`, error)
+      console.error(`[admin-request ${requestId}] ${request.method} ${new URL(request.url).pathname} ${describeError(error)}`)
       return Response.json({ error: 'Server error' }, { status: 500 })
     }
   }

@@ -1,4 +1,5 @@
 import { asUser, type Tx } from '@kando/db'
+import { describeError } from './log-error'
 import { isCrossSiteWrite } from './origin'
 import { EmailConflictError, ensureUser, type SessionUser } from './users'
 
@@ -61,7 +62,7 @@ export function createAppRequest(getSession: SessionResolver) {
         const afterCommit: AfterCommit = (fn) => void queue.push(fn)
         const response = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit }))
         // The transaction has committed: only now touch storage. A failing task is logged, never turns the answer into a 500.
-        for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed`, e))
+        for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed ${describeError(e)}`))
         return response
       } catch (error) {
         // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
@@ -70,7 +71,7 @@ export function createAppRequest(getSession: SessionResolver) {
           console.error(`[app-request ${requestId}] email conflict`)
           return Response.json({ error: error.message }, { status: 409 })
         }
-        console.error(`[app-request ${requestId}] ${request.method} ${new URL(request.url).pathname}`, error)
+        console.error(`[app-request ${requestId}] ${request.method} ${new URL(request.url).pathname} ${describeError(error)}`)
         return Response.json({ error: 'Server error' }, { status: 500 })
       }
     }
