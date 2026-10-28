@@ -1,5 +1,5 @@
 import { asUser, type Tx } from '@kando/db'
-import { EmailConflictError, ensureUser, type SessionUser } from './users'
+import { EmailConflictError, ensureUser, SessionGoneError, type SessionUser } from './users'
 
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
 /** The signed-in account as the auth server knows it; `name` is the account name given at sign-up. */
@@ -59,6 +59,7 @@ export function createAppRequest(getSession: SessionResolver) {
       } catch (error) {
         // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
         if (error instanceof Response) return error
+        if (error instanceof SessionGoneError) return Response.json({ error: 'Unauthorized' }, { status: 401 })
         if (error instanceof EmailConflictError) {
           console.error(`[app-request ${requestId}] email conflict`)
           return Response.json({ error: error.message }, { status: 409 })

@@ -141,3 +141,21 @@ it('format=csv for a person without a provider has no provider rows; an unknown 
   expect(await bad.json()).toEqual({ error: 'BAD_FORMAT' })
   expect((await call(exportRoute.GET, 'ex3')).headers.get('content-type')).toContain('application/json')
 })
+
+it('format=csv neutralises spreadsheet formulas (the leading quote is intentional) and keeps empty objects and nulls as rows', async () => {
+  const names = ['=HYPERLINK("http://x.test","hi")', '+cmd|calc', '@SUM(A1:A2)', '-5', '-1+2', '\tTabbed', 'safe']
+  for (const n of names) await pool.query("INSERT INTO provider_references (provider_id, client_name, description) SELECT id, $2, 'x' FROM providers WHERE owner_id = $1", ['ex1', n])
+  const text = Buffer.from(await (await csv('ex1')).arrayBuffer()).toString('utf8').slice(1)
+  const rows = parseCsv(text)
+  const clients = rows.filter((r) => r[0] === 'references' && r[2] === 'clientName').map((r) => r[3])
+  // Read back as written: the quote prefix is part of the value on purpose.
+  expect(clients).toEqual(expect.arrayContaining(["'=HYPERLINK(\"http://x.test\",\"hi\")", "'+cmd|calc", "'@SUM(A1:A2)", '-5', "'-1+2", "'\tTabbed", 'safe']))
+  expect(clients).not.toContain('-1+2')
+  // The JSON export is unchanged.
+  const json = await (await call(exportRoute.GET, 'ex1')).json()
+  expect(json.references.map((r: { clientName: string }) => r.clientName)).toEqual(expect.arrayContaining(names))
+  // The notification payload is {}: its row stays, as does every null field.
+  expect(rows.find((r) => r[0] === 'notifications' && r[2] === 'payload')?.[3]).toBe('{}')
+  expect(rows.find((r) => r[0] === 'user' && r[2] === 'suspendedUntil')).toEqual(['user', '1', 'suspendedUntil', ''])
+  await pool.query('DELETE FROM provider_references WHERE client_name = ANY($1)', [names])
+})

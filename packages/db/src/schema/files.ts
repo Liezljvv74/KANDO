@@ -62,3 +62,12 @@ export const documents = pgTable(
     uniqueIndex('documents_one_pending_idx').on(t.ownerId, t.requirement).where(sql`status = 'pending'`),
   ],
 )
+
+// Objects whose storage delete is still owed (an erased account's files): written with the delete, cleared once the object is gone.
+// app_user has no access (STAFF_ONLY_TABLES); a daily job retries what is left.
+export const pendingObjectDeletes = pgTable('pending_object_deletes', {
+  id: uuid().primaryKey().defaultRandom(),
+  bucket: text().notNull(),
+  key: text().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

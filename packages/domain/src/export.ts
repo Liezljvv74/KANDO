@@ -57,13 +57,14 @@ type Export = Awaited<ReturnType<typeof exportMyData>>
 
 const cell = (v: unknown): string => (v == null ? '' : v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v))
 
-/** One row per field of every record: section, record (1, 2, ...), field, value. Nested objects (the address) become `address.street`. */
+/** One row per field of every record: section, record (1, 2, ...), field, value. Nested objects (the address) become `address.street`; an empty object is a row of its own and a null is a row with an empty value, so nothing silently vanishes. */
 export function exportRows(data: Export): string[][] {
   const rows: string[][] = []
   const add = (section: string, record: number, obj: Record<string, unknown>, prefix = '') => {
     for (const [k, v] of Object.entries(obj)) {
-      if (v && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)) add(section, record, v as Record<string, unknown>, `${prefix}${k}.`)
-      else rows.push([section, String(record), prefix + k, cell(v)])
+      const plain = v && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)
+      if (plain && Object.keys(v).length) add(section, record, v as Record<string, unknown>, `${prefix}${k}.`)
+      else rows.push([section, String(record), prefix + k, plain ? '{}' : cell(v)])
     }
   }
   add('export', 1, { exportedAt: data.exportedAt })
@@ -76,8 +77,15 @@ export function exportRows(data: Export): string[][] {
   return rows
 }
 
+const PLAIN_NUMBER = /^-?\d+([.,]\d+)?$/
+/**
+ * A spreadsheet program runs a cell that starts with = + @ (or a tab, a carriage return, or a minus that is not a plain
+ * number) as a formula: such a cell gets a leading single quote. The quote is intentional and part of the CSV value; the JSON export is unchanged.
+ */
+const noFormula = (s: string) => (/^[=+@\t\r]/.test(s) || (s.startsWith('-') && !PLAIN_NUMBER.test(s)) ? `'${s}` : s)
+
 const quote = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s)
 
 /** RFC 4180 text (CRLF lines) with a UTF-8 byte order mark, so spreadsheet programs show umlauts correctly. */
 export const exportCsv = (data: Export): string =>
-  '\uFEFF' + [['section', 'record', 'field', 'value'], ...exportRows(data)].map((r) => r.map(quote).join(',')).join('\r\n') + '\r\n'
+  '\uFEFF' + [['section', 'record', 'field', 'value'], ...exportRows(data).map(([a, b, c, d]) => [a!, b!, c!, noFormula(d!)])].map((r) => r.map(quote).join(',')).join('\r\n') + '\r\n'

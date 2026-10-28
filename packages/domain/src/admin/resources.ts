@@ -13,7 +13,7 @@ import type { AfterCommit } from '../app-request'
 import { REQUIREMENTS } from '../documents'
 import { fail } from '../providers/http'
 import { mediaBucket, photoUrl, removeObject } from '../storage'
-import type { StaffRole } from '../users'
+import { activeAdmins, lockAdmins, type StaffRole } from '../users'
 import { filterOf, isUuid, like, notFound, ok, orderOf, pageOf, textOf, uniqueViolation } from './common'
 import { getDocument, listDocuments } from './documents'
 import { fullName, getUser, listUsers, withPictures } from './users'
@@ -257,10 +257,9 @@ async function setStaffRole(tx: Tx, request: Request) {
   const b = await parseBody(StaffInputSchema, request)
   const target = (await tx.select().from(users).where(sql`lower(${users.email}) = ${b.email}`))[0]
   if (!target) return notFound()
-  if (target.staffRole === 'admin' && b.staffRole !== 'admin') {
-    const admins = await tx.execute(sql`SELECT id FROM users WHERE staff_role = 'admin' AND (suspended_until IS NULL OR suspended_until <= now()) FOR UPDATE`)
-    if (admins.rows.length <= 1) return fail(409, { error: 'The last Administrator cannot be demoted' })
-  }
+  // Lock order as in deleteAccount: the Administrator set first, then the target row.
+  const admins = await lockAdmins(tx)
+  if (target.staffRole === 'admin' && b.staffRole !== 'admin' && activeAdmins(admins).length <= 1) return fail(409, { error: 'The last Administrator cannot be demoted' })
   const [row] = await tx.update(users).set({ staffRole: b.staffRole, updatedAt: new Date() }).where(eq(users.id, target.id)).returning()
   return ok((await withPictures(tx, [row!]))[0])
 }
