@@ -135,7 +135,7 @@ export const en: Record<Key, string> = {
   'myProfile.categoryInactive': 'This category is currently unavailable',
   'myProfile.notInSearch':
     'Your profile is published, but customers only see it once at least one service is visible.',
-  'myProfile.photoTake': 'Take photo',
+  'myProfile.photoTake': 'Camera',
   'myProfile.photoChoose': 'Choose photo',
   'myProfile.photoRemove': 'Remove picture',
   'myProfile.photoRemoveTitle': 'Remove picture?',

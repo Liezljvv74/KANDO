@@ -134,7 +134,7 @@ export const de = {
   'myProfile.categoryInactive': 'Diese Kategorie ist derzeit nicht verfügbar',
   'myProfile.notInSearch':
     'Dein Profil ist veröffentlicht, aber Kunden sehen es erst, wenn mindestens eine Leistung sichtbar ist.',
-  'myProfile.photoTake': 'Foto aufnehmen',
+  'myProfile.photoTake': 'Kamera',
   'myProfile.photoChoose': 'Foto auswählen',
   'myProfile.photoRemove': 'Foto entfernen',
   'myProfile.photoRemoveTitle': 'Bild entfernen?',
