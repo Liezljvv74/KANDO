@@ -56,6 +56,33 @@ it('inBatches runs at most 5 at a time, and all of them', async () => {
   expect(done.sort((a, b) => a - b)).toEqual([...Array(12).keys()])
 })
 
+it('inBatches keeps the window full (a slow item does not hold back the next ones)', async () => {
+  const started: number[] = []
+  let release!: () => void
+  const slow = new Promise<void>((r) => (release = r))
+  const run = inBatches([0, 1, 2, 3, 4, 5], 2, async (n) => {
+    started.push(n)
+    if (n === 0) await slow // the first item stays busy while the second slot works through the rest
+    else await new Promise((r) => setTimeout(r, 2))
+  })
+  await new Promise((r) => setTimeout(r, 60))
+  expect(started).toEqual([0, 1, 2, 3, 4, 5])
+  release()
+  await run
+})
+
+it('inBatches does not stop at a rejecting item: the others still run, the failure is logged', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const done: number[] = []
+  await inBatches([0, 1, 2, 3, 4], 2, async (n) => {
+    if (n === 1) throw new Error('boom')
+    done.push(n)
+  })
+  expect(done.sort()).toEqual([0, 2, 3, 4])
+  expect(log).toHaveBeenCalled()
+  log.mockRestore()
+})
+
 it('the daily check emails every ended profile (more than one batch)', async () => {
   const { categoryId } = await seedBase()
   const ids = Array.from({ length: 7 }, (_, i) => `cr-many${i}`)
