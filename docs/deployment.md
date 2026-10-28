@@ -38,6 +38,7 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `OPENROUTER_API_KEY` | yes | web | Translate button. Without it the original texts are shown. |
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
+| `TRANSLATE_GLOBAL_LIMIT_PER_DAY` | no | web | Translate calls allowed across all visitors together per 24 hours (default 2000); caps the bill if someone spreads calls over many addresses. |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
 | `RESEND_API_KEY` | yes | web | Approval, rejection, suspension and "profile is live" emails. Required in production: without it no email is sent, only one line is logged. |
 | `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. Production only (crons do not run on Preview). |
@@ -95,6 +96,12 @@ Proposal, not yet agreed: the owner decides when and whether.
 1. Keep the old `main` (read-only, no writes) as a fallback.
 2. When the owner is satisfied that the new site runs cleanly, take a final Neon branch of old `main` named `old-main-final`, then delete the old `dev` branch and the old `main` branch.
 3. Archive the old repository `skill-web`.
+
+## Known limits of the safety checks
+
+- **Translate daily caps are soft under concurrency.** Each call counts first and inserts after, so several simultaneous calls can pass the cap together and overshoot it by a few. They never grow without bound.
+- **The `unknown` anonymous bucket.** Anonymous visitors are counted by the address Vercel sets (`x-vercel-forwarded-for`, else `x-real-ip`). Outside Vercel (local, another host) neither exists and all anonymous visitors share one `unknown` bucket.
+- **Origin check.** A write from a browser is accepted only when its `Origin` is the request's own origin or `NEXT_PUBLIC_SERVER_URL`. Set `NEXT_PUBLIC_SERVER_URL` in Vercel Production to the canonical host, `https://skillweb.space`. An extra alias host (for example one staff use) must be added there first; until then its writes get 403.
 
 ## Seeds
 

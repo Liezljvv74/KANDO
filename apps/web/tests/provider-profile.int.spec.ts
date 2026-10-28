@@ -135,7 +135,7 @@ it('POST creates a draft with the postcode prefilled; again returns the same id;
   expect(a.status).toBe(200)
   const draft = MyProfileSchema.parse(await a.json())
   expect(draft).toMatchObject({ status: 'draft', providerType: null, basePostcode: '10115', serviceRadiusKm: 25 })
-  expect(draft.missing).toEqual(['name', 'photo', 'service', 'providerType', 'skills', 'experience'])
+  expect(draft.missing).toEqual(['name', 'service', 'providerType', 'skills', 'experience'])
   expect(MyProfileSchema.parse(await (await call(POST, 'dr1', 'POST')).json()).id).toBe(draft.id)
   const m = await (await call(me.GET, 'dr1')).json()
   expect(m.isProvider).toBe(true)
@@ -144,11 +144,11 @@ it('POST creates a draft with the postcode prefilled; again returns the same id;
 it('missing: the empty draft lists the person-independent items, business adds two, saves shrink it, PUT carries it', async () => {
   await call(me.GET, 'dr2')
   const empty = await missingOf(await call(POST, 'dr2', 'POST'))
-  expect(empty).toEqual(['name', 'photo', 'service', 'providerType', 'skills', 'experience', 'postcode'])
+  expect(empty).toEqual(['name', 'service', 'providerType', 'skills', 'experience', 'postcode'])
   const biz = await missingOf(await call(PUT, 'dr2', 'PUT', { providerType: 'business' }))
-  expect(biz).toEqual(['name', 'photo', 'service', 'businessName', 'impressum', 'skills', 'experience', 'postcode'])
+  expect(biz).toEqual(['name', 'service', 'businessName', 'impressum', 'skills', 'experience', 'postcode'])
   const next = await missingOf(await call(PUT, 'dr2', 'PUT', { businessName: 'Nord', basePostcode: '10115', skills: ['a'] }))
-  expect(next).toEqual(['name', 'photo', 'service', 'impressum', 'experience'])
+  expect(next).toEqual(['name', 'service', 'impressum', 'experience'])
 })
 
 it('publish of an incomplete draft is 409 with the list; complete publishes with public name Lena F.', async () => {
@@ -159,7 +159,7 @@ it('publish of an incomplete draft is 409 with the list; complete publishes with
   await call(POST, 'dr3', 'POST')
   const refused = await call(publishRoute.POST, 'dr3', 'POST')
   expect(refused.status).toBe(409)
-  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['photo', 'service', 'providerType', 'skills', 'experience', 'postcode'] })
+  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service', 'providerType', 'skills', 'experience', 'postcode'] })
 
   // a service with a category alone: title = category name in the user's language, no price type, not offerable
   const created = await call(servicesRoute.POST, 'dr3', 'POST', { categoryId, currency: 'EUR' })

@@ -80,15 +80,12 @@ export default async function ProviderPage({ params, searchParams }: Args) {
   let unavailable = false
   if (query.translate === '1') {
     // Same anonymous transaction for the profile, the translation store and the rate counter.
-    const ip = (await headers()).get('x-forwarded-for')
+    const h = await headers()
     data = await asUser(null, async (tx) => {
       const d = await read(tx, slug, lang)
       if (!d?.profile.translatable) return d
       try {
-        const request = new Request('http://localhost', {
-          headers: ip ? { 'x-forwarded-for': ip } : {},
-        })
-        const texts = await translateTexts(tx, textsOf(d.profile), lang, clientKeyOf(null, request))
+        const texts = await translateTexts(tx, textsOf(d.profile), lang, clientKeyOf(null, h))
         translated = true
         return { ...d, profile: withTexts(d.profile, texts) }
       } catch (e) {

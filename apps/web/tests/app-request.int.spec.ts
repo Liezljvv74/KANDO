@@ -170,3 +170,28 @@ it('a thrown 400 Response is returned unchanged', async () => {
   expect(body.error).toBe('Invalid input')
   expect(body.issues.length).toBeGreaterThan(0)
 })
+
+it('a suspended person: writes are 403 SUSPENDED, reads work, an expired date is not suspended', async () => {
+  const write = appRequest({ auth: 'required' }, async () => Response.json({ ran: true }))
+  const req = (id: string, method: string) => new Request('http://localhost/x', { method, headers: { cookie: `uid=${id}:${id}@test.skilled.invalid` } })
+  await me(as('usus'), ctx)
+  await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usus'")
+  const blocked = await write(req('usus', 'POST'), ctx)
+  expect(blocked.status).toBe(403)
+  expect(await blocked.json()).toEqual({ error: 'SUSPENDED' })
+  expect((await write(req('usus', 'GET'), ctx)).status).toBe(200)
+  await pool.query("UPDATE users SET suspended_until = now() - interval '1 day' WHERE id = 'usus'")
+  expect((await write(req('usus', 'POST'), ctx)).status).toBe(200)
+})
+
+it('a suspended person can still erase their own data (DELETE) and use a route marked allowWhenSuspended, never create or edit', async () => {
+  const run = async () => Response.json({ ran: true })
+  const plain = appRequest({ auth: 'required' }, run)
+  const open = appRequest({ auth: 'required', allowWhenSuspended: true }, run)
+  const req = (method: string) => new Request('http://localhost/x', { method, headers: { cookie: 'uid=usdel:usdel@test.skilled.invalid' } })
+  await me(as('usdel'), ctx)
+  await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usdel'")
+  expect((await plain(req('DELETE'), ctx)).status).toBe(200)
+  for (const m of ['POST', 'PUT', 'PATCH']) expect((await plain(req(m), ctx)).status).toBe(403)
+  expect((await open(req('POST'), ctx)).status).toBe(200)
+})
