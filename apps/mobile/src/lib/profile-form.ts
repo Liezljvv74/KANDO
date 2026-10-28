@@ -94,3 +94,13 @@ export const referenceBody = (f: ReferenceForm) => ({
   description: f.description.trim(),
   year: f.year.trim() === '' ? null : Number(f.year),
 })
+
+const SNIPPET = 80
+
+/** What the About you card shows: provider type, number of strengths, the start of the description; null when nothing is filled in yet. */
+export function aboutSummary(p: { providerType?: string | null; strengths?: string | null; bio?: string | null }) {
+  const strengths = new Set((p.strengths ?? '').split('\n').map((x) => x.trim()).filter(Boolean)).size
+  const bio = (p.bio ?? '').trim().replace(/\s+/g, ' ')
+  if (!p.providerType && !strengths && !bio) return null
+  return { type: p.providerType ?? null, strengths, bio: bio.length > SNIPPET ? `${bio.slice(0, SNIPPET).trimEnd()}…` : bio }
+}

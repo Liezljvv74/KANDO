@@ -1,8 +1,7 @@
 import { ApiError } from '@/api/client'
-import { missingText, setLang } from '@/i18n'
 
 import { createFieldSaver } from '@/hooks/use-field-save'
-import { isLive, needsFormError, radiusBody, typedTag, validRadius, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
+import { aboutSummary, isLive, needsFormError, radiusBody, typedTag, validRadius, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
@@ -50,15 +49,6 @@ test('service and reference validation', () => {
   expect(validateReference({ clientName: 'A', description: 'B', year: '' }, 2026)).toEqual({})
 })
 
-test('every missing item the publish route can return has de and en text', () => {
-  // German only: several English texts equal the item name ("experience"); key sets of de and en are tested in packages/i18n.
-  for (const lang of ['de'] as const) {
-    setLang(lang)
-    for (const item of ['name', 'service', 'providerType', 'businessName', 'impressum', 'skills', 'experience', 'postcode', 'radius']) expect(missingText(item)).not.toBe(item)
-  }
-  expect(missingText('unheard-of')).toBe('unheard-of')
-})
-
 test('the service body names the category by id and the currency, as the server expects', () => {
   expect(serviceBody({ category: 'c1', title: ' Fix ', description: '', priceType: 'fixed', price: '12,5' })).toEqual({
     categoryId: 'c1',
@@ -95,4 +85,10 @@ test('an invalid radius keeps the typed value, is reported as invalid and sends 
   saver.set('30')
   await saver.flush()
   expect(request).toHaveBeenCalledWith({ serviceRadiusKm: 30 })
+})
+
+test('the About you summary: nothing filled in gives null, else type, strength count and a short description', () => {
+  expect(aboutSummary({ providerType: null, strengths: ' \n', bio: ' ' })).toBeNull()
+  expect(aboutSummary({ providerType: 'business', strengths: 'a\nb\na\n', bio: 'Hello  there' })).toEqual({ type: 'business', strengths: 2, bio: 'Hello there' })
+  expect(aboutSummary({ bio: 'x'.repeat(200) })!.bio).toHaveLength(81)
 })

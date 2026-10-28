@@ -2,10 +2,8 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import type { MyProfile, OwnService } from '@kando/contract'
-
 import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
-import { ErrorText } from '@/components/auth-ui'
+import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { NotificationBanner } from '@/components/notification-banner'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -14,7 +12,6 @@ import { useLoad } from '@/hooks/use-load'
 import { dismissNotification, loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { canShare, documentRows } from '@/lib/documents'
-import { flushPendingTags } from '@/lib/pending-tags'
 import { createStaleGuard } from '@/lib/stale-guard'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
@@ -37,7 +34,6 @@ export default function SetupScreen() {
     useCallback(
       () => () => {
         setWelcome(false)
-        void flushPendingTags() // leaving the page: tag text typed but not added is saved
       },
       [],
     ),
@@ -56,35 +52,9 @@ export default function SetupScreen() {
   const { done, data, error, retry } = useLoad(loadAll)
   const { categories } = useCategories()
   const me = useMe()
-  // The latest profile the server sent (the Publish bar reads its missing list) and the live services list.
-  const [profile, setProfile] = useState<MyProfile | null>(null)
-  const [services, setServices] = useState<OwnService[] | null>(null)
-  useEffect(() => {
-    if (!data || !data.fresh()) return
-    setProfile(data.profile)
-    setServices(data.services)
-  }, [data])
-
-  // A service change can change what is missing (a service with a price type): ask for the profile again.
-  const refreshProfile = () => {
-    const fresh = stamp()
-    getMyProfile()
-      .then((p) => p && fresh() && setProfile(p))
-      .catch(() => {})
-  }
-  const onService = (s: OwnService) => {
-    const before = services?.find((x) => x.id === s.id)
-    setServices((list) => (list?.some((x) => x.id === s.id) ? list.map((x) => (x.id === s.id ? s : x)) : [...(list ?? []), s]))
-    if (!before || before.category !== s.category || before.priceType !== s.priceType) refreshProfile()
-  }
-  const onServiceRemoved = (id: string) => {
-    setServices((list) => list?.filter((x) => x.id !== id) ?? null)
-    refreshProfile()
-  }
-
   const title = welcome ? t('setup.welcome') : t('setup.title')
-  if (!done || !data || !profile || !services) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
-  const { references, photos, verifications } = data
+  if (!done || !data) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
+  const { profile, services, references, photos, verifications } = data
   const name = profile.publicName ?? ''
   const docRows = documentRows(services, categories ?? [], verifications)
   const banner = me?.notifications.find((n) => n.kind === 'profile-live' && !n.dismissedAt)
@@ -105,13 +75,14 @@ export default function SetupScreen() {
 
       <PublishBar profile={profile} services={services} onChanged={retry} />
 
-      <ServicesCard services={services} docRows={docRows} onService={onService} onRemoved={onServiceRemoved} />
+      <ServicesCard services={services} docRows={docRows} />
 
-      <AboutCard initial={data.profile} onSaved={setProfile} stamp={stamp} />
+      <AboutCard profile={profile} />
 
       <ReferencesCard references={references} />
       <PortfolioCard photos={photos.filter((p) => p.kind === 'portfolio')} name={name} onChanged={retry} />
-      {docRows.length > 0 && <DocumentsCard rows={docRows} verifications={verifications} onChanged={retry} />}
+      {docRows.some((r) => r.optional) && <Info text={t('setup.documentsExtra')} />}
+      {docRows.length > 0 && <DocumentsCard rows={docRows} />}
     </FormScreen>
   )
 }

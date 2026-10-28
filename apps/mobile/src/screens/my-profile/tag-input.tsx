@@ -11,6 +11,7 @@ import { withItem } from '@/lib/profile-form'
  */
 export function TagInput({
   label,
+  placeholder,
   items,
   onItems,
   text,
@@ -21,6 +22,7 @@ export function TagInput({
   error,
 }: {
   label: string
+  placeholder?: string
   items: string[]
   onItems: (items: string[]) => void
   text: string
@@ -38,6 +40,7 @@ export function TagInput({
     <View style={styles.root}>
       <Field
         label={`${label} (${items.length}/${max})`}
+        placeholder={placeholder}
         value={text}
         onChangeText={onText}
         maxLength={maxLength}

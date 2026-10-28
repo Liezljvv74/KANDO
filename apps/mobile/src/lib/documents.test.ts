@@ -1,5 +1,5 @@
 import type { Category, Document, OwnService } from '@kando/contract'
-import { canShare, deleteBodyKey, documentRows, serviceDocNote, submittedDocs, type DocumentRow } from './documents'
+import { DOC_COLORS, canShare, deleteBodyKey, docTone, documentRows, serviceDocNote, submittedDocs, type DocumentRow } from './documents'
 
 const cats = [
   { id: 'c1', requiredDocuments: ['police-certificate'] },
@@ -106,4 +106,17 @@ test('waiting for a document ignores optional rows', () => {
   const rows = documentRows([svc('c5')], cats, [])
   expect(serviceDocNote(['police-certificate'], rows)).toBe('needed')
   expect(canShare([{ waitingFor: [] } as unknown as OwnService])).toBe(true) // optional rows never set waitingFor
+})
+
+test('a compulsory document not approved is red, an optional one orange, pending neutral, approved green', () => {
+  const row = (optional: boolean, state: DocumentRow['state']): DocumentRow => ({ requirement: 'permit', optional, state, note: null })
+  expect(docTone(row(false, 'none'))).toBe('required')
+  expect(docTone(row(false, 'rejected'))).toBe('required')
+  expect(docTone(row(true, 'none'))).toBe('optional')
+  expect(docTone(row(true, 'rejected'))).toBe('optional')
+  for (const optional of [false, true]) {
+    expect(docTone(row(optional, 'pending'))).toBe('pending')
+    expect(docTone(row(optional, 'approved'))).toBe('approved')
+  }
+  expect(new Set(Object.values(DOC_COLORS)).size).toBe(4)
 })
