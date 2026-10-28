@@ -44,8 +44,15 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
 export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
 
+// Readable by app_user only where the expression holds (drafts stay hidden), written only by staff (owner connection,
+// which sees everything).
+export const PUBLISHED_READ_TABLES: Record<string, string> = {
+  pages: 'published',
+  page_texts: 'EXISTS (SELECT 1 FROM pages p WHERE p.id = page_id AND p.published)',
+}
+
 // Readable by app_user, written only by staff (owner connection).
-export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'pages', 'page_texts']
+export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
 
 // Tables app requests never touch: all privileges revoked.
 export const STAFF_ONLY_TABLES: string[] = []
@@ -54,7 +61,7 @@ export const STAFF_ONLY_TABLES: string[] = []
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
 
 // Every policy name any map creates, dropped first so a table can move between the maps.
-export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert']
+export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read']
 
 /** Every schema table must be in exactly one map. */
 export function classifyTables(): { unclassified: string[]; duplicated: string[] } {
@@ -62,6 +69,7 @@ export function classifyTables(): { unclassified: string[]; duplicated: string[]
     Object.keys(PRIVATE_TABLES),
     Object.keys(PUBLIC_OWNED_TABLES),
     INSERT_ONLY_TABLES,
+    Object.keys(PUBLISHED_READ_TABLES),
     PUBLIC_REFERENCE_TABLES,
     STAFF_ONLY_TABLES,
   ]
@@ -115,6 +123,8 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY owner_delete ON ${t} FOR DELETE TO ${APP_ROLE} USING (${owner})`,
     ]
   }
+  const published = PUBLISHED_READ_TABLES[table]
+  if (published) return [...head, `CREATE POLICY published_read ON ${t} FOR SELECT TO ${APP_ROLE} USING (${published})`]
   if (INSERT_ONLY_TABLES.includes(table)) {
     return [
       `GRANT INSERT ON ${t} TO ${APP_ROLE}`,
@@ -123,7 +133,7 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY app_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (true)`,
     ]
   }
-  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES or INSERT_ONLY_TABLES`)
+  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES or INSERT_ONLY_TABLES`)
 }
 
 // The only write path to a provider's domain-only columns. SECURITY DEFINER (runs as the table owner, past RLS) but
@@ -202,7 +212,7 @@ const TRANSLATION_FUNCTIONS = [
 
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
-  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...INSERT_ONLY_TABLES],
+  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...INSERT_ONLY_TABLES],
 ): string[] {
   const dup = classifyTables().duplicated
   if (dup.length) throw new Error(`rlsStatements: ${dup.join(', ')} in more than one map`)
