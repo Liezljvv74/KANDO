@@ -6,6 +6,7 @@ import {
   clientKeyOf,
   needsTranslation,
   textsOf,
+  TRANSLATE_GLOBAL_LIMIT_PER_DAY,
   TRANSLATE_LIMIT_PER_HOUR,
   TRANSLATE_TIMEOUT_MS,
   TranslationUnavailable,
@@ -65,6 +66,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   delete process.env.TRANSLATE_TIMEOUT_MS
 })
 afterAll(async () => {
@@ -156,6 +158,18 @@ describe('translate', () => {
     const other = client('limit-other')
     await translate(texts({ bio: en('limit') }), 'de', other)
     expect(await counted(other)).toBe(1)
+  })
+
+  it('the global daily cap refuses every caller, and only counts the last 24 hours', async () => {
+    const total = async () => (await pool.query("SELECT count(*)::int AS n FROM translation_requests WHERE created_at > now() - interval '24 hours'")).rows[0].n as number
+    vi.stubEnv('TRANSLATE_GLOBAL_LIMIT_PER_DAY', String((await total()) + 1))
+    const f = answer(echo('DE: '))
+    await translate(texts({ bio: en('global-0') }), 'de', client('global-a')) // the last call under the cap
+    f.mockClear()
+    await expect(translate(texts({ bio: en('global-1') }), 'de', client('global-b'))).rejects.toBeInstanceOf(TranslationUnavailable)
+    expect(f).not.toHaveBeenCalled()
+    expect(await counted(client('global-b'))).toBe(0)
+    expect(TRANSLATE_GLOBAL_LIMIT_PER_DAY).toBe(2000)
   })
 
   it('the limit boundary: the 30th call passes, the 31st is refused', async () => {
@@ -264,12 +278,17 @@ describe('translate', () => {
   })
 
   it('anonymous client keys are salted hashes, never the raw IP', () => {
-    const req = (ip: string | null) => new Request('http://localhost/x', { headers: ip ? { 'x-forwarded-for': ip } : {} })
+    const req = (ip: string | null) => new Headers(ip ? { 'x-vercel-forwarded-for': ip } : {})
     const k = clientKeyOf(null, req('203.0.113.7, 10.0.0.1'))
     expect(k).toMatch(/^ip:[0-9a-f]{32}$/)
     expect(k).not.toContain('203.0.113.7')
     expect(clientKeyOf(null, req('203.0.113.7'))).toBe(k)
     expect(clientKeyOf(null, req(null))).toBe(clientKeyOf(null, req('')))
+    // A forged x-forwarded-for neither changes the key nor lets a caller pick another bucket; x-real-ip is the fallback.
+    const spoofed = new Headers({ 'x-vercel-forwarded-for': '203.0.113.7', 'x-forwarded-for': '6.6.6.6' })
+    expect(clientKeyOf(null, spoofed)).toBe(k)
+    expect(clientKeyOf(null, new Headers({ 'x-forwarded-for': '6.6.6.6' }))).toBe(clientKeyOf(null, req(null)))
+    expect(clientKeyOf(null, new Headers({ 'x-real-ip': '203.0.113.7' }))).toBe(k)
     expect(clientKeyOf({ id: 'u-5' } as never, req('1.1.1.1'))).toBe('user:u-5')
   })
 

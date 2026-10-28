@@ -6,7 +6,7 @@ import { t } from '@kando/i18n'
 import { cleanupUsers, seedBase, seedProvider } from './helpers'
 
 vi.mock('next/headers', () => ({
-  headers: async () => new Headers({ 'x-forwarded-for': '203.0.113.7' }),
+  headers: async () => new Headers({ 'x-vercel-forwarded-for': '203.0.113.7' }),
 }))
 process.env.NEON_AUTH_COOKIE_SECRET ||= 'test-secret-not-real'
 

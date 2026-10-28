@@ -30,6 +30,9 @@ export function t(lang: Lang, key: Key, params: Record<string, string | number> 
 
 export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
 
+/** The time zone dates in emails are shown in (the server runs in UTC); one place to change per country. */
+export const TIME_ZONE = 'Europe/Berlin'
+
 export const formatMoney = (amount: number, currency: string, lang: Lang): string =>
   new Intl.NumberFormat(LOCALE[lang], { style: 'currency', currency }).format(amount)
 

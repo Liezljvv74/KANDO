@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
-import { categories, categoryTexts, pages, pageTexts, photos, providers, users, type Tx } from '@kando/db'
+import { categories, categoryTexts, pages, notSuspendedSql, pageTexts, photos, providers, users, type Tx } from '@kando/db'
 import {
   CategoryInputSchema,
   CategoryUpdateSchema,
@@ -31,7 +31,7 @@ const slugTaken = (e: unknown) => (uniqueViolation(e) ? fail(409, { error: 'Slug
 // ---- providers (read) and photos ----
 
 /** The provider is hidden until suspended_until passes. */
-const isSuspended = sql<boolean>`coalesce(${providers.suspendedUntil} > now(), false)`
+const isSuspended = sql<boolean>`NOT ${notSuspendedSql('providers')}`
 
 async function listProviders(tx: Tx, q: AdminListQuery) {
   const f = filterOf(q)

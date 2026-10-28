@@ -51,6 +51,7 @@ export const errorKeys: Record<string, Key> = {
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',
   'Profile suspended': 'error.profileSuspended',
+  SUSPENDED: 'error.accountSuspended',
   'Create your profile first': 'error.createProfileFirst',
   'Not found': 'error.notFound',
   'Reference limit reached': 'error.referenceLimit',
@@ -59,7 +60,6 @@ export const errorKeys: Record<string, Key> = {
   'Unsupported file type': 'error.unsupportedFile',
   'File unreadable': 'error.fileUnreadable',
   'Photo limit reached': 'error.photoLimit',
-  'Profile photo required while published': 'error.photoRequired',
   'Check already pending': 'error.checkPending',
   'Translation unavailable': 'provider.translateError',
   network: 'error.network',
@@ -88,7 +88,6 @@ const known = (key: string): key is Key => translate(DEFAULT_LANG, key as Key) !
 
 /** Maps a `missing` item of a 409 'Profile incomplete' response to text; unknown items show the raw name. */
 export const missingText = (item: string): string => {
-  if (item === 'photo') return t('setup.photo') // inside a sentence; missing.photo is the capitalised name (buttons, alert titles)
   const key = `missing.${item}`
   return known(key) ? t(key) : item
 }

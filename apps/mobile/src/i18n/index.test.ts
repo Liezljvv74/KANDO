@@ -42,6 +42,7 @@ test('errorText maps the auth server codes to catalogue messages', () => {
 test('errorText maps the app API strings', () => {
   setLang('en')
   expect(errorText('Unknown postcode')).toContain('We do not know this postcode')
+  expect(errorText('SUSPENDED')).toContain('Your account is suspended')
   expect(errorText('Invalid postcode')).toContain('not written correctly')
   expect(errorText('Reference limit reached')).toContain('You can list at most 2 past jobs.')
   expect(errorText('Translation unavailable')).toContain('Translation is not available right now.')

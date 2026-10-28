@@ -62,7 +62,7 @@ export async function reviewDocument(tx: Tx, staff: StaffUser, id: string, input
   if (input.decision === 'rejected' && !note) return fail(400, { error: 'A reason is required' })
   const [done] = await tx
     .update(documents)
-    .set({ status: input.decision, note, reviewedBy: staff.id, reviewedAt: new Date() })
+    .set({ status: input.decision, note, reviewedBy: staff.id, reviewedAt: sql`now()` })
     .where(eq(documents.id, id))
     .returning()
   afterCommit(() => notifyDocumentDecision(done!.ownerId, { id, requirement: done!.requirement, status: input.decision, note }))

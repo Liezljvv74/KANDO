@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { describeError } from './log-error'
 import { getSignedUrl as presign } from '@aws-sdk/s3-request-presigner'
 
 export interface Storage {
@@ -25,7 +26,8 @@ function s3Storage(): Storage {
     async put(Bucket, Key, Body, ContentType) {
       await client.send(new PutObjectCommand({ Bucket, Key, Body, ContentType }))
     },
-    getSignedUrl: (Bucket, Key, expiresIn) => presign(client, new GetObjectCommand({ Bucket, Key }), { expiresIn }),
+    // Documents (the only signed links) are saved, never shown inside the page: the response override makes browsers download them.
+    getSignedUrl: (Bucket, Key, expiresIn) => presign(client, new GetObjectCommand({ Bucket, Key, ResponseContentDisposition: 'attachment' }), { expiresIn }),
     async delete(Bucket, Key) {
       await client.send(new DeleteObjectCommand({ Bucket, Key }))
     },
@@ -49,4 +51,4 @@ export const photoUrl = (key: string): string => storage().publicUrl(key)
 export const removeObject = (bucket: string, key: string): Promise<void> =>
   storage()
     .delete(bucket, key)
-    .catch((e) => console.error(`[storage] could not delete ${bucket}/${key}`, e))
+    .catch((e) => console.error(`[storage] could not delete ${bucket}/${key} ${describeError(e)}`))

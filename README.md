@@ -24,7 +24,7 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (28 October 2026)
 
-Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 407 (259 web, 125 app, 23 in the shared packages); typecheck, lint and the Android bundle build are clean.
+Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 434 (280 web, 130 app, 24 in the shared packages); typecheck, lint and the Android bundle build are clean.
 
 ### What was built, in order
 
@@ -79,11 +79,9 @@ Nothing has been checked on a phone or in a real browser yet; every "Not yet don
 
 ### Small points parked from the reviews
 
-- A lift on a user who was not suspended still sends "published again"; end dates in emails use the server time zone; the daily check sends its emails one by one.
-- Two reviewers approving at the same moment can send a double "profile is live" email; a live profile can still delete its last complete service; the "not suspended" test is written in many SQL places (one shared constant would keep them equal).
-- Tag text typed but not yet added is saved on blur only; an invalid radius is not saved until valid.
-- A bad postcode typed at sign-up is dropped silently (the error shows in Account); street and city labels are not marked optional.
-- Refine's own button labels (Save, Create, Edit, Delete) are still English in the back office.
+- A bad postcode typed at sign-up is dropped silently (the error shows in Account).
+- The "not suspended" rule in JavaScript still exists as copies that compare with the app server's clock (`providers/items.ts` withState, `providers/profile.ts` publish, `notifications.ts`); the SQL copies now all use the shared `notSuspended` helper.
+- Email dates use one time zone constant (`TIME_ZONE`, Europe/Berlin, in `packages/i18n`); it has to become per country before South Africa.
 - Details: the Open Items sheets of the reports in `Reports/`.
 
 ### Retiring the old Payload stack
@@ -119,10 +117,12 @@ KANDO contains no Payload code. What remains is the old repository and its runni
 
 **To decide, to continue tomorrow**
 
-1. **Impressum and Datenschutz content:** I need the legal details (company or person name, address, contact, VAT number if any, who is responsible for content); I will not make them up. AGB and Ranking text: write them yourself or have a lawyer do it; I can prepare drafts to review.
+1. **Legal pages, review and follow up.** English drafts of Impressum, Ranking, AGB and Datenschutz are in `docs/legal-drafts/legal-pages-drafts.md`. Known so far: company Amplivine, email info@skillweb.space, person responsible Liezl Fourie, no VAT number. Still needed: Amplivine's legal form and postal address, register entry if any, the small-business VAT rule (ask a tax adviser), free or paid for now, notice period and place of jurisdiction for the AGB, the competent data protection authority, retention periods, signed processing agreements with Neon, Vercel, Resend and OpenRouter. Then: your review, a lawyer or legal-text check, the German versions, and entering the four pages in the back office.
 2. **Graphics:** app icon, splash screen, home page pictures: supply the files, or tell me the style and I prepare options.
-3. When to move the domain (after a successful production test), and how long to keep the old `main` and `dev` branches before deleting them.
-4. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
+3. **First admin (owner, next).** Open https://kando-web.vercel.app (skillweb.space after the domain move), sign up with your own email and confirm the code, then tell me. I make the account an Administrator on `kando-main`; if the permission system blocks me, I give you the one command to run with `!`.
+4. **Quick production check (after the admin exists).** Sign in and walk through the back office on the live site.
+5. **Domain.** Move skillweb.space from the old Vercel project `skillweb` to `kando-web` only after the production check (the old site goes offline at that moment). Then decide how long to keep the old `main` and `dev` Neon branches before deleting them.
+6. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
 
 ### Next features
 

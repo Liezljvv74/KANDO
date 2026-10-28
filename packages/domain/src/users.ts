@@ -7,7 +7,7 @@ import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
-export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean }
+export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null }
 export type StaffRole = 'admin' | 'reviewer'
 export type StaffUser = { id: string; email: string; staffRole: StaffRole }
 
@@ -67,6 +67,7 @@ export async function ensureUser(session: { id: string; email: string }, request
     email: row.email,
     language: isLang(row.language) ? row.language : DEFAULT_LANG,
     isProvider: row.isProvider,
+    suspendedUntil: row.suspendedUntil,
   }
 }
 

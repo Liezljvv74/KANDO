@@ -62,6 +62,21 @@ describe('pages tables', () => {
     expect(classifyTables()).toEqual({ unclassified: [], duplicated: [] })
   })
 
+  it('app requests see published pages and their texts only; the owner connection sees drafts too', async () => {
+    const pagesSeen = async (uid: string | null) =>
+      (await asUser(uid, (tx) => tx.execute<{ slug: string }>(sql`SELECT slug FROM pages WHERE slug IN (${slug('both')}, ${slug('draft')})`))).rows.map((r) => r.slug)
+    const textsSeen = async (uid: string | null) =>
+      (await asUser(uid, (tx) => tx.execute(sql`SELECT t.title FROM page_texts t JOIN pages p ON p.id = t.page_id WHERE p.slug = ${slug('draft')}`))).rows.length
+    const rawTexts = async () =>
+      (await pool.query('SELECT 1 FROM page_texts t JOIN pages p ON p.id = t.page_id WHERE p.slug = $1', [slug('draft')])).rows.length
+    expect(await pagesSeen(null)).not.toContain(slug('draft'))
+    expect(await pagesSeen('u1')).not.toContain(slug('draft'))
+    expect(await pagesSeen(null)).toContain(slug('both'))
+    expect(await rawTexts()).toBeGreaterThan(0) // the draft has texts on the owner connection ...
+    expect(await textsSeen(null)).toBe(0) // ... and none for the public
+    expect((await pool.query('SELECT slug FROM pages WHERE slug = $1', [slug('draft')])).rows).toHaveLength(1)
+  })
+
   it('anonymous app requests read pages but cannot write them', async () => {
     const rows = await asUser(null, (tx) =>
       tx.execute(sql`SELECT slug FROM pages WHERE slug = ${slug('both')}`),

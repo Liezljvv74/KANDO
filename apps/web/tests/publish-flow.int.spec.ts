@@ -31,7 +31,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
   await call(profileRoute.PUT, 'pf1', 'PUT', { ...profile, skills: [], experience: null })
   const refused = await call(publish.POST, 'pf1', 'POST')
   expect(refused.status).toBe(409)
-  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['photo', 'service', 'skills', 'experience'] })
+  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service', 'skills', 'experience'] })
   await givePhoto('pf1') // Task 6 uploads for real
   await call(profileRoute.PUT, 'pf1', 'PUT', profile)
   await call(services.POST, 'pf1', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
@@ -125,10 +125,10 @@ it('offerableServiceIds: services whose required documents are all approved', as
   expect((await ids()).sort()).toEqual([plain, needy].sort())
 })
 
-it('a user suspension that has ended no longer blocks publishing; a running one does', async () => {
+it('a user suspension that has ended no longer blocks publishing; a running one does (403)', async () => {
   await pool.query("UPDATE providers SET suspended_until = NULL, status = 'draft' WHERE owner_id = 'pf2'")
   await pool.query("UPDATE users SET suspended_until = now() + interval '1 day', suspended_reason = 'x' WHERE id = 'pf2'")
-  expect((await call(publish.POST, 'pf2', 'POST')).status).toBe(409)
+  expect((await call(publish.POST, 'pf2', 'POST')).status).toBe(403) // the wrapper refuses every write of a suspended person
   await pool.query("UPDATE users SET suspended_until = now() - interval '1 minute' WHERE id = 'pf2'")
   expect((await call(publish.POST, 'pf2', 'POST')).status).toBe(200)
 })
