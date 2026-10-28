@@ -78,7 +78,6 @@ const known = (key: string): key is Key => translate(DEFAULT_LANG, key as Key) !
 
 /** Maps a `missing` item of a 409 'Profile incomplete' response to text; unknown items show the raw name. */
 export const missingText = (item: string): string => {
-  if (item === 'photo') return t('setup.photo') // inside a sentence; missing.photo is the capitalised name (buttons, alert titles)
   const key = `missing.${item}`
   return known(key) ? t(key) : item
 }

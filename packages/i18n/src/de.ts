@@ -106,7 +106,6 @@ export const de = {
   'setup.live': 'Online',
   'setup.liveWaiting': 'Online, {count} Leistung(en) warten auf eine Prüfung',
   'setup.takeOffline': 'Offline nehmen',
-  'setup.photo': 'Profilbild',
   'setup.services': 'Leistungen',
   'setup.addService': 'Weitere Leistung hinzufügen',
   'setup.removeService': 'Entfernen',

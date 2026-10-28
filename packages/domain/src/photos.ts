@@ -96,7 +96,6 @@ export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCo
 
 /** Deletes one of the caller's photos; false when it is not theirs. The picture is optional: a live profile may drop it. */
 export async function deletePhoto(tx: Tx, userId: string, id: string, afterCommit: AfterCommit): Promise<boolean> {
-  await lockProfile(tx, userId) // serialises with publish
   const row = UUID.test(id)
     ? (await tx.select().from(photos).where(and(eq(photos.id, id), eq(photos.ownerId, userId))))[0]
     : undefined

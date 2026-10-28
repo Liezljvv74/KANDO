@@ -107,7 +107,6 @@ export const en: Record<Key, string> = {
   'setup.live': 'Live',
   'setup.liveWaiting': 'Live, {count} service(s) waiting for a check',
   'setup.takeOffline': 'Take offline',
-  'setup.photo': 'profile picture',
   'setup.services': 'Services',
   'setup.addService': 'Add another service',
   'setup.removeService': 'Remove',

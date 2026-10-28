@@ -165,7 +165,7 @@ export async function upsertMyProfile(
 
 /** Publishes the caller's profile: 404 without one, 409 when suspended or incomplete (`missing` lists what). */
 export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
-  await lockProfile(tx, userId) // serialises with a photo delete between this check and the status change
+  await lockProfile(tx, userId) // serialises with a concurrent profile edit between this check and the status change
   const row = await ownProvider(tx, userId)
   if (!row) return fail(404, { error: 'Not found' })
   if (row.suspendedUntil && row.suspendedUntil > new Date()) fail(409, { error: 'Profile suspended' })
