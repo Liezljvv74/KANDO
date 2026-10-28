@@ -31,7 +31,7 @@ const slugTaken = (e: unknown) => (uniqueViolation(e) ? fail(409, { error: 'Slug
 // ---- providers (read) and photos ----
 
 /** The provider is hidden until suspended_until passes. */
-const isSuspended = sql<boolean>`coalesce(${providers.suspendedUntil} > now(), false)`
+const isSuspended = sql<boolean>`NOT ${sql.raw(notSuspended('providers'))}`
 
 async function listProviders(tx: Tx, q: AdminListQuery) {
   const f = filterOf(q)

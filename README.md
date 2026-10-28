@@ -24,7 +24,7 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (28 October 2026)
 
-Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 425 (274 web, 127 app, 24 in the shared packages); typecheck, lint and the Android bundle build are clean.
+Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 434 (280 web, 130 app, 24 in the shared packages); typecheck, lint and the Android bundle build are clean.
 
 ### What was built, in order
 
@@ -79,6 +79,8 @@ Nothing has been checked on a phone or in a real browser yet; every "Not yet don
 ### Small points parked from the reviews
 
 - A bad postcode typed at sign-up is dropped silently (the error shows in Account).
+- The "not suspended" rule in JavaScript still exists as copies that compare with the app server's clock (`providers/items.ts` withState, `providers/profile.ts` publish, `notifications.ts`); the SQL copies now all use the shared `notSuspended` helper.
+- Email dates use one time zone constant (`TIME_ZONE`, Europe/Berlin, in `packages/i18n`); it has to become per country before South Africa.
 - Details: the Open Items sheets of the reports in `Reports/`.
 
 ### Retiring the old Payload stack

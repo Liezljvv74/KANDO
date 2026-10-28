@@ -11,13 +11,12 @@ import { Select } from '@/components/select'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { errorText, t } from '@/i18n'
 import { registerPendingTags } from '@/lib/pending-tags'
-import { MAX_SKILLS, MAX_SKILL_LENGTH, typedTag } from '@/lib/profile-form'
+import { MAX_SKILLS, MAX_SKILL_LENGTH, radiusBody, typedTag, validRadius } from '@/lib/profile-form'
 import { TagInput } from '../my-profile/tag-input'
 
 const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split('\n').map((x) => x.trim()).filter(Boolean))]
 /** The server keeps strengths as one text of at most 1000 characters. */
 const MAX_STRENGTHS_TEXT = 1000
-const validRadius = (s: string) => /^\d{1,3}$/.test(s.trim()) && +s >= 1 && +s <= 200
 
 /**
  * One field = one useFieldSave = one request. Every response replaces the held profile (`onSaved`, for the Publish bar);
@@ -51,7 +50,7 @@ export function AboutCard({ initial, onSaved, stamp }: { initial: MyProfile; onS
   const skills = useField('skills', initial.skills ?? [], (v) => ({ skills: v }))
   const experience = useField('experience', initial.experience ?? '', (v) => ({ experience: v.trim() }))
   const postcode = useField('basePostcode', initial.basePostcode ?? '', (v) => ({ basePostcode: v.trim() }))
-  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), (v) => (validRadius(v) ? { serviceRadiusKm: Number(v) } : null))
+  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), radiusBody)
   const remote = useField('worksRemotely', !!initial.worksRemotely, (v) => ({ worksRemotely: v }))
   const [skillText, setSkillText] = useState('')
   const [strengthText, setStrengthText] = useState('')

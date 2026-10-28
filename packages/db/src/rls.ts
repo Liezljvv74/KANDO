@@ -147,7 +147,7 @@ const PROVIDER_FUNCTIONS = [
     BEGIN
       SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;
       IF NOT FOUND THEN RETURN false; END IF;
-      IF p_published AND ((r.suspended_until IS NOT NULL AND r.suspended_until > now()) OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND u.suspended_until > now())) THEN
+      IF p_published AND (NOT ${notSuspended('r')} OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND NOT ${notSuspended('u')})) THEN
         RETURN false;
       END IF;
       IF p_published AND r.slug IS NULL THEN

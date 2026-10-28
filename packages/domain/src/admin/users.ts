@@ -1,5 +1,5 @@
-import { and, count, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-orm'
-import { db, photos, providers, users, type Tx } from '@kando/db'
+import { and, count, desc, eq, ilike, inArray, lte, or, sql } from 'drizzle-orm'
+import { db, notSuspended, photos, providers, users, type Tx } from '@kando/db'
 import type { AdminListQuery, AdminUser } from '@kando/contract'
 import { isLang } from '@kando/i18n'
 import { inBatches } from '../batches'
@@ -43,7 +43,7 @@ export async function listUsers(tx: Tx, q: AdminListQuery) {
   const text = textOf(f.q)
   const where = and(
     text ? or(ilike(users.email, like(text)), ilike(fullName, like(text))) : undefined,
-    f.suspended === true ? gt(users.suspendedUntil, sql`now()`) : undefined,
+    f.suspended === true ? sql`NOT ${sql.raw(notSuspended('users'))}` : undefined,
   )
   const total = (await tx.select({ n: count() }).from(users).where(where))[0]!.n
   const rows = await tx
