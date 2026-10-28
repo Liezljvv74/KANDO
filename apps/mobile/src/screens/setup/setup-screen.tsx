@@ -14,6 +14,7 @@ import { useLoad } from '@/hooks/use-load'
 import { dismissNotification, loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { canShare, documentRows } from '@/lib/documents'
+import { flushPendingTags } from '@/lib/pending-tags'
 import { createStaleGuard } from '@/lib/stale-guard'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
@@ -32,7 +33,15 @@ export default function SetupScreen() {
   useEffect(() => {
     if (params.welcome === '1') setWelcome(true)
   }, [params.welcome])
-  useFocusEffect(useCallback(() => () => setWelcome(false), []))
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setWelcome(false)
+        void flushPendingTags() // leaving the page: tag text typed but not added is saved
+      },
+      [],
+    ),
+  )
 
   // Every load and every save stamps itself; an answer older than one already applied never replaces the held profile.
   const stamp = useRef(createStaleGuard()).current

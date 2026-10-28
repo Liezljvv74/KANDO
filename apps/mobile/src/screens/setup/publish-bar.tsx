@@ -9,6 +9,7 @@ import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, SmallButton } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { canShare } from '@/lib/documents'
+import { flushPendingTags } from '@/lib/pending-tags'
 import { errorText, getLang, missingText, t } from '@/i18n'
 import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
@@ -31,6 +32,7 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
     setBusy(true)
     setProblem(null)
     try {
+      if (published) await flushPendingTags() // tag text typed but not added yet counts
       await action()
       setJustPublished(published)
       onChanged()

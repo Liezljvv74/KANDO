@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
 import { endExpiredSuspensions } from '@kando/domain'
+import { TIME_ZONE } from '@kando/i18n'
 import { clearOutbox, outboxForTests } from '@kando/domain'
 import { adminCall, call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -60,6 +61,18 @@ it('lists documents with the pending ones first, with owner email', async () => 
   expect(one.data.link).toContain('signed.test')
 })
 
+it('the review time comes from the database clock, whatever the app server clock says', async () => {
+  const id = await doc('aa-owner')
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(Date.now() + 3_600_000) // the app server runs an hour ahead
+  try {
+    expect((await adminCall(review.POST, 'aa-rev', 'POST', '/x', { decision: 'rejected', note: 'skew' }, { id })).status).toBe(200)
+  } finally {
+    vi.useRealTimers()
+  }
+  expect((await pool.query('SELECT reviewed_at <= now() AS ok FROM documents WHERE id = $1', [id])).rows[0].ok).toBe(true)
+})
+
 it('approving a document makes the service offerable and records the reviewer', async () => {
   const id = await doc('aa-owner')
   const before = await offerableServiceIds(db, providerId)
@@ -113,7 +126,7 @@ it('suspending a user hides the provider from search and the public page; liftin
   const [mail] = outboxForTests().slice(-1)
   expect(mail).toMatchObject({ to: EMAIL('aa-sus'), subject: 'Dein Profil wurde gesperrt' })
   expect(mail!.text).toContain('Complaints')
-  expect(mail!.text).toContain(new Date(until).toLocaleDateString('de-DE'))
+  expect(mail!.text).toContain(new Date(until).toLocaleDateString('de-DE', { timeZone: TIME_ZONE }))
   await pool.query("UPDATE providers SET suspended_until = now() - interval '1 minute' WHERE id = $1", [sid])
   expect(await visible()).toBe(true) // the date passed: shown again without any lift
   await pool.query('UPDATE providers SET suspended_until = $2 WHERE id = $1', [sid, until])
@@ -137,6 +150,30 @@ it('suspension emails: none for a customer without a profile, none for a lift of
   await seedProvider('aa-notsus', { name: 'Not Suspended', categoryId })
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-notsus' })).status).toBe(200)
   expect(outboxForTests()).toEqual([])
+})
+
+it('a lift of a suspension that already ran out but was not yet cleared by the daily check still sends "published again"', async () => {
+  await seedUser('aa-lapsed')
+  await seedProvider('aa-lapsed', { name: 'Lapsed', categoryId })
+  await pool.query("UPDATE users SET suspended_until = now() - interval '1 hour', suspended_reason = 'old' WHERE id = 'aa-lapsed'")
+  clearOutbox()
+  expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-lapsed' })).status).toBe(200)
+  expect(outboxForTests()).toHaveLength(1)
+})
+
+it('the end date in the suspension email is the Berlin date, whatever the server time zone', async () => {
+  await seedUser('aa-tz')
+  await seedProvider('aa-tz', { name: 'Zone', categoryId })
+  clearOutbox()
+  const zone = process.env.TZ
+  process.env.TZ = 'Pacific/Auckland' // 22:30 UTC on 31 Dec is already 1 Jan there, but 23:30 on 31 Dec in Berlin
+  try {
+    expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: '2099-12-31T22:30:00.000Z', reason: 'Spam' }, { id: 'aa-tz' })).status).toBe(200)
+  } finally {
+    if (zone === undefined) delete process.env.TZ
+    else process.env.TZ = zone
+  }
+  expect(outboxForTests()[0]!.text).toContain('31.12.2099')
 })
 
 it('a user suspended before having a profile cannot create one and publish it (409)', async () => {

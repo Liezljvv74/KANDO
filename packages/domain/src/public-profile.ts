@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { lookupPostcode, type Tx } from '@kando/db'
+import { lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
 import type { ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
 import type { Lang } from '@kando/i18n'
@@ -33,7 +33,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     SELECT p.id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
            p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key
     FROM providers p LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
-    WHERE p.slug = ${slug} AND p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())`)
+    WHERE p.slug = ${slug} AND p.status = 'published' AND ${notSuspendedSql('p')}`)
   const p = rows[0]
   if (!p) return null
   const ids = await offerableServiceIds(tx, p.id)
