@@ -47,6 +47,15 @@ it('live and nothing else pending: "profile is live" email with the link, and on
   expect(await rows('nt-live')).toEqual([{ kind: 'profile-live', payload: { url: 'https://kando.example/providers/nt-live-slug?lang=en' } }])
 })
 
+it('two documents approved at the same moment: one "profile is live" email and one notification', async () => {
+  await seedProvider('nt-race', { name: 'nt-race', categoryId: multiId })
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status, reviewed_at) VALUES ('nt-race', 'police-certificate', 'r1', 'approved', now()), ('nt-race', 'permit', 'r2', 'approved', now())")
+  // both approvals have committed before either email is decided
+  await Promise.all(['police-certificate', 'permit'].map((requirement) => notifyDocumentDecision('nt-race', { id: 'x', requirement, status: 'approved', note: null })))
+  expect(outboxForTests().map((m) => m.subject).sort()).toEqual(['Dein Dokument wurde freigegeben', 'Dein Profil ist online'].sort())
+  expect(await rows('nt-race')).toHaveLength(1)
+})
+
 it('the link of a German provider has no lang parameter', async () => {
   await decide('nt-de')
   expect((await rows('nt-de'))[0].payload.url).toBe('https://kando.example/providers/nt-de-slug')

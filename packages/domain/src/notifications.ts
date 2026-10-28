@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { categories, categoryTexts, db, documents, providers, services, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE, TIME_ZONE, type Lang } from '@kando/i18n'
 import { sendEmail, type Template } from './email'
@@ -12,6 +12,21 @@ export function providerUrl(slug: string, lang: Lang): string {
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL
   const base = (process.env.NEXT_PUBLIC_SERVER_URL || (host ? `https://${host}` : 'http://localhost:3000')).replace(/\/$/, '')
   return `${base}/providers/${slug}${lang !== DEFAULT_LANG ? `?lang=${lang}` : ''}`
+}
+
+/**
+ * Stores the "profile is live" message unless one was stored since the latest approval (two reviewers deciding at the
+ * same moment both find the profile complete). The advisory lock makes the check and the insert one step per user.
+ */
+async function claimProfileLive(userId: string, url: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`)
+    const told = await tx.execute(sql`SELECT 1 FROM notifications WHERE user_id = ${userId} AND kind = 'profile-live'
+      AND created_at >= coalesce((SELECT max(reviewed_at) FROM documents WHERE owner_id = ${userId} AND status = 'approved'), '-infinity')`)
+    if (told.rows.length) return false
+    await createNotification(tx, userId, 'profile-live', { url })
+    return true
+  })
 }
 
 /**
@@ -45,7 +60,7 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
   }
   const url = providerUrl(provider.slug!, lang)
   try {
-    await createNotification(db, userId, 'profile-live', { url })
+    if (!(await claimProfileLive(userId, url))) return plain // a simultaneous approval already told them
   } catch (e) {
     // The email must still go out when the in-app message cannot be stored.
     console.error('[notify] profile-live notification failed', e instanceof Error ? e.message : 'unknown')
