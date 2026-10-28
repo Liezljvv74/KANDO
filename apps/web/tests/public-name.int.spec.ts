@@ -36,7 +36,7 @@ it('slugify transliterates umlauts and strips the rest', () => {
 const setup = async (uid: string, businessName: string) => {
   await call(profileRoute.GET, uid)
   await pool.query("UPDATE users SET first_name = 'Nora', last_name = 'Nord' WHERE id = $1", [uid])
-  const p = { providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115', skills: ['a'], experience: '1 Jahr' }
+  const p = { providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115', strengths: 'Ruhig', skills: ['a'] }
   expect((await call(profileRoute.PUT, uid, 'PUT', p)).status).toBe(201)
   await givePhoto(uid)
   await call(services.POST, uid, 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })

@@ -86,12 +86,6 @@ export const errorText = (code: string): string => t(errorKeys[code] ?? (/^HTTP 
 
 const known = (key: string): key is Key => translate(DEFAULT_LANG, key as Key) !== key
 
-/** Maps a `missing` item of a 409 'Profile incomplete' response to text; unknown items show the raw name. */
-export const missingText = (item: string): string => {
-  const key = `missing.${item}`
-  return known(key) ? t(key) : item
-}
-
 /** Maps a required-document code to its name; unknown codes show the raw code. */
 export const docText = (code: string): string => {
   const key = `doc.${code}`

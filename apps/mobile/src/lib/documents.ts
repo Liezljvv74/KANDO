@@ -42,3 +42,11 @@ export const submittedDocs = (requirement: string, verifications: Document[]) =>
 
 /** The confirmation text before a delete: an approved document says that the services needing it go offline until the replacement is approved. */
 export const deleteBodyKey = (status: Document['status']): Key => (status === 'approved' ? 'myProfile.docDeleteBody.approved' : 'myProfile.docDeleteBody')
+
+export type DocTone = 'required' | 'optional' | 'pending' | 'approved'
+
+/** A document row's colour: red while a compulsory one is not approved, orange for an optional one, neutral while in review, green when approved. */
+export const docTone = (r: DocumentRow): DocTone => (r.state === 'approved' ? 'approved' : r.state === 'pending' ? 'pending' : r.optional ? 'optional' : 'required')
+
+/** Text colours per tone, readable (4.5:1 or more) on the white and on the green card. */
+export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#9A5B00', pending: '#4A665E', approved: '#0B7A5E' }

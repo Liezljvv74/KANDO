@@ -8,6 +8,7 @@ import { photosApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, IconButton, SectionHeader } from '@/components/form-ui'
 import { errorText, t } from '@/i18n'
+import { hasEntries } from '@/lib/completeness'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
 
@@ -53,9 +54,10 @@ export function PortfolioCard({ photos, name, onChanged }: { photos: OwnPhoto[];
       { text: t('myProfile.portfolioRemove'), style: 'destructive', onPress: () => run('remove', async () => (await photosApi.remove(id), true)) },
     ])
 
+  const done = hasEntries(photos.length)
   return (
-    <Card>
-      <SectionHeader title={`${t('provider.portfolio')}  ${t('myProfile.portfolioCount', { n: photos.length, max: MAX_PORTFOLIO_PHOTOS })}`}>
+    <Card done={done}>
+      <SectionHeader done={done} title={`${t('provider.portfolio')}  ${t('myProfile.portfolioCount', { n: photos.length, max: MAX_PORTFOLIO_PHOTOS })}`}>
         {photos.length < MAX_PORTFOLIO_PHOTOS && (
           <IconButton icon="add-circle-outline" label={t('myProfile.portfolioAdd')} onPress={choose} busy={busy === 'camera' || busy === 'library'} disabled={busy !== null} />
         )}

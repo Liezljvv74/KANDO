@@ -50,8 +50,8 @@ export function completeness(
     ['providerType', row.type === null],
     ['businessName', biz && blank(row.businessName)],
     ['impressum', biz && blank(row.impressum)],
+    ['strengths', blank(row.strengths)],
     ['skills', !row.skills?.length],
-    ['experience', blank(row.experience)],
     ['postcode', blank(row.basePostcode)],
     ['radius', !row.serviceRadiusKm],
   ]

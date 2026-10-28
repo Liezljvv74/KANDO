@@ -9,8 +9,7 @@ import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, SmallButton } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { canShare } from '@/lib/documents'
-import { flushPendingTags } from '@/lib/pending-tags'
-import { errorText, getLang, missingText, t } from '@/i18n'
+import { errorText, getLang, t } from '@/i18n'
 import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
 
@@ -24,22 +23,21 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
   // Set when a Publish succeeded here: the live message (with Share) shows until the page is left.
   const [justPublished, setJustPublished] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  // The list a 409 'Profile incomplete' came back with; the next profile response replaces it.
-  const [refused, setRefused] = useState<string[] | null>(null)
-  useEffect(() => setRefused(null), [profile])
+  // Set when the server answered 409 'Profile incomplete'; the next profile response clears it.
+  const [refused, setRefused] = useState(false)
+  useEffect(() => setRefused(false), [profile])
 
   async function run(action: () => Promise<unknown>, published = false) {
     setBusy(true)
     setProblem(null)
     try {
-      if (published) await flushPendingTags() // tag text typed but not added yet counts
       await action()
       setJustPublished(published)
       onChanged()
     } catch (e) {
       const code = e instanceof ApiError ? e.code : 'network'
-      if (e instanceof ApiError && code === 'Profile incomplete') setRefused(e.missing ?? [])
-      else setProblem(errorText(code))
+      setProblem(errorText(code))
+      setRefused(code === 'Profile incomplete')
     }
     setBusy(false)
   }
@@ -68,15 +66,10 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
     )
   }
 
-  const missing = refused ?? profile.missing
+  // Greyed out while the profile is incomplete; the starred fields say what is needed.
   return (
     <Card>
-      <Button
-        label={missing.length ? t('setup.publishMissing', { items: missing.map(missingText).join(', ') }) : t('setup.publish')}
-        onPress={() => run(publishProfile, true)}
-        busy={busy}
-        disabled={missing.length > 0}
-      />
+      <Button label={t('setup.publish')} onPress={() => run(publishProfile, true)} busy={busy} disabled={profile.missing.length > 0 && !refused} />
       <ErrorText text={problem} />
     </Card>
   )

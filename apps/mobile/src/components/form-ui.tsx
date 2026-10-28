@@ -19,7 +19,11 @@ export function FormScreen({ title, children, back = true }: { title: string; ch
   )
 }
 
-export const Card = ({ children }: { children: React.ReactNode }) => <View style={styles.card}>{children}</View>
+/** Text colour on a green (complete) card: the brand green, darkened to stay readable on the tint. */
+export const DONE_TEXT = '#0B6B54'
+
+/** `done`: the card's compulsory information is complete, so it is tinted green. */
+export const Card = ({ children, done }: { children: React.ReactNode; done?: boolean }) => <View style={[styles.card, done && styles.cardDone]}>{children}</View>
 
 export const SectionTitle = ({ text }: { text: string }) => <Text style={styles.section}>{text}</Text>
 
@@ -87,9 +91,9 @@ export const IconButton = ({
 export const EditButton = ({ label, onPress }: { label: string; onPress: () => void }) => <IconButton icon="pencil" label={label} onPress={onPress} />
 
 /** A section title with its action icon (add, upload) on the right. */
-export const SectionHeader = ({ title, children }: { title: string; children?: React.ReactNode }) => (
+export const SectionHeader = ({ title, children, done }: { title: string; children?: React.ReactNode; done?: boolean }) => (
   <View style={styles.header}>
-    <Text style={[styles.section, styles.headerTitle]}>{title}</Text>
+    <Text style={[styles.section, styles.headerTitle, done && { color: DONE_TEXT }]}>{title}</Text>
     {children}
   </View>
 )
@@ -104,6 +108,7 @@ const styles = StyleSheet.create({
   content: { padding: 12, gap: 8 },
   title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 12, gap: 6 },
+  cardDone: { backgroundColor: '#E3F5EE' },
   section: { fontSize: 18, fontWeight: '700', color: '#14352E' },
   field: { gap: 4 },
   label: { fontSize: 14, fontWeight: '600', color: '#14352E' },
