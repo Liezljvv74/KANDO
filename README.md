@@ -118,7 +118,7 @@ KANDO contains no Payload code. What remains is the old repository and its runni
 
 **To decide, to continue tomorrow**
 
-1. **Impressum and Datenschutz content:** I need the legal details (company or person name, address, contact, VAT number if any, who is responsible for content); I will not make them up. AGB and Ranking text: write them yourself or have a lawyer do it; I can prepare drafts to review.
+1. **Legal pages, review and follow up.** English drafts of Impressum, Ranking, AGB and Datenschutz are in `docs/legal-drafts/legal-pages-drafts.md`. Known so far: company Amplivine, email info@skillweb.space, person responsible Liezl Fourie, no VAT number. Still needed: Amplivine's legal form and postal address, register entry if any, the small-business VAT rule (ask a tax adviser), free or paid for now, notice period and place of jurisdiction for the AGB, the competent data protection authority, retention periods, signed processing agreements with Neon, Vercel, Resend and OpenRouter. Then: your review, a lawyer or legal-text check, the German versions, and entering the four pages in the back office.
 2. **Graphics:** app icon, splash screen, home page pictures: supply the files, or tell me the style and I prepare options.
 3. When to move the domain (after a successful production test), and how long to keep the old `main` and `dev` branches before deleting them.
 4. Whether the phone tests run before or after the domain move (I recommend: redeploy, quick production check, phone tests against production, then move the domain).
