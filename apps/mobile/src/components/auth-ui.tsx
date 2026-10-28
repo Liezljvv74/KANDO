@@ -33,7 +33,7 @@ export const Field = ({ label, error, style, hint, ...props }: TextInputProps & 
   </View>
 )
 
-export const Button = ({ label, onPress, busy, disabled }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean }) => (
+export const Button = ({ label, onPress, busy, disabled, danger }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean; danger?: boolean }) => (
   <Pressable
     onPress={onPress}
     disabled={busy || disabled}
@@ -41,7 +41,7 @@ export const Button = ({ label, onPress, busy, disabled }: { label: string; onPr
     accessibilityLabel={label}
     accessibilityState={{ busy: !!busy, disabled: !!(busy || disabled) }}
     // Dims while pressed, so a tap is visible.
-    style={({ pressed }) => [styles.button, (busy || disabled) && styles.busy, pressed && styles.pressed]}>
+    style={({ pressed }) => [styles.button, danger && styles.danger, (busy || disabled) && styles.busy, pressed && styles.pressed]}>
     {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonLabel}>{label}</Text>}
   </Pressable>
 )
@@ -73,6 +73,7 @@ const styles = StyleSheet.create({
   inputError: { borderColor: '#B3261E' },
   hint: { fontSize: 13, color: '#4A6A62' },
   button: { minHeight: 44, borderRadius: 22, backgroundColor: '#0E8A6B', alignItems: 'center', justifyContent: 'center' },
+  danger: { backgroundColor: '#B3261E' },
   busy: { opacity: 0.6 },
   buttonLabel: { color: '#fff', fontSize: 16, fontWeight: '700' },
   link: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },

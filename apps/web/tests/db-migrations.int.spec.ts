@@ -71,7 +71,7 @@ it('0008 on a database with data: a suspended provider stays hidden, a published
   cpSync(src, upTo7, { recursive: true })
   const journalPath = join(upTo7, 'meta/_journal.json')
   const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
-  journal.entries = journal.entries.filter((e: { tag: string }) => !e.tag.startsWith('0008'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0008')
   writeFileSync(journalPath, JSON.stringify(journal))
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')

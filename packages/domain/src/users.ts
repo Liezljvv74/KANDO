@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { db, isPostcode, photos, users, type Tx } from '@kando/db'
 import type { Me, MePatch } from '@kando/contract'
 import { fail } from './providers/http'
@@ -18,6 +18,26 @@ export class EmailConflictError extends Error {
   }
 }
 
+/** The session's account no longer exists in Neon Auth (deleted); a cached session cookie may still look valid for minutes. */
+export class SessionGoneError extends Error {
+  constructor() {
+    super('Account no longer exists')
+  }
+}
+
+type AdminRow = { id: string; suspended_until: Date | null }
+/**
+ * The first lock of any operation that may change the Administrator set, taken before the person's own row: one advisory lock
+ * serialises those operations (row locks alone, even in id order, deadlocked two concurrent ones in a test), then every
+ * Administrator row is locked in id order.
+ */
+export async function lockAdmins(tx: Tx): Promise<AdminRow[]> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('kando.administrator-set'))`)
+  return (await tx.execute<AdminRow>(sql`SELECT id, suspended_until FROM users WHERE staff_role = 'admin' ORDER BY id FOR UPDATE`)).rows
+}
+/** The Administrators who are not suspended (a past suspended_until counts as none). */
+export const activeAdmins = (rows: AdminRow[]) => rows.filter((a) => !a.suspended_until || a.suspended_until <= new Date())
+
 /** Language from ?lang, else the first supported tag of Accept-Language, else the default. */
 export function requestLang(request: Request): Lang {
   const q = new URL(request.url).searchParams.get('lang')
@@ -27,6 +47,10 @@ export function requestLang(request: Request): Lang {
 
 /** First contact creates the users row (owner connection); names and address are the person's own, set through the app. */
 export async function ensureUser(session: { id: string; email: string }, request: Request): Promise<SessionUser> {
+  // Where Neon Auth lives in this database, an id it no longer knows (a deleted account) gets no users row: 401 instead.
+  if ((await db.execute(sql`SELECT to_regclass('neon_auth."user"') AS t`)).rows[0]!.t) {
+    if (!(await db.execute(sql`SELECT 1 FROM neon_auth."user" WHERE id = ${session.id}`)).rows.length) throw new SessionGoneError()
+  }
   try {
     await db
       .insert(users)

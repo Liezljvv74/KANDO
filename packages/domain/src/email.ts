@@ -6,7 +6,7 @@ const FROM = 'SkillWeb <noreply@skillweb.space>'
 const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
-export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again'
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained'
 type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
 
@@ -27,12 +27,14 @@ const KEY: Record<Template, string> = {
   'profile-live': 'email.profileLive',
   suspended: 'email.suspended',
   'published-again': 'email.publishedAgain',
+  'account-deleted': 'email.accountDeleted',
+  'account-deleted-retained': 'email.accountDeleted.retained',
 }
 
 function compose(lang: Lang, template: Template, params: Params) {
   const key = KEY[template]
   const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
-  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '' })}\n\n${APP_LINK}`
+  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '' })}${template.startsWith('account-deleted') ? '' : `\n\n${APP_LINK}`}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   return { subject: t(lang, `${key}.subject` as Parameters<typeof t>[1]), text, html }
 }

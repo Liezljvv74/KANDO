@@ -62,7 +62,7 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = []
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']

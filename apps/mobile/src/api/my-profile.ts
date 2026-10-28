@@ -53,6 +53,8 @@ export const documentsApi = {
   },
 }
 
+export const removeDocument = (id: string) => api<unknown>(`/app-api/v1/verifications/${id}`, json('DELETE'))
+
 export const notificationsApi = {
   mark: (id: string, body: { seen?: true; dismissed?: true }) => api<unknown>(`/app-api/v1/notifications/${id}`, json('PATCH', body)),
 }

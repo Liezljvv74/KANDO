@@ -41,6 +41,9 @@ export const MeSchema = z.object({
 })
 export type Me = z.infer<typeof MeSchema>
 
+/** DELETE /me: the person types their own email to confirm. */
+export const DeleteMeSchema = z.object({ confirmEmail: z.string().max(320) })
+
 /** PATCH /me: names, language of emails and private address; all optional (address null clears it). */
 export const MePatchSchema = z
   .object({

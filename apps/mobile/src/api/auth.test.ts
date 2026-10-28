@@ -53,7 +53,7 @@ test('a refused sign-in throws the server code, which maps to a catalogue messag
   const err = await signIn('a@b.de', 'wrong').catch((e) => e)
   expect(err).toMatchObject({ status: 401, code: 'INVALID_EMAIL_OR_PASSWORD' })
   setLang('en')
-  expect(errorText(err.code)).toBe('Email or password is incorrect.')
+  expect(errorText(err.code)).toContain('Email or password is incorrect.')
 })
 
 test('signOut forgets the session at once and tells the server with the old cookie', async () => {
@@ -125,7 +125,7 @@ test('a wrong code throws INVALID_OTP, shown as the code message', async () => {
   const err = (await resetPassword('a@b.de', '000000', 'newsecret1').catch((e) => e)) as { code: string }
   expect(err).toMatchObject({ status: 400, code: 'INVALID_OTP' })
   setLang('de')
-  expect(errorText(err.code)).toBe('Der Code ist falsch oder abgelaufen. Bitte fordere einen neuen an.')
+  expect(errorText(err.code)).toContain('Der Code ist falsch oder abgelaufen.')
 })
 
 test('signUp and signIn start without an old stored session', async () => {

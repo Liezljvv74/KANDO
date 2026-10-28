@@ -111,7 +111,7 @@ export default function SetupScreen() {
 
       <ReferencesCard references={references} />
       <PortfolioCard photos={photos.filter((p) => p.kind === 'portfolio')} name={name} onChanged={retry} />
-      {docRows.length > 0 && <DocumentsCard rows={docRows} onChanged={retry} />}
+      {docRows.length > 0 && <DocumentsCard rows={docRows} verifications={verifications} onChanged={retry} />}
     </FormScreen>
   )
 }

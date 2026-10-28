@@ -53,6 +53,7 @@
       "en": "./locales/en.json"
     },
     "extra": {
+      "supportEmail": "info@skillweb.space",
       "eas": {
         "projectId": "b66a6d0d-2214-47e3-85be-cd5501e24f6c"
       }

@@ -1,5 +1,5 @@
 import type { Category, Document, OwnService } from '@kando/contract'
-import { canShare, documentRows, serviceDocNote, type DocumentRow } from './documents'
+import { canShare, deleteBodyKey, documentRows, serviceDocNote, submittedDocs, type DocumentRow } from './documents'
 
 const cats = [
   { id: 'c1', requiredDocuments: ['police-certificate'] },
@@ -72,4 +72,16 @@ test('saving a waiting service keeps Share hidden: the server answer carries wai
   const list = [{ id: 'a', waitingFor: ['police-certificate'] }, { id: 'b', waitingFor: [] }] as OwnService[]
   const saved = { id: 'a', title: 'Neu', waitingFor: ['police-certificate'], visibleInSearch: false } as OwnService
   expect(canShare(list.map((s) => (s.id === saved.id ? saved : s)))).toBe(false)
+})
+
+test('submitted documents of a requirement, newest first', () => {
+  const a = { ...v('a', 'rejected', '2026-02-01'), createdAt: '2026-02-01T00:00:00Z' }
+  const b = { ...v('b', 'pending', null), createdAt: '2026-03-01T00:00:00Z' }
+  const other = { ...v('c', 'pending', null), requirement: 'permit' }
+  expect(submittedDocs('police-certificate', [a, other, b]).map((d) => d.id)).toEqual(['b', 'a'])
+})
+
+test('the delete confirmation says services go offline only for an approved document', () => {
+  expect(deleteBodyKey('approved')).toBe('myProfile.docDeleteBody.approved')
+  for (const status of ['pending', 'rejected'] as const) expect(deleteBodyKey(status)).toBe('myProfile.docDeleteBody')
 })
