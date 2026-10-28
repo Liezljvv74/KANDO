@@ -4,19 +4,22 @@ import { StyleSheet, Text, View } from 'react-native'
 import type { OwnService } from '@kando/contract'
 
 import { Info } from '@/components/auth-ui'
-import { Card, EditButton, IconButton, SectionHeader } from '@/components/form-ui'
+import { Card, DONE_TEXT, EditButton, IconButton, SectionHeader } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { docText, t } from '@/i18n'
 import { serviceDocNote, type DocumentRow } from '@/lib/documents'
+import { servicesComplete } from '@/lib/completeness'
 import { formatPrice } from '@/lib/format'
 
 /** Services; adding and editing happen on their own screens. */
 export function ServicesCard({ services, docRows }: { services: OwnService[]; docRows: DocumentRow[] }) {
   const router = useRouter()
   const { categories } = useCategories()
+  const done = servicesComplete(services)
+  const green = done && { color: DONE_TEXT }
   return (
-    <Card>
-      <SectionHeader title={t('setup.services')}>
+    <Card done={done}>
+      <SectionHeader title={t('setup.services')} done={done}>
         <IconButton icon="add-circle-outline" label={t('myProfile.addService')} onPress={() => router.push('/my-profile/service/new')} />
       </SectionHeader>
       {services.length === 0 && <Info text={t('setup.noServices')} />}
@@ -26,8 +29,8 @@ export function ServicesCard({ services, docRows }: { services: OwnService[]; do
         return (
           <View key={s.id} style={styles.row}>
             <View style={styles.rowText}>
-              <Text style={styles.name}>{name}</Text>
-              <Text style={styles.status}>{s.priceType ? formatPrice({ ...s, priceType: s.priceType }) : t('setup.noPrice')}</Text>
+              <Text style={[styles.name, green]}>{name}</Text>
+              <Text style={[styles.status, green]}>{s.priceType ? formatPrice({ ...s, priceType: s.priceType }) : t('setup.noPrice')}</Text>
               {waitingFor.length > 0 && (
                 <Text style={styles.waiting}>{t(serviceDocNote(waitingFor, docRows) === 'needed' ? 'myProfile.neededDocs' : 'myProfile.waitingDocs') + waitingFor.map(docText).join(', ')}</Text>
               )}

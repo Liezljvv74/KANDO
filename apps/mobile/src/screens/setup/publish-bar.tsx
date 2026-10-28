@@ -66,11 +66,10 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
     )
   }
 
-  // Nothing is shown while the profile is incomplete: the fields say what they need.
-  if (profile.missing.length && !refused) return null
+  // Greyed out while the profile is incomplete; the starred fields say what is needed.
   return (
     <Card>
-      <Button label={t('setup.publish')} onPress={() => run(publishProfile, true)} busy={busy} />
+      <Button label={t('setup.publish')} onPress={() => run(publishProfile, true)} busy={busy} disabled={profile.missing.length > 0 && !refused} />
       <ErrorText text={problem} />
     </Card>
   )

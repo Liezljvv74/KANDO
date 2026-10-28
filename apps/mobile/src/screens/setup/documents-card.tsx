@@ -3,14 +3,16 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Card, EditButton, IconButton, SectionHeader } from '@/components/form-ui'
 import { docText, t } from '@/i18n'
+import { documentsComplete } from '@/lib/completeness'
 import { DOC_COLORS, docTone, type DocumentRow } from '@/lib/documents'
 
 /** Verification documents, required ones first: a compulsory one not yet approved is red, an optional one orange; each has its own screen. */
 export function DocumentsCard({ rows }: { rows: DocumentRow[] }) {
   const router = useRouter()
+  const done = documentsComplete(rows)
   return (
-    <Card>
-      <SectionHeader title={t('setup.documents.title')} />
+    <Card done={done}>
+      <SectionHeader title={t('setup.documents.title')} done={done} />
       {rows.map((r) => {
         const color = DOC_COLORS[docTone(r)]
         const open = () => router.push({ pathname: '/my-profile/document/[requirement]', params: { requirement: r.requirement } })

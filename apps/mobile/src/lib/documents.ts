@@ -48,5 +48,5 @@ export type DocTone = 'required' | 'optional' | 'pending' | 'approved'
 /** A document row's colour: red while a compulsory one is not approved, orange for an optional one, neutral while in review, green when approved. */
 export const docTone = (r: DocumentRow): DocTone => (r.state === 'approved' ? 'approved' : r.state === 'pending' ? 'pending' : r.optional ? 'optional' : 'required')
 
-/** Text colours per tone, all readable (4.5:1 or more) on the white card. */
-export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#9A5B00', pending: '#5C7A72', approved: '#0B7A5E' }
+/** Text colours per tone, readable (4.5:1 or more) on the white and on the green card. */
+export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#9A5B00', pending: '#4A665E', approved: '#0B7A5E' }
