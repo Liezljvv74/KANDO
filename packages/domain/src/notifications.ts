@@ -1,9 +1,11 @@
 import { and, eq } from 'drizzle-orm'
 import { categories, categoryTexts, db, documents, providers, services, users } from '@kando/db'
-import { DEFAULT_LANG, isLang, LOCALE, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, LOCALE, TIME_ZONE, type Lang } from '@kando/i18n'
 import { sendEmail, type Template } from './email'
 import { createNotification } from './notifications-store'
 import { offerableServiceIds } from './providers/eligibility'
+
+const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
 
 /** Public address of a provider page; the language only when it is not the default. */
 export function providerUrl(slug: string, lang: Lang): string {
@@ -31,7 +33,7 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
   if (!affected.length) return plain
   if (provider.status !== 'published') return { template: 'document-approved-offline', params: {} }
   if (provider.suspendedUntil && provider.suspendedUntil > new Date()) {
-    return { template: 'document-approved-suspended', params: { date: provider.suspendedUntil.toLocaleDateString(LOCALE[lang]) } }
+    return { template: 'document-approved-suspended', params: { date: emailDate(provider.suspendedUntil, lang) } }
   }
   const offerable = new Set(await offerableServiceIds(db, provider.id))
   const nowVisible = affected.find((s) => offerable.has(s.id))
@@ -80,7 +82,7 @@ export async function notifySuspension(userId: string, s: { until: Date | null; 
       to: user.email,
       lang,
       template: s.until ? 'suspended' : 'published-again',
-      params: { reason: s.reason, date: s.until?.toLocaleDateString(LOCALE[lang]) },
+      params: { reason: s.reason, date: s.until && emailDate(s.until, lang) },
     })
   } catch (e) {
     console.error('[notify] suspension email failed', e instanceof Error ? e.message : 'unknown')

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
 import { endExpiredSuspensions } from '@kando/domain'
+import { TIME_ZONE } from '@kando/i18n'
 import { clearOutbox, outboxForTests } from '@kando/domain'
 import { adminCall, call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -113,7 +114,7 @@ it('suspending a user hides the provider from search and the public page; liftin
   const [mail] = outboxForTests().slice(-1)
   expect(mail).toMatchObject({ to: EMAIL('aa-sus'), subject: 'Dein Profil wurde gesperrt' })
   expect(mail!.text).toContain('Complaints')
-  expect(mail!.text).toContain(new Date(until).toLocaleDateString('de-DE'))
+  expect(mail!.text).toContain(new Date(until).toLocaleDateString('de-DE', { timeZone: TIME_ZONE }))
   await pool.query("UPDATE providers SET suspended_until = now() - interval '1 minute' WHERE id = $1", [sid])
   expect(await visible()).toBe(true) // the date passed: shown again without any lift
   await pool.query('UPDATE providers SET suspended_until = $2 WHERE id = $1', [sid, until])
@@ -146,6 +147,21 @@ it('a lift of a suspension that already ran out sends no "published again" email
   clearOutbox()
   expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id: 'aa-lapsed' })).status).toBe(200)
   expect(outboxForTests()).toEqual([])
+})
+
+it('the end date in the suspension email is the Berlin date, whatever the server time zone', async () => {
+  await seedUser('aa-tz')
+  await seedProvider('aa-tz', { name: 'Zone', categoryId })
+  clearOutbox()
+  const zone = process.env.TZ
+  process.env.TZ = 'Pacific/Auckland' // 22:30 UTC on 31 Dec is already 1 Jan there, but 23:30 on 31 Dec in Berlin
+  try {
+    expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: '2099-12-31T22:30:00.000Z', reason: 'Spam' }, { id: 'aa-tz' })).status).toBe(200)
+  } finally {
+    if (zone === undefined) delete process.env.TZ
+    else process.env.TZ = zone
+  }
+  expect(outboxForTests()[0]!.text).toContain('31.12.2099')
 })
 
 it('a user suspended before having a profile cannot create one and publish it (409)', async () => {

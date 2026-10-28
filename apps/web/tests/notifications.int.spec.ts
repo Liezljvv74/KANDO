@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MeSchema } from '@kando/contract'
 import { clearOutbox, notifyDocumentDecision, outboxForTests } from '@kando/domain'
+import { TIME_ZONE } from '@kando/i18n'
 import { call, cleanupUsers, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -73,7 +74,7 @@ it('draft profile: offline text, no notification', async () => {
 
 it('suspended profile: suspended text with the date, no notification', async () => {
   await decide('nt-susp', { suspended: true, lang: 'en' })
-  const date = new Date(Date.now() + 86400000).toLocaleDateString('en-GB')
+  const date = new Date(Date.now() + 86400000).toLocaleDateString('en-GB', { timeZone: TIME_ZONE })
   expect(outboxForTests()[0]!.subject).toBe('Your document is approved, your profile is suspended')
   expect(outboxForTests()[0]!.text).toContain(`suspended until ${date}`)
   expect(await rows('nt-susp')).toEqual([])
