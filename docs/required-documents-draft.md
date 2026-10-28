@@ -23,25 +23,25 @@ R = required, O = optional (shown as a badge when approved, not needed to go liv
 
 | Category | id-document | trade-registration | liability-insurance | police-certificate | other |
 | --- | --- | --- | --- | --- | --- |
-| Photography | R | R | O | – | – |
-| DJ | R | R | O | – | – |
-| Catering | R | R | R | – | R hygiene-certificate; R food-business-registration |
-| Digital services | R | R | O | – | – |
-| Marketing | R | R | O | – | – |
-| Management & consulting | R | R | O | – | – |
-| Dog walking | R | R | R | O (recommended) | R permit where the local authority requires one (provider confirms in the form; staff check) |
-| Babysitting | R | R (or freelance proof) | O | R (extended, §30a) | O first-aid course certificate |
-| Cleaning | R | R | R | O (recommended) | – |
-| Moving & house clearance | R | R | R | – | – |
-| Assembly | R | R | R | – | – |
-| Gardening | R | R | R | – | – |
-| Small repairs | R | R | R | – | O craft-qualification (optional for now, to be made compulsory later) |
-| Other services | R | R | O | – | Staff may ask for more case by case |
+| Photography | R | O | O | – | – |
+| DJ | R | O | O | – | – |
+| Catering | R | O | R | – | R hygiene-certificate; R food-business-registration |
+| Digital services | R | O | O | – | – |
+| Marketing | R | O | O | – | – |
+| Management & consulting | R | O | O | – | – |
+| Dog walking | R | O | R | O (recommended) | R permit where the local authority requires one (provider confirms in the form; staff check) |
+| Babysitting | R | O (or freelance proof) | O | R (extended, §30a) | O first-aid course certificate |
+| Cleaning | R | O | R | O (recommended) | – |
+| Moving & house clearance | R | O | R | – | – |
+| Assembly | R | O | R | – | – |
+| Gardening | R | O | R | – | – |
+| Small repairs | R | O | R | – | O craft-qualification (optional for now, to be made compulsory later) |
+| Other services | R | O | O | – | Staff may ask for more case by case |
 
 ## 3. Owner decisions (28 October 2026)
 
 1. **Photo ID:** required from every provider.
-2. **Private persons:** submit their ID (in the trade-registration slot) for now; to be confirmed with the tax adviser before launch.
+2. **Trade registration:** optional for now (changed from required). Private persons (babysitting, dog walking, small household tasks, window cleaning) are not asked for it; their photo ID stays required. To be confirmed with the tax adviser before launch.
 3. **Optional documents:** get a slot. An approved optional document shows as a badge on the profile; it is not needed to go live. (Changed from "leave out".)
 4. **Police certificate for cleaning and dog walking:** recommended, as an optional slot with a badge.
 5. **Craft trades:** the craft qualification (for example a Meisterbrief) is optional for Small repairs for now and can be made compulsory later. (Changed from compulsory.)
