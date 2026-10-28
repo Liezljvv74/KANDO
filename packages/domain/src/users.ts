@@ -26,8 +26,13 @@ export class SessionGoneError extends Error {
 }
 
 type AdminRow = { id: string; suspended_until: Date | null }
-/** Locks every Administrator row in id order: the first lock of any operation that may change the Administrator set, before the person's own row, so two of them cannot deadlock. */
+/**
+ * The first lock of any operation that may change the Administrator set, taken before the person's own row: one advisory lock
+ * serialises those operations (row locks alone, even in id order, deadlocked two concurrent ones in a test), then every
+ * Administrator row is locked in id order.
+ */
 export async function lockAdmins(tx: Tx): Promise<AdminRow[]> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('kando.administrator-set'))`)
   return (await tx.execute<AdminRow>(sql`SELECT id, suspended_until FROM users WHERE staff_role = 'admin' ORDER BY id FOR UPDATE`)).rows
 }
 /** The Administrators who are not suspended (a past suspended_until counts as none). */
