@@ -6,8 +6,8 @@ import { ApiError } from '@/api/client'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { signOutGeneration } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
-import { errorText, t, useLang } from '@/i18n'
-import { emailMatches, exportText } from '@/lib/account-data'
+import { t, useLang } from '@/i18n'
+import { accountError, emailMatches, exportText } from '@/lib/account-data'
 
 /** Export of the person's data through the share sheet, and the deletion of the account behind a typed-email confirmation. */
 export function AccountDataSection() {
@@ -27,7 +27,7 @@ export function AccountDataSection() {
       const data = await getExport()
       if (account === signOutGeneration()) await Share.share({ message: exportText(data) }) // signed out meanwhile: nothing of that account is shown
     } catch (e) {
-      setError(errorText(e instanceof ApiError ? e.code : ''))
+      setError(accountError('export', e instanceof ApiError ? e.code : ''))
     }
     setBusy(null)
   }
@@ -39,7 +39,7 @@ export function AccountDataSection() {
     try {
       await deleteAccount(typed.trim())
     } catch (e) {
-      setError(errorText(e instanceof ApiError ? e.code : ''))
+      setError(accountError('delete', e instanceof ApiError ? e.code : ''))
       return setBusy(null)
     }
     await signOut() // the account is gone: same local sign-out as the Log out button, back to the start screen
