@@ -85,10 +85,7 @@ export default async function ProviderPage({ params, searchParams }: Args) {
       const d = await read(tx, slug, lang)
       if (!d?.profile.translatable) return d
       try {
-        const request = new Request('http://localhost', {
-          headers: Object.fromEntries(['x-vercel-forwarded-for', 'x-real-ip'].flatMap((k) => (h.get(k) ? [[k, h.get(k)!]] : []))),
-        })
-        const texts = await translateTexts(tx, textsOf(d.profile), lang, clientKeyOf(null, request))
+        const texts = await translateTexts(tx, textsOf(d.profile), lang, clientKeyOf(null, h))
         translated = true
         return { ...d, profile: withTexts(d.profile, texts) }
       } catch (e) {

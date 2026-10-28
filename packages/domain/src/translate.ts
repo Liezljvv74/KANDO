@@ -98,7 +98,7 @@ function requireSecret(): string {
  * Callers are counted per user id; anonymous ones as a salted hash of the address Vercel itself sets (x-vercel-forwarded-for,
  * else x-real-ip), never the raw address. x-forwarded-for is not used: a caller can put anything at its start.
  */
-export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, request: Request): string {
+export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, headers: Pick<Headers, 'get'>): string {
   if (user) return `user:${user.id}`
   const ip = (request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-real-ip'))?.split(',')[0]?.trim() || 'unknown'
   const hash = createHash('sha256').update(`${requireSecret()}${ip}`).digest('hex')

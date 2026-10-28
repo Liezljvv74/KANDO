@@ -278,17 +278,17 @@ describe('translate', () => {
   })
 
   it('anonymous client keys are salted hashes, never the raw IP', () => {
-    const req = (ip: string | null) => new Request('http://localhost/x', { headers: ip ? { 'x-vercel-forwarded-for': ip } : {} })
+    const req = (ip: string | null) => new Headers(ip ? { 'x-vercel-forwarded-for': ip } : {})
     const k = clientKeyOf(null, req('203.0.113.7, 10.0.0.1'))
     expect(k).toMatch(/^ip:[0-9a-f]{32}$/)
     expect(k).not.toContain('203.0.113.7')
     expect(clientKeyOf(null, req('203.0.113.7'))).toBe(k)
     expect(clientKeyOf(null, req(null))).toBe(clientKeyOf(null, req('')))
     // A forged x-forwarded-for neither changes the key nor lets a caller pick another bucket; x-real-ip is the fallback.
-    const spoofed = new Request('http://localhost/x', { headers: { 'x-vercel-forwarded-for': '203.0.113.7', 'x-forwarded-for': '6.6.6.6' } })
+    const spoofed = new Headers({ 'x-vercel-forwarded-for': '203.0.113.7', 'x-forwarded-for': '6.6.6.6' })
     expect(clientKeyOf(null, spoofed)).toBe(k)
-    expect(clientKeyOf(null, new Request('http://localhost/x', { headers: { 'x-forwarded-for': '6.6.6.6' } }))).toBe(clientKeyOf(null, req(null)))
-    expect(clientKeyOf(null, new Request('http://localhost/x', { headers: { 'x-real-ip': '203.0.113.7' } }))).toBe(k)
+    expect(clientKeyOf(null, new Headers({ 'x-forwarded-for': '6.6.6.6' }))).toBe(clientKeyOf(null, req(null)))
+    expect(clientKeyOf(null, new Headers({ 'x-real-ip': '203.0.113.7' }))).toBe(k)
     expect(clientKeyOf({ id: 'u-5' } as never, req('1.1.1.1'))).toBe('user:u-5')
   })
 

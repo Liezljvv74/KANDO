@@ -8,7 +8,7 @@ export const GET = appRequest({ auth: 'optional' }, async ({ tx, user, request, 
   const profile = await getPublicProfile(tx, params.slug!, lang)
   if (!profile) return Response.json({ error: 'Not found' }, { status: 404 })
   try {
-    const clientKey = clientKeyOf(user, request) // throws TranslationUnavailable without a usable secret
+    const clientKey = clientKeyOf(user, request.headers) // throws TranslationUnavailable without a usable secret
     return Response.json(await translateTexts(tx, textsOf(profile), lang, clientKey))
   } catch (e) {
     // Returned, not re-thrown: the request transaction commits and keeps the rate-limit counter.

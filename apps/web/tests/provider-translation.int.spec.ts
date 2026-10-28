@@ -13,7 +13,7 @@ const stamp = Date.now()
 // One unique English text per provider, so the shared store never serves another test's text.
 const bioOf = (key: string) => `The carpenter builds kitchens and wardrobes for families in the region (${key} ${stamp}).`
 const keyOf = (s: string) => createHash('sha256').update(s).digest('hex')
-const ipKeyOf = (ip: string) => clientKeyOf(null, new Request('http://localhost/x', { headers: { 'x-vercel-forwarded-for': ip } }))
+const ipKeyOf = (ip: string) => clientKeyOf(null, new Headers({ 'x-vercel-forwarded-for': ip }))
 const ip = `10.9.${stamp % 255}.${stamp % 199}`
 const ipKey = ipKeyOf(ip)
 const clients = [ipKey]
