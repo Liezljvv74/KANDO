@@ -3,25 +3,27 @@ import { db } from '../client'
 
 type Row = { slug: string; de: string; en: string; requiredDocuments: string[]; optionalDocuments?: string[] }
 
-// Everyone submits a photo ID and a trade registration (private persons: their ID for now); the rest per category.
-const BASE = ['id-document', 'trade-registration']
+// Everyone submits a photo ID. The trade registration is optional for now: many providers are private persons
+// (babysitting, dog walking, small household tasks), who submit their ID there until the tax adviser has answered.
+const BASE = ['id-document']
+const TRADE = 'trade-registration'
 
 // Order is the display order (sort = index + 1); "other-services" is always listed last by the query.
 export const CATEGORIES: Row[] = [
-  { slug: 'photography', de: 'Fotografie', en: 'Photography', requiredDocuments: BASE, optionalDocuments: ['liability-insurance'] },
-  { slug: 'dj', de: 'DJ', en: 'DJ', requiredDocuments: BASE, optionalDocuments: ['liability-insurance'] },
-  { slug: 'catering', de: 'Catering', en: 'Catering', requiredDocuments: [...BASE, 'liability-insurance', 'hygiene-certificate', 'food-business-registration'] },
-  { slug: 'digital-services', de: 'Digitale Dienstleistungen', en: 'Digital services', requiredDocuments: BASE, optionalDocuments: ['liability-insurance'] },
-  { slug: 'marketing', de: 'Marketing', en: 'Marketing', requiredDocuments: BASE, optionalDocuments: ['liability-insurance'] },
-  { slug: 'management-consulting', de: 'Management & Beratung', en: 'Management & consulting', requiredDocuments: BASE, optionalDocuments: ['liability-insurance'] },
-  { slug: 'dog-walking', de: 'Gassi-Service', en: 'Dog walking', requiredDocuments: [...BASE, 'liability-insurance', 'permit'], optionalDocuments: ['police-certificate'] },
-  { slug: 'babysitting', de: 'Babysitting', en: 'Babysitting', requiredDocuments: [...BASE, 'police-certificate'], optionalDocuments: ['liability-insurance', 'first-aid-certificate'] },
-  { slug: 'cleaning', de: 'Reinigung', en: 'Cleaning', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: ['police-certificate'] },
-  { slug: 'moving-clearance', de: 'Umzug & Entrümpelung', en: 'Moving & house clearance', requiredDocuments: [...BASE, 'liability-insurance'] },
-  { slug: 'assembly', de: 'Montage & Aufbau', en: 'Assembly', requiredDocuments: [...BASE, 'liability-insurance'] },
-  { slug: 'gardening', de: 'Gartenarbeit', en: 'Gardening', requiredDocuments: [...BASE, 'liability-insurance'] },
-  { slug: 'small-repairs', de: 'Kleinreparaturen', en: 'Small repairs', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: ['craft-qualification'] },
-  { slug: 'other-services', de: 'Sonstige Dienstleistungen', en: 'Other services', requiredDocuments: BASE, optionalDocuments: ['liability-insurance'] },
+  { slug: 'photography', de: 'Fotografie', en: 'Photography', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
+  { slug: 'dj', de: 'DJ', en: 'DJ', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
+  { slug: 'catering', de: 'Catering', en: 'Catering', requiredDocuments: [...BASE, 'liability-insurance', 'hygiene-certificate', 'food-business-registration'], optionalDocuments: [TRADE] },
+  { slug: 'digital-services', de: 'Digitale Dienstleistungen', en: 'Digital services', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
+  { slug: 'marketing', de: 'Marketing', en: 'Marketing', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
+  { slug: 'management-consulting', de: 'Management & Beratung', en: 'Management & consulting', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
+  { slug: 'dog-walking', de: 'Gassi-Service', en: 'Dog walking', requiredDocuments: [...BASE, 'liability-insurance', 'permit'], optionalDocuments: [TRADE, 'police-certificate'] },
+  { slug: 'babysitting', de: 'Babysitting', en: 'Babysitting', requiredDocuments: [...BASE, 'police-certificate'], optionalDocuments: [TRADE, 'liability-insurance', 'first-aid-certificate'] },
+  { slug: 'cleaning', de: 'Reinigung', en: 'Cleaning', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: [TRADE, 'police-certificate'] },
+  { slug: 'moving-clearance', de: 'Umzug & Entrümpelung', en: 'Moving & house clearance', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: [TRADE] },
+  { slug: 'assembly', de: 'Montage & Aufbau', en: 'Assembly', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: [TRADE] },
+  { slug: 'gardening', de: 'Gartenarbeit', en: 'Gardening', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: [TRADE] },
+  { slug: 'small-repairs', de: 'Kleinreparaturen', en: 'Small repairs', requiredDocuments: [...BASE, 'liability-insurance'], optionalDocuments: [TRADE, 'craft-qualification'] },
+  { slug: 'other-services', de: 'Sonstige Dienstleistungen', en: 'Other services', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
 ]
 
 const list = (docs: string[] = []) => sql`ARRAY[${sql.join(docs.map((d) => sql`${d}`), sql`, `)}]::text[]`

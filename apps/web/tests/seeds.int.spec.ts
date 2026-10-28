@@ -57,21 +57,22 @@ it('categories seed is idempotent: 14 categories, both names, babysitting needs 
     await count("SELECT count(*) n FROM category_texts t JOIN categories c ON c.id = t.category_id WHERE c.slug = ANY($1) AND t.lang IN ('de','en')", [slugs]),
   ).toBe(28)
   const { rows } = await pool.query("SELECT required_documents, optional_documents FROM categories WHERE slug = 'babysitting'")
-  expect(rows[0]).toEqual({ required_documents: ['id-document', 'trade-registration', 'police-certificate'], optional_documents: ['liability-insurance', 'first-aid-certificate'] })
+  expect(rows[0]).toEqual({ required_documents: ['id-document', 'police-certificate'], optional_documents: ['trade-registration', 'liability-insurance', 'first-aid-certificate'] })
 })
 
 // Counts from the "Per category" sheet of required-documents-draft.xlsx: [required, optional] per category.
 const TABLE: Record<string, [number, number]> = {
-  photography: [2, 1], dj: [2, 1], catering: [5, 0], 'digital-services': [2, 1], marketing: [2, 1], 'management-consulting': [2, 1], 'dog-walking': [4, 1],
-  babysitting: [3, 2], cleaning: [3, 1], 'moving-clearance': [3, 0], assembly: [3, 0], gardening: [3, 0], 'small-repairs': [3, 1], 'other-services': [2, 1],
+  photography: [1, 2], dj: [1, 2], catering: [4, 1], 'digital-services': [1, 2], marketing: [1, 2], 'management-consulting': [1, 2], 'dog-walking': [3, 2],
+  babysitting: [2, 3], cleaning: [2, 2], 'moving-clearance': [2, 1], assembly: [2, 1], gardening: [2, 1], 'small-repairs': [2, 2], 'other-services': [1, 2],
 }
 
-it('the seeded requirement table matches the sheet: everyone needs an ID and a trade registration, lists never overlap', async () => {
+it('the seeded requirement table matches the sheet: everyone needs an ID, the trade registration is optional, lists never overlap', async () => {
   await pool.query('UPDATE categories SET required_documents = $2, optional_documents = $2 WHERE slug = ANY($1)', [CATEGORIES.map((c) => c.slug), []])
   await applyDocumentLists()
   for (const c of CATEGORIES) {
     const { rows } = await pool.query('SELECT required_documents r, optional_documents o FROM categories WHERE slug = $1', [c.slug])
-    expect(rows[0].r, c.slug).toEqual(expect.arrayContaining(['id-document', 'trade-registration']))
+    expect(rows[0].r, c.slug).toContain('id-document')
+    expect(rows[0].o, c.slug).toContain('trade-registration')
     expect([rows[0].r.length, rows[0].o.length], c.slug).toEqual(TABLE[c.slug])
     expect(rows[0].r.filter((d: string) => rows[0].o.includes(d)), c.slug).toEqual([])
     for (const d of [...rows[0].r, ...rows[0].o]) expect(DOCUMENT_TYPES as readonly string[], d).toContain(d)
@@ -84,7 +85,7 @@ it('a re-seed keeps the lists staff edited, but keeps the sort current; the one-
   const { rows } = await pool.query("SELECT required_documents, optional_documents, sort FROM categories WHERE slug = 'gardening'")
   expect(rows[0]).toEqual({ required_documents: ['permit'], optional_documents: ['id-document'], sort: 12 })
   await applyDocumentLists()
-  expect((await pool.query("SELECT required_documents FROM categories WHERE slug = 'gardening'")).rows[0].required_documents).toEqual(['id-document', 'trade-registration', 'liability-insurance'])
+  expect((await pool.query("SELECT required_documents FROM categories WHERE slug = 'gardening'")).rows[0].required_documents).toEqual(['id-document', 'liability-insurance'])
 })
 
 it('postcode import upserts: a second run leaves the same count', async () => {

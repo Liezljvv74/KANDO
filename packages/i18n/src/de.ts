@@ -128,7 +128,7 @@ export const de = {
   'missing.radius': 'Einsatzradius',
   'myProfile.becomeTitle': 'Werde Anbieter',
   'doc.id-document': 'Lichtbildausweis (Personalausweis oder Reisepass)',
-  'doc.trade-registration': 'Gewerbeanmeldung oder Nachweis der freiberuflichen Tätigkeit (Privatpersonen: vorerst eine Kopie des Ausweises)',
+  'doc.trade-registration': 'Gewerbeanmeldung oder Nachweis der freiberuflichen Tätigkeit',
   'doc.liability-insurance': 'Betriebshaftpflichtversicherung',
   'doc.police-certificate': 'Führungszeugnis; für Babysitting das erweiterte Führungszeugnis',
   'doc.hygiene-certificate': 'Nachweis der Belehrung nach Infektionsschutzgesetz',

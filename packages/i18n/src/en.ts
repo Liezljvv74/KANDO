@@ -129,7 +129,7 @@ export const en: Record<Key, string> = {
   'missing.radius': 'service radius',
   'myProfile.becomeTitle': 'Become a provider',
   'doc.id-document': 'Photo ID (ID card or passport)',
-  'doc.trade-registration': 'Trade registration or freelance proof (private persons: a copy of your photo ID for now)',
+  'doc.trade-registration': 'Trade registration or freelance proof',
   'doc.liability-insurance': 'Business liability insurance',
   'doc.police-certificate': 'Police certificate (Führungszeugnis); for babysitting the extended certificate',
   'doc.hygiene-certificate': 'Food hygiene instruction certificate',
