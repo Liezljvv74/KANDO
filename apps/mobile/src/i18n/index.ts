@@ -59,6 +59,8 @@ const errorKeys: Record<string, Key> = {
   'Check already pending': 'error.checkPending',
   'Translation unavailable': 'provider.translateError',
   network: 'error.network',
+  EMAIL_MISMATCH: 'account.emailMismatch',
+  LAST_ADMIN: 'account.lastAdmin',
   // Auth server (`code`)
   INVALID_EMAIL_OR_PASSWORD: 'error.invalidLogin',
   USER_ALREADY_EXISTS: 'error.emailTaken',
