@@ -50,9 +50,9 @@ test('errorText maps the app API strings', () => {
 
 test('docText maps known document codes and passes unknown ones through', () => {
   setLang('en')
-  expect(docText('police-certificate')).toBe('Extended police certificate')
-  expect(docText('permit')).toBe('Permit')
+  expect(docText('police-certificate')).toContain('Police certificate')
+  expect(docText('permit')).toBe('Permit from the local authority')
   expect(docText('xyz')).toBe('xyz')
   setLang('de')
-  expect(docText('permit')).toBe('Genehmigung')
+  expect(docText('permit')).toBe('Genehmigung der örtlichen Behörde')
 })

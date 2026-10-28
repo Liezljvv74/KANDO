@@ -154,3 +154,18 @@ it('add and update answer with waitingFor and visibleInSearch, like the list', a
   )
   expect(patched).toMatchObject({ title: 'Neu', waitingFor: ['police-certificate'], visibleInSearch: false })
 })
+
+it('an optional document never holds a service back, and an approved one changes nothing', async () => {
+  const slug = `sr-opt-${Date.now()}`
+  const { rows } = await pool.query("INSERT INTO categories (slug, required_documents, optional_documents) VALUES ($1, ARRAY['police-certificate'], ARRAY['first-aid-certificate']), ($2, '{}', ARRAY['liability-insurance']) RETURNING id", [slug, `${slug}-2`])
+  const find = async (title: string) =>
+    OwnServicesListSchema.parse(await (await call(services.GET, 'sr2')).json()).docs.find((d) => d.title === title)!
+  await call(services.POST, 'sr2', 'POST', svc({ categoryId: rows[0].id, title: 'Mixed' }))
+  await call(services.POST, 'sr2', 'POST', svc({ categoryId: rows[1].id, title: 'Only optional' }))
+  expect((await find('Mixed')).waitingFor).toEqual(['police-certificate'])
+  expect((await find('Only optional')).waitingFor).toEqual([])
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('sr2', 'first-aid-certificate', 'k', 'approved')")
+  expect((await find('Mixed')).waitingFor).toEqual(['police-certificate']) // the optional badge does not satisfy the required one
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('sr2', 'police-certificate', 'k2', 'approved')")
+  expect((await find('Mixed')).waitingFor).toEqual([])
+})

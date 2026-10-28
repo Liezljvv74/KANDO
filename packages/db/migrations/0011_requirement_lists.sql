@@ -1,0 +1,1 @@
+ALTER TABLE "categories" ADD COLUMN "optional_documents" text[] DEFAULT '{}' NOT NULL;
