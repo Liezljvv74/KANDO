@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import sharp from 'sharp'
-import { documents, privateFiles, type Tx } from '@kando/db'
+import { db, documents, pendingObjectDeletes, privateFiles, type Tx } from '@kando/db'
 import type { Document } from '@kando/contract'
+import { flushPendingObjects } from './account'
 import { fail } from './providers/http'
 import { lockProfile } from './providers/profile'
 import type { AfterCommit } from './app-request'
@@ -127,4 +128,30 @@ export async function submitDocument(tx: Tx, userId: string, requirement: string
   const doc = (await tx.select().from(documents).where(eq(documents.id, rows[0]!.id)))[0]!
   await tx.delete(privateFiles).where(eq(privateFiles.id, file.id)) // the object stays: the document owns it now
   return toDocument(doc)
+}
+
+/**
+ * Deletes one of the caller's submitted documents, but only while another document for the same requirement exists (any
+ * status, pending included): false when it is not theirs (404), 409 REPLACEMENT_FIRST otherwise. Runs on the owner connection
+ * with an explicit owner filter, so the row, its owed object delete and the check happen in one transaction; the person's
+ * documents of that requirement are locked first, so two deletes at once cannot remove both. The object goes after the commit
+ * (a failure leaves the owed row for the daily job). Eligibility follows from the rows: a service that needed the deleted,
+ * approved document goes offline until the replacement is approved.
+ */
+export async function deleteDocument(userId: string, id: string, afterCommit: AfterCommit): Promise<boolean> {
+  if (!UUID.test(id)) return false
+  const owed = await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(documents).where(and(eq(documents.id, id), eq(documents.ownerId, userId)))
+    if (!row) return null
+    await tx.execute(sql`SELECT id FROM documents WHERE owner_id = ${userId} AND requirement = ${row.requirement} ORDER BY id FOR UPDATE`)
+    const [other] = await tx.select({ id: documents.id }).from(documents).where(and(eq(documents.ownerId, userId), eq(documents.requirement, row.requirement), ne(documents.id, id)))
+    if (!other) return fail(409, { error: 'REPLACEMENT_FIRST' })
+    const gone = await tx.delete(documents).where(and(eq(documents.id, id), eq(documents.ownerId, userId))).returning({ id: documents.id })
+    if (!gone.length) return null // deleted meanwhile
+    const [t] = await tx.insert(pendingObjectDeletes).values({ bucket: documentsBucket(), key: row.key }).returning({ id: pendingObjectDeletes.id })
+    return t!.id
+  })
+  if (!owed) return false
+  afterCommit(async () => void (await flushPendingObjects([owed])))
+  return true
 }
