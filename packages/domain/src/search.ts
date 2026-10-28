@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { distanceKm, lookupPostcode, notSuspended, type Tx } from '@kando/db'
+import { distanceKm, lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
 import type { SearchItem, SearchResult } from '@kando/contract'
 import { fail } from './providers/http'
 import { photoUrl } from './storage'
@@ -72,7 +72,7 @@ export async function search(
            p.service_radius_km, p.works_remotely
     FROM providers p
     LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
-    WHERE p.status = 'published' AND ${sql.raw(notSuspended('p'))} AND p.country = ${country} AND p.slug IS NOT NULL
+    WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.country = ${country} AND p.slug IS NOT NULL
       AND ${offerable}
       ${near}
       ${term ? sql`AND (p.public_name ILIKE ${like(term)} OR EXISTS (SELECT 1 FROM unnest(p.skills) k WHERE k ILIKE ${like(term)}))` : sql``}
@@ -145,7 +145,7 @@ export async function visibleProviderSlugs(
 ): Promise<{ slug: string; updatedAt: Date }[]> {
   const { rows } = await tx.execute<{ slug: string; updated_at: Date | string }>(sql`
     SELECT p.slug, p.updated_at FROM providers p
-    WHERE p.status = 'published' AND ${sql.raw(notSuspended('p'))} AND p.country = ${country} AND p.slug IS NOT NULL
+    WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.country = ${country} AND p.slug IS NOT NULL
       AND EXISTS (SELECT 1 FROM offerable_service_ids(p.id))
     ORDER BY p.slug LIMIT ${MAX_SITEMAP_PROVIDERS}`)
   return rows.map((r) => ({ slug: r.slug, updatedAt: new Date(r.updated_at) }))

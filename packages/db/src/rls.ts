@@ -30,6 +30,8 @@ export const notSuspended = (alias = ''): string => {
   const c = `${alias ? `${alias}.` : ''}suspended_until`
   return `(${c} IS NULL OR ${c} <= now())`
 }
+/** The same condition as a SQL fragment for Drizzle queries: the alias is a constant, never input (this file is on the raw-SQL allow-list). */
+export const notSuspendedSql = (alias = '') => sql.raw(notSuspended(alias))
 const NOT_SUSPENDED = notSuspended()
 const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND ${NOT_SUSPENDED})`
 
