@@ -266,6 +266,8 @@ export const en: Record<Key, string> = {
   'notification.profileLive': 'Your profile is live. Tell people about it.',
   'email.suspended.subject': 'Your profile was suspended',
   'email.suspended.body': 'Your profile was suspended for the following reason: {reason}. It will be published again on {date}.',
+  'email.accountDeleted.subject': 'Your account has been deleted',
+  'email.accountDeleted.body': 'Your account and all your data have been deleted, as you asked. This cannot be undone. If this was not you, please write to us at once.',
   'email.publishedAgain.subject': 'Your profile is published again',
   'email.publishedAgain.body': 'Your profile has been published again and customers can book your services again. Good and prompt service rewards you with more customers.',
   'common.description': 'Description',

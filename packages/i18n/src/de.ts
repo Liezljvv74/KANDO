@@ -265,6 +265,8 @@ export const de = {
   'notification.profileLive': 'Dein Profil ist online. Erzähl anderen davon.',
   'email.suspended.subject': 'Dein Profil wurde gesperrt',
   'email.suspended.body': 'Dein Profil wurde aus folgendem Grund gesperrt: {reason}. Es wird am {date} wieder veröffentlicht.',
+  'email.accountDeleted.subject': 'Dein Konto wurde gelöscht',
+  'email.accountDeleted.body': 'Dein Konto und alle Deine Daten wurden gelöscht, so wie Du es gewünscht hast. Das lässt sich nicht rückgängig machen. Wenn Du das nicht warst, schreib uns bitte sofort.',
   'email.publishedAgain.subject': 'Dein Profil ist wieder veröffentlicht',
   'email.publishedAgain.body': 'Dein Profil wurde wieder veröffentlicht und Kunden können Deine Leistungen wieder buchen. Gute und schnelle Arbeit wird mit mehr Kunden belohnt.',
   'common.description': 'Beschreibung',
