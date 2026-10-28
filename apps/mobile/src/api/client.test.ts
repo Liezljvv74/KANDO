@@ -214,3 +214,24 @@ test('text mode reads a successful answer as text and still parses an error as J
   fetchMock.mockResolvedValueOnce(json(400, { error: 'BAD_FORMAT' }))
   await expect(api('/app-api/v1/me/export?format=x', { text: true })).rejects.toMatchObject({ status: 400, code: 'BAD_FORMAT' })
 })
+test('an ok answer whose body cannot be read is a network failure, not null', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(), json: async () => { throw new Error('truncated') } } as unknown as Response)
+  await expect(api('/app-api/v1/me/export')).rejects.toMatchObject({ status: 0, code: 'network' })
+  fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(), text: async () => { throw new Error('truncated') } } as unknown as Response)
+  await expect(api('/app-api/v1/me/export?format=csv', { text: true })).rejects.toMatchObject({ status: 0, code: 'network' })
+})
+
+test('a time limit given in milliseconds is used instead of the default one', async () => {
+  jest.useFakeTimers()
+  try {
+    fetchMock.mockImplementationOnce((_u: string, init: RequestInit) => new Promise((_, reject) => init.signal!.addEventListener('abort', () => reject(new Error('aborted')))))
+    let settled = false
+    const result = api('/app-api/v1/me', { method: 'DELETE', timeLimit: 60_000 }).catch((e) => ((settled = true), e))
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1)
+    expect(settled).toBe(false) // still waiting after the default limit
+    await jest.advanceTimersByTimeAsync(60_000)
+    expect(await result).toMatchObject({ status: 0, code: 'network' })
+  } finally {
+    jest.useRealTimers()
+  }
+})

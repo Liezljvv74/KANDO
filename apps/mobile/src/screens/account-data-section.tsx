@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { Share, StyleSheet, Text, View } from 'react-native'
 
 import { deleteAccount, getExport, type ExportFormat } from '@/api/account'
-import { ApiError } from '@/api/client'
+import { ApiError, getMe } from '@/api/client'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { signOutGeneration } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
-import { accountError, emailMatches, exportText } from '@/lib/account-data'
+import { accountError, afterDeleteFailure, emailMatches, exportText } from '@/lib/account-data'
 
 /** Export of the person's data through the share sheet, and the deletion of the account behind a typed-email confirmation. */
 export function AccountDataSection() {
@@ -39,8 +39,11 @@ export function AccountDataSection() {
     try {
       await deleteAccount(typed.trim())
     } catch (e) {
-      setError(accountError('delete', e instanceof ApiError ? e.code : ''))
-      return setBusy(null)
+      const after = await afterDeleteFailure(e, getMe) // the server may have committed: never claim "not deleted" without asking
+      if (!after.deleted) {
+        setError(after.text)
+        return setBusy(null)
+      }
     }
     await signOut() // the account is gone: same local sign-out as the Log out button, back to the start screen
   }

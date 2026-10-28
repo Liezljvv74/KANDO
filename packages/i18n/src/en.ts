@@ -390,4 +390,5 @@ export const en: Record<Key, string> = {
   'account.exportJson': 'Export as JSON',
   'account.exportCsv': 'Export as CSV',
   'error.badFormat': 'This export format is not known.',
+  'account.deleteUnconfirmed': 'We could not confirm the deletion. Your account may still exist: check your connection and try again, or contact {contact}.',
 }

@@ -68,7 +68,7 @@ neon neon-auth domain add <origin>
 
 ## Deleting an account
 
-`DELETE /app-api/v1/me` runs on the owner connection (the app role may not delete from several tables), so it needs no setting of its own. It also deletes the person's rows in the `neon_auth` schema (every table with a `userId`, `user_id` or `inviterId` column, the confirmation codes by email, then the user); the database owner role must be allowed to write there. Objects in the media and documents buckets are removed after the commit with the same storage keys as uploads. Before the first real use, try it once on a throw-away account on the `kando-dev` branch and check that the person is gone from the `neon_auth` tables.
+`DELETE /app-api/v1/me` runs on the owner connection (the app role may not delete from several tables), so it needs no setting of its own. It also deletes the person's rows in the `neon_auth` schema (every table with a foreign key to the user, the pending codes `<type>-otp-<email>` and the bare email, then the user); the database owner role must be allowed to write there. Migration `0009` adds `pending_object_deletes` (no access for the app role): run `pnpm db:migrate` (owner) on `kando-dev` and on `kando-main` before this ships. The keys of the person's files are stored there in the delete transaction, the objects are removed after the commit, and the daily cron (`/api/cron/suspensions`) retries what is left (200 even when storage is down). Before the first real use, try it once on a throw-away account on the `kando-dev` branch and check that the person is gone from the `neon_auth` tables.
 
 ## Exporting an account
 

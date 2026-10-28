@@ -389,4 +389,5 @@ export const de = {
   'account.exportJson': 'Als JSON exportieren',
   'account.exportCsv': 'Als CSV exportieren',
   'error.badFormat': 'Dieses Exportformat kennen wir nicht.',
+  'account.deleteUnconfirmed': 'Wir konnten die Löschung nicht bestätigen. Dein Konto gibt es vielleicht noch: Prüfe deine Verbindung und versuche es noch einmal oder wende dich an {contact}.',
 }
