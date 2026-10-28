@@ -25,7 +25,12 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
 
 const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
 // Suspensions end by their date: a past suspended_until counts as none.
-const NOT_SUSPENDED = '(suspended_until IS NULL OR suspended_until <= now())'
+// The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
+export const notSuspended = (alias = ''): string => {
+  const c = `${alias ? `${alias}.` : ''}suspended_until`
+  return `(${c} IS NULL OR ${c} <= now())`
+}
+const NOT_SUSPENDED = notSuspended()
 const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND ${NOT_SUSPENDED})`
 
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
@@ -168,7 +173,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = p_provider_id
         AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL)
-        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
           WHERE NOT EXISTS (
@@ -183,7 +188,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
       WHERE s.id = p_service_id AND s.provider_id = p_provider_id
-        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
         ) $$`,

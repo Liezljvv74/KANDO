@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
-import { categories, categoryTexts, pages, pageTexts, photos, providers, users, type Tx } from '@kando/db'
+import { categories, categoryTexts, pages, notSuspended, pageTexts, photos, providers, users, type Tx } from '@kando/db'
 import {
   CategoryInputSchema,
   CategoryUpdateSchema,
@@ -258,7 +258,7 @@ async function setStaffRole(tx: Tx, request: Request) {
   const target = (await tx.select().from(users).where(sql`lower(${users.email}) = ${b.email}`))[0]
   if (!target) return notFound()
   if (target.staffRole === 'admin' && b.staffRole !== 'admin') {
-    const admins = await tx.execute(sql`SELECT id FROM users WHERE staff_role = 'admin' AND (suspended_until IS NULL OR suspended_until <= now()) FOR UPDATE`)
+    const admins = await tx.execute(sql`SELECT id FROM users WHERE staff_role = 'admin' AND ${sql.raw(notSuspended())} FOR UPDATE`)
     if (admins.rows.length <= 1) return fail(409, { error: 'The last Administrator cannot be demoted' })
   }
   const [row] = await tx.update(users).set({ staffRole: b.staffRole, updatedAt: new Date() }).where(eq(users.id, target.id)).returning()
