@@ -80,3 +80,24 @@ test('dispose sends a pending change so nothing typed is lost', async () => {
   jest.advanceTimersByTime(2000)
   expect(save).toHaveBeenCalledTimes(1)
 })
+
+test('flush waits for the request in flight and the follow-up with the newest value', async () => {
+  const sent: string[] = []
+  const gates: (() => void)[] = []
+  const save = jest.fn((v: string) => new Promise<void>((res) => { sent.push(v); gates.push(res) }))
+  const { saver } = setup(save)
+  saver.set('a')
+  saver.flush() // 'a' is in flight
+  saver.set('ab') // typed while it runs
+  let done = false
+  void saver.flush().then(() => { done = true })
+  await flushPromises()
+  expect(done).toBe(false)
+  gates[0]()
+  await flushPromises()
+  expect(sent).toEqual(['a', 'ab'])
+  expect(done).toBe(false) // the follow-up is still running
+  gates[1]()
+  await flushPromises()
+  expect(done).toBe(true)
+})

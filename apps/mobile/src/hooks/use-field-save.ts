@@ -9,28 +9,27 @@ export type SaveStatus = 'saved' | 'saving' | 'error'
 export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayMs: number, onStatus: (s: SaveStatus) => void) {
   let latest: V
   let dirty = false
-  let inFlight = false
+  let running: Promise<void> | null = null // the loop below: one request at a time, until nothing is dirty
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  const send = async (): Promise<void> => {
-    if (inFlight || !dirty) return // a change made during a request is sent when it ends
-    dirty = false
-    inFlight = true
-    try {
-      await save(latest)
-      inFlight = false
-      if (dirty) return flush() // typed meanwhile: the status stays 'saving'
-      onStatus('saved')
-    } catch {
-      inFlight = false
-      onStatus('error') // the value stays; `retry` resends it (or a newer change does)
-      if (dirty) flush()
+  const run = async (): Promise<void> => {
+    while (dirty) {
+      dirty = false // a change made during a request is sent when it ends; the status stays 'saving' until then
+      try {
+        await save(latest)
+        if (!dirty) onStatus('saved')
+      } catch {
+        onStatus('error') // the value stays; `retry` resends it (or a newer change does)
+      }
     }
+    running = null
   }
+  /** Resolves when nothing is dirty and nothing is in flight (also the follow-up save for the newest value). */
   const flush = (): Promise<void> => {
     clearTimeout(timer)
     timer = undefined
-    return send()
+    if (!running && dirty) running = run()
+    return running ?? Promise.resolve()
   }
   return {
     set(value: V) {
@@ -71,7 +70,7 @@ export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>
     },
     status,
     retry: () => void saver.current!.retry(),
-    /** Resolves when the request it started has ended (or at once when one is already running). */
+    /** Resolves when nothing is dirty and nothing is in flight. */
     flush: () => saver.current!.flush(),
   }
 }
