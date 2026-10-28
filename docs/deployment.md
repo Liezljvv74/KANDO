@@ -84,7 +84,7 @@ Proposal, not yet agreed: the owner decides when and whether.
 1. Create `kando-main` in the `SkillWeb` project (from `kando-dev` without data, or empty).
 2. Run `neon deploy` on it, then `pnpm db:migrate` against it (owner instruction).
 3. Import postcodes (`pnpm db:import:postcodes`) and categories (`$env:ALLOW_PRODUCTION='1'; pnpm db:seed:categories` in PowerShell, `ALLOW_PRODUCTION=1 pnpm db:seed:categories` in bash; the categories seed refuses any database but the dev one without it). Test accounts and placeholder photos are never seeded on `kando-main`.
-4. Import real users and providers from the old database (not part of Stage 1).
+4. Real users and providers from the old database: none today (the old production database holds only test data), so nothing is imported. If real users exist before the cutover, a migration has to be designed first.
 5. Create the buckets and keys, set the Production variables in Vercel (including `RESEND_API_KEY`), add the production domain as trusted, and decide whether to turn on "Require email verification" in Neon Auth (see above).
 6. Point the domain at the new Vercel project.
 
