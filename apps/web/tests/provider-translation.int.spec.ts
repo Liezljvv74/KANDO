@@ -13,7 +13,7 @@ const stamp = Date.now()
 // One unique English text per provider, so the shared store never serves another test's text.
 const bioOf = (key: string) => `The carpenter builds kitchens and wardrobes for families in the region (${key} ${stamp}).`
 const keyOf = (s: string) => createHash('sha256').update(s).digest('hex')
-const ipKeyOf = (ip: string) => clientKeyOf(null, new Request('http://localhost/x', { headers: { 'x-forwarded-for': ip } }))
+const ipKeyOf = (ip: string) => clientKeyOf(null, new Request('http://localhost/x', { headers: { 'x-vercel-forwarded-for': ip } }))
 const ip = `10.9.${stamp % 255}.${stamp % 199}`
 const ipKey = ipKeyOf(ip)
 const clients = [ipKey]
@@ -74,13 +74,13 @@ afterAll(async () => {
 
 it('returns translated texts in the page shape', async () => {
   const f = fakeModel()
-  const { status, body } = await translate(slugs.ok!, '?lang=de', { headers: { 'x-forwarded-for': `${ip}, 1.1.1.1` } })
+  const { status, body } = await translate(slugs.ok!, '?lang=de', { headers: { 'x-vercel-forwarded-for': `${ip}, 1.1.1.1` } })
   expect(status).toBe(200)
   expect(Object.keys(body).sort()).toEqual(['bio', 'experience', 'references', 'services', 'skills', 'strengths'])
   expect(body.bio).toBe(`DE: ${bioOf('ok')}`)
   expect(body.services[0].title).toBe('DE: Möbelbau') // short texts of a page that needs translation are sent too
   expect(f).toHaveBeenCalledTimes(1)
-  expect(await count('translation_requests', 'client_key', ipKey)).toBe(1) // first x-forwarded-for entry is the key, stored hashed
+  expect(await count('translation_requests', 'client_key', ipKey)).toBe(1) // the Vercel address header is the key, stored hashed
   expect(ipKey).not.toContain(ip)
 })
 
@@ -103,7 +103,7 @@ it('service failure -> 503 and nothing stored', async () => {
   const failKey = ipKeyOf(failIp)
   clients.push(failKey)
   fakeModel(500)
-  const r = await translate(p.slug, '?lang=de', { headers: { 'x-forwarded-for': failIp } })
+  const r = await translate(p.slug, '?lang=de', { headers: { 'x-vercel-forwarded-for': failIp } })
   expect(r.status).toBe(503)
   expect(r.body).toEqual({ error: 'Translation unavailable' })
   expect(await count('translations', 'key', keyOf(p.bio))).toBe(0)
@@ -134,7 +134,7 @@ it('accepts no text from the client', async () => {
   const p = await provider('inject')
   fakeModel()
   const r = await translate(p.slug, '?lang=de&bio=INJECTED&text=INJECTED', {
-    headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+    headers: { 'content-type': 'application/json', 'x-vercel-forwarded-for': ip },
   })
   expect(r.status).toBe(200)
   expect(calls).toHaveLength(1)
@@ -156,7 +156,7 @@ it('fails closed without a usable secret: 503, no counter row, no model call', a
     for (const secret of [undefined, 'short-secret']) {
       if (secret === undefined) delete process.env.NEON_AUTH_COOKIE_SECRET
       else process.env.NEON_AUTH_COOKIE_SECRET = secret
-      const r = await translate(p.slug, '?lang=de', { headers: { 'x-forwarded-for': noSecretIp } })
+      const r = await translate(p.slug, '?lang=de', { headers: { 'x-vercel-forwarded-for': noSecretIp } })
       expect(r.status).toBe(503)
       expect(r.body).toEqual({ error: 'Translation unavailable' })
     }

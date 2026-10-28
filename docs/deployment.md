@@ -38,6 +38,7 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `OPENROUTER_API_KEY` | yes | web | Translate button. Without it the original texts are shown. |
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
+| `TRANSLATE_GLOBAL_LIMIT_PER_DAY` | no | web | Translate calls allowed across all visitors together per 24 hours (default 2000); caps the bill if someone spreads calls over many addresses. |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
 | `RESEND_API_KEY` | yes | web | Approval, rejection, suspension and "profile is live" emails. Required in production: without it no email is sent, only one line is logged. |
 | `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. Production only (crons do not run on Preview). |
