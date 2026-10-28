@@ -28,10 +28,10 @@ const denied = (message: string) => ({ cause: { message: expect.stringContaining
 
 it('the first-time flow: refused until photo and service exist, then published, then unpublished', async () => {
   expect((await call(publish.POST, 'pf1', 'POST')).status).toBe(404) // no profile
-  await call(profileRoute.PUT, 'pf1', 'PUT', { ...profile, skills: [], experience: null })
+  await call(profileRoute.PUT, 'pf1', 'PUT', { ...profile, skills: [], strengths: null })
   const refused = await call(publish.POST, 'pf1', 'POST')
   expect(refused.status).toBe(409)
-  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service', 'skills', 'experience'] })
+  expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service', 'strengths', 'skills'] })
   await givePhoto('pf1') // Task 6 uploads for real
   await call(profileRoute.PUT, 'pf1', 'PUT', profile)
   await call(services.POST, 'pf1', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
@@ -43,7 +43,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
 })
 
 it('a postcode-less profile is refused until a postcode is saved', async () => {
-  await call(profileRoute.PUT, 'pf2', 'PUT', { providerType: 'individual', skills: ['a'], experience: '1 Jahr' })
+  await call(profileRoute.PUT, 'pf2', 'PUT', { providerType: 'individual', strengths: 'Ruhig', skills: ['a'] })
   await givePhoto('pf2')
   await call(services.POST, 'pf2', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
   const refused = await call(publish.POST, 'pf2', 'POST')

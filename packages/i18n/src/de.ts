@@ -116,6 +116,7 @@ export const de = {
   'ph.providerType': 'Privatperson oder Unternehmen',
   'ph.businessName': 'Der Name deines Unternehmens',
   'ph.impressum': 'Dein Name und deine Anschrift für das Impressum',
+  'ph.strengths': 'Was andere an dir schätzen',
   'ph.skills': 'Worin du gut bist, eins nach dem anderen',
   'ph.experience': 'Wo und wie lange du gearbeitet hast',
   'ph.postcode': 'Die Postleitzahl deines Standorts',

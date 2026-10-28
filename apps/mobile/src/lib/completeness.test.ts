@@ -13,7 +13,7 @@ test('services are complete with at least one service that has a price type', ()
 test('about you is complete when the server lists none of its fields as missing', () => {
   expect(aboutComplete([])).toBe(true)
   expect(aboutComplete(['name', 'service'])).toBe(true) // not About you items
-  for (const item of ['providerType', 'businessName', 'impressum', 'skills', 'experience', 'postcode', 'radius']) expect(aboutComplete(['service', item])).toBe(false)
+  for (const item of ['providerType', 'businessName', 'impressum', 'strengths', 'skills', 'postcode', 'radius']) expect(aboutComplete(['service', item])).toBe(false)
 })
 
 test('documents: every compulsory one approved or pending; optional-only needs one sent', () => {

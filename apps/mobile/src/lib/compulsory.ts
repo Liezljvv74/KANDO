@@ -13,8 +13,8 @@ export const COMPULSORY = {
   providerType: { item: 'providerType', label: 'f.type', placeholder: 'ph.providerType' },
   businessName: { item: 'businessName', label: 'f.businessName', placeholder: 'ph.businessName' },
   impressum: { item: 'impressum', label: 'provider.impressum', placeholder: 'ph.impressum' },
+  strengths: { item: 'strengths', label: 'provider.strengths', placeholder: 'ph.strengths' },
   skills: { item: 'skills', label: 'provider.skills', placeholder: 'ph.skills' },
-  experience: { item: 'experience', label: 'provider.experience', placeholder: 'ph.experience' },
   postcode: { item: 'postcode', label: 'search.postcode', placeholder: 'ph.postcode' },
   radius: { item: 'radius', label: 'f.radius', placeholder: 'ph.radius' },
 } as const satisfies Record<string, { item: Missing; label: Key; placeholder: Key }>

@@ -132,7 +132,7 @@ function AboutForm({ initial }: { initial: MyProfile }) {
       <Field label={t('f.bio')} value={bio.value} onChangeText={bio.setValue} onBlur={bio.flush} multiline maxLength={2000} style={styles.multi} />
       {problem('bio', bio)}
       <TagInput
-        label={t('provider.strengths')}
+        {...compulsory('strengths')}
         items={strengths.value}
         onItems={(v) => {
           // Stop adding once the joined text would pass the server's limit (removing is always fine).
@@ -164,7 +164,7 @@ function AboutForm({ initial }: { initial: MyProfile }) {
         addLabel={t('f.skillAdd')}
       />
       {problem('skills', skills)}
-      <Field {...compulsory('experience')} hint={t('f.experienceHint')} value={experience.value} onChangeText={experience.setValue} onBlur={experience.flush} multiline maxLength={500} style={styles.multi} />
+      <Field label={t('provider.experience')} placeholder={t('ph.experience')} hint={t('f.experienceHint')} value={experience.value} onChangeText={experience.setValue} onBlur={experience.flush} multiline maxLength={500} style={styles.multi} />
       {problem('experience', experience)}
       <Field
         {...compulsory('postcode')}

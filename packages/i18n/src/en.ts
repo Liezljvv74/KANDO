@@ -117,6 +117,7 @@ export const en: Record<Key, string> = {
   'ph.providerType': 'Private person or business',
   'ph.businessName': 'The name of your business',
   'ph.impressum': 'Your name and address for the legal notice',
+  'ph.strengths': 'What people value about you',
   'ph.skills': 'What you are good at, one at a time',
   'ph.experience': 'Where and how long you have worked',
   'ph.postcode': 'The postcode where you are based',
