@@ -1,7 +1,7 @@
 import { ApiError } from '@/api/client'
 import { missingText, setLang } from '@/i18n'
 
-import { isLive, needsFormError, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
+import { isLive, needsFormError, typedTag, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
@@ -19,6 +19,14 @@ test('withItem adds a trimmed new skill or strength once and ignores blanks', ()
   expect(withItem([], '  Fliesen ')).toEqual(['Fliesen'])
   expect(withItem(['Fliesen'], 'Fliesen')).toEqual(['Fliesen'])
   expect(withItem(['a'], '   ')).toEqual(['a'])
+})
+
+test('typedTag keeps to the tag limits like TagInput and says when a limit stopped it', () => {
+  expect(typedTag(['a'], ' b ', 3, 5, 100)).toEqual({ list: ['a', 'b'], tooLong: false })
+  expect(typedTag(['a'], '   ', 3, 5, 100)).toEqual({ list: null, tooLong: false })
+  expect(typedTag(['a', 'b', 'c'], 'd', 3, 5, 100)).toEqual({ list: null, tooLong: true }) // already at the maximum
+  expect(typedTag(['a'], 'abcdef', 3, 5, 100)).toEqual({ list: null, tooLong: true }) // longer than one tag may be
+  expect(typedTag(['aaaa'], 'bbbb', 3, 5, 8)).toEqual({ list: null, tooLong: true }) // joined text too long
 })
 
 test('the form-level error shows unless every server error has an inline slot', () => {

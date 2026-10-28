@@ -11,7 +11,7 @@ import { Select } from '@/components/select'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { errorText, t } from '@/i18n'
 import { registerPendingTags } from '@/lib/pending-tags'
-import { MAX_SKILLS, MAX_SKILL_LENGTH, withItem } from '@/lib/profile-form'
+import { MAX_SKILLS, MAX_SKILL_LENGTH, typedTag } from '@/lib/profile-form'
 import { TagInput } from '../my-profile/tag-input'
 
 const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split('\n').map((x) => x.trim()).filter(Boolean))]
@@ -63,18 +63,21 @@ export function AboutCard({ initial, onSaved, stamp }: { initial: MyProfile; onS
   useEffect(() => {
     const flushTyped = () => {
       const now = typed.current
+      typed.current = { ...now, skillText: '', strengthText: '' } // sent once: the focus cleanup and the unmount cleanup both call this
       const jobs: Promise<void>[] = []
-      if (now.skillText.trim()) {
-        skills.setValue(withItem(now.skills, now.skillText))
+      const addedSkill = typedTag(now.skills, now.skillText, MAX_SKILLS, MAX_SKILL_LENGTH, Infinity)
+      if (addedSkill.list) {
+        skills.setValue(addedSkill.list)
         setSkillText('')
         jobs.push(skills.flush())
       }
-      const joined = withItem(now.strengths, now.strengthText)
-      if (now.strengthText.trim() && joined.join('\n').length <= MAX_STRENGTHS_TEXT) {
-        strengths.setValue(joined)
+      const addedStrength = typedTag(now.strengths, now.strengthText, MAX_SKILLS, MAX_SKILL_LENGTH, MAX_STRENGTHS_TEXT)
+      if (addedStrength.list) {
+        strengths.setValue(addedStrength.list)
         setStrengthText('')
         jobs.push(strengths.flush())
       }
+      if (addedStrength.tooLong) setStrengthsTooLong(true) // the text stays in the field with the same error as TagInput
       return Promise.all(jobs)
     }
     const off = registerPendingTags(flushTyped)
