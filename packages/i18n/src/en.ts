@@ -183,6 +183,7 @@ export const en: Record<Key, string> = {
   'f.strengthAdd': 'Add strength',
   'f.strengthsError': 'At most 20 strengths of 1 to 50 characters each.',
   'f.skillsError': 'At most 20 skills of 1 to 50 characters each.',
+  'f.tagLimit': 'You have reached the maximum of {max} entries. Tap an entry to remove it before adding another.',
   'f.experienceHint': 'Briefly describe your experience – years are welcome.',
   'f.radius': 'Service radius (km)',
   'f.radiusError': 'Please enter a whole number from 1 to 200.',

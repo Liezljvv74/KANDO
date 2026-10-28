@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { Field } from '@/components/auth-ui'
+import { Field, Info } from '@/components/auth-ui'
 import { IconButton } from '@/components/form-ui'
 import { t } from '@/i18n'
 import { withItem } from '@/lib/profile-form'
@@ -59,6 +59,7 @@ export function TagInput({
           </View>
         )}
       </View>
+      {items.length >= max && <Info text={t('f.tagLimit', { max })} />}
       <View style={styles.chips}>
         {items.map((s) => (
           <Pressable key={s} onPress={() => onItems(items.filter((x) => x !== s))} accessibilityRole="button" accessibilityLabel={`${s}, ${t('common.delete')}`} style={styles.chip}>

@@ -182,6 +182,7 @@ export const de = {
   'f.strengthAdd': 'Stärke hinzufügen',
   'f.strengthsError': 'Höchstens 20 Stärken mit je 1 bis 50 Zeichen.',
   'f.skillsError': 'Höchstens 20 Fähigkeiten mit je 1 bis 50 Zeichen.',
+  'f.tagLimit': 'Du hast die höchste Anzahl von {max} Einträgen erreicht. Tippe einen Eintrag an, um ihn zu entfernen, bevor du einen neuen hinzufügst.',
   'f.experienceHint': 'Beschreibe kurz deine Erfahrung – gern mit Jahren.',
   'f.radius': 'Einsatzradius (km)',
   'f.radiusError': 'Bitte eine ganze Zahl von 1 bis 200.',
