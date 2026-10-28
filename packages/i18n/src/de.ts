@@ -137,6 +137,7 @@ export const de = {
     'Dein Profil ist veröffentlicht, aber Kunden sehen es erst, wenn mindestens eine Leistung sichtbar ist.',
   'myProfile.photoTake': 'Foto aufnehmen',
   'myProfile.photoChoose': 'Foto auswählen',
+  'myProfile.photoRemove': 'Foto entfernen',
   'myProfile.photoEdit': 'Profilfoto ändern',
   'myProfile.denied': 'Erlaube den Zugriff auf Kamera/Fotos in den Einstellungen.',
   'myProfile.openSettings': 'Einstellungen öffnen',

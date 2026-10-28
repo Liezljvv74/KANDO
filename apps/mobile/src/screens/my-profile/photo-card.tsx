@@ -11,7 +11,7 @@ import { errorText, t } from '@/i18n'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
 
-/** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library. */
+/** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library, and offers Remove when there is a picture. */
 export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | null; name: string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -34,11 +34,25 @@ export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | nul
     setBusy(false)
   }
 
+  async function remove(id: string) {
+    setBusy(true)
+    setProblem(null)
+    setDenied(false)
+    try {
+      await photosApi.remove(id)
+      onChanged()
+    } catch (e) {
+      setProblem(errorText(uploadErrorCode(e)))
+    }
+    setBusy(false)
+  }
+
   const choose = () =>
     Alert.alert(t('missing.photo'), undefined, [
       { text: t('myProfile.photoTake'), onPress: () => pick('camera') },
       { text: t('myProfile.photoChoose'), onPress: () => pick('library') },
-      { text: t('common.cancel'), style: 'cancel' },
+      ...(photo ? [{ text: t('myProfile.photoRemove'), style: 'destructive' as const, onPress: () => remove(photo.id) }] : []),
+      { text: t('common.cancel'), style: 'cancel' as const },
     ])
 
   return (

@@ -50,7 +50,7 @@ After the code is confirmed:
 
 The tick only decides where the person lands. Anyone can open the provider page later from the Account tab ("Offer services"); a provider is always a customer too.
 
-The profile picture is the person's picture: it serves customers (a provider recognises who booked, a safety point) and providers (it is the picture on the public page). One picture, stored once. For customers it is optional (owner decision, 27 October): the app nudges, it never blocks. While the picture is missing, Home shows a dismissible banner "Add your picture" with the safety reason, and the banner returns at the moment it matters most, before the first booking request in the bookings stage. For providers the picture stays compulsory for Publish.
+The profile picture is the person's picture: it serves customers (a provider recognises who booked, a safety point) and providers (it is the picture on the public page). One picture, stored once. For customers it is optional (owner decision, 27 October): the app nudges, it never blocks. While the picture is missing, Home shows a dismissible banner "Add your picture" with the safety reason, and the banner returns at the moment it matters most, before the first booking request in the bookings stage. For providers it is optional too (owner decision, 28 October): the same nudge applies, Publish does not need it, and it can be removed at any time from the pencil on the profile page.
 
 The address is private. It is used for the default postcode in search and, in later stages, shown to a provider only after they accepted a job that needs it. If the address is missing, the app asks for it when it is first needed (a search without a postcode, later a booking at the customer's place) and saves it to the account from there.
 
@@ -131,10 +131,10 @@ New texts in German and English: the sign-up tick, the address labels, "Let's se
 ## Owner decisions recorded in this document (27 October 2026)
 
 - Tick box at sign-up decides the landing page only.
-- Customer sign-up: first name, surname, email, address (optional, private, postcode drives search), profile picture optional with a nudge that explains the safety value; compulsory only for providers at Publish.
+- Customer sign-up: first name, surname, email, address (optional, private, postcode drives search), profile picture optional with a nudge that explains the safety value; optional for providers too (owner decision, 28 October).
 - Provider page order: services (category compulsory, title auto-filled), about you, past jobs, portfolio, documents at the end in a red card.
 - Everything saves as entered; Publish instead of Save, active only when complete.
-- Compulsory for Publish: picture, one service with category and price type, provider type (+ business name and legal notice), skills, experience, postcode, radius.
+- Compulsory for Publish: one service with category and price type, provider type (+ business name and legal notice), skills, experience, postcode, radius.
 - A provider goes live with complete services while a pending one waits; no Share while something is pending; the share link comes with the "profile is live" notification in the app and by email.
 
 ## Builder questions, settled (my calls, strike any that are wrong)

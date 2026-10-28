@@ -138,6 +138,7 @@ export const en: Record<Key, string> = {
     'Your profile is published, but customers only see it once at least one service is visible.',
   'myProfile.photoTake': 'Take photo',
   'myProfile.photoChoose': 'Choose photo',
+  'myProfile.photoRemove': 'Remove picture',
   'myProfile.photoEdit': 'Change profile photo',
   'myProfile.denied': 'Allow access to the camera/photos in Settings.',
   'myProfile.openSettings': 'Open Settings',
