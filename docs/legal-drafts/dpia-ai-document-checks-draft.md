@@ -6,7 +6,7 @@ Controller: Amplivine, [address], Germany. Contact: info@skillweb.space. Person 
 
 ## 1. Description of the processing
 
-**What it is.** Providers on SkillWeb upload documents that prove who they are and that they may offer a service (see `docs/required-documents-draft.md`). Staff check each document and approve or reject it. The planned change: after upload, an AI vision model reads the document and returns a fixed set of fields. Owner decision of 28 October 2026: the AI handles about 90% of the checks; a person looks only when needed (see section 1a). The AI may approve a document by itself when every check passes. It never rejects by itself: anything doubtful goes to a staff member.
+**What it is.** Providers on SkillWeb upload documents that prove who they are and that they may offer a service (see `docs/required-documents-draft.md`). Staff check each document and approve or reject it. The planned change: after upload, an AI vision model reads the document and returns a fixed set of fields. Owner decision of 28 October 2026: the AI handles about 90% of the checks; a person looks only when needed (see section 1a). The AI may approve a document by itself when every check passes. It never rejects by itself: anything doubtful goes to a staff member (owner confirmed, 28 October: no automatic rejection, about 10% sample audit, first approvals by a person).
 
 **Purposes.**
 1. Verify that a provider is who they say they are and holds the documents their services need (trust and safety of customers; know-your-trader record for the EU Digital Services Act).
@@ -47,8 +47,8 @@ Controller: Amplivine, [address], Germany. Contact: info@skillweb.space. Person 
 | Any check fails, low confidence, a flag (edited, text layer disagrees), unreadable, expired, name does not match | Staff queue; staff decide |
 | AI wants to reject | Never automatic: staff queue, and the provider gets a human-written reason |
 | Police certificate showing anything other than "no entries"; extended certificate for Babysitting | Always staff, no automatic approval |
-| Provider's first documents (first [50] approvals) and any provider with an earlier rejection or complaint | Staff until trust is established [to decide] |
-| Random sample of automatic approvals (about 10%, [to decide]) | Staff re-check afterwards; wrong approvals are withdrawn |
+| Provider's first documents (first [50] approvals) and any provider with an earlier rejection or complaint | Staff until trust is established (owner confirmed, 28 October) |
+| Random sample of automatic approvals (about 10%, owner confirmed, 28 October) | Staff re-check afterwards; wrong approvals are withdrawn |
 
 Target: about 90% of documents decided without a person. The share is measured monthly; the thresholds are tuned on the [300]-document test before launch and may be stricter at first. Photo ID: automatic approval only for the checks listed (type, name match, not expired, readable); no biometric face comparison.
 
