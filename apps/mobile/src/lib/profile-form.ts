@@ -27,6 +27,22 @@ export function withItem(list: string[], text: string): string[] {
   return s && !list.includes(s) ? [...list, s] : list
 }
 
+/** The service radius is 1 to 200 whole kilometres. */
+export const validRadius = (s: string) => /^\d{1,3}$/.test(s.trim()) && +s >= 1 && +s <= 200
+/** The one-field PUT body for a typed radius; null (nothing is sent) while the text is not a valid radius. */
+export const radiusBody = (v: string) => (validRadius(v) ? { serviceRadiusKm: Number(v) } : null)
+
+/**
+ * A typed tag that was not added yet: the new list, or null when there is nothing to add or a limit stops it
+ * (`tooLong` then, for the error). Limits: tags per list, characters per tag, characters of the joined list.
+ */
+export function typedTag(list: string[], text: string, max: number, maxLength: number, maxJoined: number): { list: string[] | null; tooLong: boolean } {
+  const next = withItem(list, text)
+  if (next === list) return { list: null, tooLong: false }
+  const over = next.length > max || text.trim().length > maxLength || next.join('\n').length > maxJoined
+  return { list: over ? null : next, tooLong: over }
+}
+
 /** True unless every server error can show next to its field (`shown` = fields with an inline error slot). */
 export const needsFormError = (errors: Errors, shown: string[]) => {
   const keys = Object.keys(errors)

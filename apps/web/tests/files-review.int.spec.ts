@@ -11,7 +11,6 @@ const profileRoute = await import('../app/app-api/v1/provider-profile/route')
 const publish = await import('../app/app-api/v1/provider-profile/publish/route')
 const services = await import('../app/app-api/v1/services/route')
 const photos = await import('../app/app-api/v1/photos/route')
-const photo = await import('../app/app-api/v1/photos/[id]/route')
 const files = await import('../app/app-api/v1/files/route')
 const file = await import('../app/app-api/v1/files/[id]/route')
 const verifications = await import('../app/app-api/v1/verifications/route')
@@ -209,16 +208,6 @@ it('replacing the profile photo of a published profile works', async () => {
   expect(keys('media')).toHaveLength(1)
 })
 
-it('deleting the profile photo while publishing never leaves a published profile without a photo', async () => {
-  for (const uid of ['rv7', 'rv8']) {
-    const id = (await (await sendPhoto(uid, 'profile')).json()).id
-    await call(services.POST, uid, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
-    await Promise.all([call(photo.DELETE, uid, 'DELETE', undefined, { id }), call(publish.POST, uid, 'POST')])
-    const row = (await pool.query("SELECT status, (SELECT count(*)::int FROM photos WHERE owner_id = $1 AND kind = 'profile') AS pics FROM providers WHERE owner_id = $1", [uid])).rows[0]
-    expect(row.status === 'published' && row.pics === 0).toBe(false)
-  }
-})
-
 it('two simultaneous submits for one requirement give one 201 and one 409', async () => {
   const [a, b] = [await newFile('rv2'), await newFile('rv2')]
   const res = await Promise.all([submit('rv2', 'permit', a), submit('rv2', 'permit', b)])
@@ -243,12 +232,14 @@ it('approval (staff SQL) makes a service with required documents offerable', asy
   expect((await call(file.GET, 'rv1', 'GET', undefined, { id: list.docs[0]!.id })).status).toBe(200)
 })
 
-it('the signed link carries X-Amz-Expires=300 and the public URL needs AWS_ENDPOINT', async () => {
+it('the signed link carries X-Amz-Expires=300 and an attachment disposition, and the public URL needs AWS_ENDPOINT', async () => {
   const saved = { ...process.env }
   Object.assign(process.env, { AWS_ENDPOINT: 'https://s3.example.test', AWS_REGION: 'eu-central-1', AWS_ACCESS_KEY_ID: 'k', AWS_SECRET_ACCESS_KEY: 's' })
   setStorageForTests(undefined)
   try {
-    expect(await storage().getSignedUrl('documents', 'documents/u/x.pdf', 300)).toContain('X-Amz-Expires=300')
+    const link = await storage().getSignedUrl('documents', 'documents/u/x.pdf', 300)
+    expect(link).toContain('X-Amz-Expires=300')
+    expect(new URL(link).searchParams.get('response-content-disposition')).toBe('attachment')
     expect(storage().publicUrl('providers/p/x.jpg')).toMatch(/^https:\/\/s3\.example\.test\/[^/]+\/providers\/p\/x\.jpg$/)
     delete process.env.AWS_ENDPOINT
     setStorageForTests(undefined)

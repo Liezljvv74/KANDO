@@ -3,6 +3,8 @@ import { getLocales } from 'expo-localization'
 import * as SecureStore from 'expo-secure-store'
 import { useSyncExternalStore } from 'react'
 
+import app from '../../app.json'
+
 // The texts live in the shared catalogue (@kando/i18n); this module only keeps the app's current language.
 export type { Key, Lang }
 
@@ -38,15 +40,18 @@ export const useLang = () =>
   )
 
 /** The catalogue text in the current language; `{name}` placeholders come from `params`. */
-export const t = (key: Key, params?: Record<string, string | number>) => translate(lang, key, params)
+// The support address is one setting, in app.json (expo.extra.supportEmail), like the product name: never typed into a text.
+export const SUPPORT_EMAIL = app.expo.extra.supportEmail
+export const t = (key: Key, params?: Record<string, string | number>) => translate(lang, key, { contact: SUPPORT_EMAIL, ...params })
 
-const errorKeys: Record<string, Key> = {
+export const errorKeys: Record<string, Key> = {
   // App API (`error`)
   'Unknown postcode': 'error.unknownPostcode',
   'Invalid postcode': 'error.invalidPostcode',
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',
   'Profile suspended': 'error.profileSuspended',
+  SUSPENDED: 'error.accountSuspended',
   'Create your profile first': 'error.createProfileFirst',
   'Not found': 'error.notFound',
   'Reference limit reached': 'error.referenceLimit',
@@ -55,10 +60,14 @@ const errorKeys: Record<string, Key> = {
   'Unsupported file type': 'error.unsupportedFile',
   'File unreadable': 'error.fileUnreadable',
   'Photo limit reached': 'error.photoLimit',
-  'Profile photo required while published': 'error.photoRequired',
   'Check already pending': 'error.checkPending',
   'Translation unavailable': 'provider.translateError',
   network: 'error.network',
+  'Server error': 'error.server',
+  BAD_FORMAT: 'error.badFormat',
+  EMAIL_MISMATCH: 'account.emailMismatch',
+  LAST_ADMIN: 'account.lastAdmin',
+  REPLACEMENT_FIRST: 'error.replacementFirst',
   // Auth server (`code`)
   INVALID_EMAIL_OR_PASSWORD: 'error.invalidLogin',
   USER_ALREADY_EXISTS: 'error.emailTaken',
@@ -72,13 +81,13 @@ const errorKeys: Record<string, Key> = {
 }
 
 /** Maps a server machine string (ApiError.code) to text in the current language. */
-export const errorText = (code: string): string => t(errorKeys[code] ?? 'error.generic')
+/** Never the raw server text or a status number: a code that is not mapped gets the general message (5xx: the server one). */
+export const errorText = (code: string): string => t(errorKeys[code] ?? (/^HTTP 5\d\d$/.test(code) ? 'error.server' : 'error.generic'))
 
 const known = (key: string): key is Key => translate(DEFAULT_LANG, key as Key) !== key
 
 /** Maps a `missing` item of a 409 'Profile incomplete' response to text; unknown items show the raw name. */
 export const missingText = (item: string): string => {
-  if (item === 'photo') return t('setup.photo') // inside a sentence; missing.photo is the capitalised name (buttons, alert titles)
   const key = `missing.${item}`
   return known(key) ? t(key) : item
 }

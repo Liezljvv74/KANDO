@@ -1,15 +1,33 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { categories, categoryTexts, db, documents, providers, services, users } from '@kando/db'
-import { DEFAULT_LANG, isLang, LOCALE, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, LOCALE, TIME_ZONE, type Lang } from '@kando/i18n'
 import { sendEmail, type Template } from './email'
+import { describeError } from './log-error'
 import { createNotification } from './notifications-store'
 import { offerableServiceIds } from './providers/eligibility'
+
+const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
 
 /** Public address of a provider page; the language only when it is not the default. */
 export function providerUrl(slug: string, lang: Lang): string {
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL
   const base = (process.env.NEXT_PUBLIC_SERVER_URL || (host ? `https://${host}` : 'http://localhost:3000')).replace(/\/$/, '')
   return `${base}/providers/${slug}${lang !== DEFAULT_LANG ? `?lang=${lang}` : ''}`
+}
+
+/**
+ * Stores the "profile is live" message unless one was stored since the latest approval (two reviewers deciding at the
+ * same moment both find the profile complete). The advisory lock makes the check and the insert one step per user.
+ */
+async function claimProfileLive(userId: string, url: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`)
+    const told = await tx.execute(sql`SELECT 1 FROM notifications WHERE user_id = ${userId} AND kind = 'profile-live'
+      AND created_at >= coalesce((SELECT max(reviewed_at) FROM documents WHERE owner_id = ${userId} AND status = 'approved'), '-infinity')`)
+    if (told.rows.length) return false
+    await createNotification(tx, userId, 'profile-live', { url })
+    return true
+  })
 }
 
 /**
@@ -31,7 +49,7 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
   if (!affected.length) return plain
   if (provider.status !== 'published') return { template: 'document-approved-offline', params: {} }
   if (provider.suspendedUntil && provider.suspendedUntil > new Date()) {
-    return { template: 'document-approved-suspended', params: { date: provider.suspendedUntil.toLocaleDateString(LOCALE[lang]) } }
+    return { template: 'document-approved-suspended', params: { date: emailDate(provider.suspendedUntil, lang) } }
   }
   const offerable = new Set(await offerableServiceIds(db, provider.id))
   const nowVisible = affected.find((s) => offerable.has(s.id))
@@ -43,10 +61,10 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
   }
   const url = providerUrl(provider.slug!, lang)
   try {
-    await createNotification(db, userId, 'profile-live', { url })
+    if (!(await claimProfileLive(userId, url))) return plain // a simultaneous approval already told them
   } catch (e) {
     // The email must still go out when the in-app message cannot be stored.
-    console.error('[notify] profile-live notification failed', e instanceof Error ? e.message : 'unknown')
+    console.error('[notify] profile-live notification failed', describeError(e))
   }
   return { template: 'profile-live', params: { url } }
 }
@@ -66,7 +84,7 @@ export async function notifyDocumentDecision(userId: string, document: DocumentD
     await sendEmail({ to: user.email, lang, template, params })
   } catch (e) {
     // After commit: a failure here must never reach the request.
-    console.error('[notify] document decision email failed', e instanceof Error ? e.message : 'unknown')
+    console.error('[notify] document decision email failed', describeError(e))
   }
 }
 
@@ -80,9 +98,9 @@ export async function notifySuspension(userId: string, s: { until: Date | null; 
       to: user.email,
       lang,
       template: s.until ? 'suspended' : 'published-again',
-      params: { reason: s.reason, date: s.until?.toLocaleDateString(LOCALE[lang]) },
+      params: { reason: s.reason, date: s.until && emailDate(s.until, lang) },
     })
   } catch (e) {
-    console.error('[notify] suspension email failed', e instanceof Error ? e.message : 'unknown')
+    console.error('[notify] suspension email failed', describeError(e))
   }
 }

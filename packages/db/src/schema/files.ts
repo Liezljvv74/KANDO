@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { type AnyPgColumn, check, index, integer, pgTable, uniqueIndex, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, check, index, integer, jsonb, pgTable, uniqueIndex, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { providers } from './providers'
 import { users } from './users'
 
@@ -62,3 +62,23 @@ export const documents = pgTable(
     uniqueIndex('documents_one_pending_idx').on(t.ownerId, t.requirement).where(sql`status = 'pending'`),
   ],
 )
+
+// Objects whose storage delete is still owed (an erased account's files): written with the delete, cleared once the object is gone.
+// app_user has no access (STAFF_ONLY_TABLES); a daily job retries what is left.
+export const pendingObjectDeletes = pgTable('pending_object_deletes', {
+  id: uuid().primaryKey().defaultRandom(),
+  bucket: text().notNull(),
+  key: text().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// A legal-duty record kept after an account is deleted (the trader's basic details and the metadata of their submitted
+// documents, whose objects stay in storage until delete_after). No foreign keys: the person is gone. app_user has no access.
+export const retainedRecords = pgTable('retained_records', {
+  id: uuid().primaryKey().defaultRandom(),
+  formerUserId: text('former_user_id').notNull(),
+  details: jsonb().notNull(),
+  documents: jsonb().notNull().default(sql`'[]'::jsonb`),
+  deleteAfter: timestamp('delete_after', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

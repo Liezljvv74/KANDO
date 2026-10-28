@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native'
 
 import type { Photo as OwnPhoto } from '@kando/contract'
 
@@ -9,9 +9,10 @@ import { Avatar } from '@/components/avatar'
 import { ErrorText } from '@/components/auth-ui'
 import { errorText, t } from '@/i18n'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
+import { photoMenu } from '@/lib/photo-menu'
 import { DeniedNotice } from './denied-notice'
 
-/** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library. */
+/** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library, and offers Remove when there is a picture. */
 export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | null; name: string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -34,12 +35,41 @@ export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | nul
     setBusy(false)
   }
 
-  const choose = () =>
-    Alert.alert(t('missing.photo'), undefined, [
-      { text: t('myProfile.photoTake'), onPress: () => pick('camera') },
-      { text: t('myProfile.photoChoose'), onPress: () => pick('library') },
+  async function remove(id: string) {
+    setBusy(true)
+    setProblem(null)
+    setDenied(false)
+    try {
+      await photosApi.remove(id)
+      onChanged()
+    } catch (e) {
+      setProblem(errorText(uploadErrorCode(e)))
+    }
+    setBusy(false)
+  }
+
+  // Remove is never one tap: Android's menu has no Cancel button, so a mis-tap must not delete the picture.
+  const confirmRemove = (id: string) =>
+    Alert.alert(t('myProfile.photoRemoveTitle'), t('myProfile.photoRemoveBody'), [
+      { text: t('myProfile.photoRemove'), style: 'destructive', onPress: () => remove(id) },
       { text: t('common.cancel'), style: 'cancel' },
     ])
+
+  const choose = () =>
+    Alert.alert(
+      t('missing.photo'),
+      undefined,
+      photoMenu(Platform.OS === 'ios' ? 'ios' : 'android', !!photo).map((item) =>
+        item === 'take'
+          ? { text: t('myProfile.photoTake'), onPress: () => pick('camera') }
+          : item === 'choose'
+            ? { text: t('myProfile.photoChoose'), onPress: () => pick('library') }
+            : item === 'remove'
+              ? { text: t('myProfile.photoRemove'), style: 'destructive' as const, onPress: () => confirmRemove(photo!.id) }
+              : { text: t('common.cancel'), style: 'cancel' as const },
+      ),
+      { cancelable: true },
+    )
 
   return (
     <View style={styles.root}>

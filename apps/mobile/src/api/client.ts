@@ -80,18 +80,18 @@ async function mergeCookies(res: Response) {
 }
 
 /** `detached`: send this cookie instead of the stored one and leave the store alone (the sign-out call after the local clear). */
-type Init = { method?: string; body?: unknown; timeLimit?: boolean; detached?: string }
+type Init = { method?: string; body?: unknown; timeLimit?: boolean | number; detached?: string; text?: boolean }
 
-async function send(path: string, { method = 'GET', body, timeLimit = method === 'GET', detached }: Init, cookie: string | null) {
+async function send(path: string, { method = 'GET', body, timeLimit = method === 'GET', detached, text }: Init, cookie: string | null) {
   // Better Auth refuses cookie-carrying writes without a trusted Origin; the app names the API's own origin.
   const headers: Record<string, string> = { Accept: 'application/json', Origin: ORIGIN }
   const form = body instanceof FormData
   // A FormData body gets its Content-Type (with the boundary) from fetch.
   if (body !== undefined && !form) headers['Content-Type'] = 'application/json'
   if (cookie) headers.Cookie = cookie
-  // Only reads are cut off: a slow save may still succeed, and retrying it could save twice.
+  // Only reads are cut off (a number: this many ms instead): a slow save may still succeed, and retrying it could save twice.
   const abort = timeLimit ? new AbortController() : null
-  const timer = abort && setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS)
+  const timer = abort && setTimeout(() => abort.abort(), typeof timeLimit === 'number' ? timeLimit : REQUEST_TIMEOUT_MS)
   let res: Response
   try {
     // credentials 'omit': the platform's own cookie store stays out; the session lives only in SecureStore.
@@ -105,8 +105,15 @@ async function send(path: string, { method = 'GET', body, timeLimit = method ===
     if (timer) clearTimeout(timer)
   }
   if (detached === undefined) await storeCookies(res)
-  const data = await res.json().catch(() => null)
-  return { res, data }
+  // `text`: a successful answer is read as text (the CSV export); errors are always JSON.
+  let data: unknown = null
+  try {
+    data = await (text && res.ok ? res.text() : res.json())
+  } catch {
+    // An answer that says ok but whose body cannot be read is a failed read, never "null" (the export must not share that).
+    if (res.ok) throw new ApiError(0, 'network')
+  }
+  return { res, data: data as never }
 }
 
 type ErrorBody = { error?: string; code?: string; message?: string; missing?: unknown; fields?: unknown; issues?: { path?: unknown[] }[] } | null

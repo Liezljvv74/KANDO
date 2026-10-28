@@ -13,16 +13,10 @@ import { accessControlProvider, authProvider } from '../../lib/admin/auth-provid
 import { adminLangCookie } from '../../lib/admin/lang'
 import { dataProvider } from '../../lib/admin/data-provider'
 import { LANGS, t, type Key, type Lang } from '@kando/i18n'
+import { refineText } from '../../lib/admin/refine-text'
 import { AdminLangProvider, useAdminLang, useAt } from '../../lib/admin/t'
 
 const locales: Record<Lang, typeof deDE> = { de: deDE, en: enUS }
-
-// The Refine labels that show up in the sider and the List/Show headers.
-const refineLabels: Record<string, Key> = {
-  'buttons.logout': 'admin.signOut',
-  'buttons.refresh': 'admin.action.refresh',
-  'buttons.list': 'admin.action.list',
-}
 
 const otherLang = (lang: Lang) => LANGS.find((l) => l !== lang)!
 
@@ -108,10 +102,7 @@ export default function AdminShell({ lang, children }: { lang: Lang; children: R
               notificationProvider={useNotificationProvider}
               resources={resources}
               i18nProvider={{
-                translate: (key: string, _options?: unknown, defaultMessage?: string) => {
-                  const k = refineLabels[key]
-                  return k ? t(lang, k) : (defaultMessage ?? key)
-                },
+                translate: (key: string, options?: unknown, defaultMessage?: string) => refineText(lang, key, options, defaultMessage),
                 changeLocale: async () => {},
                 getLocale: () => lang,
               }}

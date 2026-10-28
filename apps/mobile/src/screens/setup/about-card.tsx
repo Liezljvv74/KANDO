@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
@@ -10,13 +10,13 @@ import { Card, SectionHeader, SmallButton, SwitchRow } from '@/components/form-u
 import { Select } from '@/components/select'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { errorText, t } from '@/i18n'
-import { MAX_SKILLS, MAX_SKILL_LENGTH } from '@/lib/profile-form'
+import { registerPendingTags } from '@/lib/pending-tags'
+import { MAX_SKILLS, MAX_SKILL_LENGTH, radiusBody, typedTag, validRadius } from '@/lib/profile-form'
 import { TagInput } from '../my-profile/tag-input'
 
 const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split('\n').map((x) => x.trim()).filter(Boolean))]
 /** The server keeps strengths as one text of at most 1000 characters. */
 const MAX_STRENGTHS_TEXT = 1000
-const validRadius = (s: string) => /^\d{1,3}$/.test(s.trim()) && +s >= 1 && +s <= 200
 
 /**
  * One field = one useFieldSave = one request. Every response replaces the held profile (`onSaved`, for the Publish bar);
@@ -50,11 +50,42 @@ export function AboutCard({ initial, onSaved, stamp }: { initial: MyProfile; onS
   const skills = useField('skills', initial.skills ?? [], (v) => ({ skills: v }))
   const experience = useField('experience', initial.experience ?? '', (v) => ({ experience: v.trim() }))
   const postcode = useField('basePostcode', initial.basePostcode ?? '', (v) => ({ basePostcode: v.trim() }))
-  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), (v) => (validRadius(v) ? { serviceRadiusKm: Number(v) } : null))
+  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), radiusBody)
   const remote = useField('worksRemotely', !!initial.worksRemotely, (v) => ({ worksRemotely: v }))
   const [skillText, setSkillText] = useState('')
   const [strengthText, setStrengthText] = useState('')
   const [strengthsTooLong, setStrengthsTooLong] = useState(false)
+
+  // Typed but not yet added tags are added and saved when the page is left or Publish is pressed (see lib/pending-tags).
+  const typed = useRef({ skills: skills.value, skillText, strengths: strengths.value, strengthText })
+  typed.current = { skills: skills.value, skillText, strengths: strengths.value, strengthText }
+  useEffect(() => {
+    const flushTyped = () => {
+      const now = typed.current
+      typed.current = { ...now, skillText: '', strengthText: '' } // sent once: the focus cleanup and the unmount cleanup both call this
+      const jobs: Promise<void>[] = []
+      const addedSkill = typedTag(now.skills, now.skillText, MAX_SKILLS, MAX_SKILL_LENGTH, Infinity)
+      if (addedSkill.list) {
+        skills.setValue(addedSkill.list)
+        setSkillText('')
+        jobs.push(skills.flush())
+      }
+      const addedStrength = typedTag(now.strengths, now.strengthText, MAX_SKILLS, MAX_SKILL_LENGTH, MAX_STRENGTHS_TEXT)
+      if (addedStrength.list) {
+        strengths.setValue(addedStrength.list)
+        setStrengthText('')
+        jobs.push(strengths.flush())
+      }
+      if (addedStrength.tooLong) setStrengthsTooLong(true) // the text stays in the field with the same error as TagInput
+      return Promise.all(jobs)
+    }
+    const off = registerPendingTags(flushTyped)
+    return () => {
+      off()
+      void flushTyped() // the card is going away
+    }
+    // runs once: reads the latest values through `typed`, the setters are stable
+  }, [])
 
   // A failed save keeps the value and says why, with a retry.
   const problem = (key: string, f: { status: string; retry: () => void }) =>

@@ -13,6 +13,7 @@ import { loadMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { startOffering } from '@/lib/start-offering'
+import { AccountDataSection } from '@/screens/account-data-section'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -87,6 +88,7 @@ export default function AccountScreen() {
           <LanguageSwitch />
         </View>
         <Button label={t('auth.logOut')} onPress={signOut} />
+        <AccountDataSection />
         {/* Staff shortcut while testing; release builds never show it. The in-app browser's ✕ returns here (createTask false:
             on Android a separate browser task closed to the home screen, not back to the app). */}
         {__DEV__ && (

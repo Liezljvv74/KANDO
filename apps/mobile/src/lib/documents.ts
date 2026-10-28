@@ -1,4 +1,5 @@
 import type { Category, Document, OwnService } from '@kando/contract'
+import type { Key } from '@/i18n'
 
 /** Mirrors VERIFICATION_REQUIREMENTS on the server (display order). */
 export const VERIFICATION_REQUIREMENTS = ['police-certificate', 'permit']
@@ -26,3 +27,10 @@ export const serviceDocNote = (waitingFor: string[], rows: DocumentRow[]): 'need
 
 /** Share is offered only while no service waits for a document check (publish bar and banner alike). */
 export const canShare = (services: OwnService[]) => !services.some((s) => (s.waitingFor ?? []).length > 0)
+
+/** The submitted documents of one requirement, newest first (each can be deleted once another exists). */
+export const submittedDocs = (requirement: string, verifications: Document[]) =>
+  verifications.filter((v) => v.requirement === requirement).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+/** The confirmation text before a delete: an approved document says that the services needing it go offline until the replacement is approved. */
+export const deleteBodyKey = (status: Document['status']): Key => (status === 'approved' ? 'myProfile.docDeleteBody.approved' : 'myProfile.docDeleteBody')

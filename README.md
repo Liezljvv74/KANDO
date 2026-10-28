@@ -24,7 +24,7 @@ Copy `.env.example` to `.env.local` and fill it in for anything that talks to Ne
 
 ## Where we are (28 October 2026)
 
-Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 407 (259 web, 125 app, 23 in the shared packages); typecheck, lint and the Android bundle build are clean.
+Everything below is merged into `main` and live at https://kando-web.vercel.app (Vercel project `kando-web`, root `apps/web`). That test site runs on the Neon branch `kando-dev` and holds test data only. All automated tests pass: 434 (280 web, 130 app, 24 in the shared packages); typecheck, lint and the Android bundle build are clean.
 
 ### What was built, in order
 
@@ -42,6 +42,7 @@ Everything below is merged into `main` and live at https://kando-web.vercel.app 
 - **The My profile tab is for providers only.** A customer opens the same page through Account, Offer services (or the card on Home), which creates the draft, makes them a provider and then shows the tab.
 - **Emails say what really happened:** document approved (profile live, service visible, profile offline, profile suspended), document rejected with the staff note, profile suspended with reason and end date, profile published again. When the last pending document is approved there is also a banner with Share and a dot on the Account tab.
 - **Suspensions end by their date.** A daily check at 06:00 UTC (`/api/cron/suspensions`, protected by `CRON_SECRET`) ends the ones whose date has passed; staff can lift earlier. Emails only go to people whose profile was live.
+- **Export and delete (Account tab, below Log out).** "Export as JSON" and "Export as CSV" fetch the person's own data (profile, services, references, photo links, documents and files with 5-minute signed links, messages, and a list of what is not included) and open the phone's share sheet with the text (`GET /app-api/v1/me/export`, `?format=csv` for the CSV: columns section, record, field, value, UTF-8 with a byte order mark; an unknown format is 400 BAD_FORMAT). The app shares the text, not a file, because expo-sharing is not installed. "Delete my account" asks the person to type their own email, then deletes everything at once and for good, in one database transaction: messages, documents, uploaded files, photos, the provider profile with services and references (the client names go with it), the person, their translation rate-limit rows and their Neon Auth records. The files to remove are written to a table `pending_object_deletes` in the same transaction; after the commit they are deleted and the rows cleared, and the daily check retries what is left (a failure is only logged with a count and never fails the request). A reviewer's id is cleared from the documents they reviewed. Neon Auth records are found through their foreign keys to the user, and pending email codes (`<type>-otp-<email>`) go too. After the deletion the old session cookie gets 401 (no users row is recreated). A provider's (or a document-submitter's) basic trader details and the metadata of their submitted documents are kept in `retained_records` for 6 months because of a legal duty, and the document files stay in storage that long; the daily check then deletes them (`DELETE_RETENTION_MONTHS`, 0 switches it off; the rule is under legal review). A provider can delete a submitted document once another one for the same requirement exists (`DELETE /app-api/v1/verifications/:id`, else 409 REPLACEMENT_FIRST). Then a confirmation email goes to the old address in the saved language. The only remaining Administrator gets "409 LAST_ADMIN" until another exists. The shared translations cache is not touched (a separate clean-up job comes later). Routes: `GET /app-api/v1/me/export`, `DELETE /app-api/v1/me`. Error texts in the app say what went wrong, the likely cause and what to do next.
 - The public name is first name plus the first letter of the surname (or the business name) and follows a rename.
 
 ### Phone testing
@@ -78,11 +79,9 @@ Nothing has been checked on a phone or in a real browser yet; every "Not yet don
 
 ### Small points parked from the reviews
 
-- A lift on a user who was not suspended still sends "published again"; end dates in emails use the server time zone; the daily check sends its emails one by one.
-- Two reviewers approving at the same moment can send a double "profile is live" email; a live profile can still delete its last complete service; the "not suspended" test is written in many SQL places (one shared constant would keep them equal).
-- Tag text typed but not yet added is saved on blur only; an invalid radius is not saved until valid.
-- A bad postcode typed at sign-up is dropped silently (the error shows in Account); street and city labels are not marked optional.
-- Refine's own button labels (Save, Create, Edit, Delete) are still English in the back office.
+- A bad postcode typed at sign-up is dropped silently (the error shows in Account).
+- The "not suspended" rule in JavaScript still exists as copies that compare with the app server's clock (`providers/items.ts` withState, `providers/profile.ts` publish, `notifications.ts`); the SQL copies now all use the shared `notSuspended` helper.
+- Email dates use one time zone constant (`TIME_ZONE`, Europe/Berlin, in `packages/i18n`); it has to become per country before South Africa.
 - Details: the Open Items sheets of the reports in `Reports/`.
 
 ### Retiring the old Payload stack
@@ -137,7 +136,7 @@ Stage 2 of the design: requests, quotes, direct booking, payments with Stripe Co
 
 - No thumbnail sizes: the photo grid and the cards load full-size images.
 - Documents over 4.5 MB cannot be uploaded through Vercel; the fix is to upload straight from the phone to storage.
-- No "Delete my account" in the app (GDPR erasure and data export come later).
+- Delete my account removes Neon Auth records through their foreign keys to the user; it has only been tested against a stand-in schema, not against the real Neon Auth tables.
 - Placeholder graphics (app icon, splash, home page pictures) are still to be replaced.
 - The legal pages are records that staff must write and publish in the back office.
 - Push notifications come with bookings; until then the banner and the email are the only signals.

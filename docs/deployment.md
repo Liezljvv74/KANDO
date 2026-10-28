@@ -38,8 +38,10 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `OPENROUTER_API_KEY` | yes | web | Translate button. Without it the original texts are shown. |
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
+| `TRANSLATE_GLOBAL_LIMIT_PER_DAY` | no | web | Translate calls allowed across all visitors together per 24 hours (default 2000); caps the bill if someone spreads calls over many addresses. |
 | `TRANSLATE_TIMEOUT_MS` | no | web | Translate time limit (default 12000). |
 | `RESEND_API_KEY` | yes | web | Approval, rejection, suspension and "profile is live" emails. Required in production: without it no email is sent, only one line is logged. |
+| `DELETE_RETENTION_MONTHS` | no | web | Months the documents and basic trader details of a deleted provider are kept (default 6; 0 = delete at once, no record). |
 | `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. Production only (crons do not run on Preview). |
 | `NEXT_PUBLIC_SERVER_URL` | no | web | Public address of the site (links, sitemaps, canonical). |
 | `VERCEL_PROJECT_PRODUCTION_URL` | no | web | Set by Vercel itself; do not add it by hand. |
@@ -65,6 +67,18 @@ neon neon-auth domain add <origin>
 ```
 
 `https://skillweb.space` is already added on `kando-dev`. Add the preview address and, at cutover, the production address on `kando-main`.
+
+## Deleting an account
+
+`DELETE /app-api/v1/me` runs on the owner connection (the app role may not delete from several tables), so it needs no setting of its own. It also deletes the person's rows in the `neon_auth` schema (every table with a foreign key to the user, the pending codes `<type>-otp-<email>` and the bare email, then the user); the database owner role must be allowed to write there. Migration `0009` adds `pending_object_deletes` (no access for the app role): run `pnpm db:migrate` (owner) on `kando-dev` and on `kando-main` before this ships (migrations `0009` and `0010` both). The keys of the person's files are stored there in the delete transaction, the objects are removed after the commit, and the daily cron (`/api/cron/suspensions`) retries what is left (200 even when storage is down). Before the first real use, try it once on a throw-away account on the `kando-dev` branch and check that the person is gone from the `neon_auth` tables.
+
+## Exporting an account
+
+`GET /app-api/v1/me/export` (JSON) and `?format=csv` (CSV) need no setting. Document and file links in the export are signed for 5 minutes with the storage keys, so the storage variables above must work on the server. The support address shown in the app error texts is `info@skillweb.space`.
+
+## Retention after deleting an account
+
+When a provider (or anyone who submitted documents) deletes their account, one row goes to `retained_records` (migration `0010`, no access for the app role): basic trader details (name, business name, email, address, legal status, VAT id, provider type, impressum) and the metadata of the submitted documents. The document files stay in the private bucket for `DELETE_RETENTION_MONTHS` (default 6); the daily cron then deletes the files and the row (a file that cannot be deleted goes to `pending_object_deletes` for the retry). The confirmation email and the app's delete step say so. **The 6-month rule is under legal review** (the micro-enterprise exemption may apply): if it does, set `DELETE_RETENTION_MONTHS=0` and everything is deleted at once, with no record. Change the number in the app text `account.deleteRetention` if the value is changed to anything but 6. Run migrations `0009` and `0010` (`pnpm db:migrate`, owner) on `kando-dev` and `kando-main` before this ships.
 
 ## Neon Auth: confirmed emails
 
@@ -95,6 +109,12 @@ Proposal, not yet agreed: the owner decides when and whether.
 1. Keep the old `main` (read-only, no writes) as a fallback.
 2. When the owner is satisfied that the new site runs cleanly, take a final Neon branch of old `main` named `old-main-final`, then delete the old `dev` branch and the old `main` branch.
 3. Archive the old repository `skill-web`.
+
+## Known limits of the safety checks
+
+- **Translate daily caps are soft under concurrency.** Each call counts first and inserts after, so several simultaneous calls can pass the cap together and overshoot it by a few. They never grow without bound.
+- **The `unknown` anonymous bucket.** Anonymous visitors are counted by the address Vercel sets (`x-vercel-forwarded-for`, else `x-real-ip`). Outside Vercel (local, another host) neither exists and all anonymous visitors share one `unknown` bucket.
+- **Origin check.** A write from a browser is accepted only when its `Origin` is the request's own origin or `NEXT_PUBLIC_SERVER_URL`. Set `NEXT_PUBLIC_SERVER_URL` in Vercel Production to the canonical host, `https://skillweb.space`. An extra alias host (for example one staff use) must be added there first; until then its writes get 403.
 
 ## Seeds
 

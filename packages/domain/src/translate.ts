@@ -14,6 +14,8 @@ export const DEFAULT_TRANSLATE_MODEL = 'anthropic/claude-haiku-5.5'
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 export const TRANSLATE_LIMIT_PER_HOUR = 30
+/** Calls allowed across all callers together per 24 hours (caps the OpenRouter bill however many addresses an abuser has); env TRANSLATE_GLOBAL_LIMIT_PER_DAY overrides it. */
+export const TRANSLATE_GLOBAL_LIMIT_PER_DAY = 2000
 /** Default time to wait for the model, in ms; env TRANSLATE_TIMEOUT_MS overrides it. */
 export const TRANSLATE_TIMEOUT_MS = 12_000
 
@@ -92,10 +94,13 @@ function requireSecret(): string {
   throw new TranslationUnavailable('No usable secret configured')
 }
 
-/** Callers are counted per user id; anonymous ones as a salted hash of the first x-forwarded-for entry, never the raw address. */
-export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, request: Request): string {
+/**
+ * Callers are counted per user id; anonymous ones as a salted hash of the address Vercel itself sets (x-vercel-forwarded-for,
+ * else x-real-ip), never the raw address. x-forwarded-for is not used: a caller can put anything at its start.
+ */
+export function clientKeyOf(user: Pick<SessionUser, 'id'> | null, headers: Pick<Headers, 'get'>): string {
   if (user) return `user:${user.id}`
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const ip = (headers.get('x-vercel-forwarded-for') || headers.get('x-real-ip'))?.split(',')[0]?.trim() || 'unknown'
   const hash = createHash('sha256').update(`${requireSecret()}${ip}`).digest('hex')
   return `ip:${hash.slice(0, 32)}`
 }
@@ -150,6 +155,9 @@ async function askModel(tx: Tx, sent: Record<string, string>, lang: Lang, client
     sql`SELECT count(*)::int AS n FROM translation_requests WHERE client_key = ${clientKey} AND created_at > now() - interval '1 hour'`,
   )
   if (rows[0]!.n >= limit) throw new TranslationUnavailable('Rate limit reached')
+  const globalLimit = Number(process.env.TRANSLATE_GLOBAL_LIMIT_PER_DAY) || TRANSLATE_GLOBAL_LIMIT_PER_DAY
+  const day = await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM translation_requests WHERE created_at > now() - interval '24 hours'`)
+  if (day.rows[0]!.n >= globalLimit) throw new TranslationUnavailable('Global rate limit reached')
   await tx.execute(sql`INSERT INTO translation_requests (client_key) VALUES (${clientKey})`)
 
   const controller = new AbortController()

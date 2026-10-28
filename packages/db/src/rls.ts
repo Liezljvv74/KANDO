@@ -25,7 +25,14 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
 
 const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
 // Suspensions end by their date: a past suspended_until counts as none.
-const NOT_SUSPENDED = '(suspended_until IS NULL OR suspended_until <= now())'
+// The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
+export const notSuspended = (alias = ''): string => {
+  const c = `${alias ? `${alias}.` : ''}suspended_until`
+  return `(${c} IS NULL OR ${c} <= now())`
+}
+/** The same condition as a SQL fragment for Drizzle queries: the alias is a constant, never input (this file is on the raw-SQL allow-list). */
+export const notSuspendedSql = (alias = '') => sql.raw(notSuspended(alias))
+const NOT_SUSPENDED = notSuspended()
 const LIVE_SERVICE = `EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.status = 'published' AND ${NOT_SUSPENDED})`
 
 // Public-owned table → ownership and public-read expressions: readable where publicRead holds (or by the owner), written only by the owner.
@@ -44,17 +51,24 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
 export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
 
+// Readable by app_user only where the expression holds (drafts stay hidden), written only by staff (owner connection,
+// which sees everything).
+export const PUBLISHED_READ_TABLES: Record<string, string> = {
+  pages: 'published',
+  page_texts: 'EXISTS (SELECT 1 FROM pages p WHERE p.id = page_id AND p.published)',
+}
+
 // Readable by app_user, written only by staff (owner connection).
-export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'pages', 'page_texts']
+export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = []
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
 
 // Every policy name any map creates, dropped first so a table can move between the maps.
-export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert']
+export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read']
 
 /** Every schema table must be in exactly one map. */
 export function classifyTables(): { unclassified: string[]; duplicated: string[] } {
@@ -62,6 +76,7 @@ export function classifyTables(): { unclassified: string[]; duplicated: string[]
     Object.keys(PRIVATE_TABLES),
     Object.keys(PUBLIC_OWNED_TABLES),
     INSERT_ONLY_TABLES,
+    Object.keys(PUBLISHED_READ_TABLES),
     PUBLIC_REFERENCE_TABLES,
     STAFF_ONLY_TABLES,
   ]
@@ -115,6 +130,8 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY owner_delete ON ${t} FOR DELETE TO ${APP_ROLE} USING (${owner})`,
     ]
   }
+  const published = PUBLISHED_READ_TABLES[table]
+  if (published) return [...head, `CREATE POLICY published_read ON ${t} FOR SELECT TO ${APP_ROLE} USING (${published})`]
   if (INSERT_ONLY_TABLES.includes(table)) {
     return [
       `GRANT INSERT ON ${t} TO ${APP_ROLE}`,
@@ -123,7 +140,7 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY app_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (true)`,
     ]
   }
-  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES or INSERT_ONLY_TABLES`)
+  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES or INSERT_ONLY_TABLES`)
 }
 
 // The only write path to a provider's domain-only columns. SECURITY DEFINER (runs as the table owner, past RLS) but
@@ -142,7 +159,7 @@ const PROVIDER_FUNCTIONS = [
     BEGIN
       SELECT * INTO r FROM providers WHERE owner_id = app_current_user_id() FOR UPDATE;
       IF NOT FOUND THEN RETURN false; END IF;
-      IF p_published AND ((r.suspended_until IS NOT NULL AND r.suspended_until > now()) OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND u.suspended_until > now())) THEN
+      IF p_published AND (NOT ${notSuspended('r')} OR EXISTS (SELECT 1 FROM users u WHERE u.id = r.owner_id AND NOT ${notSuspended('u')})) THEN
         RETURN false;
       END IF;
       IF p_published AND r.slug IS NULL THEN
@@ -168,7 +185,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = p_provider_id
         AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL)
-        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
           WHERE NOT EXISTS (
@@ -183,7 +200,7 @@ const ELIGIBILITY_FUNCTIONS = [
       JOIN providers p ON p.id = s.provider_id
       CROSS JOIN LATERAL unnest(c.required_documents) AS r(requirement)
       WHERE s.id = p_service_id AND s.provider_id = p_provider_id
-        AND ((p.status = 'published' AND (p.suspended_until IS NULL OR p.suspended_until <= now())) OR p.owner_id = app_current_user_id())
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND NOT EXISTS (
           SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
         ) $$`,
@@ -202,7 +219,7 @@ const TRANSLATION_FUNCTIONS = [
 
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
-  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...INSERT_ONLY_TABLES],
+  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...INSERT_ONLY_TABLES],
 ): string[] {
   const dup = classifyTables().duplicated
   if (dup.length) throw new Error(`rlsStatements: ${dup.join(', ')} in more than one map`)
