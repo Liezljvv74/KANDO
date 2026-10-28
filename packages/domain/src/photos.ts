@@ -94,15 +94,13 @@ export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCo
   }
 }
 
-/** Deletes one of the caller's photos; false when it is not theirs. 409 for the profile photo of a published profile. */
+/** Deletes one of the caller's photos; false when it is not theirs. The picture is optional: a live profile may drop it. */
 export async function deletePhoto(tx: Tx, userId: string, id: string, afterCommit: AfterCommit): Promise<boolean> {
   await lockProfile(tx, userId) // serialises with publish
   const row = UUID.test(id)
     ? (await tx.select().from(photos).where(and(eq(photos.id, id), eq(photos.ownerId, userId))))[0]
     : undefined
   if (!row) return false
-  const profile = await ownProvider(tx, userId)
-  if (profile?.status === 'published' && row.kind === 'profile') fail(409, { error: 'Profile photo required while published' })
   await tx.delete(photos).where(eq(photos.id, id))
   afterCommit(() => removeObject(mediaBucket(), row.key))
   return true

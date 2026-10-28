@@ -56,7 +56,6 @@ const errorKeys: Record<string, Key> = {
   'Unsupported file type': 'error.unsupportedFile',
   'File unreadable': 'error.fileUnreadable',
   'Photo limit reached': 'error.photoLimit',
-  'Profile photo required while published': 'error.photoRequired',
   'Check already pending': 'error.checkPending',
   'Translation unavailable': 'provider.translateError',
   network: 'error.network',

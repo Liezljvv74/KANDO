@@ -159,7 +159,6 @@ export const en: Record<Key, string> = {
   'error.fileUnreadable':
     'This file could not be opened. Download it to your phone first (for example to "Downloads") and choose it from there – or take a picture of the document with "Scan with the camera".',
   'error.photoLimit': 'You have reached the maximum number of photos.',
-  'error.photoRequired': 'A published profile needs a profile photo.',
   'error.checkPending': 'This document is already being checked.',
   'f.name': 'Name and surname',
   'f.type': 'Provider type',

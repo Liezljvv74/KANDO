@@ -158,7 +158,6 @@ export const de = {
   'error.fileUnreadable':
     'Diese Datei konnte nicht geöffnet werden. Lade sie zuerst auf dein Handy herunter (zum Beispiel in „Downloads“) und wähle sie dort aus – oder fotografiere das Dokument mit „Mit der Kamera scannen“.',
   'error.photoLimit': 'Du hast die höchste Anzahl an Fotos erreicht.',
-  'error.photoRequired': 'Ein veröffentlichtes Profil braucht ein Profilfoto.',
   'error.checkPending': 'Dieses Dokument wird bereits geprüft.',
   'f.name': 'Name und Nachname',
   'f.type': 'Anbieterart',

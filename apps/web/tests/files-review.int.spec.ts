@@ -11,7 +11,6 @@ const profileRoute = await import('../app/app-api/v1/provider-profile/route')
 const publish = await import('../app/app-api/v1/provider-profile/publish/route')
 const services = await import('../app/app-api/v1/services/route')
 const photos = await import('../app/app-api/v1/photos/route')
-const photo = await import('../app/app-api/v1/photos/[id]/route')
 const files = await import('../app/app-api/v1/files/route')
 const file = await import('../app/app-api/v1/files/[id]/route')
 const verifications = await import('../app/app-api/v1/verifications/route')
@@ -207,16 +206,6 @@ it('replacing the profile photo of a published profile works', async () => {
   expect((await photoRows('rv6'))[0]).toMatchObject({ id: fresh })
   expect(await photoRows('rv6')).toHaveLength(1)
   expect(keys('media')).toHaveLength(1)
-})
-
-it('deleting the profile photo while publishing never leaves a published profile without a photo', async () => {
-  for (const uid of ['rv7', 'rv8']) {
-    const id = (await (await sendPhoto(uid, 'profile')).json()).id
-    await call(services.POST, uid, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
-    await Promise.all([call(photo.DELETE, uid, 'DELETE', undefined, { id }), call(publish.POST, uid, 'POST')])
-    const row = (await pool.query("SELECT status, (SELECT count(*)::int FROM photos WHERE owner_id = $1 AND kind = 'profile') AS pics FROM providers WHERE owner_id = $1", [uid])).rows[0]
-    expect(row.status === 'published' && row.pics === 0).toBe(false)
-  }
 })
 
 it('two simultaneous submits for one requirement give one 201 and one 409', async () => {

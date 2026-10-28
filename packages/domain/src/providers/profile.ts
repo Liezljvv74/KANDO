@@ -1,5 +1,5 @@
-import { and, eq, sql } from 'drizzle-orm'
-import { lookupPostcode, photos, providers, services, users, type Tx } from '@kando/db'
+import { eq, sql } from 'drizzle-orm'
+import { lookupPostcode, providers, services, users, type Tx } from '@kando/db'
 import type { Missing, MyProfile, ProfileInput } from '@kando/contract'
 import { fail } from './http'
 import { publicNameFor } from './public-name'
@@ -37,17 +37,15 @@ export const lockProfile = (tx: Tx, userId: string) =>
 
 const blank = (v: string | null | undefined) => !v?.trim()
 
-/** The one list of what a profile still needs before Publish, in the order of `MissingSchema`. */
+/** The one list of what a profile still needs before Publish, in the order of `MissingSchema`. The picture is optional (it is not on the list). */
 export function completeness(
   row: Row,
   services: { categoryId: string | null; priceType: string | null; price: string | null }[],
-  hasPhoto: boolean,
   hasName: boolean,
 ): Missing[] {
   const biz = row.type === 'business'
   const m: [Missing, boolean][] = [
     ['name', !hasName],
-    ['photo', !hasPhoto],
     ['service', !services.some((s) => s.categoryId && s.priceType && (s.priceType === 'on-request' || s.price !== null))],
     ['providerType', row.type === null],
     ['businessName', biz && blank(row.businessName)],
@@ -63,9 +61,8 @@ export function completeness(
 /** The profile as the app sees it, with its completeness list. */
 async function view(tx: Tx, userId: string, row: Row): Promise<MyProfile> {
   const svc = await tx.select({ categoryId: services.categoryId, priceType: services.priceType, price: services.price }).from(services).where(eq(services.providerId, row.id))
-  const pic = (await tx.select({ id: photos.id }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
   const person = (await tx.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId)))[0]
-  return toMyProfile(row, completeness(row, svc, !!pic, !!person?.first?.trim() && !!person?.last?.trim()))
+  return toMyProfile(row, completeness(row, svc, !!person?.first?.trim() && !!person?.last?.trim()))
 }
 
 export async function getMyProfile(tx: Tx, userId: string): Promise<MyProfile | null> {
