@@ -24,7 +24,7 @@ CREATE TABLE "messages" (
 	"card" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "messages_kind_check" CHECK (kind in ('text','photo','card')),
-	CONSTRAINT "messages_content_check" CHECK ((kind = 'text' AND body IS NOT NULL) OR (kind = 'photo' AND photo_key IS NOT NULL) OR (kind = 'card' AND card IS NOT NULL))
+	CONSTRAINT "messages_content_check" CHECK ((kind = 'text' AND body IS NOT NULL AND body <> '' AND photo_key IS NULL AND card IS NULL) OR (kind = 'photo' AND photo_key IS NOT NULL AND body IS NULL AND card IS NULL) OR (kind = 'card' AND card IS NOT NULL AND body IS NULL AND photo_key IS NULL))
 );
 --> statement-breakpoint
 CREATE TABLE "staff_flags" (
@@ -64,5 +64,5 @@ ALTER TABLE "threads" ADD CONSTRAINT "threads_booking_id_bookings_id_fk" FOREIGN
 ALTER TABLE "threads" ADD CONSTRAINT "threads_customer_id_users_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "threads" ADD CONSTRAINT "threads_provider_id_providers_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."providers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "messages_thread_id_created_at_idx" ON "messages" USING btree ("thread_id","created_at","id");--> statement-breakpoint
-CREATE UNIQUE INDEX "staff_flags_open_idx" ON "staff_flags" USING btree ("kind","ref_id","user_id") WHERE resolved_at IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "staff_flags_open_idx" ON "staff_flags" USING btree ("kind","ref_id",coalesce("user_id", '')) WHERE resolved_at IS NULL;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_kind_check" CHECK (kind in ('profile-live','request-received','quote-received','booking-proposed','booking-accepted','booking-declined','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','pending-slot-requested','message-received'));

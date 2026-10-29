@@ -98,3 +98,61 @@ it('the block also holds when the provider profile is hidden from the customer (
   await pool.query('DELETE FROM blocks')
   await pool.query("UPDATE providers SET status = 'published' WHERE id = $1", [providerId])
 })
+
+it('is_blocked answers only for a caller who is one of the two; a third user probing gets false', async () => {
+  await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [ids.owner, ids.customer])
+  const probe = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, async (tx) => (await tx.execute(q)).rows[0]!.b)
+  const byUser = sql`SELECT is_blocked(${ids.owner}, ${ids.customer}) AS b`
+  const byProvider = sql`SELECT is_blocked(${ids.customer}, ${providerId}::uuid) AS b`
+  expect(await probe(ids.customer, byUser)).toBe(true)
+  expect(await probe(ids.owner, byUser)).toBe(true)
+  expect(await probe(ids.other, byUser)).toBe(false)
+  expect(await probe(null, byUser)).toBe(false)
+  expect(await probe(ids.customer, byProvider)).toBe(true)
+  expect(await probe(ids.owner, byProvider)).toBe(true)
+  expect(await probe(ids.other, byProvider)).toBe(false)
+  await pool.query('DELETE FROM blocks')
+})
+
+it('app_user cannot insert a card message (cards are written by the domain on the owner connection)', async () => {
+  await expect(
+    run(ids.owner, sql`INSERT INTO messages (thread_id, sender_id, kind, card) VALUES (${threadId}, ${ids.owner}, 'card', '{"type":"acceptance","refId":"x"}'::jsonb)`),
+  ).rejects.toMatchObject(rls)
+  await expect(run(ids.owner, sql`INSERT INTO messages (thread_id, sender_id, kind, photo_key) VALUES (${threadId}, ${ids.owner}, 'photo', 'chat/x.jpg')`)).resolves.toBeTruthy()
+})
+
+it('messages hold the content of their kind only', async () => {
+  const raw = (kind: string, body: string | null, key: string | null, card: string | null) =>
+    pool.query('INSERT INTO messages (thread_id, sender_id, kind, body, photo_key, card) VALUES ($1, $2, $3, $4, $5, $6::jsonb)', [threadId, ids.customer, kind, body, key, card])
+  await expect(raw('text', '', null, null)).rejects.toThrow() // empty body
+  await expect(raw('text', 'x', 'k', null)).rejects.toThrow() // text with a photo key
+  await expect(raw('photo', 'x', 'k', null)).rejects.toThrow() // photo with a body
+  await expect(raw('card', null, 'k', '{"type":"quote","refId":"r"}')).rejects.toThrow() // card with a photo key
+  await expect(raw('card', null, null, '{"type":"quote","refId":"r"}')).resolves.toBeTruthy()
+})
+
+it('threads: a booking thread passes the policy, a forged booking does not; exactly one parent; one thread per request', async () => {
+  const bookingOf = async (customer: string, provider: string) =>
+    (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, currency, on_site) VALUES ($1, $2, 'direct', 'proposed', now() + interval '3 days', 60, 50, 'EUR', false) RETURNING id", [customer, provider])).rows[0].id
+  const mine = await bookingOf(ids.customer, providerId)
+  const theirs = await bookingOf(ids.other, otherProviderId)
+  const open = (uid: string, booking: string) => run(uid, sql`INSERT INTO threads (booking_id, customer_id, provider_id) VALUES (${booking}, ${ids.customer}, ${providerId})`)
+  await expect(open(ids.customer, theirs)).rejects.toMatchObject(rls) // someone else's booking
+  await expect(open(ids.customer, mine)).resolves.toBeTruthy()
+  const both = (await pool.query('SELECT $1::uuid AS r', [requestId])).rows[0].r
+  await expect(pool.query('INSERT INTO threads (customer_id, provider_id) VALUES ($1, $2)', [ids.customer, providerId])).rejects.toThrow() // no parent
+  await expect(pool.query('INSERT INTO threads (request_id, booking_id, customer_id, provider_id) VALUES ($1, $2, $3, $4)', [both, mine, ids.customer, providerId])).rejects.toThrow() // two parents
+  await expect(run(ids.customer, sql`INSERT INTO threads (request_id, customer_id, provider_id) VALUES (${requestId}, ${ids.customer}, ${providerId})`)).rejects.toThrow() // second thread for the request
+})
+
+it('app_user cannot insert into staff_flags or contact_attempts either', async () => {
+  await expect(run(ids.owner, sql`INSERT INTO staff_flags (kind, ref_id) VALUES ('message-reported', 'x')`)).rejects.toMatchObject(denied)
+  await expect(run(ids.owner, sql`INSERT INTO contact_attempts (user_id, hit, text) VALUES (${ids.owner}, 'phone', 'x')`)).rejects.toMatchObject(denied)
+})
+
+it('one open staff flag per kind, ref and user, also when the user is NULL', async () => {
+  const flag = (user: string | null) => pool.query("INSERT INTO staff_flags (kind, ref_id, user_id) VALUES ('message-reported', 'dup', $1)", [user])
+  await flag(null)
+  await expect(flag(null)).rejects.toThrow()
+  await pool.query("DELETE FROM staff_flags WHERE ref_id = 'dup'")
+})

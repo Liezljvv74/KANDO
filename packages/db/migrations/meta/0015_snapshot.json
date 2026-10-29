@@ -1,5 +1,5 @@
 {
-  "id": "02c4e8ed-7050-4151-9263-a24a7b7afb9d",
+  "id": "cc3eb606-d96a-4293-a114-af60ffdb7f49",
   "prevId": "0df778b5-5132-46a0-a19a-e7dce1a7a713",
   "version": "7",
   "dialect": "postgresql",
@@ -2430,7 +2430,7 @@
         },
         "messages_content_check": {
           "name": "messages_content_check",
-          "value": "(kind = 'text' AND body IS NOT NULL) OR (kind = 'photo' AND photo_key IS NOT NULL) OR (kind = 'card' AND card IS NOT NULL)"
+          "value": "(kind = 'text' AND body IS NOT NULL AND body <> '' AND photo_key IS NULL AND card IS NULL) OR (kind = 'photo' AND photo_key IS NOT NULL AND body IS NULL AND card IS NULL) OR (kind = 'card' AND card IS NOT NULL AND body IS NULL AND photo_key IS NULL)"
         }
       },
       "isRLSEnabled": false
@@ -2507,9 +2507,9 @@
               "nulls": "last"
             },
             {
-              "expression": "user_id",
-              "isExpression": false,
+              "expression": "coalesce(\"user_id\", '')",
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],

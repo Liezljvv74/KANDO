@@ -29,7 +29,6 @@ export const INSERT_RULES: Record<string, string> = {
   quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id)`,
 }
 
-// Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
 const PARTY = `customer_id = app_current_user_id() OR ${OWN_SERVICE}`
 // A message's thread, as t: the caller is a party of it.
 const IN_MY_THREAD = (extra = 'true') => `EXISTS (SELECT 1 FROM threads t WHERE t.id = messages.thread_id AND (t.customer_id = app_current_user_id() OR EXISTS (SELECT 1 FROM providers p WHERE p.id = t.provider_id AND p.owner_id = app_current_user_id())) AND ${extra})`
@@ -44,10 +43,12 @@ export const APPEND_ONLY_TABLES: Record<string, { read: string; insert: string }
   },
   messages: {
     read: IN_MY_THREAD(),
-    insert: `sender_id = app_current_user_id() AND ${IN_MY_THREAD('NOT is_blocked(t.customer_id, t.provider_id)')}`,
+    // Cards (quote, acceptance, ...) carry money: the domain writes them on the owner connection, never the app role.
+    insert: `kind IN ('text', 'photo') AND sender_id = app_current_user_id() AND ${IN_MY_THREAD('NOT is_blocked(t.customer_id, t.provider_id)')}`,
   },
 }
 
+// Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
 export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
   requests: ['customer_id', 'provider_id'],
   quotes: ['request_id', 'provider_id'],
@@ -307,11 +308,12 @@ const TRANSLATION_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION prune_translation_requests() TO ${APP_ROLE}`,
 ]
 
-// Blocks are private to the blocker, so the check that must see both directions runs as the table owner. Returns a boolean only.
+// Blocks are private to the blocker, so the check that must see both directions runs as the table owner. Returns a boolean only,
+// and only answers for a caller who is one of the two (anyone else, and the owner connection without app.user_id, gets false).
 const BLOCK_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION is_blocked(p_a text, p_b text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-      SELECT EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = p_a AND blocked_id = p_b) OR (blocker_id = p_b AND blocked_id = p_a)) $$`,
+      SELECT coalesce(app_current_user_id() IN (p_a, p_b), false) AND EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = p_a AND blocked_id = p_b) OR (blocker_id = p_b AND blocked_id = p_a)) $$`,
   // The provider's owner by provider id: a draft or suspended provider is invisible to the customer under RLS, so the policy cannot look the owner up itself.
   `CREATE OR REPLACE FUNCTION is_blocked(p_user text, p_provider uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$

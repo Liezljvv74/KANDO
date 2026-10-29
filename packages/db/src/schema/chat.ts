@@ -45,7 +45,7 @@ export const messages = pgTable(
   },
   (t) => [
     check('messages_kind_check', sql`kind in ('text','photo','card')`),
-    check('messages_content_check', sql`(kind = 'text' AND body IS NOT NULL) OR (kind = 'photo' AND photo_key IS NOT NULL) OR (kind = 'card' AND card IS NOT NULL)`),
+    check('messages_content_check', sql`(kind = 'text' AND body IS NOT NULL AND body <> '' AND photo_key IS NULL AND card IS NULL) OR (kind = 'photo' AND photo_key IS NOT NULL AND body IS NULL AND card IS NULL) OR (kind = 'card' AND card IS NOT NULL AND body IS NULL AND photo_key IS NULL)`),
     index('messages_thread_id_created_at_idx').on(t.threadId, t.createdAt, t.id),
   ],
 )
@@ -65,7 +65,7 @@ export const blocks = pgTable(
   (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] })],
 )
 
-// Staff only (rls.ts). Later plans widen the kind list.
+// Staff only (rls.ts). Later plans widen the kind list. The open-flag index folds a NULL user to '' (drizzle-kit has no NULLS NOT DISTINCT on indexes yet).
 export const staffFlags = pgTable(
   'staff_flags',
   {
@@ -80,7 +80,7 @@ export const staffFlags = pgTable(
   },
   (t) => [
     check('staff_flags_kind_check', sql`kind in ('contact-attempts','message-reported')`),
-    uniqueIndex('staff_flags_open_idx').on(t.kind, t.refId, t.userId).where(sql`resolved_at IS NULL`),
+    uniqueIndex('staff_flags_open_idx').on(t.kind, t.refId, sql`coalesce(${t.userId}, '')`).where(sql`resolved_at IS NULL`),
   ],
 )
 
