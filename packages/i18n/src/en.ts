@@ -590,7 +590,7 @@ export const en: Record<Key, string> = {
   'error.booking.quote-expired': 'This quote has expired.',
   'error.booking.quote-not-open': 'This quote can no longer be accepted.',
   'error.booking.request-closed': 'This request is closed.',
-  'error.booking.request-limit': 'You already have an open request with this provider. Wait for the answer or withdraw it.',
+  'error.booking.request-limit': 'You already have an open request with this provider. Wait for the answer from the provider. An unanswered request expires on its own after a few days.',
   'error.booking.daily-limit': 'You have sent a lot of requests today. Please try again tomorrow.',
   'error.booking.unknown-service': 'This service no longer exists.',
   'booking.descriptionMissing': 'Please describe briefly what needs to be done.',

@@ -65,7 +65,7 @@ export function findContactDetails(text: string): ContactHit | null {
     .normalize('NFKC')
     .toLowerCase()
     // invisible characters, variation selector and keycap mark (keycap digits fold to digits)
-    .replace(/[\u200b-\u200f\u2060\ufeff\u00ad\ufe0f\u20e3]/g, '')
+    .replace(/[\u200b-\u200f\u2060\ufeff\u00ad]|\ufe0f|\u20e3/g, '')
     // en/em/figure dash and minus sign read as a hyphen
     .replace(/[\u2010-\u2015\u2212]/g, '-')
     // pictographs between digits read as spaces

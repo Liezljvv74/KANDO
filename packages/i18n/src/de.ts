@@ -589,7 +589,7 @@ export const de = {
   'error.booking.quote-expired': 'Dieses Angebot ist abgelaufen.',
   'error.booking.quote-not-open': 'Dieses Angebot kann nicht mehr angenommen werden.',
   'error.booking.request-closed': 'Diese Anfrage ist geschlossen.',
-  'error.booking.request-limit': 'Du hast bei diesem Anbieter schon eine offene Anfrage. Warte auf die Antwort oder ziehe sie zurück.',
+  'error.booking.request-limit': 'Du hast bei diesem Anbieter schon eine offene Anfrage. Warte auf die Antwort des Anbieters. Eine unbeantwortete Anfrage läuft nach einigen Tagen von selbst ab.',
   'error.booking.daily-limit': 'Du hast heute schon sehr viele Anfragen gesendet. Bitte versuche es morgen wieder.',
   'error.booking.unknown-service': 'Diese Leistung gibt es nicht mehr.',
   'booking.descriptionMissing': 'Bitte beschreibe kurz, was gemacht werden soll.',
