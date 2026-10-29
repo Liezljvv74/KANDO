@@ -20,6 +20,7 @@
     "drizzle-orm": "0.45.4",
     "resend": "6.34.1",
     "sharp": "0.34.5",
+    "stripe": "23.0.1",
     "tinyld": "1.3.4"
   },
   "devDependencies": {
