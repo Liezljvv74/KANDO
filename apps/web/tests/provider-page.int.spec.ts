@@ -157,6 +157,14 @@ describe('translate link', () => {
         JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }),
       )
     })
+    const calls = vi.mocked(global.fetch)
+    // A plain page view never calls the model: nothing is stored yet, so the original shows.
+    expect(await render(deSlug, { lang: 'en', translate: '1' })).not.toContain('TRANSLATED')
+    expect(calls).not.toHaveBeenCalled()
+    // The button asks the translation route (the one paid call); the page then shows what was stored.
+    const { GET } = await import('../app/app-api/v1/providers/[slug]/translation/route')
+    expect((await GET(new Request(`http://localhost/app-api/v1/providers/${deSlug}/translation?lang=en`), { params: Promise.resolve({ slug: deSlug }) })).status).toBe(200)
+    expect(calls).toHaveBeenCalled()
     const html = await render(deSlug, { lang: 'en', translate: '1' })
     expect(html).toContain('TRANSLATED')
     expect(html).toContain('Automatically translated (AI) · Show original')
