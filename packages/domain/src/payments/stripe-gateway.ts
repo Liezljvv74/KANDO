@@ -49,7 +49,8 @@ const INTEGRATION_ID = 'kando-booking-pay-qzvhkmrt'
 const MIN_EXPIRY_MS = 30.5 * 60_000
 const MAX_EXPIRY_MS = 24 * 3_600_000
 
-export const stripeClient = (key: string): Stripe => new Stripe(key, { apiVersion: STRIPE_API_VERSION, maxNetworkRetries: 2 })
+// A hung call must not hold a booking row lock (settle) for minutes: 15 s per attempt, two retries (SDK default 80 s).
+export const stripeClient = (key: string): Stripe => new Stripe(key, { apiVersion: STRIPE_API_VERSION, maxNetworkRetries: 2, timeout: 15_000 })
 
 export function stripeGateway(client: Stripe): PaymentsGateway {
   return {
@@ -94,8 +95,8 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           mode: 'payment',
           line_items: [{ quantity: 1, price_data: { currency: i.currency.toLowerCase(), unit_amount: i.amountCents, product_data: { name: i.description } } }],
           client_reference_id: i.bookingId,
-          metadata: { bookingId: i.bookingId },
-          payment_intent_data: { transfer_group: i.bookingId, metadata: { bookingId: i.bookingId } },
+          metadata: { bookingId: i.bookingId, providerId: i.providerId },
+          payment_intent_data: { transfer_group: i.bookingId, metadata: { bookingId: i.bookingId, providerId: i.providerId } },
           success_url: i.successUrl,
           cancel_url: i.cancelUrl,
           expires_at: Math.floor(i.expiresAt.getTime() / 1000),
@@ -107,7 +108,11 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
       return { sessionId: session.id, url: session.url }
     },
 
+    // Stripe keeps idempotency keys for 24 h; a settlement retried later finds its earlier movement by the key in metadata.
+    // ponytail: one page of 100 per booking (a booking has one transfer and a handful of refunds).
     async transfer(i) {
+      const existing = (await client.transfers.list({ transfer_group: i.bookingId, limit: 100 })).data.find((t) => t.metadata?.idempotencyKey === i.idempotencyKey)
+      if (existing) return { transferId: existing.id }
       const intent = await client.paymentIntents.retrieve(i.paymentRef)
       if (intent.status !== 'succeeded') throw new Error(`PaymentIntent ${i.paymentRef} has not succeeded (${intent.status})`)
       const charge = typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id
@@ -119,7 +124,7 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           destination: i.accountId,
           source_transaction: charge,
           transfer_group: i.bookingId,
-          metadata: { bookingId: i.bookingId },
+          metadata: { bookingId: i.bookingId, idempotencyKey: i.idempotencyKey },
         },
         { idempotencyKey: i.idempotencyKey },
       )
@@ -127,7 +132,12 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
     },
 
     async refund(i) {
-      const refund = await client.refunds.create({ payment_intent: i.paymentRef, amount: i.amountCents }, { idempotencyKey: i.idempotencyKey })
+      const existing = (await client.refunds.list({ payment_intent: i.paymentRef, limit: 100 })).data.find((r) => r.metadata?.idempotencyKey === i.idempotencyKey)
+      if (existing) return { refundId: existing.id }
+      const refund = await client.refunds.create(
+        { payment_intent: i.paymentRef, amount: i.amountCents, metadata: { bookingId: i.bookingId, idempotencyKey: i.idempotencyKey } },
+        { idempotencyKey: i.idempotencyKey },
+      )
       return { refundId: refund.id }
     },
 

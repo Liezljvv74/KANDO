@@ -12,7 +12,7 @@ import { commissionFor, toCents } from './rules'
  * rest of what was paid back to the customer. Owner connection only (released_at is staff only: the update below fails
  * for app_user before any money moves). The caller sets the booking status (plan 2d). The commission needs no gateway
  * call: it is the part of the charge that stays on the platform; its ledger row records it.
- * 404 unknown booking; 409 NOT_PAID; 409 ALREADY_SETTLED once released_at is set; 400 share not 0..paid in whole cents;
+ * 404 unknown booking; 409 NOT_PAID; 409 NO_CHARGE (paid_at set but no charge in the ledger); 409 ALREADY_SETTLED once released_at is set; 400 share not 0..paid in whole cents;
  * 409 NO_PAYOUT_ACCOUNT when a transfer is due and the provider has no payout account; 409 SETTLEMENT_MISMATCH when an
  * earlier, partly done run moved a different split.
  *
@@ -22,13 +22,11 @@ import { commissionFor, toCents } from './rules'
  * released_at and the commission row commit together at the end. "Settled" means released_at is set, not "has rows".
  *   crash / failure point                          | left behind                    | the retry (a timer)
  *   before or during the refund call               | nothing                        | runs everything
- *   refund done, crash before its ledger row       | nothing in the ledger          | refund again, same key: Stripe replays it (keys live >= 24 h; see ponytail)
- *   refund row written, transfer fails             | refund row, released_at null   | skips the refund, transfers, commission, release
- *   transfer done, crash before its ledger row     | refund row                     | transfer again, same key: replayed
+ *   refund done, crash before its ledger row       | nothing in the ledger          | refund again, same key: replayed inside 24 h, found by its metadata key after (gateway)
+ *   refund row written, transfer fails             | refund row, released_at null   | skips the refund (no call), transfers, commission, release
+ *   transfer done, crash before its ledger row     | refund row                     | transfer again, same key: replayed or found (gateway)
  *   both rows written, commit fails                | refund + transfer rows         | writes the commission row and released_at only
  *   the caller's transaction rolls back afterwards | refund + transfer rows         | as above
- * ponytail: the "crash between gateway success and ledger row" window relies on the gateway's idempotency key; a retry
- * more than 24 h later could repeat that one movement. Upgrade: look up the refund/transfer by key metadata before calling.
  * ponytail: holds a second pool connection while the first holds the lock; settle bookings one at a time (timer loop),
  * a parallel fan-out needs pool headroom.
  */
@@ -46,6 +44,7 @@ export async function settle(exec: Exec, bookingId: string, providerShare: numbe
       (await tx.select({ key: ledgerEntries.idempotencyKey, amount: ledgerEntries.amount }).from(ledgerEntries).where(inArray(ledgerEntries.idempotencyKey, Object.values(key)))).map((r) => [r.key, toCents(Number(r.amount))]),
     )
     const paidC = toCents(await paidAmount(tx, b.id)) + (done.get(key.refund) ?? 0) // this settlement's own refund does not count against it
+    if (paidC <= 0) fail(409, { error: 'NO_CHARGE' }) // paid_at without a charge row: a data error, nothing may be released
     if (!(Number.isFinite(providerShare) && providerShare >= 0 && providerShare <= paidC / 100) || toCents(providerShare) / 100 !== providerShare) fail(400, { error: 'INVALID_SHARE' })
     const shareC = toCents(providerShare)
     const commissionC = toCents(commissionFor(providerShare, Number(b.commissionRate)))
@@ -62,7 +61,7 @@ export async function settle(exec: Exec, bookingId: string, providerShare: numbe
     await tx.update(bookings).set({ releasedAt: new Date() }).where(eq(bookings.id, b.id))
     const row = { bookingId: b.id, providerId: b.providerId, currency: b.currency }
     if (due(key.refund)) {
-      const { refundId } = await gateway().refund({ paymentRef: b.paymentRef, amountCents: plan[key.refund]!, idempotencyKey: key.refund })
+      const { refundId } = await gateway().refund({ paymentRef: b.paymentRef, amountCents: plan[key.refund]!, bookingId: b.id, idempotencyKey: key.refund })
       await addLedger(db, { ...row, kind: 'refund', amount: plan[key.refund]! / 100, gatewayRef: refundId, idempotencyKey: key.refund })
     }
     if (due(key.transfer)) {

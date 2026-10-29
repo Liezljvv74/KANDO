@@ -13,9 +13,13 @@ export interface PaymentsGateway {
    * idempotency key sends the same parameters (Stripe refuses a reused key with different ones). The caller computes the
    * expiry once, stores it with the session (checkoutRef) and, while that session is still open, reuses it instead of
    * calling again; a new session needs a new key.
+   * `providerId` goes into the session's and the PaymentIntent's metadata: a booking can be deleted with an account while
+   * the customer pays (awaiting-payment does not block deletion), and the Task 4 webhook must still refund that charge and
+   * write its ledger rows (charge, refund) with the provider id although the booking row is gone.
    */
   createCheckout(i: {
     bookingId: string
+    providerId: string
     amountCents: number
     currency: string
     description: string
@@ -24,8 +28,14 @@ export interface PaymentsGateway {
     expiresAt: Date
     idempotencyKey: string
   }): Promise<{ sessionId: string; url: string }>
+  /**
+   * transfer and refund are safe to repeat at any age with the same key: inside the gateway's idempotency window (Stripe:
+   * 24 h) the key replays the first result; after it, an existing transfer/refund carrying the key in its metadata is
+   * found and returned instead of making another. A key names one logical movement: a further staff refund needs its own
+   * key (e.g. `staff-refund:<bookingId>:<n>`).
+   */
   transfer(i: { accountId: string; amountCents: number; currency: string; paymentRef: string; bookingId: string; idempotencyKey: string }): Promise<{ transferId: string }>
-  refund(i: { paymentRef: string; amountCents: number; idempotencyKey: string }): Promise<{ refundId: string }>
+  refund(i: { paymentRef: string; amountCents: number; bookingId: string; idempotencyKey: string }): Promise<{ refundId: string }>
   /** Throws on a bad signature. */
   verifyEvent(rawBody: string, signature: string): GatewayEvent
 }

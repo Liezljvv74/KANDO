@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { STRIPE_API_VERSION, stripeGateway } from './stripe-gateway'
+import { STRIPE_API_VERSION, stripeClient, stripeGateway } from './stripe-gateway'
 
 const SECRET = 'whsec_test_fake'
 const CONNECT_SECRET = 'whsec_test_fake_connect'
@@ -17,15 +17,17 @@ function mockClient() {
     sessionsCreate: vi.fn().mockResolvedValue({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }),
     paymentIntentsRetrieve: vi.fn().mockResolvedValue({ id: 'pi_1', status: 'succeeded', latest_charge: 'ch_1' }),
     transfersCreate: vi.fn().mockResolvedValue({ id: 'tr_1' }),
+    transfersList: vi.fn().mockResolvedValue({ data: [] }),
     refundsCreate: vi.fn().mockResolvedValue({ id: 're_1' }),
+    refundsList: vi.fn().mockResolvedValue({ data: [] }),
   }
   const client = {
     v2: { core: { accounts: { create: m.accountsCreate, retrieve: m.accountsRetrieve }, accountLinks: { create: m.accountLinksCreate } } },
     balanceSettings: { update: m.balanceSettingsUpdate },
     checkout: { sessions: { create: m.sessionsCreate } },
     paymentIntents: { retrieve: m.paymentIntentsRetrieve },
-    transfers: { create: m.transfersCreate },
-    refunds: { create: m.refundsCreate },
+    transfers: { create: m.transfersCreate, list: m.transfersList },
+    refunds: { create: m.refundsCreate, list: m.refundsList },
     webhooks: real.webhooks,
   } as unknown as Stripe
   return { m, g: stripeGateway(client) }
@@ -105,6 +107,7 @@ describe('stripeGateway: calls', () => {
       cancelUrl: 'https://k/cancel',
       expiresAt,
       idempotencyKey: 'checkout:b-1:x',
+      providerId: 'p-1',
     })
     expect(r).toEqual({ sessionId: 'cs_1', url: 'https://checkout.stripe.test/cs_1' })
     const [params, opts] = m.sessionsCreate.mock.calls[0]!
@@ -113,8 +116,9 @@ describe('stripeGateway: calls', () => {
       mode: 'payment',
       line_items: [{ quantity: 1, price_data: { currency: 'eur', unit_amount: 12_345, product_data: { name: 'Garden work' } } }],
       client_reference_id: 'b-1',
-      metadata: { bookingId: 'b-1' },
-      payment_intent_data: { transfer_group: 'b-1', metadata: { bookingId: 'b-1' } },
+      // providerId too: the payment webhook can record a refund of a booking deleted while the customer paid
+      metadata: { bookingId: 'b-1', providerId: 'p-1' },
+      payment_intent_data: { transfer_group: 'b-1', metadata: { bookingId: 'b-1', providerId: 'p-1' } },
       success_url: 'https://k/done',
       cancel_url: 'https://k/cancel',
       expires_at: Math.floor(expiresAt.getTime() / 1000),
@@ -124,7 +128,7 @@ describe('stripeGateway: calls', () => {
 
   it('createCheckout never changes expiresAt: the same input gives the same parameters (idempotent retry)', async () => {
     const { m, g } = mockClient()
-    const base = { bookingId: 'b', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
+    const base = { bookingId: 'b', providerId: 'p', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
     const expiresAt = new Date(Date.now() + 2 * 3_600_000)
     await g.createCheckout({ ...base, expiresAt })
     await new Promise((r) => setTimeout(r, 1100)) // a retry a second later
@@ -135,7 +139,7 @@ describe('stripeGateway: calls', () => {
 
   it('createCheckout refuses an expiresAt outside 30 minutes to 24 hours from now (RangeError, no call)', async () => {
     const { m, g } = mockClient()
-    const base = { bookingId: 'b', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
+    const base = { bookingId: 'b', providerId: 'p', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
     const at = (ms: number) => ({ ...base, expiresAt: new Date(Date.now() + ms) })
     await expect(g.createCheckout(at(29 * 60_000))).rejects.toThrow(RangeError)
     await expect(g.createCheckout(at(24 * 3_600_000 + 60_000))).rejects.toThrow(RangeError)
@@ -151,9 +155,19 @@ describe('stripeGateway: calls', () => {
     expect(r).toEqual({ transferId: 'tr_1' })
     expect(m.paymentIntentsRetrieve).toHaveBeenCalledWith('pi_1')
     expect(m.transfersCreate).toHaveBeenCalledWith(
-      { amount: 8800, currency: 'eur', destination: 'acct_1', source_transaction: 'ch_1', transfer_group: 'b-1', metadata: { bookingId: 'b-1' } },
+      { amount: 8800, currency: 'eur', destination: 'acct_1', source_transaction: 'ch_1', transfer_group: 'b-1', metadata: { bookingId: 'b-1', idempotencyKey: 'transfer:b-1' } },
       { idempotencyKey: 'transfer:b-1' },
     )
+  })
+
+  it('transfer returns an existing transfer of the booking with the same key and creates nothing (a retry after the 24 h key window)', async () => {
+    const { m, g } = mockClient()
+    m.transfersList.mockResolvedValueOnce({ data: [{ id: 'tr_other', metadata: { idempotencyKey: 'x' } }, { id: 'tr_old', metadata: { bookingId: 'b-1', idempotencyKey: 'transfer:b-1' } }] })
+    const r = await g.transfer({ accountId: 'acct_1', amountCents: 8800, currency: 'EUR', paymentRef: 'pi_1', bookingId: 'b-1', idempotencyKey: 'transfer:b-1' })
+    expect(r).toEqual({ transferId: 'tr_old' })
+    expect(m.transfersList).toHaveBeenCalledWith({ transfer_group: 'b-1', limit: 100 })
+    expect(m.transfersCreate).not.toHaveBeenCalled()
+    expect(m.paymentIntentsRetrieve).not.toHaveBeenCalled()
   })
 
   it('transfer refuses a PaymentIntent that has not succeeded or has no charge', async () => {
@@ -168,8 +182,22 @@ describe('stripeGateway: calls', () => {
 
   it('refund refunds the PaymentIntent with the idempotency key', async () => {
     const { m, g } = mockClient()
-    expect(await g.refund({ paymentRef: 'pi_1', amountCents: 500, idempotencyKey: 'refund:b-1' })).toEqual({ refundId: 're_1' })
-    expect(m.refundsCreate).toHaveBeenCalledWith({ payment_intent: 'pi_1', amount: 500 }, { idempotencyKey: 'refund:b-1' })
+    expect(await g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' })).toEqual({ refundId: 're_1' })
+    expect(m.refundsList).toHaveBeenCalledWith({ payment_intent: 'pi_1', limit: 100 })
+    expect(m.refundsCreate).toHaveBeenCalledWith({ payment_intent: 'pi_1', amount: 500, metadata: { bookingId: 'b-1', idempotencyKey: 'refund:b-1' } }, { idempotencyKey: 'refund:b-1' })
+  })
+
+  it('refund returns an existing refund of the PaymentIntent with the same key and creates nothing (a retry after the 24 h key window)', async () => {
+    const { m, g } = mockClient()
+    m.refundsList.mockResolvedValueOnce({ data: [{ id: 're_staff', metadata: { idempotencyKey: 'staff-refund:b-1:1' } }, { id: 're_old', metadata: { idempotencyKey: 'refund:b-1' } }] })
+    expect(await g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' })).toEqual({ refundId: 're_old' })
+    expect(m.refundsCreate).not.toHaveBeenCalled()
+  })
+
+  it('the client times out a hung call after 15 s and retries at most twice (a hung call holds the booking lock)', () => {
+    const c = stripeClient('sk_test_fake')
+    expect(c.getApiField('timeout')).toBe(15_000)
+    expect(c.getMaxNetworkRetries()).toBe(2)
   })
 })
 

@@ -88,12 +88,17 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     if (confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) fail(400, { error: 'EMAIL_MISMATCH' })
     if (user.staffRole === 'admin' && !activeAdmins(admins).some((a) => a.id !== userId)) fail(409, { error: 'LAST_ADMIN' })
     const own = tx.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, userId))
-    // Paid money is still open (not yet settled): refuse. The person's bookings (either side) are locked before the check, so
+    // Paid money is still open (paid and not released, whatever the status, or a money-open status): refuse. The person's bookings (either side) are locked before the check, so
     // the payment code cannot confirm one in between: its update waits for this transaction and then finds the row gone.
     // Lock order: Administrator set, the person, their bookings (by id); settlement and payment lock only a booking row
     // (payment after the provider's slot lock, which this never takes), so there is no cycle. Ledger rows are never touched.
-    const theirs = await tx.select({ status: bookings.status }).from(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`).orderBy(asc(bookings.id)).for('update')
-    if (theirs.some((b) => (MONEY_OPEN_STATUSES as readonly string[]).includes(b.status))) fail(409, { error: 'OPEN_BOOKINGS' })
+    const theirs = await tx
+      .select({ status: bookings.status, paidAt: bookings.paidAt, releasedAt: bookings.releasedAt })
+      .from(bookings)
+      .where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
+      .orderBy(asc(bookings.id))
+      .for('update')
+    if (theirs.some((b) => (b.paidAt && !b.releasedAt) || (MONEY_OPEN_STATUSES as readonly string[]).includes(b.status))) fail(409, { error: 'OPEN_BOOKINGS' })
     // Every object key first: after the rows are gone nothing says where the files are.
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))

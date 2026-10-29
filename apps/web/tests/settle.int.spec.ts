@@ -4,7 +4,7 @@ import { deleteAccount, setGatewayForTests, settle } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
-const U = { cust: 'st-cust', owner: 'st-owner', bare: 'st-bare' }
+const U = { cust: 'st-cust', owner: 'st-owner', bare: 'st-bare', cust2: 'st-cust2' }
 let providerId: string
 let bareProviderId: string
 let g: FakeGateway
@@ -14,6 +14,7 @@ beforeAll(async () => {
   await cleanupUsers()
   const { categoryId } = await seedBase()
   await seedUser(U.cust)
+  await seedUser(U.cust2)
   providerId = await seedProvider(U.owner, { name: 'St Owner', categoryId, price: 100 })
   bareProviderId = await seedProvider(U.bare, { name: 'St Bare', categoryId, price: 100 })
   await pool.query("UPDATE providers SET stripe_account_id = 'acct_st_1' WHERE id = $1", [providerId])
@@ -30,17 +31,17 @@ afterEach(() => {
 afterAll(cleanupUsers)
 
 /** A paid (confirmed) booking with its charge row, as the payment webhook leaves it. */
-async function paidBooking(o: { paid?: number; rate?: number; provider?: string } = {}): Promise<string> {
+async function paidBooking(o: { paid?: number | null; rate?: number; provider?: string; customer?: string } = {}): Promise<string> {
   const p = o.provider ?? providerId
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate)
        VALUES ($1, $2, $3, 'direct', 'confirmed', now() + make_interval(hours => $4), 60, now(), 'pi_st', $5) RETURNING id`,
-      [U.cust, p, service, 48 + ++hour * 2, o.rate ?? 0.12],
+      [o.customer ?? U.cust, p, service, 48 + ++hour * 2, o.rate ?? 0.12],
     )
   ).rows[0].id as string
-  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', $3, $4)", [id, p, o.paid ?? 100, `charge:${id}`])
+  if (o.paid !== null) await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', $3, $4)", [id, p, o.paid ?? 100, `charge:${id}`])
   return id
 }
 
@@ -68,7 +69,7 @@ it('settle zero: one refund of the full amount, no commission', async () => {
   const id = await paidBooking()
   expect(await settle(db, id, 0)).toEqual({ refunded: 100, transferred: 0, commission: 0 })
   expect(await rows(id)).toEqual({ refund: { amount: '100.00', key: `refund:${id}` } })
-  expect(callsOf('refund')).toEqual([{ paymentRef: 'pi_st', amountCents: 10000, idempotencyKey: `refund:${id}` }])
+  expect(callsOf('refund')).toEqual([{ paymentRef: 'pi_st', amountCents: 10000, bookingId: id, idempotencyKey: `refund:${id}` }])
   expect(callsOf('transfer')).toEqual([])
 })
 
@@ -90,7 +91,7 @@ it('settle partial 40 of 100 at 0.12: refund 60, transfer 35.20, commission 4.80
     transfer: { amount: '35.20', key: `transfer:${id}` },
     commission: { amount: '4.80', key: `commission:${id}` },
   })
-  expect(callsOf('refund')).toEqual([{ paymentRef: 'pi_st', amountCents: 6000, idempotencyKey: `refund:${id}` }])
+  expect(callsOf('refund')).toEqual([{ paymentRef: 'pi_st', amountCents: 6000, bookingId: id, idempotencyKey: `refund:${id}` }])
   expect(callsOf('transfer')).toMatchObject([{ amountCents: 3520, idempotencyKey: `transfer:${id}` }])
 })
 
@@ -129,12 +130,13 @@ it('settle twice writes the rows once (second call 409, gateway called once per 
 
 it('a gateway failure leaves released_at null and no rows', async () => {
   const id = await paidBooking()
-  g.transfer = async () => {
+  g.refund = async () => {
     throw new Error('gateway down')
   }
-  await expect(settle(db, id, 100)).rejects.toThrow('gateway down')
+  await expect(settle(db, id, 40)).rejects.toThrow('gateway down')
   expect(await releasedAt(id)).toBeNull()
   expect(await rows(id)).toEqual({})
+  expect(g.calls).toEqual([]) // nothing moved: no transfer is tried after a failed refund
 })
 
 it('a retry after a failure between refund and transfer completes without a second refund', async () => {
@@ -147,7 +149,9 @@ it('a retry after a failure between refund and transfer completes without a seco
   expect(await releasedAt(id)).toBeNull()
   expect(await rows(id)).toEqual({ refund: { amount: '60.00', key: `refund:${id}` } }) // the refund that happened is recorded
   g.transfer = transfer
+  expect(g.attempts.refund).toBe(1)
   expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 35.2, commission: 4.8 })
+  expect(g.attempts.refund).toBe(1) // the ledger row skips the refund: no call at all, not even a replay (safe after any delay)
   expect(callsOf('refund')).toHaveLength(1)
   expect(Object.keys(await rows(id)).sort()).toEqual(['commission', 'refund', 'transfer'])
   expect(await releasedAt(id)).not.toBeNull()
@@ -160,6 +164,44 @@ it('a retry after a failure between refund and transfer completes without a seco
   g.transfer = transfer
   expect(await refusal(settle(db, other, 50))).toEqual({ status: 409, body: { error: 'SETTLEMENT_MISMATCH' } })
   expect(callsOf('refund')).toHaveLength(2) // no refund of the new split
+})
+
+it('a crash between the gateway and the ledger row: the retry after the key window finds the existing refund and transfer', async () => {
+  // The ledger insert of one key fails (as a crash would) until the trigger is dropped; forgetKeys simulates a retry
+  // after Stripe's 24 h idempotency window, so only the gateway's lookup by key can prevent a second refund or transfer.
+  const failOn = async (key: string, fn: () => Promise<void>) => {
+    await pool.query(`CREATE FUNCTION settle_test_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.idempotency_key = '${key}' THEN RAISE EXCEPTION 'crash'; END IF; RETURN NEW; END $$`)
+    await pool.query('CREATE TRIGGER settle_test_fail BEFORE INSERT ON ledger_entries FOR EACH ROW EXECUTE FUNCTION settle_test_fail()')
+    try {
+      await fn()
+    } finally {
+      await pool.query('DROP TRIGGER settle_test_fail ON ledger_entries')
+      await pool.query('DROP FUNCTION settle_test_fail()')
+    }
+  }
+  for (const step of ['refund', 'transfer']) {
+    g = fakeGateway()
+    setGatewayForTests(g)
+    const id = await paidBooking()
+    await failOn(`${step}:${id}`, () => expect(settle(db, id, 40)).rejects.toMatchObject({ cause: { message: 'crash' } }))
+    expect(await releasedAt(id)).toBeNull()
+    g.forgetKeys()
+    expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 35.2, commission: 4.8 })
+    expect(callsOf('refund')).toHaveLength(1) // exactly one refund object and one transfer object exist
+    expect(callsOf('transfer')).toHaveLength(1)
+    expect(await rows(id)).toEqual({
+      refund: { amount: '60.00', key: `refund:${id}` },
+      transfer: { amount: '35.20', key: `transfer:${id}` },
+      commission: { amount: '4.80', key: `commission:${id}` },
+    })
+  }
+})
+
+it('a paid booking without a charge row is refused before anything is released', async () => {
+  const id = await paidBooking({ paid: null })
+  expect(await refusal(settle(db, id, 0))).toEqual({ status: 409, body: { error: 'NO_CHARGE' } })
+  expect(await releasedAt(id)).toBeNull()
+  expect(g.calls).toEqual([])
 })
 
 it('settle refuses a bad share, an unpaid and an unknown booking', async () => {
@@ -192,6 +234,16 @@ it('two parallel settles of the same booking: exactly one wins', async () => {
   expect(callsOf('refund')).toHaveLength(1)
   expect(callsOf('transfer')).toHaveLength(1)
   expect((await pool.query("SELECT count(*)::int n FROM ledger_entries WHERE booking_id = $1 AND kind <> 'charge'", [id])).rows[0].n).toBe(3)
+})
+
+it('deleting an account with paid, unsettled money in any status is 409 OPEN_BOOKINGS; once settled it is allowed', async () => {
+  const id = await paidBooking({ customer: U.cust2 })
+  await pool.query("UPDATE bookings SET status = 'expired' WHERE id = $1", [id]) // not a money-open status, but paid and not released
+  expect(await refusal(deleteAccount(U.cust2, EMAIL(U.cust2), () => {}))).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
+  await settle(db, id, 0)
+  await deleteAccount(U.cust2, EMAIL(U.cust2), () => {})
+  expect((await pool.query('SELECT count(*)::int n FROM users WHERE id = $1', [U.cust2])).rows[0].n).toBe(0)
+  expect((await pool.query('SELECT count(*)::int n FROM ledger_entries WHERE booking_id = $1', [id])).rows[0].n).toBe(2) // the money rows stay
 })
 
 it('deleting an account with a confirmed booking is 409 OPEN_BOOKINGS', async () => {
