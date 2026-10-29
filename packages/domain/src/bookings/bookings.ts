@@ -1,5 +1,5 @@
-import { desc, eq } from 'drizzle-orm'
-import { bookings, db, providers, services, type Tx } from '@kando/db'
+import { desc, eq, getTableColumns } from 'drizzle-orm'
+import { bookingAppInsert, bookings, db, providers, services, type Tx } from '@kando/db'
 import type { Booking, BookingAnswer, DirectBookingInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
@@ -38,7 +38,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
   if (input.note) await assertNoContactDetails(userId, input.note)
   const [row] = await tx
-    .insert(bookings)
+    .insert(bookingAppInsert) // the price comes from the service (trigger bookings_fill_amount), never from the client
     .values({
       customerId: userId,
       providerId: provider.id,
@@ -47,8 +47,6 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
       status: 'proposed',
       startAt,
       durationMin: input.durationMin,
-      amount: service.price, // from the stored service, never from the client
-      currency: service.currency,
       onSite: input.onSite,
       ...(input.onSite && input.address && { addressStreet: input.address.street ?? null, addressPostcode: input.address.postcode, addressCity: input.address.city ?? null }),
       note: input.note ?? null,
@@ -56,7 +54,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
+    .returning(getTableColumns(bookings))
   await threadForBooking(tx, row!.id) // a direct booking gets its own chat
   notifyProposal(afterCommit, provider, row!)
   return view(row!, userId)
@@ -115,7 +113,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
   assertFuture(b.startAt, now)
   await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)
   const pay = payBy(now, b.startAt)
-  const done = await set('awaiting-payment', { payBy: pay, answerBy: null, counterBy: null })
+  const done = await set('awaiting-payment', { payBy: pay, acceptedAt: now, answerBy: null, counterBy: null })
   tell('booking-accepted', pay)
   return done
 }

@@ -54,9 +54,8 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
 
   if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, events }
 
-  // Reminders, each once (the reminded columns), never for a finished item. Acceptance time = updated_at: nothing
-  // touches an awaiting-payment booking between accepting and expiring/withdrawing it. If a later task writes to
-  // awaiting-payment rows, add an accepted_at column and use it here.
+  // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
+  // booking became awaiting-payment), so a later write to the row does not move them.
   const quoteReminders = await count(sql`
     WITH r AS (UPDATE quotes SET reminder_sent_at = ${t}::timestamptz WHERE status = 'sent' AND reminder_sent_at IS NULL AND expires_at > ${t}::timestamptz
         AND expires_at - interval '1 day' <= ${t}::timestamptz ${scoped(ownedBy('provider_id'), sql`request_id IN (SELECT id FROM requests WHERE customer_id = ${userId})`)} RETURNING id, request_id),
@@ -69,7 +68,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'payment-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
     ${result('r')}`)
   // halfway: only when 6h+ were given, and not when the last reminder is due as well (one message is enough)
-  const half = await payReminder('reminded_half_at', sql`pay_by - updated_at >= interval '6 hours' AND updated_at + (pay_by - updated_at) / 2 <= ${t}::timestamptz AND pay_by - interval '3 hours' > ${t}::timestamptz`)
+  const half = await payReminder('reminded_half_at', sql`pay_by - accepted_at >= interval '6 hours' AND accepted_at + (pay_by - accepted_at) / 2 <= ${t}::timestamptz AND pay_by - interval '3 hours' > ${t}::timestamptz`)
   const last = await payReminder('reminded_last_at', sql`pay_by - interval '3 hours' <= ${t}::timestamptz`)
 
   const ignoredNotices = await (exec as typeof db).transaction(async (tx) => {

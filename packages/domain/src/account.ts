@@ -1,5 +1,5 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { blocks, bookings, contactAttempts, db, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
+import { availabilityWatches, blocks, bookings, contactAttempts, db, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
@@ -8,7 +8,7 @@ import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -130,6 +130,7 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     await tx.delete(messages).where(sql`${messages.senderId} = ${userId} OR ${messages.threadId} IN ${ownThreads}`)
     await tx.delete(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
     await tx.delete(blocks).where(sql`${blocks.blockerId} = ${userId} OR ${blocks.blockedId} = ${userId}`)
+    await tx.delete(availabilityWatches).where(sql`${availabilityWatches.customerId} = ${userId} OR ${availabilityWatches.providerId} IN ${own}`)
     await tx.delete(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
     await tx.delete(quotes).where(sql`${quotes.providerId} IN ${own}`)
     await tx.delete(requests).where(sql`${requests.customerId} = ${userId} OR ${requests.providerId} IN ${own}`)

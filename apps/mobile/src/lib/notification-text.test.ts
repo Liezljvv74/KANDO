@@ -6,6 +6,9 @@ test('every known kind has a text and an unknown kind is skipped without throwin
   expect(notificationText('requests-ignored')).toBe('notification.requestsIgnored')
   expect(notificationText('profile-live')).toBe('notification.profileLive')
   expect(notificationText('kind-from-a-newer-server')).toBeNull()
+  for (const [kind, key] of [['booking-paid', 'notification.bookingPaid'], ['payment-received', 'notification.paymentReceived'], ['payment-late-refunded', 'notification.paymentLateRefunded'], ['payout-setup-complete', 'notification.payoutSetupComplete'], ['customers-waiting', 'notification.customersWaiting'], ['provider-available', 'notification.providerAvailable'], ['refund-issued', 'notification.refundIssued']]) {
+    expect(notificationText(kind!)).toBe(key)
+  }
 })
 
 test('only the profile-live payload has a shareable url', () => {

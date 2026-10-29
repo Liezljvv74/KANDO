@@ -2,14 +2,14 @@ import { eq } from 'drizzle-orm'
 import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang } from '@kando/i18n'
 import type { AfterCommit } from '../app-request'
-import { sendEmail } from '../email'
+import { sendEmail, type BookingTemplate } from '../email'
 import { describeError } from '../log-error'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime } from '../notifications'
 import { slotIsHeld } from './busy'
 
-/** The notification kinds that have an email template. */
-export type BookingKind = Exclude<NotificationKind, 'profile-live'>
+/** The notification kinds that have an email template (a kind without one cannot be sent from here). */
+export type BookingKind = Extract<NotificationKind, BookingTemplate>
 /** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write: here they only get the email. */
 const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored']
 

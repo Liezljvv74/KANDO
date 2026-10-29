@@ -19,6 +19,8 @@ export const PRIVATE_TABLES: Record<string, string> = {
   bookings: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
   // Only the blocker sees a block; is_blocked() answers for both sides.
   blocks: 'blocker_id = app_current_user_id()',
+  // Only the customer sees a watch; the provider is told the count by the domain, never the names.
+  availability_watches: 'customer_id = app_current_user_id()',
 }
 
 // Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.
@@ -51,19 +53,26 @@ export const APPEND_ONLY_TABLES: Record<string, { read: string; insert: string }
 // Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
 export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
   requests: ['customer_id', 'provider_id'],
-  quotes: ['request_id', 'provider_id'],
-  bookings: ['customer_id', 'provider_id'],
+  // A quote is final once sent (the booking's price is copied from it): only status and reminder_sent_at change.
+  quotes: ['request_id', 'provider_id', 'amount', 'currency', 'scope', 'start_at', 'duration_min', 'expires_at'],
+  bookings: ['customer_id', 'provider_id', 'request_id'],
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
 // the set_provider_* SECURITY DEFINER functions below. Works for private and public-owned tables.
 export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   users: ['staff_role', 'suspended_until', 'suspended_reason'],
-  providers: ['status', 'suspended_until', 'slug', 'public_name', 'location'],
+  providers: ['status', 'suspended_until', 'slug', 'public_name', 'location', 'stripe_account_id', 'payouts_ready_at'],
   // Rows are created on the owner connection; the app only sets seen_at and dismissed_at.
   notifications: ['kind', 'payload', 'user_id'],
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
+  // Money and payment: the price comes from the quote or service (bookings_fill_amount), the rest from the payment code.
+  // The app role still reads them; no DTO carries commission_rate or the gateway references. App inserts use bookingAppInsert.
+  bookings: ['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at'],
 }
+
+/** Booking statuses only the owner connection (the payment code, staff) may set; plan 2d appends. */
+export const OWNER_ONLY_BOOKING_STATUSES = ['confirmed'] as const
 
 // Suspensions end by their date: a past suspended_until counts as none.
 // The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
@@ -103,7 +112,7 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log']
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
@@ -299,6 +308,59 @@ const BUSY_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION busy_times(uuid, timestamptz, timestamptz) TO ${APP_ROLE}`,
 ]
 
+// Booking guards, for every writer (the owner connection included unless said otherwise). Invoker rights: the inserting
+// customer reads the quote and service under RLS, so a quote or service they cannot see counts as foreign.
+// bookings_fill_amount: the price is the quote's, else the service's (an app insert cannot name amount or currency at all);
+// the quote must be the booking provider's, on a request of the booking's customer; the service must be the provider's.
+// request_id is the quote's request. On update only a changed quote or service id is checked (a NULL from ON DELETE SET NULL passes).
+const BOOKING_TRIGGERS = [
+  `CREATE OR REPLACE FUNCTION bookings_fill_amount() RETURNS trigger LANGUAGE plpgsql AS $$
+    DECLARE q_amount numeric; q_currency text; q_request uuid; s_price numeric; s_currency text;
+    BEGIN
+      IF NEW.service_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.service_id IS DISTINCT FROM OLD.service_id) THEN
+        SELECT price, currency INTO s_price, s_currency FROM services WHERE id = NEW.service_id AND provider_id = NEW.provider_id;
+        IF NOT FOUND THEN RAISE EXCEPTION 'bookings: service % does not belong to the provider', NEW.service_id; END IF;
+      END IF;
+      IF NEW.quote_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.quote_id IS DISTINCT FROM OLD.quote_id) THEN
+        SELECT q.amount, q.currency, q.request_id INTO q_amount, q_currency, q_request FROM quotes q JOIN requests r ON r.id = q.request_id
+          WHERE q.id = NEW.quote_id AND q.provider_id = NEW.provider_id AND r.customer_id = NEW.customer_id;
+        IF NOT FOUND THEN RAISE EXCEPTION 'bookings: quote % does not belong to this customer and provider', NEW.quote_id; END IF;
+      END IF;
+      IF TG_OP = 'INSERT' THEN
+        NEW.request_id := q_request;
+        IF q_amount IS NOT NULL THEN NEW.amount := q_amount; NEW.currency := q_currency;
+        ELSIF s_price IS NOT NULL THEN NEW.amount := s_price; NEW.currency := s_currency;
+        END IF;
+      END IF;
+      RETURN NEW;
+    END $$`,
+  `DROP TRIGGER IF EXISTS bookings_fill_amount ON bookings`,
+  `CREATE TRIGGER bookings_fill_amount BEFORE INSERT OR UPDATE OF quote_id, service_id ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_fill_amount()`,
+  // A status the payment code sets (paid) cannot be set by an app request, on insert or update.
+  `CREATE OR REPLACE FUNCTION bookings_guard_status() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF current_user = '${APP_ROLE}' AND NEW.status = ANY (ARRAY[${OWNER_ONLY_BOOKING_STATUSES.map((s) => `'${s}'`).join(', ')}]::text[])
+        AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status) THEN
+        RAISE EXCEPTION 'bookings: status % is set by the payment code only', NEW.status;
+      END IF;
+      RETURN NEW;
+    END $$`,
+  `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
+  `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE OF status ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
+  // Money rows are never changed or removed, not even on the owner connection. The one exception is the test clean-up
+  // (cleanupUsers), which sets kando.ledger_cleanup for its own transaction only.
+  `CREATE OR REPLACE FUNCTION ledger_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF coalesce(current_setting('kando.ledger_cleanup', true), '') = 'on' THEN
+        IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+        RETURN NEW;
+      END IF;
+      RAISE EXCEPTION 'ledger_entries is append-only: write a new row instead';
+    END $$`,
+  `DROP TRIGGER IF EXISTS ledger_append_only ON ledger_entries`,
+  `CREATE TRIGGER ledger_append_only BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE FUNCTION ledger_append_only()`,
+]
+
 // app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.
 const TRANSLATION_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION prune_translation_requests() RETURNS void
@@ -360,6 +422,7 @@ export function rlsStatements(
     ...ELIGIBILITY_FUNCTIONS,
     ...BUSY_FUNCTIONS,
     ...TRANSLATION_FUNCTIONS,
+    ...BOOKING_TRIGGERS,
   ]
 }
 

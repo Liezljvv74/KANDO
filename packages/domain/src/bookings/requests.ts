@@ -1,5 +1,5 @@
-import { and, desc, eq, gt, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
+import { and, desc, eq, getTableColumns, gt, or, sql } from 'drizzle-orm'
+import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -55,6 +55,7 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   providerId: b.providerId,
   serviceId: b.serviceId,
   quoteId: b.quoteId,
+  requestId: b.requestId,
   source: b.source as Booking['source'],
   status: b.status as Booking['status'],
   startAt: iso(b.startAt),
@@ -208,7 +209,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   await tx.update(quotes).set({ status: 'accepted' }).where(eq(quotes.id, quote.id))
   await tx.update(requests).set({ status: 'booked', updatedAt: now }).where(eq(requests.id, req.id))
   const [row] = await tx
-    .insert(bookings)
+    .insert(bookingAppInsert) // the price comes from the quote (trigger bookings_fill_amount), never from the client
     .values({
       customerId: userId,
       providerId: provider.id,
@@ -218,8 +219,6 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
       status: 'proposed',
       startAt,
       durationMin: input.durationMin,
-      amount: quote.amount, // from the stored quote, never from the client
-      currency: quote.currency,
       onSite: input.onSite,
       ...(input.onSite && input.address && { addressStreet: input.address.street ?? null, addressPostcode: input.address.postcode, addressCity: input.address.city ?? null }),
       note: input.note ?? null,
@@ -227,7 +226,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
+    .returning(getTableColumns(bookings))
   const threadId = await threadForRequest(tx, req.id)
   afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: row!.currency as 'EUR' }))
   notifyProposal(afterCommit, provider, row!)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AcceptQuoteInputSchema, BookingAnswerSchema, DirectBookingInputSchema, TimeProposalSchema } from './index'
+import { AcceptQuoteInputSchema, BookingAnswerSchema, BookingSchema, DirectBookingInputSchema, TimeProposalSchema } from './index'
 
 const proposal = { startAt: '2026-11-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
@@ -45,5 +45,14 @@ describe('BookingAnswerSchema', () => {
     expect(BookingAnswerSchema.safeParse({ type: 'accept' }).success).toBe(true)
     expect(BookingAnswerSchema.safeParse({ type: 'decline' }).success).toBe(true)
     expect(BookingAnswerSchema.safeParse({ type: 'other' }).success).toBe(false)
+  })
+})
+
+describe('BookingSchema', () => {
+  it('carries the request id (null for a direct booking) and never the payment internals', () => {
+    const keys = Object.keys(BookingSchema.shape)
+    expect(keys).toContain('requestId')
+    expect(BookingSchema.shape.requestId.safeParse(null).success).toBe(true)
+    for (const k of ['commissionRate', 'paymentRef', 'checkoutRef', 'paidAt', 'releasedAt', 'acceptedAt']) expect(keys).not.toContain(k)
   })
 })

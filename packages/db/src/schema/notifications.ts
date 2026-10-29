@@ -17,7 +17,7 @@ export const notifications = pgTable(
     dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
   },
   (t) => [
-    check('notifications_kind_check', sql`kind in ('profile-live','request-received','quote-received','booking-proposed','booking-accepted','booking-declined','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','pending-slot-requested','message-received')`),
+    check('notifications_kind_check', sql`kind in ('profile-live','request-received','quote-received','booking-proposed','booking-accepted','booking-declined','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','pending-slot-requested','message-received','booking-paid','payment-received','payment-late-refunded','payout-setup-complete','customers-waiting','provider-available','refund-issued')`),
     index('notifications_user_id_created_at_idx').on(t.userId, t.createdAt.desc()),
   ],
 )

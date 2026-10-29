@@ -44,6 +44,9 @@ export const providers = pgTable(
     suspendedUntil: timestamp('suspended_until', { withTimezone: true }),
     legalStatus: text('legal_status'),
     vatId: text('vat_id'),
+    // Staff-only (rls.ts): the Stripe connected account and when its payout set-up was complete.
+    stripeAccountId: text('stripe_account_id').unique(),
+    payoutsReadyAt: timestamp('payouts_ready_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

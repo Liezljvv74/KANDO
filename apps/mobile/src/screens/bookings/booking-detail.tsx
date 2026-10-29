@@ -80,7 +80,7 @@ export default function BookingDetail() {
           <Text style={styles.small}>{t('booking.payPlaceholder')}</Text>
         </Card>
       )}
-      <OpenChat find={() => threadIdForBooking(b, viewer)} />
+      <OpenChat find={() => threadIdForBooking(b)} />
       <ErrorText text={problem} />
       {bookingActions(b, viewer).map((a) => (
         <Button key={a} label={t(`booking.${a}` as Key)} onPress={() => act(a)} busy={busy} danger={a === 'decline' || a === 'withdraw'} />

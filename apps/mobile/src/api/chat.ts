@@ -1,6 +1,5 @@
 import type { BlockedUser, Booking, Message, Thread } from '@kando/contract'
 
-import { listQuotes, listRequests, type Role } from '@/api/bookings'
 import { api, upload, type PickedFile } from '@/api/client'
 
 const BASE = '/app-api/v1'
@@ -19,16 +18,8 @@ export const unblockUser = (threadId: string) => api<null>(`${BASE}/blocks?threa
 /** The chat of a request (opened with the request), or null. */
 export const threadIdForRequest = async (requestId: string) => (await listThreads()).find((t) => t.requestId === requestId)?.id ?? null
 
-/**
- * The chat of a booking: a direct booking has its own, a booking from a quote shares its request's. There is no read-one route
- * for either, so the request is found among the person's requests to the same other side by the quote it holds.
- */
-export async function threadIdForBooking(b: Pick<Booking, 'id' | 'quoteId' | 'customerId' | 'providerId'>, role: Role): Promise<string | null> {
+/** The chat of a booking: a direct booking has its own, a booking from a quote shares its request's. */
+export async function threadIdForBooking(b: Pick<Booking, 'id' | 'requestId'>): Promise<string | null> {
   const threads = await listThreads()
-  const own = threads.find((t) => t.bookingId === b.id)
-  if (own || !b.quoteId) return own?.id ?? null
-  for (const r of (await listRequests(role)).filter((r) => r.customerId === b.customerId && r.providerId === b.providerId)) {
-    if ((await listQuotes(r.id)).some((q) => q.id === b.quoteId)) return threads.find((t) => t.requestId === r.id)?.id ?? null
-  }
-  return null
+  return (threads.find((t) => t.bookingId === b.id) ?? (b.requestId ? threads.find((t) => t.requestId === b.requestId) : undefined))?.id ?? null
 }

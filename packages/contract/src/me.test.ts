@@ -20,3 +20,9 @@ it('a message-received notification with url and threadId parses, and profile-li
     ['profile-live', { url: 'https://x.test/p' }],
   ])
 })
+
+it('the payment kinds parse', () => {
+  const kinds = ['booking-paid', 'payment-received', 'payment-late-refunded', 'payout-setup-complete', 'customers-waiting', 'provider-available', 'refund-issued']
+  const r = MeSchema.parse({ ...me, notifications: kinds.map((k, i) => n(String(i), k, { bookingId: 'b' })) })
+  expect(r.notifications.map((x) => x.kind)).toEqual(kinds)
+})

@@ -30,7 +30,7 @@ const request = async (providerId: string, answerBy: string, status = 'open', cu
 const booking = async (status: string, o: { answerBy?: string; payBy?: string; acceptedAt?: string; startAt?: string } = {}) =>
   (
     await pool.query(
-      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, answer_by, pay_by, updated_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, 10, $6, $7, COALESCE($8::timestamptz, now())) RETURNING id",
+      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, $6, $7, $8) RETURNING id",
       [U.cust, prov, service, status, o.startAt ?? at(24 * 20), o.answerBy ?? null, o.payBy ?? null, o.acceptedAt ?? null],
     )
   ).rows[0].id as string
@@ -107,6 +107,7 @@ it('payment reminders: halfway once, 3 hours before once; none under 6 hours or 
   await clean()
   const b = await booking('awaiting-payment', { acceptedAt: at(0), payBy: at(48) })
   const short = await booking('awaiting-payment', { acceptedAt: at(0), payBy: at(5) }) // under 6h: no halfway reminder
+  await pool.query('UPDATE bookings SET updated_at = $1 WHERE id = $2', [at(30), b]) // a later write to the row: the reminders still count from accepted_at
   const sent = async (h: number) => {
     const before = (await notes('payment-reminder')).length
     await run(h)
