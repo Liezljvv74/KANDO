@@ -2,6 +2,6 @@
   "regions": ["fra1"],
   "crons": [
     { "path": "/api/cron/suspensions", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/bookings", "schedule": "0 * * * *" }
+    { "path": "/api/cron/bookings", "schedule": "0 5 * * *" }
   ]
 }

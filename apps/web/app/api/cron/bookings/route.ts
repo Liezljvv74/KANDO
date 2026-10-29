@@ -2,7 +2,10 @@ import { timingSafeEqual } from 'node:crypto'
 import { db } from '@kando/db'
 import { runDueTimers } from '@kando/domain'
 
-/** Hourly check (vercel.json): expires unanswered requests, quotes, proposals and unpaid bookings, sends the reminders and the ignored-requests notice. */
+/**
+ * Daily on the free Vercel plan (a more frequent cron fails every deployment there): "0 5 * * *" in vercel.json.
+ * Change it to hourly ("0 * * * *") when the project moves to Vercel Pro: the payment reminders 3 hours before the deadline need an hourly run.
+ * The check: expires unanswered requests, quotes, proposals and unpaid bookings, sends the reminders and the ignored-requests notice. */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   const given = Buffer.from(request.headers.get('authorization') ?? '')
