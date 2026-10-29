@@ -6,7 +6,8 @@ export const isUuid = (s: string) => UUID.test(s)
 
 /** The filter object of a list query (`{ "q": "...", "status": "..." }`); anything else is empty. */
 export function filterOf(q: AdminListQuery): Record<string, unknown> {
-  const f: unknown = q.filter ? JSON.parse(q.filter) : {}
+  let f: unknown = {}
+  try { f = q.filter ? JSON.parse(q.filter) : {} } catch { /* a malformed filter counts as none */ }
   return f && typeof f === 'object' && !Array.isArray(f) ? (f as Record<string, unknown>) : {}
 }
 export const textOf = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined)

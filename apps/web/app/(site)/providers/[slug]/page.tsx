@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
-import { headers } from 'next/headers'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { asUser, type Tx } from '@kando/db'
 import type { ProviderDetail } from '@kando/contract'
 import {
-  clientKeyOf,
   getPublicProfile,
   listCategories,
   textsOf,
@@ -14,6 +12,7 @@ import {
   TranslationUnavailable,
 } from '@kando/domain'
 import { formatPrice, t, type Key, type Lang } from '@kando/i18n'
+import { TranslateLink } from './translate-link'
 import { LangSwitch } from '../../../../components/lang-switch'
 import { alternates, langPath, siteLang } from '../../../../lib/site'
 
@@ -79,13 +78,12 @@ export default async function ProviderPage({ params, searchParams }: Args) {
   let translated = false
   let unavailable = false
   if (query.translate === '1') {
-    // Same anonymous transaction for the profile, the translation store and the rate counter.
-    const h = await headers()
+    // Stored translations only: the model is called by the button (TranslateLink), never by a page view.
     data = await asUser(null, async (tx) => {
       const d = await read(tx, slug, lang)
       if (!d?.profile.translatable) return d
       try {
-        const texts = await translateTexts(tx, textsOf(d.profile), lang, clientKeyOf(null, h))
+        const texts = await translateTexts(tx, textsOf(d.profile), lang, '', true)
         translated = true
         return { ...d, profile: withTexts(d.profile, texts) }
       } catch (e) {
@@ -118,12 +116,12 @@ export default async function ProviderPage({ params, searchParams }: Args) {
       <LangSwitch lang={lang} path={base} />
       {p.translatable && !translated && (
         <p className="text-sm">
-          <Link
+          <TranslateLink
             href={`${langPath(base, lang)}${langPath(base, lang).includes('?') ? '&' : '?'}translate=1`}
-            rel="nofollow"
+            apiPath={`/app-api/v1/providers/${encodeURIComponent(slug)}/translation?lang=${lang}`}
           >
             {tt('web.translate')}
-          </Link>
+          </TranslateLink>
           {unavailable && <span className="ml-2">{tt('web.translationUnavailable')}</span>}
         </p>
       )}

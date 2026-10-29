@@ -12,6 +12,7 @@ import {
 } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { fail } from '../providers/http'
+import { isSuspendedNow } from '../providers/profile'
 import { mediaBucket, photoUrl, removeObject } from '../storage'
 import { activeAdmins, lockAdmins, type StaffRole } from '../users'
 import { filterOf, isUuid, like, notFound, ok, orderOf, pageOf, textOf, uniqueViolation } from './common'
@@ -74,7 +75,7 @@ async function getProvider(tx: Tx, id: string) {
   void location
   return ok({
     ...rest,
-    suspended: !!rest.suspendedUntil && rest.suspendedUntil > new Date(),
+    suspended: await isSuspendedNow(tx, id),
     suspendedUntil: rest.suspendedUntil?.toISOString() ?? null,
     createdAt: rest.createdAt.toISOString(),
     updatedAt: rest.updatedAt.toISOString(),

@@ -109,9 +109,10 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
 
 /**
  * Translates the texts into `lang`: from the store, else one model call for whatever is missing. Throws TranslationUnavailable.
+ * `storedOnly` never calls the model (a plain page view must not cost money): anything missing throws TranslationUnavailable.
  * Everything runs in the caller's request transaction `tx` (as app_user); no second connection is opened.
  */
-export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lang, clientKey: string): Promise<TranslatableTexts> {
+export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lang, clientKey: string, storedOnly = false): Promise<TranslatableTexts> {
   if (!needsTranslation(texts, lang)) return texts
   requireSecret() // before any count, insert or model call
   const flat = flatten(texts)
@@ -133,6 +134,7 @@ export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lan
 
   const missing = Object.keys(flat).filter((id) => !(id in result))
   if (missing.length) {
+    if (storedOnly) throw new TranslationUnavailable('Not translated yet')
     const answer = await askModel(tx, Object.fromEntries(missing.map((id) => [id, flat[id]!])), lang, clientKey)
     for (const id of missing) {
       result[id] = answer[id]!

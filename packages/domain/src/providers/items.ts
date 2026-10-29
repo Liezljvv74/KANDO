@@ -4,7 +4,7 @@ import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
-import { getMyProfile, lockProfile, ownProvider } from './profile'
+import { getMyProfile, isSuspendedNow, lockProfile, ownProvider } from './profile'
 
 /** Owner decision: customer ratings matter more than self-listed references. */
 export const MAX_PROVIDER_REFERENCES = 2
@@ -59,7 +59,7 @@ export async function listServices(tx: Tx, userId: string): Promise<OwnService[]
 
 /** One service with whether it shows in search and which documents it waits for: the same answer from list, add and update. */
 async function withState(tx: Tx, profile: NonNullable<Awaited<ReturnType<typeof ownProvider>>>, s: ServiceRow): Promise<OwnService> {
-  const live = profile.status === 'published' && (!profile.suspendedUntil || profile.suspendedUntil <= new Date())
+  const live = profile.status === 'published' && !(await isSuspendedNow(tx, profile.id))
   const waitingFor = await missingRequirements(tx, profile.id, s.id)
   return { ...toService(s), visibleInSearch: live && waitingFor.length === 0, waitingFor, categoryInactive: false }
 }
