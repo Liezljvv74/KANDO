@@ -247,7 +247,28 @@ const ELIGIBILITY_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid), public_checked_documents(uuid) TO ${APP_ROLE}`,
 ]
 
-// app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.
+// A provider's calendar for everyone: bookings are private (RLS), so this runs as the table owner and returns only
+// the time range and a state, for a published, non-suspended provider, in a window of at most 62 days.
+// 'pending' = awaiting-payment; 'booked' is added when a confirmed status exists.
+const BUSY_FUNCTIONS = [
+  `CREATE OR REPLACE FUNCTION busy_times(p_provider uuid, p_from timestamptz, p_to timestamptz)
+    RETURNS TABLE (start_at timestamptz, end_at timestamptz, state text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      IF p_to <= p_from OR p_to - p_from > interval '62 days' THEN RAISE EXCEPTION 'busy_times: range must be 1 to 62 days'; END IF;
+      RETURN QUERY
+        SELECT b.start_at, b.start_at + b.duration_min * interval '1 minute', 'pending'::text
+        FROM bookings b JOIN providers p ON p.id = b.provider_id
+        WHERE b.provider_id = p_provider AND b.status = 'awaiting-payment'
+          AND p.status = 'published' AND ${notSuspended('p')}
+          AND b.start_at < p_to AND b.start_at + b.duration_min * interval '1 minute' > p_from
+        ORDER BY 1, 2;
+    END $$`,
+  `REVOKE ALL ON FUNCTION busy_times(uuid, timestamptz, timestamptz) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION busy_times(uuid, timestamptz, timestamptz) TO ${APP_ROLE}`,
+]
+
+// app_user has no DELETE on the rate-limit log,so the 24-hour clean-up runs as the table owner through this function.
 const TRANSLATION_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION prune_translation_requests() RETURNS void
     LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -291,6 +312,7 @@ export function rlsStatements(
     ...policies,
     ...PROVIDER_FUNCTIONS,
     ...ELIGIBILITY_FUNCTIONS,
+    ...BUSY_FUNCTIONS,
     ...TRANSLATION_FUNCTIONS,
   ]
 }

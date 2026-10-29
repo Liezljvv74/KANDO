@@ -1,7 +1,17 @@
 import { and, eq, ne, sql } from 'drizzle-orm'
-import { bookings, type Tx } from '@kando/db'
+import { bookings, providers, type Tx } from '@kando/db'
+import type { BusyTime } from '@kando/contract'
 import { fail } from '../providers/http'
+import { isSuspendedNow } from '../providers/profile'
 import { BUFFER_MINUTES, overlaps } from './rules'
+
+/** The provider's busy ranges (time and state only) in [from, to]; 404 for an unknown, unpublished or suspended provider. */
+export async function busyTimes(tx: Tx, slug: string, from: Date, to: Date): Promise<BusyTime[]> {
+  const [p] = await tx.select({ id: providers.id }).from(providers).where(and(eq(providers.slug, slug), eq(providers.status, 'published')))
+  if (!p || (await isSuspendedNow(tx, p.id))) return fail(404, { error: 'Not found' })
+  const { rows } = await tx.execute<{ start_at: Date; end_at: Date; state: BusyTime['state'] }>(sql`SELECT * FROM busy_times(${p.id}::uuid, ${from.toISOString()}::timestamptz, ${to.toISOString()}::timestamptz)`)
+  return rows.map((r) => ({ startAt: new Date(r.start_at).toISOString(), endAt: new Date(r.end_at).toISOString(), state: r.state }))
+}
 
 /** Serialises slot-taking actions of one provider (two accepts on overlapping times cannot interleave). */
 export const lockProviderSlots = (tx: Tx, providerId: string) =>

@@ -124,3 +124,8 @@ export const BusyTimeSchema = z.object({
   state: z.enum(['pending', 'booked']),
 })
 export type BusyTime = z.infer<typeof BusyTimeSchema>
+
+export const BUSY_MAX_DAYS = 62
+export const BusyQuerySchema = z
+  .object({ from: z.coerce.date(), to: z.coerce.date() })
+  .refine((q) => q.to > q.from && q.to.getTime() - q.from.getTime() <= BUSY_MAX_DAYS * 86_400_000, { message: `range must be 1 to ${BUSY_MAX_DAYS} days` })
