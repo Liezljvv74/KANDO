@@ -1,0 +1,121 @@
+import { z } from 'zod'
+
+import { AmountSchema, CurrencySchema, requiredText, text } from './common'
+
+// Mirror the status checks in packages/db/src/schema/bookings.ts.
+export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn'] as const
+export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
+export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'expired', 'declined', 'withdrawn'] as const
+
+const IsoSchema = z.string().datetime({ offset: true })
+const DurationSchema = z.number().int().min(15).max(720)
+
+/** Where the work happens, when on site: only the postcode is required. */
+export const BookingAddressSchema = z.object({
+  street: text(120).optional(),
+  postcode: requiredText(16),
+  city: text(80).optional(),
+})
+
+/** POST /requests: the customer describes the job. */
+export const RequestInputSchema = z.object({
+  providerId: z.string().uuid(),
+  serviceId: z.string().uuid().optional(),
+  description: requiredText(2000),
+  preferredDate: z.string().date().optional(),
+})
+
+export const RequestSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  providerId: z.string(),
+  serviceId: z.string().nullable(),
+  description: z.string(),
+  preferredDate: z.string().nullable(),
+  status: z.enum(REQUEST_STATUSES),
+  answerBy: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type BookingRequest =z.infer<typeof RequestSchema>
+
+/** A quote's start and duration are only a suggestion; the customer confirms the time when accepting. */
+export const QuoteInputSchema = z.object({
+  amount: AmountSchema,
+  scope: requiredText(2000),
+  startAt: IsoSchema.optional(),
+  durationMin: DurationSchema.optional(),
+})
+
+export const QuoteSchema = z.object({
+  id: z.string(),
+  requestId: z.string(),
+  providerId: z.string(),
+  version: z.number().int(),
+  amount: AmountSchema,
+  currency: CurrencySchema,
+  scope: z.string(),
+  startAt: z.string().nullable(),
+  durationMin: z.number().int().nullable(),
+  status: z.enum(QUOTE_STATUSES),
+  expiresAt: z.string(),
+  createdAt: z.string(),
+})
+export type Quote = z.infer<typeof QuoteSchema>
+
+/** A proposed time; whether the provider can work remotely is checked in the domain. The past-time check also lives there. */
+export const TimeProposalSchema = z
+  .object({
+    startAt: IsoSchema,
+    durationMin: DurationSchema,
+    onSite: z.boolean(),
+    address: BookingAddressSchema.optional(),
+    note: text(1000).optional(),
+  })
+  .refine((v) => !v.onSite || v.address !== undefined, { message: 'Address required when on site', path: ['address'] })
+export type TimeProposal = z.infer<typeof TimeProposalSchema>
+
+/** POST /quotes/[id]/accept: the customer's proposed time. */
+export const AcceptQuoteInputSchema = TimeProposalSchema
+
+/** POST /bookings: a booking without a prior request. */
+export const DirectBookingInputSchema = z.intersection(TimeProposalSchema, z.object({ serviceId: z.string().uuid() }))
+
+/** The other party's answer to a proposed booking. */
+export const BookingAnswerSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('accept') }),
+  z.object({ type: z.literal('decline') }),
+  z.object({ type: z.literal('counter'), startAt: IsoSchema, durationMin: DurationSchema, onSite: z.boolean() }),
+])
+export type BookingAnswer = z.infer<typeof BookingAnswerSchema>
+
+export const BookingSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  providerId: z.string(),
+  serviceId: z.string().nullable(),
+  quoteId: z.string().nullable(),
+  source: z.enum(['quote', 'direct']),
+  status: z.enum(BOOKING_STATUSES),
+  startAt: z.string(),
+  durationMin: z.number().int(),
+  amount: AmountSchema,
+  currency: CurrencySchema,
+  onSite: z.boolean(),
+  address: BookingAddressSchema.nullable(),
+  note: z.string().nullable(),
+  answerBy: z.string().nullable(),
+  payBy: z.string().nullable(),
+  counterBy: z.enum(['provider', 'customer']).nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type Booking = z.infer<typeof BookingSchema>
+
+/** What others may see of a calendar: the time only. */
+export const BusyTimeSchema = z.object({
+  startAt: z.string(),
+  endAt: z.string(),
+  state: z.enum(['pending', 'booked']),
+})
+export type BusyTime = z.infer<typeof BusyTimeSchema>
