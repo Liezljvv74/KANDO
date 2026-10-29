@@ -31,7 +31,7 @@ async function createAccountOnce(providerId: string, country: string, email: str
     await o.execute(sql`SELECT pg_advisory_xact_lock(hashtext('payout_setup'), hashtext(${providerId}))`)
     const stored = (await o.select({ a: providers.stripeAccountId }).from(providers).where(eq(providers.id, providerId)))[0]?.a
     if (stored) return stored
-    const { accountId } = await gateway().createAccount({ email, country, idempotencyKey: `account:${providerId}` })
+    const { accountId } = await gateway().createAccount({ email, country, providerId, idempotencyKey: `account:${providerId}` })
     await o.update(providers).set({ stripeAccountId: accountId }).where(eq(providers.id, providerId))
     return accountId
   })

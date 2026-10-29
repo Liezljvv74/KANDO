@@ -366,6 +366,8 @@ export const de = {
   'notification.paymentLateRefunded': 'Deine Zahlung konnte für die Buchung nicht verwendet werden (sie war abgelaufen, zurückgezogen oder schon bezahlt). Du bekommst den vollen Betrag zurück.',
   'notification.payoutSetupComplete': 'Deine Auszahlung ist eingerichtet. Du kannst jetzt Angebote senden und Buchungen annehmen.',
   'notification.customersWaiting': 'Kunden möchten bei dir buchen. Richte deine Auszahlung ein, damit sie es können.',
+  'notification.customersWaitingOne': 'Jemand möchte bei dir buchen. Richte deine Auszahlung ein, damit es klappt.',
+  'notification.customersWaitingMany': '{count} Kunden möchten bei dir buchen. Richte deine Auszahlung ein, damit sie es können.',
   'notification.providerAvailable': 'Ein Anbieter, über den du benachrichtigt werden wolltest, ist jetzt buchbar.',
   'notification.refundIssued': 'Eine Erstattung an Dich wurde veranlasst.',
   'email.suspended.subject': 'Dein Profil wurde gesperrt',

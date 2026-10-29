@@ -26,3 +26,8 @@ it('the payment kinds parse', () => {
   const r = MeSchema.parse({ ...me, notifications: kinds.map((k, i) => n(String(i), k, { bookingId: 'b' })) })
   expect(r.notifications.map((x) => x.kind)).toEqual(kinds)
 })
+
+it('a customers-waiting notice carries only the count', () => {
+  const r = MeSchema.parse({ ...me, notifications: [n('1', 'customers-waiting', { count: 3 })] })
+  expect(r.notifications[0]!.payload).toEqual({ count: 3 })
+})

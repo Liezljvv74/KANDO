@@ -1,5 +1,5 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
-import { availabilityWatches, bookings, db, providers, quotes, users } from '@kando/db'
+import { eq } from 'drizzle-orm'
+import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang } from '@kando/i18n'
 import type { AfterCommit } from '../app-request'
 import { sendEmail, type BookingTemplate } from '../email'
@@ -10,14 +10,11 @@ import { slotIsHeld } from './busy'
 
 /** The notification kinds that have an email template (a kind without one cannot be sent from here). */
 export type BookingKind = Extract<NotificationKind, BookingTemplate>
-/** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write: here they only get the email. */
+/** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write (customers-waiting: payments/watches.ts): here they only get the email. */
 const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored', 'customers-waiting']
 /** Kinds whose in-app row carries a link (`params.url`, or the provider page of `params.slug`) instead of ids. */
 const WITH_URL: NotificationKind[] = ['message-received', 'provider-available']
 
-/** How many customers wait for the provider owned by `userId` (the count only: the email never names them). */
-const waitingFor = async (userId: string) =>
-  (await db.select({ n: sql<number>`count(*)::int` }).from(availabilityWatches).innerJoin(providers, eq(providers.id, availabilityWatches.providerId)).where(and(eq(providers.ownerId, userId), isNull(availabilityWatches.notifiedAt))))[0]!.n
 
 /** The date an email names, when the caller did not pass one (`params.date`, ISO): the timers pass ids only. */
 async function dateOf(kind: BookingKind, params: Record<string, string>): Promise<string | undefined> {
@@ -33,6 +30,7 @@ async function dateOf(kind: BookingKind, params: Record<string, string>): Promis
  */
 export async function notifyBookingEvent(kind: BookingKind, userId: string, params: Record<string, string>): Promise<void> {
   try {
+    if (kind === 'customers-waiting' && !(Number(params.count) > 0)) return // the count only, and never "0 customers"
     const [user] = await db.select({ email: users.email, language: users.language }).from(users).where(eq(users.id, userId))
     if (!user) return
     const lang = isLang(user.language) ? user.language : DEFAULT_LANG
@@ -46,8 +44,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
       }
     }
     const iso = params.date ?? (await dateOf(kind, params))
-    const count = kind === 'customers-waiting' ? String(await waitingFor(userId)) : ''
-    await sendEmail({ to: user.email, lang, template: kind, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count } })
+    await sendEmail({ to: user.email, lang, template: kind, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count } })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

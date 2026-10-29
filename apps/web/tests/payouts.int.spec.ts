@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, outboxForTests, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, notifyBookingEvent, outboxForTests, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -17,9 +17,11 @@ const acceptQuoteRoute = await import('../app/app-api/v1/quotes/[id]/accept/rout
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const webhook = await import('../app/api/stripe/webhook/route')
+const exportRoute = await import('../app/app-api/v1/me/export/route')
 
 const U = { c1: 'po-c1', c2: 'po-c2', c3: 'po-c3', third: 'po-third' }
 const DAY = 86_400_000
+const HOUR = 3_600_000
 let categoryId: string
 let g: FakeGateway
 let n = 0
@@ -91,7 +93,7 @@ it('set-up creates one account and returns a link; a second call reuses the acco
   expect(res.status).toBe(200)
   const { url } = await res.json()
   expect(url).toBe('https://stripe.fake/onboarding/acct_fake_1')
-  expect(g.calls.find((c) => c.method === 'createAccount')!.args).toEqual({ email: EMAIL(p.uid), country: 'DE', idempotencyKey: `account:${p.id}` })
+  expect(g.calls.find((c) => c.method === 'createAccount')!.args).toEqual({ email: EMAIL(p.uid), country: 'DE', providerId: p.id, idempotencyKey: `account:${p.id}` })
   expect((await prow(p.id)).stripe_account_id).toBe('acct_fake_1') // stored on the owner connection (staff-only column)
   const link = g.calls.find((c) => c.method === 'onboardingLink')!.args as { returnUrl: string; refreshUrl: string }
   for (const u of [link.returnUrl, link.refreshUrl]) {
@@ -192,21 +194,88 @@ it('a customer cannot request or book an unready provider (409) but can watch it
   expect((await bookable.json()).error).toBe('ALREADY_BOOKABLE')
 })
 
-it('three watches send the provider one customers-waiting notice with count 3 within 24 hours', async () => {
+it('three watches send the provider one customers-waiting notice with count 3 within 24 hours: the first tap at once, the cron a summary', async () => {
   const p = await provider()
-  for (const c of [U.c1, U.c2, U.c3]) expect((await watch(p.slug, c)).status).toBe(204)
-  const now = new Date()
-  await runDueTimers(db, now)
-  await runDueTimers(db, new Date(now.getTime() + 23 * 3_600_000)) // within 24 hours: no second notice
-  const notes = await kindsFor(p.uid, 'customers-waiting')
-  expect(notes).toEqual([{ payload: {} }]) // no ids, no names
-  const mails = outboxForTests().filter((m) => m.to === EMAIL(p.uid))
+  expect((await watch(p.slug, U.c1)).status).toBe(204)
+  expect(await kindsFor(p.uid, 'customers-waiting')).toEqual([{ payload: { count: 1 } }]) // at once, the count only
+  let mails = outboxForTests().filter((m) => m.to === EMAIL(p.uid))
   expect(mails).toHaveLength(1)
-  expect(mails[0]!.text).toContain(': 3.')
-  for (const c of [U.c1, U.c2, U.c3]) expect(mails[0]!.text + mails[0]!.subject).not.toContain(c)
-  // after 24 hours only a new watch brings a new notice
-  await runDueTimers(db, new Date(now.getTime() + 25 * 3_600_000))
+  expect(mails[0]!.text).toContain(': 1.')
+  for (const c of [U.c2, U.c3]) expect((await watch(p.slug, c)).status).toBe(204) // within 24 hours: silent
   expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
+  const now = new Date()
+  await runDueTimers(db, new Date(now.getTime() + 19 * HOUR)) // too soon even with the cron's 4-hour tolerance
+  expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
+  await runDueTimers(db, new Date(now.getTime() + 21 * HOUR)) // next day's cron (a little early): one summary with the new count
+  expect((await kindsFor(p.uid, 'customers-waiting')).map((r) => r.payload)).toEqual([{ count: 1 }, { count: 3 }])
+  mails = outboxForTests().filter((m) => m.to === EMAIL(p.uid))
+  expect(mails).toHaveLength(2)
+  expect(mails[1]!.text).toContain(': 3.')
+  for (const m of mails) for (const c of [U.c1, U.c2, U.c3]) expect(m.text + m.subject).not.toContain(c) // never who
+  await runDueTimers(db, new Date(now.getTime() + 50 * HOUR)) // no new watchers since: nothing
+  expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(2)
+})
+
+it('two first taps at the same instant send one notice (the lock serialises them)', async () => {
+  const p = await provider()
+  const holder = await pool.connect() // someone else holds the notice lock: both taps must wait for it
+  await holder.query('BEGIN')
+  await holder.query("SELECT pg_advisory_xact_lock(hashtext('customers_waiting'))")
+  let finished = 0
+  const taps = Promise.all([watch(p.slug, U.c1), watch(p.slug, U.c2)].map((t) => t.then((r) => (finished++, r.status))))
+  await new Promise((r) => setTimeout(r, 500))
+  expect(finished).toBe(0) // without the lock they would be done by now
+  await holder.query('COMMIT')
+  holder.release()
+  expect(await taps).toEqual([204, 204])
+  expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
+  expect(outboxForTests().filter((m) => m.to === EMAIL(p.uid))).toHaveLength(1)
+})
+
+it('no notice and no email when nobody is waiting (count 0), nor for an unpublished or suspended provider', async () => {
+  const p = await provider()
+  await watch(p.slug, U.c1)
+  await pool.query("UPDATE notifications SET created_at = now() - interval '3 days' WHERE user_id = $1", [p.uid])
+  await pool.query("UPDATE availability_watches SET notified_at = now(), created_at = now() WHERE provider_id = $1", [p.id]) // already told: 0 waiting
+  await runDueTimers(db, new Date(Date.now() + HOUR))
+  expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
+  clearOutbox()
+  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' })
+  await notifyBookingEvent('customers-waiting', p.uid, {})
+  expect(outboxForTests()).toHaveLength(0)
+  for (const hide of ["status = 'draft'", "suspended_until = now() + interval '1 day'"]) {
+    const q = await provider()
+    await watch(q.slug, U.c1)
+    await pool.query("UPDATE notifications SET created_at = now() - interval '3 days' WHERE user_id = $1", [q.uid])
+    await pool.query("UPDATE availability_watches SET created_at = now() WHERE provider_id = $1", [q.id])
+    await pool.query(`UPDATE providers SET ${hide} WHERE id = $1`, [q.id])
+    await runDueTimers(db, new Date(Date.now() + HOUR))
+    expect(await kindsFor(q.uid, 'customers-waiting')).toHaveLength(1) // only the first tap's
+  }
+})
+
+it('a blocked customer cannot watch (404); a watch already answered is re-armed by a new tap', async () => {
+  const p = await provider()
+  await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [p.uid, U.c3])
+  expect((await watch(p.slug, U.c3)).status).toBe(404)
+  await pool.query('DELETE FROM blocks WHERE blocker_id = $1', [p.uid])
+  await pool.query("DELETE FROM notifications WHERE user_id = $1 AND kind = 'provider-available'", [U.c1]) // count this test's only
+  await watch(p.slug, U.c1)
+  await startSetup(p.uid)
+  const acct = (await prow(p.id)).stripe_account_id as string
+  g.ready.add(acct)
+  await refreshAccount(db, acct)
+  expect(await kindsFor(U.c1, 'provider-available')).toHaveLength(1)
+  g.ready.delete(acct) // the account is restricted again
+  await refreshAccount(db, acct)
+  await pool.query("UPDATE notifications SET created_at = now() - interval '2 days' WHERE user_id = $1", [p.uid])
+  expect((await watch(p.slug, U.c1)).status).toBe(204)
+  const w = (await pool.query('SELECT notified_at, created_at FROM availability_watches WHERE provider_id = $1', [p.id])).rows[0]
+  expect(w.notified_at).toBeNull()
+  expect((await kindsFor(p.uid, 'customers-waiting')).at(-1)!.payload).toEqual({ count: 1 }) // the re-armed watch counts again
+  g.ready.add(acct)
+  await refreshAccount(db, acct)
+  expect(await kindsFor(U.c1, 'provider-available')).toHaveLength(2)
 })
 
 it('when the account becomes ready each watcher gets provider-available once', async () => {
@@ -218,12 +287,12 @@ it('when the account becomes ready each watcher gets provider-available once', a
   await Promise.all([refreshAccount(db, acct), refreshAccount(db, acct), getStatus(p.uid), deliver(acct)])
   await refreshAccount(db, acct)
   for (const c of [U.c1, U.c2]) {
-    const notes = await kindsFor(c, 'provider-available')
+    const notes = (await kindsFor(c, 'provider-available')).filter((r) => r.payload.url.endsWith(`/providers/${p.slug}`)) // this provider's (earlier tests told c1 of others)
     expect(notes).toHaveLength(1)
     expect(notes[0].payload.url).toMatch(new RegExp(`/providers/${p.slug}$`))
     expect(outboxForTests().filter((m) => m.to === EMAIL(c))).toHaveLength(1)
   }
-  expect(await kindsFor(U.c3, 'provider-available')).toHaveLength(0)
+  expect((await kindsFor(U.c3, 'provider-available')).filter((r) => r.payload.url.endsWith(`/providers/${p.slug}`))).toHaveLength(0)
   expect(await kindsFor(p.uid, 'payout-setup-complete')).toHaveLength(1)
   expect((await pool.query('SELECT count(*)::int n FROM availability_watches WHERE provider_id = $1 AND notified_at IS NULL', [p.id])).rows[0].n).toBe(0)
 })
@@ -274,4 +343,14 @@ it('payout routes: signed out 401, no profile 409, payments off 503 PAYMENTS_OFF
     expect(r.status).toBe(503)
     expect((await r.json()).error).toBe('PAYMENTS_OFF')
   }
+})
+
+it('the data export lists the customer own watches by provider name only', async () => {
+  const p = await provider()
+  await watch(p.slug, U.c2)
+  const body = await (await call(exportRoute.GET, U.c2)).json()
+  expect(body.watches).toContainEqual({ provider: `Po Prov ${p.uid.slice(4)}`, slug: p.slug, createdAt: expect.any(String), notified: false })
+  expect(JSON.stringify(body.watches)).not.toContain(p.id)
+  const theirs = await (await call(exportRoute.GET, p.uid)).json()
+  expect(theirs.watches).toEqual([]) // the provider never sees who watches them
 })

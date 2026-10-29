@@ -19,7 +19,7 @@ export const NotificationSchema = z.object({
   id: z.string(),
   kind: z.enum(NOTIFICATION_KINDS),
   /** profile-live carries the profile link; message-received a link and the thread id; the booking kinds carry ids only (none for requests-ignored). */
-  payload: z.union([z.object({ url: z.string().url(), threadId: z.string().optional() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional() })]),
+  payload: z.union([z.object({ url: z.string().url(), threadId: z.string().optional() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional(), /** customers-waiting: how many, never who */ count: z.number().int().nonnegative().optional() })]),
   createdAt: z.string(),
   seenAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),

@@ -3,8 +3,8 @@ import { stripeClient, stripeGateway } from './stripe-gateway'
 
 /** Everything KANDO asks of the payment provider. Amounts are integer cents; idempotency keys make retries safe. */
 export interface PaymentsGateway {
-  /** Creates the connected account only; key e.g. `account:<providerId>` (Stripe replays it for 30 days). Store the id at once. */
-  createAccount(i: { email: string; country: string; idempotencyKey: string }): Promise<{ accountId: string }>
+  /** Creates the connected account only; key e.g. `account:<providerId>` (Stripe replays it for 30 days). Store the id at once. `providerId` goes into the account's metadata, so staff can find an account whose id was never stored. */
+  createAccount(i: { email: string; country: string; providerId: string; idempotencyKey: string }): Promise<{ accountId: string }>
   /** Sets the account's payout schedule (daily, safe to repeat) and returns a fresh Stripe-hosted onboarding link. */
   onboardingLink(i: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{ url: string }>
   accountReady(accountId: string): Promise<boolean>

@@ -11,7 +11,7 @@ import { shareProfile } from '@/lib/share-profile'
 
 /** One message with a dismiss ×; "your profile is live" also gets Share (`payload.url` is the link); "new message" gets Open (the thread). A kind this app does not know renders nothing. */
 export function NotificationBanner({ notification, canShare, onDismiss }: { notification: Notification; canShare: boolean; onDismiss: () => void }) {
-  const text = notificationText(notification.kind)
+  const text = notificationText(notification.kind, notification.payload)
   if (!text) return null
   const url = notificationUrl(notification)
   const threadId = notificationThreadId(notification)

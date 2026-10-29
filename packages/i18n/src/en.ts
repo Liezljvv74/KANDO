@@ -367,6 +367,8 @@ export const en: Record<Key, string> = {
   'notification.paymentLateRefunded': 'Your payment could not be used for the booking (it had expired, was withdrawn or was already paid). You get the full amount back.',
   'notification.payoutSetupComplete': 'Your payouts are set up. You can now send quotes and accept bookings.',
   'notification.customersWaiting': 'Customers want to book you. Set up your payouts so they can.',
+  'notification.customersWaitingOne': 'A customer wants to book you. Set up your payouts so they can.',
+  'notification.customersWaitingMany': '{count} customers want to book you. Set up your payouts so they can.',
   'notification.providerAvailable': 'A provider you asked to hear about can now be booked.',
   'notification.refundIssued': 'A refund to you has been issued.',
   'email.suspended.subject': 'Your profile was suspended',

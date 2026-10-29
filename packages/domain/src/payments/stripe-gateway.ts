@@ -54,7 +54,7 @@ export const stripeClient = (key: string): Stripe => new Stripe(key, { apiVersio
 
 export function stripeGateway(client: Stripe): PaymentsGateway {
   return {
-    async createAccount({ email, country, idempotencyKey }) {
+    async createAccount({ email, country, providerId, idempotencyKey }) {
       const account = await client.v2.core.accounts.create(
         {
           contact_email: email,
@@ -62,6 +62,7 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           identity: { country: country.toLowerCase() },
           defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
           configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+          metadata: { providerId },
         },
         { idempotencyKey },
       )

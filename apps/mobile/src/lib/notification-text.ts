@@ -26,7 +26,11 @@ const KEY: Record<Notification['kind'], Key> = {
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */
-export const notificationText = (kind: string): string | null => (kind in KEY ? t(KEY[kind as Notification['kind']]) : null)
+export function notificationText(kind: string, payload: object = {}): string | null {
+  const count = 'count' in payload && typeof payload.count === 'number' ? payload.count : 0 // customers-waiting: how many, never who
+  if (kind === 'customers-waiting' && count > 0) return count === 1 ? t('notification.customersWaitingOne') : t('notification.customersWaitingMany', { count })
+  return kind in KEY ? t(KEY[kind as Notification['kind']]) : null
+}
 
 export const MAX_BANNERS = 3
 

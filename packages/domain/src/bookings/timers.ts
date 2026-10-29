@@ -3,6 +3,7 @@ import type { db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
 import { notifyBookingEvent, type BookingKind } from './notify'
 import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
+import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
 
 export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number; customersWaiting: number }
@@ -87,20 +88,11 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('n')}`)
   })
 
-  // "Customers want to book you" (payments on only): a provider without payout set-up who has watches newer than their
-  // last such notice, and no notice within CUSTOMERS_WAITING_NOTICE_HOURS. The row carries nothing; the email the count.
-  const customersWaiting = !paymentsEnabled()
-    ? 0
-    : await (exec as typeof db).transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('customers_waiting'))`) // as above: overlapping runs take turns
-        return countOn(tx, sql`
-    WITH last AS (SELECT user_id, max(created_at) AS at FROM notifications WHERE kind = 'customers-waiting' GROUP BY user_id),
-    d AS (SELECT DISTINCT p.owner_id FROM providers p JOIN availability_watches w ON w.provider_id = p.id LEFT JOIN last l ON l.user_id = p.owner_id
-      WHERE p.payouts_ready_at IS NULL AND w.notified_at IS NULL AND w.created_at > coalesce(l.at, '-infinity')
-        AND coalesce(l.at, '-infinity') <= ${t}::timestamptz - make_interval(hours => ${CUSTOMERS_WAITING_NOTICE_HOURS})),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT owner_id, 'customers-waiting', '{}'::jsonb, ${t}::timestamptz FROM d RETURNING user_id, kind, payload)
-    ${result('n')}`)
-      })
+  // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
+  // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.
+  const waiting = paymentsEnabled() ? await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS) : []
+  for (const w of waiting) events.push({ userId: w.userId, kind: 'customers-waiting', payload: { count: String(w.count) } })
+  const customersWaiting = waiting.length
 
   return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, events }
 }

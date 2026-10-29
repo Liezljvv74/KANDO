@@ -53,15 +53,15 @@ describe('fakeGateway', () => {
 
   it('createAccount is idempotent by key', async () => {
     const g = fakeGateway()
-    const a = await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })
-    expect(await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })).toEqual(a)
-    expect((await g.createAccount({ email: 'q@example.com', country: 'DE', idempotencyKey: 'account:p-2' })).accountId).not.toBe(a.accountId)
+    const a = await g.createAccount({ email: 'p@example.com', country: 'DE', providerId: 'p-1', idempotencyKey: 'account:p-1' })
+    expect(await g.createAccount({ email: 'p@example.com', country: 'DE', providerId: 'p-1', idempotencyKey: 'account:p-1' })).toEqual(a)
+    expect((await g.createAccount({ email: 'q@example.com', country: 'DE', providerId: 'p-2', idempotencyKey: 'account:p-2' })).accountId).not.toBe(a.accountId)
     expect(g.calls.filter((c) => c.method === 'createAccount')).toHaveLength(2)
   })
 
   it('accountReady follows the ready set', async () => {
     const g = fakeGateway()
-    const { accountId } = await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })
+    const { accountId } = await g.createAccount({ email: 'p@example.com', country: 'DE', providerId: 'p-1', idempotencyKey: 'account:p-1' })
     expect(await g.accountReady(accountId)).toBe(false)
     g.ready.add(accountId)
     expect(await g.accountReady(accountId)).toBe(true)

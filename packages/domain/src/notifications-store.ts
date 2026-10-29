@@ -7,7 +7,7 @@ import type { Exec } from './providers/eligibility'
 export type NotificationKind = Notification['kind']
 
 /** Creates an in-app message for the user (owner connection: the app role may not insert). */
-export async function createNotification(exec: Exec, userId: string, kind: NotificationKind, payload: { url: string; threadId?: string } | { requestId?: string; bookingId?: string; quoteId?: string }): Promise<void> {
+export async function createNotification(exec: Exec, userId: string, kind: NotificationKind, payload: { url: string; threadId?: string } | { requestId?: string; bookingId?: string; quoteId?: string; count?: number }): Promise<void> {
   await exec.insert(notifications).values({ userId, kind, payload })
 }
 

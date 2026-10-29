@@ -1,6 +1,6 @@
 import { notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
 
-jest.mock('@/i18n', () => ({ t: (k: string) => k }))
+jest.mock('@/i18n', () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k} ${JSON.stringify(p)}` : k) }))
 
 test('every known kind has a text and an unknown kind is skipped without throwing', () => {
   expect(notificationText('requests-ignored')).toBe('notification.requestsIgnored')
@@ -31,4 +31,10 @@ test('only a message-received notice opens a thread: by its threadId, else by th
   expect(notificationThreadId({ kind: 'message-received', payload: { url: 'https://evil.test/threads/t3' } })).toBeNull()
   expect(notificationThreadId({ kind: 'profile-live', payload: { url: 'skilled://threads/t1', threadId: 't1' } })).toBeNull()
   expect(notificationThreadId({ kind: 'quote-received', payload: { bookingId: 'b' } })).toBeNull()
+})
+
+test('customers-waiting shows the count, singular or plural; without a count the plain text', () => {
+  expect(notificationText('customers-waiting', { count: 1 })).toBe('notification.customersWaitingOne')
+  expect(notificationText('customers-waiting', { count: 3 })).toBe('notification.customersWaitingMany {"count":3}')
+  expect(notificationText('customers-waiting', {})).toBe('notification.customersWaiting')
 })

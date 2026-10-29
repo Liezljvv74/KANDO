@@ -44,7 +44,7 @@ afterEach(() => vi.unstubAllEnvs())
 describe('stripeGateway: calls', () => {
   it('createAccount makes one v2 recipient account (Express dashboard) under the idempotency key, nothing else', async () => {
     const { m, g } = mockClient()
-    expect(await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })).toEqual({ accountId: 'acct_1' })
+    expect(await g.createAccount({ email: 'p@example.com', country: 'DE', providerId: 'p-1', idempotencyKey: 'account:p-1' })).toEqual({ accountId: 'acct_1' })
     expect(m.accountsCreate).toHaveBeenCalledWith(
       {
         contact_email: 'p@example.com',
@@ -52,6 +52,7 @@ describe('stripeGateway: calls', () => {
         identity: { country: 'de' },
         defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
         configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+        metadata: { providerId: 'p-1' }, // staff find an orphaned account by it
       },
       { idempotencyKey: 'account:p-1' },
     )
