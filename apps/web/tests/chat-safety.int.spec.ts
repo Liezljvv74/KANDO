@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { MessageSchema, RequestSchema, ThreadSchema } from '@kando/contract'
+import { MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { clearOutbox, notifyNewMessage, outboxForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
@@ -11,6 +11,8 @@ const reportRoute = await import('../app/app-api/v1/messages/[id]/report/route')
 const blocksRoute = await import('../app/app-api/v1/blocks/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
+const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
+const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
 
 const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other', twin: 'cs-twin' }
 let pOwner: string, sOwner: string
@@ -85,6 +87,33 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
   expect(control.status).toBe(201) // the same booking by an unblocked user works
   expect((await call(requests.POST, U.third, 'POST', { providerId: pOwner, description: 'Third job' })).status).toBe(201) // others are not affected
   await unblock(U.owner, t.id)
+})
+
+const quote = (reqId: string) => call(quotesRoute.POST, U.owner, 'POST', { amount: 40, scope: 'Fence' }, { id: reqId })
+const accept = (quoteId: string) => call(acceptRoute.POST, U.cust, 'POST', { startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: quoteId })
+const stored = async (reqId: string) => (await pool.query('SELECT (SELECT count(*) FROM quotes WHERE request_id = $1)::int q, (SELECT count(*) FROM bookings b JOIN quotes x ON x.id = b.quote_id WHERE x.request_id = $1)::int b', [reqId])).rows[0]
+
+it('a block, in either direction, stops quotes and acceptances (403 BLOCKED, nothing stored); unblocking restores them', async () => {
+  for (const blocker of [U.cust, U.owner]) {
+    const r = await newRequest(U.cust)
+    const t = await threadOf(U.cust, r.id)
+    // quote while blocked
+    await block(blocker, t.id)
+    const res = await quote(r.id)
+    expect([res.status, await res.json()]).toEqual([403, { error: 'BLOCKED' }])
+    expect(await stored(r.id)).toEqual({ q: 0, b: 0 })
+    await unblock(blocker, t.id)
+    const q = QuoteSchema.parse(await (await quote(r.id)).json())
+    // accept while blocked
+    await block(blocker, t.id)
+    const acc = await accept(q.id)
+    expect([acc.status, await acc.json()]).toEqual([403, { error: 'BLOCKED' }])
+    expect(await stored(r.id)).toEqual({ q: 1, b: 0 })
+    expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('sent')
+    await unblock(blocker, t.id)
+    expect((await accept(q.id)).status).toBe(200)
+    await pool.query("UPDATE requests SET status = 'booked' WHERE id = $1", [r.id])
+  }
 })
 
 it('blocking is only for someone you share a thread with (404)', async () => {

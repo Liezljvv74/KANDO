@@ -5,14 +5,15 @@ import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
+const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 
-const U = { c1: 'al-c1', c2: 'al-c2', c3: 'al-c3', c4: 'al-c4', owner: 'al-owner', owner2: 'al-owner2' }
+const U = { c1: 'al-c1', c2: 'al-c2', c3: 'al-c3', c4: 'al-c4', c5: 'al-c5', owner: 'al-owner', owner2: 'al-owner2' }
 let pOwner: string, pOwner2: string, sOwner2: string
 
 beforeAll(async () => {
   await cleanupUsers()
   const { categoryId } = await seedBase()
-  for (const u of [U.c1, U.c2, U.c3, U.c4]) await seedUser(u)
+  for (const u of [U.c1, U.c2, U.c3, U.c4, U.c5]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Al Owner', categoryId })
   pOwner2 = await seedProvider(U.owner2, { name: 'Al Owner2', categoryId })
   sOwner2 = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pOwner2])).rows[0].id
@@ -35,12 +36,20 @@ it('a second open request to the same provider is 409 request-limit; after it ex
   expect((await count(U.c1)).r).toBe(1) // nothing was saved
   expect((await req(U.c1, pOwner2)).status).toBe(201) // another provider is fine
   expect((await req(U.c2)).status).toBe(201) // another customer is fine
-  await pool.query("UPDATE requests SET status = 'quoted' WHERE id = $1", [id])
-  expect((await req(U.c1)).status).toBe(409) // quoted still counts
+  expect((await call(quotesRoute.POST, U.owner, 'POST', { amount: 10, scope: 'Fence' }, { id })).status).toBe(201)
+  expect((await req(U.c1)).status).toBe(409) // quoted (with a live quote) still counts
   await pool.query("UPDATE requests SET status = 'expired' WHERE id = $1", [id])
   expect((await req(U.c1)).status).toBe(201)
   await pool.query("UPDATE requests SET status = 'booked' WHERE customer_id = $1 AND provider_id = $2", [U.c1, pOwner])
   expect((await req(U.c1)).status).toBe(201)
+})
+
+it('a quoted request whose quote has expired no longer counts toward the pair limit, before the daily timer runs', async () => {
+  const id = (await (await req(U.c5)).json()).id as string
+  expect((await call(quotesRoute.POST, U.owner, 'POST', { amount: 10, scope: 'Fence' }, { id })).status).toBe(201)
+  expect((await req(U.c5)).status).toBe(409) // a live quote counts
+  await pool.query("UPDATE quotes SET expires_at = now() - interval '1 minute' WHERE request_id = $1", [id])
+  expect((await req(U.c5)).status).toBe(201)
 })
 
 it('the 11th request or direct booking in 24 hours is 409 daily-limit', async () => {

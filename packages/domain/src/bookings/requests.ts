@@ -85,7 +85,7 @@ const lockRequest = (tx: Tx, requestId: string) =>
 export async function assertWithinLimits(tx: Tx, userId: string, providerId: string | null, now: Date): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('request_limit'), hashtext(${userId}))`)
   if (providerId) {
-    const open = or(and(eq(requests.status, 'open'), gt(requests.answerBy, now)), eq(requests.status, 'quoted')) // an open request past its deadline is as good as expired
+    const open = or(and(eq(requests.status, 'open'), gt(requests.answerBy, now)), and(eq(requests.status, 'quoted'), sql`EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ${requests.id} AND q.status = 'sent' AND q.expires_at > ${now.toISOString()}::timestamptz)`)) // a quoted request counts only while its quote is live (the timer leaves it 'quoted' after expiry); an open request past its deadline is as good as expired
     const n = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(eq(requests.customerId, userId), eq(requests.providerId, providerId), open)))[0]!.n
     if (n >= MAX_OPEN_REQUESTS_PER_PAIR) fail(409, { error: 'request-limit' })
   }
@@ -149,7 +149,9 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   const provider = (await ownProvider(tx, userId)) ?? notFound()
   if (!isUuid(requestId)) return notFound()
   const own = () => tx.select().from(requests).where(and(eq(requests.id, requestId), eq(requests.providerId, provider.id)))
-  if (!(await own())[0]) return notFound() // party check before the lock: a stranger cannot make anyone wait
+  const first = (await own())[0]
+  if (!first) return notFound() // party check before the lock: a stranger cannot make anyone wait
+  if (await blockedWithProvider(tx, first.customerId, provider.id)) fail(403, { error: 'BLOCKED' }) // either side blocked the other
   await assertNoContactDetails(userId, input.scope)
   await lockRequest(tx, requestId)
   const req = (await own())[0]! // read again after the lock
@@ -190,6 +192,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
     return q && r ? { quote: q, req: r } : null
   }
   const pre = (await find()) ?? notFound() // party check before the lock: a stranger cannot make anyone wait
+  if (await blockedWithProvider(tx, userId, pre.req.providerId)) fail(403, { error: 'BLOCKED' })
   if (input.note) await assertNoContactDetails(userId, input.note)
   await lockRequest(tx, pre.req.id)
   const { quote, req } = (await find()) ?? notFound() // read again after the lock: a concurrent accept has committed by now
