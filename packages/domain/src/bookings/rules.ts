@@ -10,18 +10,22 @@ export const PROPOSAL_ANSWER_HOURS = 24
 export const BUFFER_MINUTES = 30
 export const IGNORED_LIMIT = 3
 export const IGNORED_WINDOW_DAYS = 30
+export const PAY_WINDOW_HOURS = 48
+export const PAY_BEFORE_START_HOURS = 24
+export const SHORT_NOTICE_PAY_HOURS = 6
+export const SHORT_NOTICE_THRESHOLD_HOURS = 24
 
 export type Span = { start: Date; end: Date }
 
 const HOUR = 3_600_000
 const MAX_AHEAD_DAYS = 365
 
-/** Payment deadline: 48h after acceptance but at least 24h before the start; under 24h to go, 6h. */
+/** Payment deadline: 48h after acceptance but at least 24h before the start; 24h or less to go, 6h. */
 export const payBy = (acceptedAt: Date, startAt: Date): Date => {
   const a = acceptedAt.getTime()
   const s = startAt.getTime()
-  if (s - a < 24 * HOUR) return new Date(a + 6 * HOUR)
-  return new Date(Math.min(a + 48 * HOUR, s - 24 * HOUR))
+  if (s - a <= SHORT_NOTICE_THRESHOLD_HOURS * HOUR) return new Date(a + SHORT_NOTICE_PAY_HOURS * HOUR)
+  return new Date(Math.min(a + PAY_WINDOW_HOURS * HOUR, s - PAY_BEFORE_START_HOURS * HOUR))
 }
 
 /** True when the spans, each widened by the buffer, share time; touching at exactly the buffer is free. */

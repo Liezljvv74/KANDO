@@ -14,8 +14,15 @@ describe('payBy', () => {
   it('is 6h after acceptance when start is under 24h away', () => {
     expect(payBy(d('02T10:00'), d('03T09:00'))).toEqual(d('02T16:00'))
   })
-  it('is acceptance itself when start is exactly 24h away', () => {
-    expect(payBy(d('02T10:00'), d('03T10:00'))).toEqual(d('02T10:00'))
+  it('is 6h after acceptance when start is exactly 24h away', () => {
+    expect(payBy(d('02T10:00'), d('03T10:00'))).toEqual(d('02T16:00'))
+  })
+  it('is the same instant at exactly 48h away, and follows each side of it', () => {
+    const a = d('02T10:00')
+    const at = (h: number) => new Date(a.getTime() + h * 3_600_000)
+    expect(payBy(a, at(48))).toEqual(at(24)) // a+48h equals s-24h
+    expect(payBy(a, at(49))).toEqual(at(25))
+    expect(payBy(a, at(47))).toEqual(at(23))
   })
 })
 
@@ -33,27 +40,46 @@ describe('overlaps', () => {
 })
 
 describe('canTransition', () => {
-  it('follows the allowed table', () => {
-    expect(canTransition('proposed', 'awaiting-payment')).toBe(true)
-    expect(canTransition('proposed', 'proposed')).toBe(true)
-    expect(canTransition('awaiting-payment', 'expired')).toBe(true)
-    expect(canTransition('expired', 'awaiting-payment')).toBe(false)
-    expect(canTransition('awaiting-payment', 'proposed')).toBe(false)
+  const all = ['proposed', 'awaiting-payment', 'expired', 'declined', 'withdrawn'] as const
+  const allowed = new Set([
+    'proposed>proposed',
+    'proposed>awaiting-payment',
+    'proposed>expired',
+    'proposed>declined',
+    'proposed>withdrawn',
+    'awaiting-payment>expired',
+    'awaiting-payment>withdrawn',
+  ])
+  it('allows exactly the table, nothing leaves a final state', () => {
+    for (const from of all) for (const to of all) expect(canTransition(from, to), `${from}>${to}`).toBe(allowed.has(`${from}>${to}`))
   })
 })
 
 describe('assertFuture', () => {
   const now = d('02T10:00')
-  const status = (f: () => void) => {
+  const caught = (start: Date) => {
     try {
-      f()
+      assertFuture(start, now)
     } catch (e) {
-      return (e as Response).status
+      return e as Response
     }
+    return undefined
   }
-  it('accepts a start within the next year and rejects past or too far', () => {
-    expect(status(() => assertFuture(d('02T10:01'), now))).toBeUndefined()
-    expect(status(() => assertFuture(d('02T10:00'), now))).toBe(400)
-    expect(status(() => assertFuture(new Date(now.getTime() + 366 * 86_400_000), now))).toBe(400)
+  const failure = async (start: Date) => {
+    const r = caught(start)
+    if (!r) throw new Error('expected assertFuture to throw')
+    return { status: r.status, body: await r.json() }
+  }
+  const year = 365 * 86_400_000
+  it('accepts a start after now up to 365 days ahead', () => {
+    expect(caught(d('02T10:01'))).toBeUndefined()
+    expect(caught(new Date(now.getTime() + year))).toBeUndefined()
+  })
+  it('rejects the past and now', async () => {
+    expect(await failure(d('02T10:00'))).toEqual({ status: 400, body: { error: 'start-in-past' } })
+    expect(await failure(d('01T10:00'))).toEqual({ status: 400, body: { error: 'start-in-past' } })
+  })
+  it('rejects more than 365 days ahead', async () => {
+    expect(await failure(new Date(now.getTime() + year + 1))).toEqual({ status: 400, body: { error: 'start-too-far' } })
   })
 })
