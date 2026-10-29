@@ -65,7 +65,7 @@ Written 28 October 2026 so that a new session can continue at once. Status in on
 
 **D. Production hardening before real users**
 
-14. **Separate production keys** (they are shared with the test branch today): a production storage key for `kando-main` in the Neon console, and separate `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `CRON_SECRET` for Production only in Vercel.
+14. **Separate production keys** (they are shared with the test branch today): a production storage key for `kando-main` in the Neon console, and separate `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `CRON_SECRET` for Production only in Vercel. **`CRON_SECRET` stays on Preview for now (owner, 29 October 2026): Preview is still needed for testing, so it cannot be removed from there yet. Remove it from Preview (untick Preview under Settings, Environment Variables, `kando-web`) when Preview testing no longer needs the cron route, or give Preview its own value.**
 15. **Email:** verify the Resend sending domain for the address KANDO sends from and send a test email from production; in Neon Auth turn on custom email sending and "Require email verification" (`docs/deployment.md`).
 16. **Vercel Pro** (the free plan is for non-commercial use), and check that the first daily 06:00 UTC suspension job ran.
 17. **Security scan** of the whole project (row-level security, routes, Vercel settings) just before launch.
@@ -75,7 +75,7 @@ Written 28 October 2026 so that a new session can continue at once. Status in on
 
 19. **AI-assisted document checks** (about 90% automatic, never an automatic rejection, a person re-checks 10% and the first approvals): needs the data protection impact assessment signed (`docs/legal-drafts/dpia-ai-document-checks-draft.md`), an EU provider chosen (recommendation: Mistral; confirm data location, processing agreement, no training) and a lawyer's confirmation. Staff review documents by hand until then.
 20. **Revisit the "optional for now" decisions** (the owner asked to be reminded): liability insurance, trade registration, craft qualification.
-21. **Clean-up:** delete the old GitHub repository `SkillWeb`, the old Vercel project `skillweb`, the local folder `Skilled\skill-web`, and later the old Neon branches `main` and `dev`; then remove the "Payload" wording from this README and `docs/deployment.md`.
+21. **Clean-up:** delete the old GitHub repository `SkillWeb`, the old Vercel project `skillweb`, the local folder `Skilled\skill-web`, and later the old Neon branch `main` (the old `dev` was deleted on 29 October 2026; `kando-main` is now the default branch, and `main` cannot be deleted while `kando-dev` is its child); then remove the "Payload" wording from this README and `docs/deployment.md`.
 
 **F. Polish: what makes the first version feel finished (do after A to D, before submitting)**
 
