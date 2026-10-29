@@ -43,8 +43,13 @@ async function writableThread(tx: Tx, threadId: string) {
   return t
 }
 
+/**
+ * Stamped with clock_timestamp() (the moment of the insert), not the transaction start: a slow transaction (a photo upload) must not
+ * give its message an older stamp than a text another side sent and the other side already polled past (the cursor is the stamp).
+ * ponytail: a window of milliseconds between this insert and the commit remains; the later fix is a small poll overlap with client-side dedupe by id.
+ */
 const insertMessage = async (tx: Tx, values: typeof messages.$inferInsert, userId: string) => {
-  const [row] = await tx.insert(messages).values(values).returning({ id: messages.id })
+  const [row] = await tx.insert(messages).values({ ...values, createdAt: sql`clock_timestamp()` as unknown as Date }).returning({ id: messages.id })
   return (await listWhere(tx, userId, eq(messages.id, row!.id)))[0]!
 }
 
@@ -63,10 +68,11 @@ export async function sendMessage(tx: Tx, userId: string, threadId: string, inpu
 }
 
 /** A photo, in the private documents bucket: the object first, then the row; a failed insert removes the object. */
-export async function sendPhoto(tx: Tx, userId: string, threadId: string, photo: NormalizedImage, afterCommit: AfterCommit): Promise<Message> {
+export async function sendPhoto(tx: Tx, userId: string, threadId: string, photo: NormalizedImage, afterCommit: AfterCommit, onFailure: AfterCommit = () => {}): Promise<Message> {
   const t = await writableThread(tx, threadId)
   const key = `chat/${t.id}/${randomUUID()}.jpg`
   await storage().put(documentsBucket(), key, photo.data, 'image/jpeg')
+  onFailure(() => removeObject(documentsBucket(), key)) // also when the commit fails (the route cleans up)
   try {
     const sent = await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'photo', photoKey: key }, userId)
     notifyNewMessage(afterCommit, t, userId)
@@ -91,7 +97,7 @@ export async function listMessages(tx: Tx, userId: string, threadId: string, aft
  */
 export async function postCard(threadId: string, senderId: string, card: Card): Promise<void> {
   try {
-    await db.insert(messages).values({ threadId, senderId, kind: 'card', card })
+    await db.insert(messages).values({ threadId, senderId, kind: 'card', card, createdAt: sql`clock_timestamp()` as unknown as Date })
   } catch (e) {
     console.error(`[chat] could not post a ${card.type} card to thread ${threadId} ${describeError(e)}`)
   }

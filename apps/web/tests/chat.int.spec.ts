@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import sharp from 'sharp'
-import { pool } from '@kando/db'
+import { sql } from 'drizzle-orm'
+import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { setStorageForTests } from '@kando/domain'
+import { sendMessage, setStorageForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -239,4 +240,24 @@ it('a cursor that is not a real time or id is 400', async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)
   expect((await list(t.id, U.cust, `2026-13-45T99:99:99Z|${crypto.randomUUID()}`)).status).toBe(400)
   expect((await list(t.id, U.cust, '2026-01-01T10:00:00Z|zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz')).status).toBe(400)
+})
+
+it('a message from a slow transaction is stamped when inserted, so the other side polling meanwhile does not miss it', async () => {
+  const r = await newRequest()
+  const t = await threadOf(U.cust, r.id)
+  let go!: () => void
+  const gate = new Promise<void>((ok) => (go = ok))
+  // A opens its transaction first (its start time is the oldest), then waits
+  const a = asUser(U.cust, async (tx) => {
+    await tx.execute(sql`SELECT 1`)
+    await gate
+    return sendMessage(tx, U.cust, t.id, { body: 'from A' }, () => {})
+  })
+  await new Promise((ok) => setTimeout(ok, 50))
+  expect((await send(t.id, U.owner, { body: 'from B' })).status).toBe(201) // B sends and commits while A is still open
+  const seen = await list(t.id, U.cust)
+  const cursor = `${seen.docs.at(-1)!.createdAt}|${seen.docs.at(-1)!.id}`
+  go()
+  await a
+  expect((await list(t.id, U.cust, cursor)).docs.map((m) => m.body)).toEqual(['from A'])
 })
