@@ -115,8 +115,10 @@ export const bookings = pgTable(
     check('bookings_status_check', sql`status in ('proposed','awaiting-payment','confirmed','expired','declined','withdrawn')`),
     check('bookings_counter_by_check', sql`counter_by in ('provider','customer')`),
     check('bookings_pay_by_check', sql`status <> 'awaiting-payment' OR pay_by IS NOT NULL`),
+    check('bookings_accepted_at_check', sql`status <> 'awaiting-payment' OR accepted_at IS NOT NULL`),
     index('bookings_provider_id_status_idx').on(t.providerId, t.status),
     index('bookings_start_at_idx').on(t.startAt),
     index('bookings_customer_id_idx').on(t.customerId),
+    index('bookings_request_id_idx').on(t.requestId),
   ],
 )

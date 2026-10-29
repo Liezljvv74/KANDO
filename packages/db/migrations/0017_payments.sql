@@ -46,9 +46,13 @@ UPDATE "bookings" SET "pay_by" = "updated_at" WHERE "status" = 'awaiting-payment
 UPDATE "bookings" b SET "request_id" = q."request_id" FROM "quotes" q WHERE q."id" = b."quote_id";--> statement-breakpoint
 ALTER TABLE "availability_watches" ADD CONSTRAINT "availability_watches_customer_id_users_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "availability_watches" ADD CONSTRAINT "availability_watches_provider_id_providers_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."providers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "availability_watches_provider_id_idx" ON "availability_watches" USING btree ("provider_id");--> statement-breakpoint
+CREATE INDEX "ledger_entries_booking_id_idx" ON "ledger_entries" USING btree ("booking_id");--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_request_id_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."requests"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "bookings_request_id_idx" ON "bookings" USING btree ("request_id");--> statement-breakpoint
 ALTER TABLE "providers" ADD CONSTRAINT "providers_stripe_account_id_unique" UNIQUE("stripe_account_id");--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_kind_check" CHECK (kind in ('profile-live','request-received','quote-received','booking-proposed','booking-accepted','booking-declined','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','pending-slot-requested','message-received','booking-paid','payment-received','payment-late-refunded','payout-setup-complete','customers-waiting','provider-available','refund-issued'));--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_pay_by_check" CHECK (status <> 'awaiting-payment' OR pay_by IS NOT NULL);--> statement-breakpoint
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_accepted_at_check" CHECK (status <> 'awaiting-payment' OR accepted_at IS NOT NULL);--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_status_check" CHECK (status in ('proposed','awaiting-payment','confirmed','expired','declined','withdrawn'));--> statement-breakpoint
 ALTER TABLE "staff_flags" ADD CONSTRAINT "staff_flags_kind_check" CHECK (kind in ('contact-attempts','message-reported','chargeback'));

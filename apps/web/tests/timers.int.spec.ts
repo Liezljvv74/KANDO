@@ -30,7 +30,7 @@ const request = async (providerId: string, answerBy: string, status = 'open', cu
 const booking = async (status: string, o: { answerBy?: string; payBy?: string; acceptedAt?: string; startAt?: string } = {}) =>
   (
     await pool.query(
-      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, $6, $7, $8) RETURNING id",
+      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, $6, $7, COALESCE($8::timestamptz, CASE WHEN $4::text = 'awaiting-payment' THEN $7::timestamptz - interval '48 hours' END)) RETURNING id",
       [U.cust, prov, service, status, o.startAt ?? at(24 * 20), o.answerBy ?? null, o.payBy ?? null, o.acceptedAt ?? null],
     )
   ).rows[0].id as string

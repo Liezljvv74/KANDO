@@ -1,5 +1,5 @@
 {
-  "id": "cf5e1430-1a91-48d2-bb43-a75f07834614",
+  "id": "6215b6fb-da16-4331-9b29-3126f50affe4",
   "prevId": "550e5119-3b8e-42ba-b19b-0844f8672c68",
   "version": "7",
   "dialect": "postgresql",
@@ -1804,6 +1804,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "bookings_request_id_idx": {
+          "name": "bookings_request_id_idx",
+          "columns": [
+            {
+              "expression": "request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1892,6 +1907,10 @@
         "bookings_pay_by_check": {
           "name": "bookings_pay_by_check",
           "value": "status <> 'awaiting-payment' OR pay_by IS NOT NULL"
+        },
+        "bookings_accepted_at_check": {
+          "name": "bookings_accepted_at_check",
+          "value": "status <> 'awaiting-payment' OR accepted_at IS NOT NULL"
         }
       },
       "isRLSEnabled": false
@@ -2834,7 +2853,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "availability_watches_provider_id_idx": {
+          "name": "availability_watches_provider_id_idx",
+          "columns": [
+            {
+              "expression": "provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "availability_watches_customer_id_users_id_fk": {
           "name": "availability_watches_customer_id_users_id_fk",
@@ -2939,7 +2974,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "ledger_entries_booking_id_idx": {
+          "name": "ledger_entries_booking_id_idx",
+          "columns": [
+            {
+              "expression": "booking_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {

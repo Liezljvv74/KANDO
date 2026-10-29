@@ -310,55 +310,64 @@ const BUSY_FUNCTIONS = [
 
 // Booking guards, for every writer (the owner connection included unless said otherwise). Invoker rights: the inserting
 // customer reads the quote and service under RLS, so a quote or service they cannot see counts as foreign.
-// bookings_fill_amount: the price is the quote's, else the service's (an app insert cannot name amount or currency at all);
-// the quote must be the booking provider's, on a request of the booking's customer; the service must be the provider's.
-// request_id is the quote's request. On update only a changed quote or service id is checked (a NULL from ON DELETE SET NULL passes).
+// bookings_fill_amount, on insert: the price is the quote's, else the service's (an app insert cannot name amount or currency
+// at all); the quote must be the booking provider's, on a request of the booking's customer; the service must be the
+// provider's; request_id is the quote's request (whatever was supplied). On update quote_id and service_id are frozen:
+// only unchanged or NULL (an ON DELETE SET NULL cascade) passes.
+const OWNER_ONLY = `ARRAY[${OWNER_ONLY_BOOKING_STATUSES.map((s) => `'${s}'`).join(', ')}]::text[]`
 const BOOKING_TRIGGERS = [
-  `CREATE OR REPLACE FUNCTION bookings_fill_amount() RETURNS trigger LANGUAGE plpgsql AS $$
+  `CREATE OR REPLACE FUNCTION bookings_fill_amount() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
     DECLARE q_amount numeric; q_currency text; q_request uuid; s_price numeric; s_currency text;
     BEGIN
-      IF NEW.service_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.service_id IS DISTINCT FROM OLD.service_id) THEN
+      IF TG_OP = 'UPDATE' THEN
+        IF NEW.quote_id IS NOT NULL AND NEW.quote_id IS DISTINCT FROM OLD.quote_id THEN RAISE EXCEPTION 'quote_id cannot be changed'; END IF;
+        IF NEW.service_id IS NOT NULL AND NEW.service_id IS DISTINCT FROM OLD.service_id THEN RAISE EXCEPTION 'service_id cannot be changed'; END IF;
+        RETURN NEW;
+      END IF;
+      IF NEW.service_id IS NOT NULL THEN
         SELECT price, currency INTO s_price, s_currency FROM services WHERE id = NEW.service_id AND provider_id = NEW.provider_id;
         IF NOT FOUND THEN RAISE EXCEPTION 'bookings: service % does not belong to the provider', NEW.service_id; END IF;
       END IF;
-      IF NEW.quote_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.quote_id IS DISTINCT FROM OLD.quote_id) THEN
+      IF NEW.quote_id IS NOT NULL THEN
         SELECT q.amount, q.currency, q.request_id INTO q_amount, q_currency, q_request FROM quotes q JOIN requests r ON r.id = q.request_id
           WHERE q.id = NEW.quote_id AND q.provider_id = NEW.provider_id AND r.customer_id = NEW.customer_id;
         IF NOT FOUND THEN RAISE EXCEPTION 'bookings: quote % does not belong to this customer and provider', NEW.quote_id; END IF;
       END IF;
-      IF TG_OP = 'INSERT' THEN
-        NEW.request_id := q_request;
-        IF q_amount IS NOT NULL THEN NEW.amount := q_amount; NEW.currency := q_currency;
-        ELSIF s_price IS NOT NULL THEN NEW.amount := s_price; NEW.currency := s_currency;
-        END IF;
+      NEW.request_id := q_request;
+      IF q_amount IS NOT NULL THEN NEW.amount := q_amount; NEW.currency := q_currency;
+      ELSIF s_price IS NOT NULL THEN NEW.amount := s_price; NEW.currency := s_currency;
       END IF;
       RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_fill_amount ON bookings`,
   `CREATE TRIGGER bookings_fill_amount BEFORE INSERT OR UPDATE OF quote_id, service_id ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_fill_amount()`,
-  // A status the payment code sets (paid) cannot be set by an app request, on insert or update.
-  `CREATE OR REPLACE FUNCTION bookings_guard_status() RETURNS trigger LANGUAGE plpgsql AS $$
+  // An owner-only status (paid) is set, and left, only by the payment code and staff: an app request can neither move a
+  // booking into it (insert or update) nor out of it (that would dodge settlement).
+  `CREATE OR REPLACE FUNCTION bookings_guard_status() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
     BEGIN
-      IF current_user = '${APP_ROLE}' AND NEW.status = ANY (ARRAY[${OWNER_ONLY_BOOKING_STATUSES.map((s) => `'${s}'`).join(', ')}]::text[])
-        AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status) THEN
-        RAISE EXCEPTION 'bookings: status % is set by the payment code only', NEW.status;
+      IF current_user = '${APP_ROLE}' AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status) THEN
+        IF NEW.status = ANY (${OWNER_ONLY}) THEN RAISE EXCEPTION 'bookings: status % is set by the payment code only', NEW.status; END IF;
+        IF TG_OP = 'UPDATE' AND OLD.status = ANY (${OWNER_ONLY}) THEN RAISE EXCEPTION 'bookings: a % booking is changed by the payment code only', OLD.status; END IF;
       END IF;
       RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
   `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE OF status ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
-  // Money rows are never changed or removed, not even on the owner connection. The one exception is the test clean-up
-  // (cleanupUsers), which sets kando.ledger_cleanup for its own transaction only.
-  `CREATE OR REPLACE FUNCTION ledger_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+  // Money rows are never changed or removed (rows or TRUNCATE), not even on the owner connection. The one exception is the
+  // test clean-up (cleanupUsers), which sets kando.ledger_cleanup for its own transaction only.
+  `CREATE OR REPLACE FUNCTION ledger_append_only() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
     BEGIN
-      IF coalesce(current_setting('kando.ledger_cleanup', true), '') = 'on' THEN
-        IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-        RETURN NEW;
+      IF coalesce(current_setting('kando.ledger_cleanup', true), '') <> 'on' THEN
+        RAISE EXCEPTION 'ledger_entries is append-only: write a new row instead';
       END IF;
-      RAISE EXCEPTION 'ledger_entries is append-only: write a new row instead';
+      IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+      IF TG_OP = 'TRUNCATE' THEN RETURN NULL; END IF;
+      RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS ledger_append_only ON ledger_entries`,
   `CREATE TRIGGER ledger_append_only BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE FUNCTION ledger_append_only()`,
+  `DROP TRIGGER IF EXISTS ledger_no_truncate ON ledger_entries`,
+  `CREATE TRIGGER ledger_no_truncate BEFORE TRUNCATE ON ledger_entries FOR EACH STATEMENT EXECUTE FUNCTION ledger_append_only()`,
 ]
 
 // app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.

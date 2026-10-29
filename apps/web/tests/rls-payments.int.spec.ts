@@ -18,6 +18,7 @@ const rls = { cause: { message: expect.stringContaining('row-level security') } 
 const denied = { cause: { message: expect.stringContaining('permission denied') } }
 const run = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, (tx) => tx.execute(q))
 const future = sql`now() + interval '3 days'`
+const paymentCodeOnly = { cause: { message: expect.stringMatching(/confirmed.*payment code only/) } }
 const unchangeable = { cause: { message: expect.stringContaining('cannot be changed') } }
 
 beforeAll(async () => {
@@ -107,29 +108,53 @@ it('a booking with a forged quote or service id is refused', async () => {
   await expect(run(ids.customer, insertBooking({ quote: otherProvidersQuoteId }))).rejects.toMatchObject(forged) // another provider's quote
   await expect(run(ids.customer, insertBooking({ service: otherServiceId }))).rejects.toMatchObject(forged) // another provider's service
   await expect(run(ids.customer, insertBooking({ quote: quoteId, service: otherServiceId }))).rejects.toMatchObject(forged)
-  // nor can a party swap them in later
+  // an app-supplied request_id is overwritten from the quote (none for a direct booking)
+  const supplied = await run(ids.customer, sql`INSERT INTO bookings (customer_id, provider_id, service_id, request_id, source, start_at, duration_min) VALUES (${ids.customer}, ${providerId}, ${serviceId}, ${requestId}, 'direct', ${future}, 60) RETURNING request_id`)
+  expect(supplied.rows).toEqual([{ request_id: null }])
+})
+
+it('quote_id, service_id and request_id are frozen after insert, even when repointed to valid ids of the same pair', async () => {
+  // a second quote on the customer's own request and a second service of the same provider: valid for this pair
+  const q2 = (await pool.query("INSERT INTO quotes (request_id, provider_id, version, amount, scope, expires_at) VALUES ($1, $2, 2, 5, 'billiger', now() + interval '7 days') RETURNING id", [requestId, providerId])).rows[0].id
+  const s2 = (await pool.query("INSERT INTO services (provider_id, category_id, title, price_type, price) SELECT provider_id, category_id, 'Zweiter', 'fixed', 1 FROM services WHERE id = $1 RETURNING id", [serviceId])).rows[0].id
+  const quoted = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, service_id, source, start_at, duration_min) VALUES ($1, $2, $3, $4, 'quote', now() + interval '6 days', 60) RETURNING id", [ids.customer, providerId, quoteId, s2])).rows[0].id
   for (const uid of [ids.customer, ids.owner]) {
-    await expect(run(uid, sql`UPDATE bookings SET quote_id = ${otherCustomersQuoteId} WHERE id = ${bookingId}`)).rejects.toMatchObject(forged)
-    await expect(run(uid, sql`UPDATE bookings SET service_id = ${otherServiceId} WHERE id = ${bookingId}`)).rejects.toMatchObject(forged)
+    await expect(run(uid, sql`UPDATE bookings SET quote_id = ${q2} WHERE id = ${quoted}`)).rejects.toMatchObject(unchangeable)
+    await expect(run(uid, sql`UPDATE bookings SET service_id = ${serviceId} WHERE id = ${quoted}`)).rejects.toMatchObject(unchangeable)
+    await expect(run(uid, sql`UPDATE bookings SET quote_id = ${otherCustomersQuoteId} WHERE id = ${bookingId}`)).rejects.toMatchObject(unchangeable)
     await expect(run(uid, sql`UPDATE bookings SET request_id = ${requestId} WHERE id = ${bookingId}`)).rejects.toMatchObject(unchangeable)
+    expect((await run(uid, sql`UPDATE bookings SET quote_id = ${quoteId}, service_id = ${s2} WHERE id = ${quoted}`)).rowCount).toBe(1) // unchanged is fine
   }
+  // ON DELETE SET NULL still works: removing the service clears the booking's service_id, the amount stays
+  await pool.query('DELETE FROM services WHERE id = $1', [s2])
+  expect((await pool.query('SELECT service_id, amount FROM bookings WHERE id = $1', [quoted])).rows).toEqual([{ service_id: null, amount: '100.00' }])
+  await pool.query('DELETE FROM bookings WHERE id = $1', [quoted])
+  await pool.query('DELETE FROM quotes WHERE id = $1', [q2])
 })
 
 it('app_user cannot set status confirmed; the owner connection can', async () => {
   expect(OWNER_ONLY_BOOKING_STATUSES).toEqual(['confirmed'])
   for (const uid of [ids.customer, ids.owner]) {
-    await expect(run(uid, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rejects.toThrow(/confirmed/)
+    await expect(run(uid, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly)
   }
-  await expect(run(ids.customer, insertBooking({ status: 'confirmed' }))).rejects.toThrow(/confirmed/)
+  await expect(run(ids.customer, insertBooking({ status: 'confirmed' }))).rejects.toMatchObject(paymentCodeOnly)
   // other changes by the parties still work
   expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist blau' WHERE id = ${bookingId}`)).rowCount).toBe(1)
   await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [bookingId])
   expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist rot' WHERE id = ${bookingId}`)).rowCount).toBe(1) // a confirmed row stays writable for other columns
+  // a paid booking cannot be moved away by a party (that would dodge settlement); the owner connection can
+  for (const uid of [ids.customer, ids.owner]) {
+    for (const to of ['withdrawn', 'expired', 'declined', 'proposed']) {
+      await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly)
+    }
+  }
+  expect((await run(ids.customer, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rowCount).toBe(1) // unchanged is fine
   await pool.query("UPDATE bookings SET status = 'proposed' WHERE id = $1", [bookingId])
 })
 
-it('an awaiting-payment booking always has a pay-by date', async () => {
-  await expect(pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = NULL WHERE id = $1", [bookingId])).rejects.toThrow(/bookings_pay_by_check/)
+it('an awaiting-payment booking always has a pay-by date and an acceptance time', async () => {
+  await expect(pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = NULL, accepted_at = now() WHERE id = $1", [bookingId])).rejects.toThrow(/bookings_pay_by_check/)
+  await expect(pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = now() + interval '1 day', accepted_at = NULL WHERE id = $1", [bookingId])).rejects.toThrow(/bookings_accepted_at_check/)
   await pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = now() + interval '1 day', accepted_at = now() WHERE id = $1", [bookingId])
   await pool.query("UPDATE bookings SET status = 'proposed', pay_by = NULL, accepted_at = NULL WHERE id = $1", [bookingId])
 })
@@ -150,6 +175,7 @@ it('updating or deleting a ledger row fails, even on the owner connection', asyn
   await expect(pool.query("DELETE FROM ledger_entries WHERE idempotency_key = 'rp-charge-1'")).rejects.toThrow(/append-only/)
   await expect(pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'refund', 0, 'rp-zero')", [bookingId, providerId])).rejects.toThrow(/ledger_entries_amount_check/)
   await expect(pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', 10, 'rp-charge-1')", [bookingId, providerId])).rejects.toThrow(/idempotency_key/)
+  await expect(pool.query('TRUNCATE ledger_entries')).rejects.toThrow(/append-only/)
   expect((await pool.query("SELECT amount FROM ledger_entries WHERE idempotency_key = 'rp-charge-1'")).rows).toEqual([{ amount: '10.00' }])
 })
 

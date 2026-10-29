@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, numeric, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { check, index, numeric, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { providers } from './providers'
 import { users } from './users'
 
@@ -22,7 +22,8 @@ export const ledgerEntries = pgTable(
     idempotencyKey: text('idempotency_key').notNull().unique(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  () => [
+  (t) => [
+    index('ledger_entries_booking_id_idx').on(t.bookingId),
     check('ledger_entries_kind_check', sql`kind in ('charge','refund','transfer','commission')`),
     check('ledger_entries_amount_check', sql`amount > 0`),
   ],
@@ -48,5 +49,5 @@ export const availabilityWatches = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
   },
-  (t) => [primaryKey({ columns: [t.customerId, t.providerId] })],
+  (t) => [primaryKey({ columns: [t.customerId, t.providerId] }), index('availability_watches_provider_id_idx').on(t.providerId)],
 )
