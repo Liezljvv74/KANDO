@@ -84,6 +84,7 @@ export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
 
 /** POST /bookings: a booking without a prior request. */
 export const DirectBookingInputSchema = z.intersection(TimeProposalSchema, z.object({ serviceId: z.string().uuid() }))
+export type DirectBookingInput = z.infer<typeof DirectBookingInputSchema>
 
 /** The other party's answer to a proposed booking. */
 export const BookingAnswerSchema = z.discriminatedUnion('type', [
