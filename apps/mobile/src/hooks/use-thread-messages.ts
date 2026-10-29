@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 
 import { MESSAGES_PAGE, type Message } from '@kando/contract'
@@ -13,6 +13,19 @@ export const POLL_SECONDS = 4
 const MAX_BACKOFF_MS = 60_000
 
 const byTime = (a: Message, b: Message) => (a.createdAt === b.createdAt ? (a.id < b.id ? -1 : 1) : a.createdAt < b.createdAt ? -1 : 1)
+
+/** Adds the messages not known yet (by id); with `replace` a known message is swapped for the incoming one (its photo link is fresh again). */
+export function mergeMessages(existing: Message[], incoming: Message[], replace = false): Message[] | null {
+  const byId = new Map(existing.map((m) => [m.id, m]))
+  let changed = false
+  for (const m of incoming) {
+    if (!byId.has(m.id) || replace) {
+      byId.set(m.id, m)
+      changed = true
+    }
+  }
+  return changed ? [...byId.values()].sort(byTime) : null
+}
 
 /**
  * The messages of one thread, and the poll that keeps them current: `start` loads at once and then every POLL_SECONDS
@@ -28,12 +41,12 @@ export function createMessageFeed(list: (after?: string) => Promise<Message[]>, 
   let failures = 0
   let caughtUp = false
   let epoch = 0 // changes on stop/start: an answer from an older run is ignored
+  let reloading = false // the run from the start after `reload`: known messages are replaced (fresh photo links)
 
-  const merge = (incoming: Message[]) => {
-    const known = new Set(messages.map((m) => m.id))
-    const fresh = incoming.filter((m) => !known.has(m.id) && known.add(m.id))
-    if (!fresh.length) return false
-    messages = [...messages, ...fresh].sort(byTime)
+  const merge = (incoming: Message[], replace = false) => {
+    const next = mergeMessages(messages, incoming, replace)
+    if (!next) return false
+    messages = next
     onMessages(messages)
     return true
   }
@@ -47,8 +60,9 @@ export function createMessageFeed(list: (after?: string) => Promise<Message[]>, 
       onError(null)
       const last = docs.at(-1)
       if (last) cursor = `${last.createdAt}|${last.id}`
-      merge(docs)
+      merge(docs, reloading)
       if (docs.length >= MESSAGES_PAGE) return tick() // more waiting: no pause
+      reloading = false
       if (!caughtUp) {
         caughtUp = true
         onCaughtUp()
@@ -74,6 +88,12 @@ export function createMessageFeed(list: (after?: string) => Promise<Message[]>, 
       void tick()
     },
     stop,
+    /** Load the whole thread again from the start (photo links expire after ten minutes) and replace what is shown by id. */
+    reload() {
+      cursor = undefined
+      reloading = true
+      this.start()
+    },
     add: (m: Message) => void merge([m]),
   }
 }
@@ -89,7 +109,7 @@ export function useThreadMessages(threadId: string) {
   useFocusEffect(
     useCallback(() => {
       if (AppState.currentState === 'active') feed.start()
-      const sub = AppState.addEventListener('change', (s) => (s === 'active' ? feed.start() : feed.stop()))
+      const sub = AppState.addEventListener('change', (s) => (s === 'active' ? feed.reload() : feed.stop()))
       return () => {
         sub.remove()
         feed.stop()
@@ -107,9 +127,18 @@ export function useThreadMessages(threadId: string) {
     }
   }
 
+  const lastRefresh = useRef(0)
+  /** An image failed to load (its link expired): fetch fresh links, at most once every 30 seconds. */
+  const refreshLinks = useCallback(() => {
+    if (Date.now() - lastRefresh.current < 30_000) return
+    lastRefresh.current = Date.now()
+    feed.reload()
+  }, [feed])
+
   return {
     messages,
     loaded,
+    refreshLinks,
     send: (body: string) => deliver(() => sendMessage(threadId, body)),
     sendPhoto: (file: PickedFile) => deliver(() => sendPhotoApi(threadId, file)),
     error: sendError ?? (pollError ? errorText(pollError) : null),

@@ -52,7 +52,7 @@ export async function listBlocks(tx: Tx, userId: string): Promise<BlockedUser[]>
   return ids.map((id) => {
     const p = byId.get(id)
     const prov = byOwner.get(id)
-    return { userId: id, threadIds: threadIds(id), name: prov ? prov.publicName || publicNameFor(p?.first ?? null, p?.last ?? null, prov.businessName, prov.type) : publicNameFor(p?.first ?? null, p?.last ?? null, null, null) }
+    return { threadIds: threadIds(id), name: prov ? prov.publicName || publicNameFor(p?.first ?? null, p?.last ?? null, prov.businessName, prov.type) : publicNameFor(p?.first ?? null, p?.last ?? null, null, null) }
   })
 }
 

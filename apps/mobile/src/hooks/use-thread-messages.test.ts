@@ -3,7 +3,7 @@ import type { Message } from '@kando/contract'
 import { ApiError } from '@/api/client'
 import { MESSAGES_PAGE } from '@kando/contract'
 
-import { createMessageFeed, POLL_SECONDS } from './use-thread-messages'
+import { createMessageFeed, mergeMessages, POLL_SECONDS } from './use-thread-messages'
 
 const msg = (n: number, extra: Partial<Message> = {}): Message => ({
   id: `00000000-0000-4000-8000-00000000000${n}`,
@@ -153,4 +153,23 @@ test('a thread that does not exist (404) stops the polling for good', async () =
   jest.advanceTimersByTime(POLL_SECONDS * 100_000)
   await flush()
   expect(list).toHaveBeenCalledTimes(1)
+})
+
+test('mergeMessages adds new messages by id and only replaces known ones when asked (fresh photo links)', () => {
+  const old = msg(1, { kind: 'photo', photoUrl: 'old' })
+  expect(mergeMessages([old], [msg(1, { kind: 'photo', photoUrl: 'new' })])).toBeNull()
+  expect(mergeMessages([old], [msg(1, { kind: 'photo', photoUrl: 'new' }), msg(2)], true)!.map((m) => m.photoUrl)).toEqual(['new', null])
+  expect(mergeMessages([old], [msg(2)])!.map((m) => m.body)).toEqual(['m1', 'm2'])
+})
+
+test('reload starts again from the beginning and swaps the photo links', async () => {
+  const list = jest.fn().mockResolvedValueOnce([msg(1, { kind: 'photo', photoUrl: 'old' })]).mockResolvedValueOnce([msg(1, { kind: 'photo', photoUrl: 'new' })]).mockResolvedValue([])
+  const { feed, seen } = setup(list)
+  feed.start()
+  await flush()
+  feed.reload()
+  await flush()
+  expect(list).toHaveBeenLastCalledWith(undefined)
+  expect(seen.at(-1)!.map((m) => m.photoUrl)).toEqual(['new'])
+  feed.stop()
 })

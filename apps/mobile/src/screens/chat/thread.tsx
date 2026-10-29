@@ -30,7 +30,7 @@ const load = async () => {
 export default function ThreadScreen() {
   useLang()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { messages, loaded, send, sendPhoto, error } = useThreadMessages(id)
+  const { messages, loaded, send, sendPhoto, refreshLinks, error } = useThreadMessages(id)
   const { data, error: loadError, retry } = useLoad(load)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -113,7 +113,7 @@ export default function ThreadScreen() {
         <View style={styles.header}>
           <LinkText label={t('common.back')} onPress={goBack} />
           <Text style={styles.title} numberOfLines={1}>{thread.otherName}</Text>
-          {(!thread.blocked || blockedByMe) && <SmallButton label={t(blockedByMe ? 'chat.unblock' : 'chat.block')} onPress={toggleBlock} />}
+          <SmallButton label={t(blockedByMe ? 'chat.unblock' : 'chat.block')} onPress={toggleBlock} />
         </View>
         <FlatList
           ref={list}
@@ -121,7 +121,7 @@ export default function ThreadScreen() {
           contentContainerStyle={styles.messages}
           data={messages}
           keyExtractor={(m) => m.id}
-          renderItem={({ item }) => <MessageBubble message={item} />}
+          renderItem={({ item }) => <MessageBubble message={item} onPhotoError={refreshLinks} />}
           onScroll={(e) => {
             const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent
             atBottom.current = nearBottom({ contentHeight: contentSize.height, viewHeight: layoutMeasurement.height, offsetY: contentOffset.y })

@@ -45,13 +45,13 @@ function Report({ id }: { id: string }) {
 }
 
 /** One message: the person's own on the right, the other side's on the left (with Report); server cards in the middle. */
-export function MessageBubble({ message: m }: { message: Message }) {
+export function MessageBubble({ message: m, onPhotoError }: { message: Message; onPhotoError?: () => void }) {
   if (m.kind === 'card' && m.card) return <CardBubble card={m.card} />
   const src = photoSrc(m.photoUrl)
   return (
     <View style={[styles.row, m.mine ? styles.mine : styles.theirs]}>
       <View style={[styles.bubble, m.mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-        {m.kind === 'photo' && src && <Image source={{ uri: src }} accessibilityLabel={t('chat.photo')} style={styles.photo} />}
+        {m.kind === 'photo' && src && <Image source={{ uri: src }} accessibilityLabel={t('chat.photo')} style={styles.photo} onError={onPhotoError} />}
         {!!m.body && <Text style={styles.text}>{m.body}</Text>}
         <Text style={styles.small}>{formatWhen(m.createdAt)}</Text>
       </View>

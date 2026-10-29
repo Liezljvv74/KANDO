@@ -65,5 +65,5 @@ export const BlockInputSchema = z.object({ threadId: z.string().min(1).max(200) 
 export type BlockInput = z.infer<typeof BlockInputSchema>
 
 /** GET /blocks: the people the caller blocked, by the name the app shows for them. */
-export const BlockedUserSchema = z.object({ userId: z.string(), name: z.string(), /** The caller's threads with this person: how the app knows which thread to unblock (names can repeat). */ threadIds: z.array(z.string()) })
+export const BlockedUserSchema = z.object({ name: z.string(), /** The caller's threads with this person: how the app knows which thread to unblock (names can repeat). */ threadIds: z.array(z.string()) })
 export type BlockedUser = z.infer<typeof BlockedUserSchema>

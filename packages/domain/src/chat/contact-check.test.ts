@@ -15,6 +15,13 @@ const rows: [string, ContactHit | null][] = [
   ['max (at) example punkt de', 'email'],
   ['max at gmail dot com', 'email'],
   ['www.example.de', 'link'],
+  ['www . example . de', 'link'],
+  ['www .meinshop', 'link'],
+  ['schau auf meinladen.shop', 'link'],
+  ['hier: handwerk.berlin', 'link'],
+  ['mein.store oder mein.online', 'link'],
+  ['seite.xyz', 'link'],
+  ['site.page und x.link', 'link'],
   ['https://wa.me/49151', 'link'],
   ['schreib mir auf example.com', 'link'],
   // brief table: allowed

@@ -13,4 +13,4 @@ export const POLL_SECONDS = 4
 export const CHAT_PHOTO_LINK_SECONDS = 600
 
 /** Top-level domains that make a bare `word.tld` (or `word dot tld`) count as a link. */
-export const CONTACT_LINK_TLDS = ['de', 'com', 'net', 'org', 'eu', 'io', 'me', 'info', 'app', 'co', 'za', 'at', 'ch'] as const
+export const CONTACT_LINK_TLDS = ['de', 'com', 'net', 'org', 'eu', 'io', 'me', 'info', 'app', 'co', 'za', 'at', 'ch', 'shop', 'berlin', 'store', 'online', 'site', 'xyz', 'page', 'link', 'dev', 'biz', 'tech'] as const

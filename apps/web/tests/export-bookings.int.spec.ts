@@ -51,7 +51,7 @@ it('the export contains my requests, quotes, bookings and my sent messages and n
   expect(body.requests).toHaveLength(1)
   expect(body.requests[0]).toMatchObject({ id: reqId, role: 'customer', description: 'Zaun reparieren', status: 'booked' })
   expect(body.quotes).toHaveLength(1)
-  expect(body.quotes[0]).toMatchObject({ requestId: reqId, amount: 120, scope: 'Zaun komplett', status: 'accepted' })
+  expect(body.quotes[0]).toMatchObject({ requestId: reqId, amount: 120, scope: null, status: 'accepted' })
   expect(body.bookings).toHaveLength(1)
   expect(body.bookings[0]).toMatchObject({ id: bookingId, role: 'customer', status: 'awaiting-payment', note: 'Tor ist blau', address: { street: ADDRESS, postcode: '10115', city: 'Berlin' } })
   expect(body.messages.map((m: { body: string | null; photo: string | null }) => m.body ?? m.photo).sort()).toEqual(['Meine Nachricht', 'zaun.jpg'])
@@ -62,7 +62,9 @@ it('the export contains my requests, quotes, bookings and my sent messages and n
   expect(await csv(U.cust)).toContain('Meine Nachricht')
   const provider = await (await call(exportRoute.GET, U.owner)).json()
   expect(provider.messages.map((m: { body: string }) => m.body)).toEqual(['Antwort des Anbieters'])
-  expect(provider.requests.map((r: { description: string }) => r.description).sort()).toEqual(['Fremder Auftrag', 'Zaun reparieren'])
+  expect(provider.requests.map((r: { description: string | null }) => r.description)).toEqual([null, null]) // other people's free text is not in my export
+  expect(provider.quotes[0].scope).toBe('Zaun komplett') // my own quote text is
+  expect(JSON.stringify(provider)).not.toContain('Tor ist blau')
   expect(provider.requests.every((r: { role: string }) => r.role === 'provider')).toBe(true)
   expect(JSON.stringify(provider)).not.toContain(U.cust) // the customer's id is not in a provider's export
 })

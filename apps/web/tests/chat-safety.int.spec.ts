@@ -69,7 +69,7 @@ it('after a block, neither side can send (403 BLOCKED) and the thread says block
   expect((await threadOf(U.cust, t.requestId!)).blocked).toBe(true)
   expect((await threadOf(U.owner, t.requestId!)).blocked).toBe(true)
   const mine = await (await call(blocksRoute.GET, U.owner)).json()
-  expect(mine.docs).toEqual([{ userId: U.cust, name: expect.any(String), threadIds: expect.arrayContaining([t.id]) }])
+  expect(mine.docs).toEqual([{ name: expect.any(String), threadIds: expect.arrayContaining([t.id]) }])
   expect(JSON.stringify(mine)).not.toContain('@')
   expect((await (await call(blocksRoute.GET, U.cust)).json()).docs).toEqual([]) // the blocked person sees nothing
   await unblock(U.owner, t.id)
@@ -148,7 +148,7 @@ it('unblocking is by thread: only the own block of that thread other side goes, 
   expect((await unblock(U.owner, t1.id)).status).toBe(204)
   expect((await send(t1.id, U.cust, 'hi')).status).toBe(201)
   expect((await send(t2.id, U.twin, 'hi')).status).toBe(403) // the other one stays blocked
-  expect((await call(blocksRoute.GET, U.owner).then((r) => r.json())).docs).toEqual([{ userId: U.twin, name: docs[0].name, threadIds: [t2.id] }])
+  expect((await call(blocksRoute.GET, U.owner).then((r) => r.json())).docs).toEqual([{ name: docs[0].name, threadIds: [t2.id] }])
   expect((await unblock(U.cust, t2.id)).status).toBe(404) // not a party
   expect((await unblock(U.twin, t2.id)).status).toBe(204) // the blocked side has no block of its own: nothing removed
   expect((await send(t2.id, U.twin, 'hi')).status).toBe(403)
