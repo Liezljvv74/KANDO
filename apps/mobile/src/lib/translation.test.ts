@@ -2,6 +2,7 @@ import type { ProviderDetail, TranslatableTexts } from '@kando/contract'
 import { applyTexts } from './translation'
 
 const base: ProviderDetail = {
+  providerId: 'p1',
   slug: 'anna',
   publicName: 'Anna H.',
   bio: 'Hallo',

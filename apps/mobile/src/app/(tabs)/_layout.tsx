@@ -22,7 +22,7 @@ export default function TabsLayout() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
     return () => sub.remove()
   }, [])
-  // A dot (empty badge) while any notification is unseen; opening My service profile marks them seen.
+  // A dot (empty badge) while any notification is unseen; the Account tab and the provider setup screen mark them seen.
   const unseen = me?.notifications.some((n) => !n.seenAt)
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#0E8A6B', tabBarInactiveTintColor: '#5C7A72' }}>

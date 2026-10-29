@@ -53,6 +53,9 @@ export const ProviderReferenceSchema = z.object({
 })
 
 export const ProviderDetailSchema = z.object({
+  /** The provider's id: a request or booking names the provider by it. */
+  /** Nullish: an older cached response may lack it; the app offers no request then. */
+  providerId: z.string().nullish(),
   slug: z.string(),
   publicName: z.string(),
   providerType: z.string().nullish(),

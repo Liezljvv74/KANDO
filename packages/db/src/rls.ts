@@ -5,12 +5,33 @@ import * as schema from './schema'
 // Restricted role every app request runs as. The owner connection bypasses RLS; never FORCE it.
 export const APP_ROLE = 'app_user'
 
+const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
+
 // Private table → ownership expression. Every new private table goes here, plus an isolation test.
 export const PRIVATE_TABLES: Record<string, string> = {
   users: 'id = app_current_user_id()',
   documents: 'owner_id = app_current_user_id()',
   private_files: 'owner_id = app_current_user_id()',
   notifications: 'user_id = app_current_user_id()',
+  // The customer and the provider's owner; the domain enforces who may change what.
+  requests: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
+  quotes: `${OWN_SERVICE} OR EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.customer_id = app_current_user_id())`,
+  bookings: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
+}
+
+// Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.
+export const INSERT_RULES: Record<string, string> = {
+  requests: 'customer_id = app_current_user_id()',
+  bookings: 'customer_id = app_current_user_id()',
+  // Only the provider's owner quotes, and only on a request addressed to that provider (qualified: requests has provider_id too).
+  quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id)`,
+}
+
+// Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
+export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
+  requests: ['customer_id', 'provider_id'],
+  quotes: ['request_id', 'provider_id'],
+  bookings: ['customer_id', 'provider_id'],
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
@@ -23,7 +44,6 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
 }
 
-const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
 // Suspensions end by their date: a past suspended_until counts as none.
 // The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
 export const notSuspended = (alias = ''): string => {
@@ -68,7 +88,7 @@ export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
 
 // Every policy name any map creates, dropped first so a table can move between the maps.
-export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read']
+export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read', 'insert_rule']
 
 /** Every schema table must be in exactly one map. */
 export function classifyTables(): { unclassified: string[]; duplicated: string[] } {
@@ -110,11 +130,20 @@ function policyStatements(table: string): string[] {
   const head = [`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`, ...drops]
   const priv = PRIVATE_TABLES[table]
   if (priv) {
+    const rule = INSERT_RULES[table]
+    const immutable = IMMUTABLE_COLUMNS[table]
     return [
       `GRANT INSERT, UPDATE, DELETE ON ${t} TO ${APP_ROLE}`,
       ...columnRestrictions(table),
       ...head,
       `CREATE POLICY owner_only ON ${t} TO ${APP_ROLE} USING (${priv}) WITH CHECK (${priv})`,
+      ...(rule ? [`CREATE POLICY insert_rule ON ${t} AS RESTRICTIVE FOR INSERT TO ${APP_ROLE} WITH CHECK (${rule})`] : []),
+      ...(immutable
+        ? [
+            `DROP TRIGGER IF EXISTS keep_parties ON ${t}`,
+            `CREATE TRIGGER keep_parties BEFORE UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION reject_column_change(${immutable.map((c) => `'${c}'`).join(', ')})`,
+          ]
+        : []),
     ]
   }
   const pub = PUBLIC_OWNED_TABLES[table]
@@ -218,6 +247,27 @@ const ELIGIBILITY_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION offerable_service_ids(uuid), missing_requirements(uuid, uuid), public_checked_documents(uuid) TO ${APP_ROLE}`,
 ]
 
+// A provider's calendar for everyone: bookings are private (RLS), so this runs as the table owner and returns only
+// the time range and a state, for a published, non-suspended provider, in a window of at most 62 days.
+// 'pending' = awaiting-payment; 'booked' is added when a confirmed status exists.
+const BUSY_FUNCTIONS = [
+  `CREATE OR REPLACE FUNCTION busy_times(p_provider uuid, p_from timestamptz, p_to timestamptz)
+    RETURNS TABLE (start_at timestamptz, end_at timestamptz, state text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      IF p_to <= p_from OR p_to - p_from > interval '62 days' THEN RAISE EXCEPTION 'busy_times: range must be 1 to 62 days'; END IF;
+      RETURN QUERY
+        SELECT b.start_at, b.start_at + b.duration_min * interval '1 minute', 'pending'::text
+        FROM bookings b JOIN providers p ON p.id = b.provider_id
+        WHERE b.provider_id = p_provider AND b.status = 'awaiting-payment' AND b.pay_by > now()
+          AND p.status = 'published' AND ${notSuspended('p')}
+          AND b.start_at < p_to AND b.start_at + b.duration_min * interval '1 minute' > p_from
+        ORDER BY 1, 2;
+    END $$`,
+  `REVOKE ALL ON FUNCTION busy_times(uuid, timestamptz, timestamptz) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION busy_times(uuid, timestamptz, timestamptz) TO ${APP_ROLE}`,
+]
+
 // app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.
 const TRANSLATION_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION prune_translation_requests() RETURNS void
@@ -251,9 +301,18 @@ export function rlsStatements(
         IF to_regclass(format('public.%I', t)) IS NOT NULL THEN EXECUTE format('REVOKE ALL ON public.%I FROM ${APP_ROLE}', t); END IF;
       END LOOP;
     END $$`,
+    `CREATE OR REPLACE FUNCTION reject_column_change() RETURNS trigger LANGUAGE plpgsql AS $$
+      DECLARE c text;
+      BEGIN
+        FOREACH c IN ARRAY TG_ARGV LOOP
+          IF to_jsonb(NEW) -> c IS DISTINCT FROM to_jsonb(OLD) -> c THEN RAISE EXCEPTION '% cannot be changed', c; END IF;
+        END LOOP;
+        RETURN NEW;
+      END $$`,
     ...policies,
     ...PROVIDER_FUNCTIONS,
     ...ELIGIBILITY_FUNCTIONS,
+    ...BUSY_FUNCTIONS,
     ...TRANSLATION_FUNCTIONS,
   ]
 }

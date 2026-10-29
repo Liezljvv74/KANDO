@@ -14,10 +14,12 @@ export const AddressSchema = z.object({
 export type Address = z.infer<typeof AddressSchema>
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
+export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested'] as const
 export const NotificationSchema = z.object({
   id: z.string(),
-  kind: z.enum(['profile-live']),
-  payload: z.object({ url: z.string().url() }),
+  kind: z.enum(NOTIFICATION_KINDS),
+  /** profile-live carries the link; the booking kinds carry ids only (none for requests-ignored). */
+  payload: z.union([z.object({ url: z.string().url() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional() })]),
   createdAt: z.string(),
   seenAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),
@@ -37,7 +39,8 @@ export const MeSchema = z.object({
   /** The person's picture (their profile photo), if any. */
   photoUrl: z.string().nullable(),
   address: AddressSchema.nullable(),
-  notifications: z.array(NotificationSchema),
+  /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
+  notifications: z.array(z.unknown()).transform((items) => items.flatMap((i) => { const r = NotificationSchema.safeParse(i); return r.success ? [r.data] : [] })),
 })
 export type Me = z.infer<typeof MeSchema>
 

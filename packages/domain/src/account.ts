@@ -1,5 +1,5 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { db, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, services, users, type Tx } from '@kando/db'
+import { bookings, db, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
@@ -8,7 +8,7 @@ import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -121,6 +121,10 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     await tx.delete(privateFiles).where(eq(privateFiles.ownerId, userId))
     await tx.delete(photos).where(eq(photos.ownerId, userId))
     const own = tx.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, userId))
+    // Requests, quotes and bookings of either side (this person as customer, or as the provider), before services and providers.
+    await tx.delete(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
+    await tx.delete(quotes).where(sql`${quotes.providerId} IN ${own}`)
+    await tx.delete(requests).where(sql`${requests.customerId} = ${userId} OR ${requests.providerId} IN ${own}`)
     await tx.delete(providerReferences).where(sql`${providerReferences.providerId} IN ${own}`)
     await tx.delete(services).where(sql`${services.providerId} IN ${own}`)
     await tx.delete(providers).where(eq(providers.ownerId, userId))

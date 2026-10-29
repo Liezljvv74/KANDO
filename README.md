@@ -1,6 +1,6 @@
 # KANDO: SkillWeb rebuilt
 
-The new home of SkillWeb, a service marketplace for Germany. The goal: households book trusted, verified local helpers and small businesses, pay when the job is done, and get the paperwork included. **Today the app is a directory: people can find and read about checked local providers, and providers can build a profile. Contacting, requesting, quoting, booking, paying, rating and chat are not built yet** (see "What the app does today"). This repository replaced the earlier Payload-based repository (`SkillWeb`). Since 28 October 2026 https://skillweb.space (and `www`) is served by this project; the old repository, Vercel project and local folder are being deleted (see "Retiring the old Payload stack").
+The new home of SkillWeb, a service marketplace for Germany. The goal: households book trusted, verified local helpers and small businesses, pay when the job is done, and get the paperwork included. **Today the app is a directory: people can find and read about checked local providers, and providers can build a profile. Requesting, quoting and booking exist on the Stage 2a branch (not merged yet); paying, rating and chat are not built yet** (see "What the app does today"). This repository replaced the earlier Payload-based repository (`SkillWeb`). Since 28 October 2026 https://skillweb.space (and `www`) is served by this project; the old repository, Vercel project and local folder are being deleted (see "Retiring the old Payload stack").
 
 - **Design:** `docs/specs/2026-10-26-kando-foundation-design.md` (what the first release does, the decided stack, the rules, the stages). The registration and provider-setup design is `docs/specs/2026-10-27-registration-and-provider-setup-design.md`; its plan is in `docs/plans/`.
 - **Stack today:** Expo app (`apps/mobile`); Next.js on Vercel for the website, the staff back office (Refine, German and English) and the API (`apps/web`); Neon Postgres with PostGIS and row-level security, Neon Auth and Neon Object Storage; Drizzle (`packages/db`); business rules in `packages/domain`; shared input rules in `packages/contract`; one text catalogue in German and English (`packages/i18n`); Resend for email; OpenRouter for the translate button. **Planned, not built yet:** Inngest for background work, Stripe behind a payments interface, Neon Realtime for chat.
@@ -10,16 +10,17 @@ Layout: `apps/mobile`, `apps/web`, `packages/db`, `packages/contract`, `packages
 
 ## What the app does today (28 October 2026, everything merged into `main`)
 
-Honest short version: sign up, log in, build a provider profile with services, documents and photos, have staff check the documents, and let anyone search and read published provider profiles. There is **no way yet for a customer to contact, request, book, pay or rate a provider** (the provider page has a greyed-out "Send request (coming soon)" button). All of it is live at https://skillweb.space on an empty production database; nothing from pull requests #14 to #20 has been seen on a phone yet.
+Honest short version: sign up, log in, build a provider profile with services, documents and photos, have staff check the documents, and let anyone search and read published provider profiles. Customers can now ask a provider for a quote or book a fixed-price service, and providers can quote, accept, counter or decline (Stage 2a, branch `stage-2a-bookings`, see "What was built"). There is **no payment yet**: a booking ends in "awaiting payment" and the pay link is a placeholder. There is no way yet to rate a provider or to chat. All of it is live at https://skillweb.space on an empty production database; nothing from pull requests #14 to #20 has been seen on a phone yet.
 
 **Phone app (Expo, German and English)**
 - **Sign-up and login:** email and password (at least 8 characters), the email is confirmed with a code; password reset by code; the session lasts 7 days. Sign-up asks for first name, surname, email, password, an optional picture, an optional address (only the postcode is required if you give one) and a switch "I also want to offer services". There is no age or terms tick yet.
 - **Home:** headline, "Find help now" button, a category list that opens a search for that category, a picture reminder (until the person has a picture), a "Become a provider" card (for people without the My profile tab) and information cards.
 - **Search:** category, 5-digit postcode and free text (provider name or skill). It lists published, not suspended providers with at least one service whose required documents are approved, sorted by distance when a postcode is given (a provider only shows within their own service radius; remote providers always show), 20 per page, refreshed when you return to the tab.
-- **Public provider page:** picture, public name (first name plus the first letter of the surname, or the business name), place, categories, "Checked documents: ..." (approved document names only), a translate button (translates the provider's texts with OpenRouter, limited per person and per day), strengths, skills, experience, services with prices (fixed, per hour, from, on request), past jobs, portfolio photos and, for businesses, the legal notice. The "Send request" button is disabled.
+- **Public provider page:** picture, public name (first name plus the first letter of the surname, or the business name), place, categories, "Checked documents: ..." (approved document names only), a translate button (translates the provider's texts with OpenRouter, limited per person and per day), strengths, skills, experience, services with prices (fixed, per hour, from, on request), past jobs, portfolio photos and, for businesses, the legal notice. Customers can request a quote (every service) or book directly (fixed-price services only) from here; the greyed-out "Send request" button is gone.
 - **My profile tab (providers only):** compact cards that roll up, each with its own edit screen: Services, About you, Past jobs (at most 2), Portfolio (at most 12 photos) and Verification documents; the profile picture; autosave; Publish and Unpublish. Rules are under "How it works now".
 - **Account tab:** edit name and address, "Offer services", log out, export my data (JSON or CSV), delete my account, and a link to the back office for staff. A dot shows when a notification has not been seen.
-- **Notifications:** one kind exists, "your profile is live" (a banner with a Share button plus a dot on the Account tab).
+- **Requests, quotes and bookings (Stage 2a):** a customer writes a request and the provider sends a quote (revisable; a quote is valid 7 days and the customer is told so); the customer accepts and proposes date, time and duration (on-site or remote); the provider accepts, counters or declines; the customer can withdraw ("I no longer need this"). A fixed-price service can be booked directly with a proposed time. Busy times of a provider are respected (first come, first served, with a travel buffer between on-site jobs). Decline and withdraw ask for confirmation. The booking ends in "awaiting payment" with a placeholder pay link; **no money moves**.
+- **Notifications:** "your profile is live" (a banner with a Share button plus a dot on the Account tab) and the booking notices: request received, quote received, time proposed or countered, accepted, declined, expired, quote about to expire, payment reminder, pending slot requested and requests ignored. Each also goes by email in the saved language. The requests-ignored text asks the provider to write to the support address (info@skillweb.space) to confirm they want to stay or to withdraw their services; the app has no confirm button yet.
 
 **Website (Next.js, German and English with `?lang=`)**
 - Home page (same content as the app home), public provider pages and sitemaps, and the pages staff publish in the back office (Impressum, Datenschutz, AGB, Ranking and any others) with a footer linking to them. The App Store and Google Play buttons say "soon": the app is not in the stores.
@@ -29,13 +30,14 @@ Honest short version: sign up, log in, build a provider profile with services, d
 - Dashboard (pending documents, suspended users); **Documents** (approve or reject with a note, which sends an email); **Users** (list, filter, suspend with reason and end date, lift); **Providers**; **Categories** (names in both languages, required and optional documents, sort order); **Pages** (legal and information pages, Markdown, German and English); **Staff** (set roles).
 
 **In the background**
+- Daily at 05:00 UTC (`/api/cron/bookings`, protected by `CRON_SECRET`): expires requests, quotes and bookings, sends the quote and payment reminders and the requests-ignored notice (the expiry rules also run when a person opens their lists). **It runs once a day because the Vercel free plan allows no more; when the project moves to Vercel Pro change its schedule in `apps/web/vercel.json` to `0 * * * *` (hourly), otherwise the 3-hour-before payment reminder only fires if the daily run happens to land inside that window, and short payment windows get no reminder, so payment reminders are effectively off until the timer is hourly (Vercel Pro). Expiry itself is checked whenever someone opens their list, and a lapsed payment window stops blocking the time at once.**
 - Daily at 06:00 UTC (`/api/cron/suspensions`): ends suspensions whose date has passed (with an email), removes retained trader records after 6 months, retries file deletions that failed.
 - Emails through Resend (German or English by the person's saved language): document approved (four variants depending on whether the profile is live, visible, offline or suspended), document rejected, profile live, suspended, published again, account deleted (two variants). Without `RESEND_API_KEY` an email is only logged.
 - Data: Neon Postgres with row-level security (users, providers, services, references, photos, private files, documents, notifications, pages, categories with texts, countries, currencies, 10,815 postcodes, translations and their rate limits, pending file deletes, retained records). Photos are stored as JPEG (at most 10 MB in, 12 portfolio photos); documents may be JPEG, PNG, WebP or PDF, at most 4.5 MB (a Vercel limit), at most 10 waiting at once.
 
 **Texts that promise more than the app does:** the "New" badge shows on every profile until ratings exist, and the home page (app and website) describes requests, quotes, in-app payment and "genuine reviews only after paid jobs". Some of those texts say "coming soon" (ID check, in-app payment); the rest describe the plan. **Owner decision (28 October 2026): the texts stay as the plan for now; before any store submission they and the store listing must match what the app really does (START HERE, step 22).**
 
-**Not built:** requests and quotes, direct booking, payments (Stripe Connect), ratings and reviews, chat, push notifications, a way for a customer to contact a provider, report or block a profile, the sign-up age and terms tick, the content of the legal pages, AI document checks, the account-deletion web page, Inngest background jobs, thumbnails.
+**Not built:** payments (Stripe Connect; the pay link of a booking is a placeholder), finishing a job, disputes, cancellation of an accepted booking, "notify me when available", invoices, ratings and reviews, chat, push notifications, report or block a profile, the sign-up age and terms tick, the content of the legal pages, AI document checks, the account-deletion web page, Inngest background jobs, thumbnails.
 
 ## START HERE: what must be done to ship a polished first version (most important first)
 
@@ -87,7 +89,7 @@ Written 28 October 2026 so that a new session can continue at once. Status in on
 27. **Stability:** make the timing-based test `inBatches keeps the window full` (PR #14) less dependent on the clock; run the whole test suite once more before the build.
 28. **Small gaps:** a bad postcode typed at sign-up is dropped silently; the share sheet shares the export as text, not as a file (needs a new app build); the unused text key `setup.documentAdd`.
 
-**How a new session starts:** open the session in this folder, read this section, run `gh pr list`, then `git pull`. Local tests need Docker (`docker compose up -d --wait db`), see "Run it". Test reports are Excel files in `Reports/` (copy the layout of `Reports/Stage-1-Test-Report.xlsx`). The latest test report is `Reports/PRs-18-19-20-Test-Report.xlsx`.
+**How a new session starts:** open the session in this folder, read this section, run `gh pr list`, then `git pull`. Local tests need Docker (`docker compose up -d --wait db`), see "Run it". Test reports are Excel files in `Reports/` (copy the layout of `Reports/Stage-1-Test-Report.xlsx`). The latest test report is `Reports/Stage-2a-Test-Report.xlsx`.
 
 ## Run it
 
@@ -121,6 +123,18 @@ Everything below is merged into `main`; no pull request is open. The site is liv
 - **Document requirements per category (PR #18).** Nine document types, a required and an optional list per category, editable in the back office (Categories); seeded from the owner's table. Migration 0011.
 - **Checked documents on the public profile (PR #19).** "Checked documents: Photo ID, ..." on every public profile (app and website), from approved documents only (names, never files). Needs the SQL function `public_checked_documents` from `rls.ts`.
 - **Profile page rework (PR #20).** Merged 28 October. Compact cards with their own edit screens, stars and lead texts, card colours, new compulsory fields. See "How it works now".
+- **Stage 2a, requests, quotes and bookings without money (29 October, branch `stage-2a-bookings`, not merged yet).** Ten tasks, each reviewed: tables and security rules (migrations 0012 to 0014), contract, rules, requests and quotes, direct booking with the date-and-time proposal (answer, counter, withdraw), busy times, timers, notifications and emails, and the phone screens. Tests on the branch (29 October): web 414 (53 files), app 182 (37 suites), contract 17, i18n 15, domain 14, all passed; typecheck shows only the 4 older typed-route errors in `apps/mobile` (about-card, documents-card, services-card x2); lint reports only the 38 older errors in scratch and marketing scripts. Report: `Reports/Stage-2a-Test-Report.xlsx`. **Before this branch is merged and deployed:** the production database needs migrations 0012 to 0014 (`pnpm db:migrate` against `kando-main`, only on the owner's instruction), and the booking timer runs daily until Vercel Pro (see "In the background"). Nothing from Stage 2a has been seen on a phone yet.
+
+**Before 2b (payments), from the final Stage 2a review:**
+- Account deletion removes the other party's requests, quotes and bookings; that must not survive once money exists.
+- A quote's customer can update quote columns, and booking `quote_id` / `service_id` are not checked by the security rules: make money and status columns staff-only or written by a definer function when payments land.
+- Add `accepted_at` before payment code writes to awaiting-payment rows.
+- At most one open request per customer-provider pair plus a small daily cap (abuse of the requests-ignored notice and inbox flooding).
+- The data export must include requests, quotes and bookings.
+- A declined or lapsed quote-born booking leaves the request closed (owner decision: reopen the request or the quote).
+- `withdrawBooking` and slot-freed notices.
+- `customerId` is exposed to providers in the booking DTOs.
+- Payment code in 2b must refuse payment when `pay_by <= now` (a lapsed hold stays `awaiting-payment` until a sweep, so two overlapping awaiting-payment rows can exist for a moment), and `pay_by` has no CHECK (an awaiting-payment row with null `pay_by` never holds a slot and never expires): add a constraint in the 2b migration.
 
 ### How it works now
 
@@ -161,6 +175,7 @@ Scan the QR code with the development app's own "Scan QR Code" button, or type t
 
 Nothing has been checked on a phone or in a real browser yet; every "Not yet done" row in the reports' Other Checks sheets is on this list.
 
+0. **Stage 2a on two accounts (a customer and a published provider on `kando-dev`):** the customer asks for a quote; the provider sends a quote and revises it; the customer accepts and proposes a time; the provider accepts, counters and declines (try each); the customer withdraws ("I no longer need this"); a direct booking of a fixed-price service; busy times shown; the 7-day quote expiry text; German and English; error messages (airplane mode, slot taken, expired quote); the confirmation dialogs; the booking emails arrive; the daily `/api/cron/bookings` run is visible under Cron Jobs in Vercel. The full list is in `Reports/Stage-2a-Test-Report.xlsx` (Other Checks).
 1. **Customer sign-up** with your own email: names, picture, postcode only; confirm the code; Home shows no My profile tab; the picture nudge disappears once a picture is added.
 2. **Account, Offer services** (and Home, Become a provider) opens the profile page directly, the tab then appears. Airplane mode: an error shows and you stay put. A second tap does nothing.
 3. **Sign-up with the provider tick** lands on "Let's set up your service profile"; nothing from a previous account carries over after sign-out and sign-in as someone else.
@@ -213,6 +228,35 @@ Today the project folder is `C:\Users\Liezl\Documents\APPS FOR BUSINESS\Skilled\
 ### Next features
 
 Stage 2 of the design: requests, quotes, direct booking, payments with Stripe Connect, ratings, chat, push notifications. Each starts with a design conversation.
+
+**Stage 2 design in progress (29 October 2026).** Agreed so far with the owner: the customer asks for a quote, the provider quotes, they may negotiate, the customer accepts, date, time and duration are agreed, the customer pays the full amount up front and it is held until the work is done, both sides review each other (written blind, shown together), the provider is paid if there is no dispute. **Deposits come after the first version.** The payment side is built behind an off switch: real payments stay off until the lawyer has cleared the legal points below. **To do: choose an EU AI provider and sign a data processing agreement for the chat contact-detail check (the same choice as for the document checks, step 19); until then the chat check uses rules only (including numbers written in words).** The customer has 7 days after the provider marks a job finished to confirm or dispute (reminders after 1, 3 and 6 days); after that Stripe releases the payment and the commission goes to KANDO. Contact details are never shared in the chat. **To decide: the commission percentage, before payouts or the Preise page are built.** Design: `docs/superpowers/specs/2026-10-29-stage-2-booking-and-money-design.md`. An extra task during a job reuses the quote and accept flow as an "Additional task" linked to the booking, started only once accepted and paid. Quotes expire after 7 days, shown clearly to the customer.
+
+### Stage 2 build progress (updated after every stage: read this first to resume)
+
+Stage 2 is built as five plans in `docs/superpowers/plans/` (one file each, `2026-10-29-stage-2a` to `2e`) from the design above, by subagent-driven execution: every task is built by a fresh helper and independently reviewed, each stage ends with a whole-branch code review and one fix round, then the owner-approved merge (the owner allowed Claude to merge each stage and to apply database migrations directly to production `kando-main`, 29 October 2026; nobody uses production yet). Real payments stay off (code switch) until the legal points below are cleared. At the very end one combined code review report for all the stage pull requests goes in `Reports/`.
+
+| Stage | What | Status |
+|---|---|---|
+| 2a | Requests, quotes and bookings, no money (plan `2026-10-29-stage-2a-requests-quotes-bookings.md`) | **Built and reviewed; merged when this line says so in git history** (branch `stage-2a-bookings`, test report `Reports/Stage-2a-Test-Report.xlsx`) |
+| 2b | Chat, contact-detail blocking, photos on requests | Not started |
+| 2c | Payments behind the off switch (Stripe test keys are in the owner's local `.env`: `Stripe_Publishable_Key`, `Stripe_Secret_Key`) | Not started |
+| 2d | Finishing, 7-day confirmation, disputes, cancellation, "Stop job", additional tasks, reviews, back-office screens | Not started |
+| 2e | Push notifications, invoices, final README and test report | Not started |
+
+**To resume after an interruption:** (1) `git log --oneline -15` and `gh pr list --state all --limit 10` to see which stage branch and pull request exist and whether they are merged; (2) read the matching plan file, then the "Before 2b" list under "Stage 2a" in "What was built"; (3) a local build ledger with every ruling and deferred point may exist at `.superpowers/sdd/<plan name>/progress.md` (git-ignored, PC only); the summary of rulings is also in the stage's test report (`Open Items` sheet); (4) the next stage starts from an up-to-date `main` on a new branch `stage-2b-chat` and so on; (5) after each stage: update this table and the "What the app does today" section, add the stage's test report, apply new migrations to production `kando-main` before merging, merge, check the deploy on https://skillweb.space.
+
+**Production database:** migrations 0012 to 0014 (stage 2a): see the line below once applied.
+
+### Legal points to clear with a lawyer (before payments are built or promised in any text)
+
+These are questions to ask, not answers. Do not publish any of the related texts before they are settled.
+
+1. **Holding the customer's money until the job is done.** Is the planned Stripe Connect set-up (the customer pays up front, the money is held, then paid out) allowed without KANDO needing its own payment licence? Which wording is safe? The foundation design bans "Treuhand", "Escrow" and "Garantie" in product and marketing texts.
+2. **Right of withdrawal (14 days) against cancellation fees.** German consumers often may withdraw from services bought at a distance. Does that limit a late-cancellation fee, and what must the customer acknowledge and consent to when the work starts within the withdrawal period?
+3. **Cancellation terms.** Are free cancellation up to 24 hours before, about half the price after that, and the full price for a no-show valid in the terms (AGB) for private customers, in particular for babysitting and dog walking?
+4. **Staff dispute decisions.** May KANDO staff decide a dispute (full refund, partial refund, full payout), is that decision binding on the parties, and what must the terms and the site say about out-of-court dispute resolution for consumers?
+5. **Reviews.** What must the site say about whether and how reviews are checked to come from people who really booked (EU rules on consumer reviews), and what may staff hide or remove?
+
 
 ## Known gaps
 

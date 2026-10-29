@@ -13,6 +13,7 @@ import { useCategories } from '@/hooks/use-categories'
 import { getLang, t, useLang, type Key } from '@/i18n'
 import { formatPrice } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
+import { RequestButton, useCanRequest } from '@/screens/provider/request-actions'
 
 export default function ProviderScreen() {
   useLang()
@@ -26,6 +27,7 @@ export default function ProviderScreen() {
   const [translateError, setTranslateError] = useState(false)
   // The app draws edge to edge: without this the end of the page sits behind the phone's navigation bar.
   const { bottom } = useSafeAreaInsets()
+  const canRequest = useCanRequest(slug)
 
   const load = useCallback(() => {
     setError('')
@@ -141,6 +143,7 @@ export default function ProviderScreen() {
               <View style={styles.serviceText}>
                 <Text style={styles.serviceTitle}>{s.title}</Text>
                 {!!s.description && <Text style={styles.small}>{s.description}</Text>}
+                {canRequest && <RequestButton provider={p} service={s} />}
               </View>
               <Text style={styles.price}>{formatPrice(s)}</Text>
             </View>
@@ -175,9 +178,7 @@ export default function ProviderScreen() {
         </Section>
       )}
 
-      <Pressable disabled accessibilityRole="button" accessibilityState={{ disabled: true }} style={styles.disabled}>
-        <Text style={styles.disabledLabel}>{`${t('provider.sendRequest')} (${t('provider.comingSoon')})`}</Text>
-      </Pressable>
+      {canRequest && <RequestButton provider={p} />}
     </ScrollView>
   )
 }
@@ -215,6 +216,4 @@ const styles = StyleSheet.create({
   reference: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gridImage: { width: '31%', aspectRatio: 1, borderRadius: 8, backgroundColor: '#BFE3D8' },
-  disabled: { minHeight: 44, borderRadius: 22, backgroundColor: '#BFE3D8', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  disabledLabel: { color: '#5C7A72', fontSize: 16, fontWeight: '700', textAlign: 'center' },
 })

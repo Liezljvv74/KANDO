@@ -1,5 +1,6 @@
 import type { Me, Photo } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
+import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -7,11 +8,13 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
+import { NotificationBanners } from '@/components/notification-banner'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useFlash } from '@/hooks/use-flash'
-import { loadMe } from '@/hooks/use-me'
+import { loadMe, markNotificationsSeen, unseenOf, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
+import { go } from '@/lib/go'
 import { startOffering } from '@/lib/start-offering'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
@@ -20,6 +23,7 @@ export default function AccountScreen() {
   useLang()
   const { user, signOut } = useSession()
   const [me, setMe] = useState<Me | null>(null)
+  const shared = useMe() // the shared copy holds the notifications and follows dismissals
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [address, setAddress] = useState(EMPTY_ADDRESS)
@@ -41,6 +45,15 @@ export default function AccountScreen() {
   useEffect(() => {
     load()
   }, [load])
+
+  // The account page is where a customer reads their messages: clear the dot on every focus, and again if one arrives while it is open.
+  // Marking updates the shared copy, so unseen turns false and the effect does not loop.
+  const hasUnseen = unseenOf(shared?.notifications).length > 0
+  useFocusEffect(
+    useCallback(() => {
+      if (hasUnseen) markNotificationsSeen().catch(() => {})
+    }, [hasUnseen]),
+  )
 
   async function offer() {
     if (busy) return
@@ -70,6 +83,7 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <NotificationBanners me={shared} />
         <View style={styles.card}>
           <Text style={styles.title}>{t('tab.account')}</Text>
           {user && <Text style={styles.email}>{user.email}</Text>}
@@ -84,6 +98,7 @@ export default function AccountScreen() {
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}
+          <LinkText label={t('booking.myBookings')} onPress={() => go('/bookings')} />
           <LinkText label={t('account.offerServices')} onPress={offer} />
           <LanguageSwitch />
         </View>

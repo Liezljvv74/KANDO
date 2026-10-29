@@ -55,6 +55,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   const approved = new Set(checked.rows[0]?.docs ?? [])
 
   const detail: ProviderDetail = {
+    providerId: p.id,
     slug: p.slug,
     publicName: p.public_name,
     providerType: p.type,

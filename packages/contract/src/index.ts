@@ -1,4 +1,5 @@
 export * from './admin'
+export * from './bookings'
 export * from './categories'
 export * from './common'
 export * from './me'
