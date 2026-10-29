@@ -214,6 +214,19 @@ Today the project folder is `C:\Users\Liezl\Documents\APPS FOR BUSINESS\Skilled\
 
 Stage 2 of the design: requests, quotes, direct booking, payments with Stripe Connect, ratings, chat, push notifications. Each starts with a design conversation.
 
+**Stage 2 design in progress (29 October 2026).** Agreed so far with the owner: the customer asks for a quote, the provider quotes, they may negotiate, the customer accepts, date, time and duration are agreed, the customer pays the full amount up front and it is held until the work is done, both sides review each other (written blind, shown together), the provider is paid if there is no dispute. **Deposits come after the first version.** An extra task during a job reuses the quote and accept flow as an "Additional task" linked to the booking, started only once accepted and paid. Quotes expire after 7 days, shown clearly to the customer.
+
+### Legal points to clear with a lawyer (before payments are built or promised in any text)
+
+These are questions to ask, not answers. Do not publish any of the related texts before they are settled.
+
+1. **Holding the customer's money until the job is done.** Is the planned Stripe Connect set-up (the customer pays up front, the money is held, then paid out) allowed without KANDO needing its own payment licence? Which wording is safe? The foundation design bans "Treuhand", "Escrow" and "Garantie" in product and marketing texts.
+2. **Right of withdrawal (14 days) against cancellation fees.** German consumers often may withdraw from services bought at a distance. Does that limit a late-cancellation fee, and what must the customer acknowledge and consent to when the work starts within the withdrawal period?
+3. **Cancellation terms.** Are free cancellation up to 24 hours before, about half the price after that, and the full price for a no-show valid in the terms (AGB) for private customers, in particular for babysitting and dog walking?
+4. **Staff dispute decisions.** May KANDO staff decide a dispute (full refund, partial refund, full payout), is that decision binding on the parties, and what must the terms and the site say about out-of-court dispute resolution for consumers?
+5. **Reviews.** What must the site say about whether and how reviews are checked to come from people who really booked (EU rules on consumer reviews), and what may staff hide or remove?
+
+
 ## Known gaps
 
 - No thumbnail sizes: the photo grid and the cards load full-size images.
