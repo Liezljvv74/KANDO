@@ -1,0 +1,97 @@
+import { sql } from 'drizzle-orm'
+import { check, index, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { providers } from './providers'
+import { bookings, requests } from './bookings'
+import { users } from './users'
+
+// Append-only for the two parties (rls.ts APPEND_ONLY_TABLES): one thread per request or booking, messages never edited or deleted.
+export const threads = pgTable(
+  'threads',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    requestId: uuid('request_id')
+      .unique()
+      .references(() => requests.id, { onDelete: 'cascade' }),
+    bookingId: uuid('booking_id')
+      .unique()
+      .references(() => bookings.id, { onDelete: 'cascade' }),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    providerId: uuid('provider_id')
+      .notNull()
+      .references(() => providers.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check('threads_one_parent_check', sql`(request_id IS NULL) <> (booking_id IS NULL)`)],
+)
+
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    threadId: uuid('thread_id')
+      .notNull()
+      .references(() => threads.id, { onDelete: 'cascade' }),
+    senderId: text('sender_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text().notNull(),
+    body: text(),
+    photoKey: text('photo_key'),
+    // {type: 'quote' | 'acceptance' | 'additional-task', refId, amount?, currency?, version?}
+    card: jsonb(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('messages_kind_check', sql`kind in ('text','photo','card')`),
+    check('messages_content_check', sql`(kind = 'text' AND body IS NOT NULL) OR (kind = 'photo' AND photo_key IS NOT NULL) OR (kind = 'card' AND card IS NOT NULL)`),
+    index('messages_thread_id_created_at_idx').on(t.threadId, t.createdAt, t.id),
+  ],
+)
+
+// Private to the blocker (rls.ts); is_blocked() answers for both directions.
+export const blocks = pgTable(
+  'blocks',
+  {
+    blockerId: text('blocker_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    blockedId: text('blocked_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] })],
+)
+
+// Staff only (rls.ts). Later plans widen the kind list.
+export const staffFlags = pgTable(
+  'staff_flags',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    kind: text().notNull(),
+    refId: text('ref_id').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    note: text(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolvedBy: text('resolved_by'),
+  },
+  (t) => [
+    check('staff_flags_kind_check', sql`kind in ('contact-attempts','message-reported')`),
+    uniqueIndex('staff_flags_open_idx').on(t.kind, t.refId, t.userId).where(sql`resolved_at IS NULL`),
+  ],
+)
+
+// What the contact filter caught; staff only.
+export const contactAttempts = pgTable('contact_attempts', {
+  id: uuid().primaryKey().defaultRandom(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  threadId: uuid('thread_id').references(() => threads.id, { onDelete: 'cascade' }),
+  hit: text().notNull(),
+  text: text().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

@@ -1,5 +1,5 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { bookings, db, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
+import { blocks, bookings, contactAttempts, db, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
@@ -8,7 +8,7 @@ import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -122,6 +122,13 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     await tx.delete(photos).where(eq(photos.ownerId, userId))
     const own = tx.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, userId))
     // Requests, quotes and bookings of either side (this person as customer, or as the provider), before services and providers.
+    // Chat first: threads point at requests and bookings, and everything points at the person.
+    const ownThreads = tx.select({ id: threads.id }).from(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
+    await tx.delete(contactAttempts).where(sql`${contactAttempts.userId} = ${userId} OR ${contactAttempts.threadId} IN ${ownThreads}`)
+    await tx.delete(staffFlags).where(eq(staffFlags.userId, userId))
+    await tx.delete(messages).where(sql`${messages.senderId} = ${userId} OR ${messages.threadId} IN ${ownThreads}`)
+    await tx.delete(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
+    await tx.delete(blocks).where(sql`${blocks.blockerId} = ${userId} OR ${blocks.blockedId} = ${userId}`)
     await tx.delete(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
     await tx.delete(quotes).where(sql`${quotes.providerId} IN ${own}`)
     await tx.delete(requests).where(sql`${requests.customerId} = ${userId} OR ${requests.providerId} IN ${own}`)

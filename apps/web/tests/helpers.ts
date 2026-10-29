@@ -47,6 +47,12 @@ export async function cleanupUsers(): Promise<void> {
   const mine = "(SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')"
   await pool.query(`DELETE FROM notifications WHERE user_id IN ${mine}`)
   const myProviders = `(SELECT id FROM providers WHERE owner_id IN ${mine})`
+  const myThreads = `(SELECT id FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
+  await pool.query(`DELETE FROM contact_attempts WHERE user_id IN ${mine} OR thread_id IN ${myThreads}`)
+  await pool.query(`DELETE FROM staff_flags WHERE user_id IN ${mine}`)
+  await pool.query(`DELETE FROM messages WHERE sender_id IN ${mine} OR thread_id IN ${myThreads}`)
+  await pool.query(`DELETE FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  await pool.query(`DELETE FROM blocks WHERE blocker_id IN ${mine} OR blocked_id IN ${mine}`)
   await pool.query(`DELETE FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM quotes WHERE provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM requests WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)

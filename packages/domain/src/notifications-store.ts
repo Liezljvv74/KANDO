@@ -4,7 +4,7 @@ import type { Notification } from '@kando/contract'
 import { isUuid } from './admin/common'
 import type { Exec } from './providers/eligibility'
 
-export type NotificationKind = 'profile-live' | 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested'
+export type NotificationKind = 'profile-live' | 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received'
 
 /** Creates an in-app message for the user (owner connection: the app role may not insert). */
 export async function createNotification(exec: Exec, userId: string, kind: NotificationKind, payload: { url: string } | { requestId?: string; bookingId?: string; quoteId?: string }): Promise<void> {

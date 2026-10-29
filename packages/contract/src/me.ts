@@ -14,7 +14,7 @@ export const AddressSchema = z.object({
 export type Address = z.infer<typeof AddressSchema>
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
-export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested'] as const
+export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested', 'message-received'] as const
 export const NotificationSchema = z.object({
   id: z.string(),
   kind: z.enum(NOTIFICATION_KINDS),

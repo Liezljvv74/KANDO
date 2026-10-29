@@ -328,6 +328,7 @@ export const en: Record<Key, string> = {
   'email.pendingSlotRequested.body':
     'Another customer asked for a time that overlaps a booking still waiting for payment. If the first customer does not pay in time, the time becomes free again and you can answer.',
   'notification.pendingSlotRequested': 'Another customer asked for a time that is waiting for payment.',
+  'notification.messageReceived': 'You have a new message.',
   'email.suspended.subject': 'Your profile was suspended',
   'email.suspended.body': 'Your profile was suspended for the following reason: {reason}. It will be published again on {date}.',
   'email.accountDeleted.subject': 'Your account has been deleted',

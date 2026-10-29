@@ -327,6 +327,7 @@ export const de = {
   'email.pendingSlotRequested.body':
     'Ein weiterer Kunde hat einen Termin angefragt, der sich mit einer Buchung überschneidet, die noch auf Zahlung wartet. Zahlt der erste Kunde nicht rechtzeitig, wird der Termin wieder frei und Du kannst antworten.',
   'notification.pendingSlotRequested': 'Ein weiterer Kunde hat einen Termin angefragt, der noch auf Zahlung wartet.',
+  'notification.messageReceived': 'Du hast eine neue Nachricht.',
   'email.suspended.subject': 'Dein Profil wurde gesperrt',
   'email.suspended.body': 'Dein Profil wurde aus folgendem Grund gesperrt: {reason}. Es wird am {date} wieder veröffentlicht.',
   'email.accountDeleted.subject': 'Dein Konto wurde gelöscht',

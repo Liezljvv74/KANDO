@@ -15,6 +15,7 @@ const KEY: Record<Notification['kind'], Key> = {
   'request-expired': 'notification.requestExpired',
   'requests-ignored': 'notification.requestsIgnored',
   'pending-slot-requested': 'notification.pendingSlotRequested',
+  'message-received': 'notification.messageReceived',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */

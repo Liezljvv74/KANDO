@@ -17,6 +17,8 @@ export const PRIVATE_TABLES: Record<string, string> = {
   requests: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
   quotes: `${OWN_SERVICE} OR EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.customer_id = app_current_user_id())`,
   bookings: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
+  // Only the blocker sees a block; is_blocked() answers for both sides.
+  blocks: 'blocker_id = app_current_user_id()',
 }
 
 // Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.
@@ -28,6 +30,24 @@ export const INSERT_RULES: Record<string, string> = {
 }
 
 // Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
+const PARTY = `customer_id = app_current_user_id() OR ${OWN_SERVICE}`
+// A message's thread, as t: the caller is a party of it.
+const IN_MY_THREAD = (extra = 'true') => `EXISTS (SELECT 1 FROM threads t WHERE t.id = messages.thread_id AND (t.customer_id = app_current_user_id() OR EXISTS (SELECT 1 FROM providers p WHERE p.id = t.provider_id AND p.owner_id = app_current_user_id())) AND ${extra})`
+
+// Readable by the parties, insertable under the insert rule, never updated or deleted: app_user gets SELECT and INSERT only.
+export const APPEND_ONLY_TABLES: Record<string, { read: string; insert: string }> = {
+  // A thread belongs to a request or booking of exactly these two parties (no forged request or booking id).
+  threads: {
+    read: PARTY,
+    insert: `(${PARTY}) AND (request_id IS NULL OR EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.customer_id = threads.customer_id AND r.provider_id = threads.provider_id))
+      AND (booking_id IS NULL OR EXISTS (SELECT 1 FROM bookings b WHERE b.id = booking_id AND b.customer_id = threads.customer_id AND b.provider_id = threads.provider_id))`,
+  },
+  messages: {
+    read: IN_MY_THREAD(),
+    insert: `sender_id = app_current_user_id() AND ${IN_MY_THREAD('NOT is_blocked(t.customer_id, t.provider_id)')}`,
+  },
+}
+
 export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
   requests: ['customer_id', 'provider_id'],
   quotes: ['request_id', 'provider_id'],
@@ -82,13 +102,13 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records']
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
 
 // Every policy name any map creates, dropped first so a table can move between the maps.
-export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read', 'insert_rule']
+export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read', 'insert_rule', 'party_read', 'party_insert']
 
 /** Every schema table must be in exactly one map. */
 export function classifyTables(): { unclassified: string[]; duplicated: string[] } {
@@ -96,6 +116,7 @@ export function classifyTables(): { unclassified: string[]; duplicated: string[]
     Object.keys(PRIVATE_TABLES),
     Object.keys(PUBLIC_OWNED_TABLES),
     INSERT_ONLY_TABLES,
+    Object.keys(APPEND_ONLY_TABLES),
     Object.keys(PUBLISHED_READ_TABLES),
     PUBLIC_REFERENCE_TABLES,
     STAFF_ONLY_TABLES,
@@ -161,6 +182,15 @@ function policyStatements(table: string): string[] {
   }
   const published = PUBLISHED_READ_TABLES[table]
   if (published) return [...head, `CREATE POLICY published_read ON ${t} FOR SELECT TO ${APP_ROLE} USING (${published})`]
+  const append = APPEND_ONLY_TABLES[table]
+  if (append) {
+    return [
+      `GRANT INSERT ON ${t} TO ${APP_ROLE}`,
+      ...head,
+      `CREATE POLICY party_read ON ${t} FOR SELECT TO ${APP_ROLE} USING (${append.read})`,
+      `CREATE POLICY party_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (${append.insert})`,
+    ]
+  }
   if (INSERT_ONLY_TABLES.includes(table)) {
     return [
       `GRANT INSERT ON ${t} TO ${APP_ROLE}`,
@@ -169,7 +199,7 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY app_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (true)`,
     ]
   }
-  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES or INSERT_ONLY_TABLES`)
+  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES, INSERT_ONLY_TABLES or APPEND_ONLY_TABLES`)
 }
 
 // The only write path to a provider's domain-only columns. SECURITY DEFINER (runs as the table owner, past RLS) but
@@ -277,9 +307,22 @@ const TRANSLATION_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION prune_translation_requests() TO ${APP_ROLE}`,
 ]
 
+// Blocks are private to the blocker, so the check that must see both directions runs as the table owner. Returns a boolean only.
+const BLOCK_FUNCTIONS = [
+  `CREATE OR REPLACE FUNCTION is_blocked(p_a text, p_b text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = p_a AND blocked_id = p_b) OR (blocker_id = p_b AND blocked_id = p_a)) $$`,
+  // The provider's owner by provider id: a draft or suspended provider is invisible to the customer under RLS, so the policy cannot look the owner up itself.
+  `CREATE OR REPLACE FUNCTION is_blocked(p_user text, p_provider uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT is_blocked(p_user, (SELECT owner_id FROM providers WHERE id = p_provider)) $$`,
+  `REVOKE ALL ON FUNCTION is_blocked(text, text), is_blocked(text, uuid) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION is_blocked(text, text), is_blocked(text, uuid) TO ${APP_ROLE}`,
+]
+
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
-  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...INSERT_ONLY_TABLES],
+  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...INSERT_ONLY_TABLES, ...Object.keys(APPEND_ONLY_TABLES)],
 ): string[] {
   const dup = classifyTables().duplicated
   if (dup.length) throw new Error(`rlsStatements: ${dup.join(', ')} in more than one map`)
@@ -309,6 +352,7 @@ export function rlsStatements(
         END LOOP;
         RETURN NEW;
       END $$`,
+    ...BLOCK_FUNCTIONS, // before the policies that call it
     ...policies,
     ...PROVIDER_FUNCTIONS,
     ...ELIGIBILITY_FUNCTIONS,

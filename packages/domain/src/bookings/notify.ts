@@ -36,7 +36,7 @@ export async function notifyBookingEvent(kind: NotificationKind, userId: string,
       }
     }
     const iso = params.date ?? (await dateOf(kind, params))
-    await sendEmail({ to: user.email, lang, template: kind as Exclude<NotificationKind, 'profile-live'>, params: { date: iso ? emailDateTime(new Date(iso), lang) : '' } })
+    await sendEmail({ to: user.email, lang, template: kind as Exclude<NotificationKind, 'profile-live' | 'message-received'>, params: { date: iso ? emailDateTime(new Date(iso), lang) : '' } })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }
