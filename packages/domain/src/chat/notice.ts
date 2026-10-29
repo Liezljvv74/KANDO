@@ -8,6 +8,8 @@ import { CHAT_EMAIL_THROTTLE_MINUTES } from './rules'
  * Tells the other party of a thread about a new message (in-app row and email, never the text), after commit; at most once per
  * thread and recipient per CHAT_EMAIL_THROTTLE_MINUTES, judged by the latest `message-received` notice of that thread.
  * ponytail: two messages committing at the same instant can both notify; harmless (one extra email).
+ * If the in-app row insert fails, the throttle cannot see it and every message emails; the failure is logged.
+ * The age is judged by this server's clock against the database's created_at; skew of seconds is accepted.
  */
 export function notifyNewMessage(afterCommit: AfterCommit, t: { id: string; customerId: string; providerId: string }, senderId: string, now = new Date()): void {
   afterCommit(async () => {

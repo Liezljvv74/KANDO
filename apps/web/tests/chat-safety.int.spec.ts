@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MessageSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { clearOutbox, outboxForTests } from '@kando/domain'
+import { clearOutbox, notifyNewMessage, outboxForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -76,7 +76,9 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
   const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Another job' })
   expect([res.status, await res.json()]).toEqual([404, { error: 'Not found' }])
   const direct = await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  expect(direct.status).toBe(404)
+  expect([direct.status, await direct.json()]).toEqual([404, { error: 'Not found' }])
+  const control = await call(bookingsRoute.POST, U.third, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
+  expect(control.status).toBe(201) // the same booking by an unblocked user works
   expect((await call(requests.POST, U.third, 'POST', { providerId: pOwner, description: 'Third job' })).status).toBe(201) // others are not affected
   await unblock(U.owner, U.cust)
 })
@@ -110,7 +112,7 @@ it('two messages within 30 minutes send one email; one after 31 minutes sends an
   expect(mails(U.owner)[0]!.text).not.toContain('secret')
   expect(mails(U.owner)[0]!.html).not.toContain('secret')
   expect(await rows()).toEqual([{ payload: { url: expect.stringContaining(t.id), threadId: t.id } }])
-  // 29 minutes ago: still throttled; 31 minutes ago: another one
+  // 29 minutes ago: still throttled (the exact boundary is the next test); 31 minutes ago: another one
   await pool.query("UPDATE notifications SET created_at = now() - interval '29 minutes' WHERE user_id = $1", [U.owner])
   await sendOk(t.id, U.cust, 'Third')
   expect(mails(U.owner)).toHaveLength(1)
@@ -121,4 +123,22 @@ it('two messages within 30 minutes send one email; one after 31 minutes sends an
   // the other direction is its own recipient
   await sendOk(t.id, U.owner, 'Reply')
   expect(mails(U.cust).some((m) => m.subject.length > 0)).toBe(true)
+})
+
+it('the throttle boundary: exactly 30 minutes sends, 29:59.999 does not (controlled time)', async () => {
+  const t = await threadOf(U.cust, (await newRequest()).id)
+  const thread = { id: t.id, customerId: U.cust, providerId: pOwner }
+  const at = new Date('2026-03-01T10:00:00.000Z')
+  const count = async () => (await pool.query("SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = 'message-received' AND payload->>'threadId' = $2", [U.owner, t.id])).rows[0].n
+  const notice = (now: Date) => notifyNewMessage((fn) => void pending.push(fn), thread, U.cust, now)
+  const pending: (() => Promise<void>)[] = []
+  const run = async () => { for (const fn of pending.splice(0)) await fn() }
+  await pool.query('DELETE FROM notifications WHERE user_id = $1', [U.owner])
+  await pool.query("INSERT INTO notifications (user_id, kind, payload, created_at) VALUES ($1, 'message-received', $2, $3)", [U.owner, JSON.stringify({ url: 'skilled://threads/x', threadId: t.id }), at])
+  notice(new Date(at.getTime() + 30 * 60_000 - 1))
+  await run()
+  expect(await count()).toBe(1)
+  notice(new Date(at.getTime() + 30 * 60_000))
+  await run()
+  expect(await count()).toBe(2)
 })

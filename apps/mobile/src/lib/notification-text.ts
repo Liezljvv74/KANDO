@@ -29,5 +29,5 @@ export function splitBanners(list: Notification[], max = MAX_BANNERS): { shown: 
   return { shown: open.slice(0, max), more: Math.max(0, open.length - max) }
 }
 
-/** The profile link of a "profile is live" message; booking kinds carry ids only. */
-export const notificationUrl = (n: Pick<Notification, 'payload'>): string | null => ('url' in n.payload && typeof n.payload.url === 'string' ? n.payload.url : null)
+/** The profile link of a "profile is live" message to share; other kinds (booking ids, a chat link) have none. */
+export const notificationUrl = (n: Pick<Notification, 'kind' | 'payload'>): string | null => (n.kind === 'profile-live' && 'url' in n.payload && typeof n.payload.url === 'string' ? n.payload.url : null)

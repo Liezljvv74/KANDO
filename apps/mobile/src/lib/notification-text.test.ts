@@ -8,10 +8,11 @@ test('every known kind has a text and an unknown kind is skipped without throwin
   expect(notificationText('kind-from-a-newer-server')).toBeNull()
 })
 
-test('only the profile-live payload has a url', () => {
-  expect(notificationUrl({ payload: { url: 'https://x.test/p' } })).toBe('https://x.test/p')
-  expect(notificationUrl({ payload: { bookingId: 'b' } })).toBeNull()
-  expect(notificationUrl({ payload: {} })).toBeNull()
+test('only the profile-live payload has a shareable url', () => {
+  expect(notificationUrl({ kind: 'profile-live', payload: { url: 'https://x.test/p' } })).toBe('https://x.test/p')
+  expect(notificationUrl({ kind: 'message-received', payload: { url: 'skilled://threads/t1' } })).toBeNull()
+  expect(notificationUrl({ kind: 'quote-received', payload: { bookingId: 'b' } })).toBeNull()
+  expect(notificationUrl({ kind: 'quote-received', payload: {} })).toBeNull()
 })
 
 test('splitBanners: newest first, dismissed left out, capped with a count of the rest', () => {
