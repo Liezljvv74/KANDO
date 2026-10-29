@@ -573,4 +573,5 @@ export const en: Record<Key, string> = {
   'booking.confirmDecline': 'Decline this booking?',
   'booking.confirmWithdraw': 'Withdraw for sure? You will no longer need this.',
   'booking.acceptExpiry': 'This quote is valid until {date}. After that it expires.',
+  'chat.contactBlocked': "Contact details can't be shared here. Please keep the conversation in the app: payment protection, reviews and our help with disputes only apply to what happens in the app.",
 }

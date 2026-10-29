@@ -1,6 +1,7 @@
 export * from './admin'
 export * from './bookings'
 export * from './categories'
+export * from './chat'
 export * from './common'
 export * from './me'
 export * from './my-profile'

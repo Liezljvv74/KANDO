@@ -6,6 +6,8 @@ import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import type { AfterCommit } from '../app-request'
+import { assertNoContactDetails } from '../chat/flags'
+import { threadForBooking } from '../chat/threads'
 import { assertSlotFree, lockProviderSlots } from './busy'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
@@ -32,6 +34,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
+  if (input.note) await assertNoContactDetails(userId, input.note)
   const [row] = await tx
     .insert(bookings)
     .values({
@@ -52,6 +55,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
       updatedAt: now,
     })
     .returning()
+  await threadForBooking(tx, row!.id) // a direct booking gets its own chat
   notifyProposal(afterCommit, provider, row!)
   return view(row!, userId)
 }

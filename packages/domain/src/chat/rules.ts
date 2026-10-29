@@ -1,7 +1,7 @@
 // Chat constants, one place each (plan 2b, Global Constraints).
 
 /** Longest chat message in characters. */
-export const MAX_MESSAGE_CHARS = 2000
+export { MAX_MESSAGE_CHARS } from '@kando/contract'
 /** This many blocked contact-detail attempts inside the window flag the sender to staff. */
 export const CONTACT_ATTEMPTS_LIMIT = 3
 export const CONTACT_ATTEMPTS_WINDOW_HOURS = 24

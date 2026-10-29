@@ -572,4 +572,5 @@ export const de = {
   'booking.confirmDecline': 'Diese Buchung ablehnen?',
   'booking.confirmWithdraw': 'Wirklich zurückziehen? Du brauchst das dann nicht mehr.',
   'booking.acceptExpiry': 'Dieses Angebot gilt bis {date}. Danach läuft es ab.',
+  'chat.contactBlocked': "Kontaktdaten können hier nicht geteilt werden. Bitte bleibt in der App: Zahlungsschutz, Bewertungen und unsere Hilfe bei Streitfällen gelten nur für das, was in der App passiert.",
 }
