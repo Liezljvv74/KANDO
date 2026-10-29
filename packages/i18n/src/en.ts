@@ -304,6 +304,7 @@ export const en: Record<Key, string> = {
   'email.bookingDeclined.subject': 'Your booking was declined',
   'email.bookingDeclined.body':
     'The provider declined your booking. You can send a new request to this or another provider.',
+  'notification.more': '+{n} more messages',
   'notification.bookingDeclined': 'The provider declined your booking.',
   'email.bookingExpired.subject': 'A booking expired',
   'email.bookingExpired.body': 'A booking request was not answered or not paid in time and has expired. The time is free again.',

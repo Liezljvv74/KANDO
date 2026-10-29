@@ -5,11 +5,11 @@ import { StyleSheet, Text, View } from 'react-native'
 import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
-import { NotificationBanner } from '@/components/notification-banner'
+import { NotificationBanners } from '@/components/notification-banner'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
-import { dismissNotification, loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
+import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { canShare, documentRows } from '@/lib/documents'
 import { createStaleGuard } from '@/lib/stale-guard'
@@ -57,11 +57,10 @@ export default function SetupScreen() {
   const { profile, services, references, photos, verifications } = data
   const name = profile.publicName ?? ''
   const docRows = documentRows(services, categories ?? [], verifications)
-  const banners = me?.notifications.filter((n) => !n.dismissedAt) ?? []
 
   return (
     <FormScreen title={title} back={false}>
-      {banners.map((n) => <NotificationBanner key={n.id} notification={n} canShare={canShare(services)} onDismiss={() => dismissNotification(n.id).catch(() => {})} />)}
+      <NotificationBanners me={me} canShare={canShare(services)} />
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />

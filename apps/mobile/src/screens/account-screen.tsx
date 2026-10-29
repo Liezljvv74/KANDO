@@ -7,9 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
+import { NotificationBanners } from '@/components/notification-banner'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useFlash } from '@/hooks/use-flash'
-import { loadMe } from '@/hooks/use-me'
+import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
@@ -21,6 +22,7 @@ export default function AccountScreen() {
   useLang()
   const { user, signOut } = useSession()
   const [me, setMe] = useState<Me | null>(null)
+  const shared = useMe() // the shared copy holds the notifications and follows dismissals
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [address, setAddress] = useState(EMPTY_ADDRESS)
@@ -32,6 +34,7 @@ export default function AccountScreen() {
     try {
       const m = await loadMe()
       setMe(m)
+      markNotificationsSeen().catch(() => {}) // the account page is where a customer reads their messages
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
       setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
@@ -71,6 +74,7 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <NotificationBanners me={shared} />
         <View style={styles.card}>
           <Text style={styles.title}>{t('tab.account')}</Text>
           {user && <Text style={styles.email}>{user.email}</Text>}

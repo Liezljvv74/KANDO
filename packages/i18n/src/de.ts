@@ -303,6 +303,7 @@ export const de = {
   'email.bookingDeclined.subject': 'Deine Buchung wurde abgelehnt',
   'email.bookingDeclined.body':
     'Der Anbieter hat Deine Buchung abgelehnt. Du kannst diesem oder einem anderen Anbieter eine neue Anfrage senden.',
+  'notification.more': '+{n} weitere Nachrichten',
   'notification.bookingDeclined': 'Der Anbieter hat Deine Buchung abgelehnt.',
   'email.bookingExpired.subject': 'Eine Buchung ist abgelaufen',
   'email.bookingExpired.body': 'Eine Buchungsanfrage wurde nicht rechtzeitig beantwortet oder bezahlt und ist abgelaufen. Der Termin ist wieder frei.',

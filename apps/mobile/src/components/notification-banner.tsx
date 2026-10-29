@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import type { Notification } from '@kando/contract'
+import type { Me, Notification } from '@kando/contract'
 
+import { dismissNotification } from '@/hooks/use-me'
 import { Card, SmallButton } from '@/components/form-ui'
 import { getLang, t } from '@/i18n'
-import { notificationText, notificationUrl } from '@/lib/notification-text'
+import { notificationText, notificationUrl, splitBanners } from '@/lib/notification-text'
 import { shareProfile } from '@/lib/share-profile'
 
 /** One message with a dismiss ×; "your profile is live" also gets Share (`payload.url` is the link). A kind this app does not know renders nothing. */
@@ -25,8 +26,20 @@ export function NotificationBanner({ notification, canShare, onDismiss }: { noti
   )
 }
 
+/** The newest few open messages with "+N more" for the rest; shared by the setup page and the account page. */
+export function NotificationBanners({ me, canShare = false }: { me: Me | null; canShare?: boolean }) {
+  const { shown, more } = splitBanners(me?.notifications ?? [])
+  return (
+    <>
+      {shown.map((n) => <NotificationBanner key={n.id} notification={n} canShare={canShare} onDismiss={() => dismissNotification(n.id).catch(() => {})} />)}
+      {more > 0 && <Text style={styles.more}>{t('notification.more', { n: more })}</Text>}
+    </>
+  )
+}
+
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   text: { flex: 1, fontSize: 16, fontWeight: '700', color: '#0E8A6B' },
+  more: { textAlign: 'center', fontSize: 14, color: '#5C7A72' },
   close: { fontSize: 28, lineHeight: 28, color: '#5C7A72', minWidth: 44, minHeight: 44, textAlign: 'center' },
 })
