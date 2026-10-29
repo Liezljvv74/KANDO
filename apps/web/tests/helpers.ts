@@ -46,6 +46,10 @@ export async function seedBase(): Promise<{ categoryId: string; docCategoryId: s
 export async function cleanupUsers(): Promise<void> {
   const mine = "(SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')"
   await pool.query(`DELETE FROM notifications WHERE user_id IN ${mine}`)
+  const myProviders = `(SELECT id FROM providers WHERE owner_id IN ${mine})`
+  await pool.query(`DELETE FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  await pool.query(`DELETE FROM quotes WHERE provider_id IN ${myProviders}`)
+  await pool.query(`DELETE FROM requests WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM photos WHERE owner_id IN ${mine}`)
   await pool.query("DELETE FROM private_files WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")
   await pool.query("DELETE FROM documents WHERE owner_id IN (SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')")

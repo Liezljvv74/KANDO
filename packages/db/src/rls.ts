@@ -5,12 +5,18 @@ import * as schema from './schema'
 // Restricted role every app request runs as. The owner connection bypasses RLS; never FORCE it.
 export const APP_ROLE = 'app_user'
 
+const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
+
 // Private table → ownership expression. Every new private table goes here, plus an isolation test.
 export const PRIVATE_TABLES: Record<string, string> = {
   users: 'id = app_current_user_id()',
   documents: 'owner_id = app_current_user_id()',
   private_files: 'owner_id = app_current_user_id()',
   notifications: 'user_id = app_current_user_id()',
+  // The customer and the provider's owner; the domain enforces who may change what.
+  requests: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
+  quotes: `${OWN_SERVICE} OR EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.customer_id = app_current_user_id())`,
+  bookings: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
@@ -23,7 +29,6 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
 }
 
-const OWN_SERVICE = 'EXISTS (SELECT 1 FROM providers p WHERE p.id = provider_id AND p.owner_id = app_current_user_id())'
 // Suspensions end by their date: a past suspended_until counts as none.
 // The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
 export const notSuspended = (alias = ''): string => {
