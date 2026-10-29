@@ -14,7 +14,7 @@ export const sendPhoto = (threadId: string, file: PickedFile) => upload<Message>
 export const reportMessage = (id: string, reason: string) => api<null>(`${BASE}/messages/${id}/report`, { method: 'POST', body: { reason } })
 export const listBlocks = async () => (await api<{ docs: BlockedUser[] }>(`${BASE}/blocks`)).docs
 export const blockUser = (threadId: string) => api<null>(`${BASE}/blocks`, { method: 'POST', body: { threadId } })
-export const unblockUser = (userId: string) => api<null>(`${BASE}/blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+export const unblockUser = (threadId: string) => api<null>(`${BASE}/blocks?threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' })
 
 /** The chat of a request (opened with the request), or null. */
 export const threadIdForRequest = async (requestId: string) => (await listThreads()).find((t) => t.requestId === requestId)?.id ?? null

@@ -50,8 +50,8 @@ export default function ThreadScreen() {
         {loadError || data ? <ErrorRetry code={loadError ?? "Not found"} onRetry={retry} /> : <Loading />}
       </SafeAreaView>
     )
-  // GET /blocks names people, not threads: my block is the one whose name is this thread's other side.
-  const blockedByMe = thread.blocked ? data.blocks.find((b) => b.name === thread.otherName) : undefined
+  // GET /blocks lists my own blocks with the threads they cover; a block by the other side is not in it.
+  const blockedByMe = data.blocks.some((b) => b.threadIds.includes(id))
 
   async function submit() {
     const body = text.trim()
@@ -95,10 +95,10 @@ export default function ThreadScreen() {
   async function toggleBlock() {
     if (working.current) return
     working.current = true
-    const unblock = !!blockedByMe
+    const unblock = blockedByMe
     try {
       if (await confirmDanger(t(unblock ? 'chat.unblockAsk' : 'chat.blockAsk', { name: thread!.otherName }), t(unblock ? 'chat.unblock' : 'chat.block'))) {
-        await (unblock ? unblockUser(blockedByMe!.userId) : blockUser(id))
+        await (unblock ? unblockUser(id) : blockUser(id))
         retry()
       }
     } catch (e) {

@@ -9,17 +9,16 @@ const threadsRoute = await import('../app/app-api/v1/threads/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 const reportRoute = await import('../app/app-api/v1/messages/[id]/report/route')
 const blocksRoute = await import('../app/app-api/v1/blocks/route')
-const blockOne = await import('../app/app-api/v1/blocks/[userId]/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 
-const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other' }
+const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other', twin: 'cs-twin' }
 let pOwner: string, sOwner: string
 
 beforeAll(async () => {
   await cleanupUsers()
   const { categoryId } = await seedBase()
-  for (const u of [U.cust, U.third, U.other]) await seedUser(u)
+  for (const u of [U.cust, U.third, U.other, U.twin]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Cs Owner', categoryId })
   sOwner = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pOwner])).rows[0].id
 })
@@ -31,7 +30,8 @@ const send = (thread: string, as: string, body: string) => call(messagesRoute.PO
 const sendOk = async (thread: string, as: string, body: string) => MessageSchema.parse(await (await send(thread, as, body)).json())
 const report = (id: string, as: string, reason = 'rude') => call(reportRoute.POST, as, 'POST', { reason }, { id })
 const block = (as: string, threadId: string) => call(blocksRoute.POST, as, 'POST', { threadId })
-const unblock = (as: string, userId: string) => call(blockOne.DELETE, as, 'DELETE', undefined, { userId })
+const unblock = (as: string, threadId: string) =>
+  blocksRoute.DELETE(new Request(`http://localhost/app-api/v1/blocks?threadId=${threadId}`, { method: 'DELETE', headers: { cookie: `uid=${as}:${EMAIL(as)}` } }), { params: Promise.resolve({}) })
 
 it('reporting a message creates one staff flag; reporting it twice does not add another', async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)
@@ -64,10 +64,10 @@ it('after a block, neither side can send (403 BLOCKED) and the thread says block
   expect((await threadOf(U.cust, t.requestId!)).blocked).toBe(true)
   expect((await threadOf(U.owner, t.requestId!)).blocked).toBe(true)
   const mine = await (await call(blocksRoute.GET, U.owner)).json()
-  expect(mine.docs).toEqual([{ userId: U.cust, name: expect.any(String) }])
+  expect(mine.docs).toEqual([{ userId: U.cust, name: expect.any(String), threadIds: expect.arrayContaining([t.id]) }])
   expect(JSON.stringify(mine)).not.toContain('@')
   expect((await (await call(blocksRoute.GET, U.cust)).json()).docs).toEqual([]) // the blocked person sees nothing
-  await unblock(U.owner, U.cust)
+  await unblock(U.owner, t.id)
 })
 
 it("a blocked customer cannot create a request to the blocker's provider (404)", async () => {
@@ -80,7 +80,7 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
   const control = await call(bookingsRoute.POST, U.third, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
   expect(control.status).toBe(201) // the same booking by an unblocked user works
   expect((await call(requests.POST, U.third, 'POST', { providerId: pOwner, description: 'Third job' })).status).toBe(201) // others are not affected
-  await unblock(U.owner, U.cust)
+  await unblock(U.owner, t.id)
 })
 
 it('blocking is only for someone you share a thread with (404)', async () => {
@@ -97,10 +97,29 @@ it('unblock restores sending', async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)
   await block(U.cust, t.id) // the customer blocks the provider
   expect((await send(t.id, U.owner, 'hi')).status).toBe(403)
-  expect((await unblock(U.cust, U.owner)).status).toBe(204)
-  expect((await unblock(U.cust, U.owner)).status).toBe(204) // idempotent
+  expect((await unblock(U.cust, t.id)).status).toBe(204)
+  expect((await unblock(U.cust, t.id)).status).toBe(204) // idempotent
   expect((await send(t.id, U.owner, 'hi again')).status).toBe(201)
   expect((await threadOf(U.cust, t.requestId!)).blocked).toBe(false)
+})
+
+it('unblocking is by thread: only the own block of that thread other side goes, even when two blocked people share a display name', async () => {
+  const t1 = await threadOf(U.cust, (await newRequest(U.cust)).id)
+  const t2 = await threadOf(U.twin, (await newRequest(U.twin)).id)
+  await block(U.owner, t1.id)
+  await block(U.owner, t2.id)
+  const docs = (await (await call(blocksRoute.GET, U.owner)).json()).docs
+  expect(docs).toHaveLength(2)
+  expect(docs[0].name).toBe(docs[1].name) // the same display name
+  expect((await unblock(U.third, t1.id)).status).toBe(404) // a third person cannot lift it
+  expect((await unblock(U.owner, t1.id)).status).toBe(204)
+  expect((await send(t1.id, U.cust, 'hi')).status).toBe(201)
+  expect((await send(t2.id, U.twin, 'hi')).status).toBe(403) // the other one stays blocked
+  expect((await call(blocksRoute.GET, U.owner).then((r) => r.json())).docs).toEqual([{ userId: U.twin, name: docs[0].name, threadIds: [t2.id] }])
+  expect((await unblock(U.cust, t2.id)).status).toBe(404) // not a party
+  expect((await unblock(U.twin, t2.id)).status).toBe(204) // the blocked side has no block of its own: nothing removed
+  expect((await send(t2.id, U.twin, 'hi')).status).toBe(403)
+  await unblock(U.owner, t2.id)
 })
 
 it('two messages within 30 minutes send one email; one after 31 minutes sends another', async () => {
