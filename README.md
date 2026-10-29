@@ -251,14 +251,14 @@ Stage 2 is built as five plans in `docs/superpowers/plans/` (one file each, `202
 | Stage | What | Status |
 |---|---|---|
 | 2a | Requests, quotes and bookings, no money (plan `2026-10-29-stage-2a-requests-quotes-bookings.md`) | **Done: merged as pull request #25 (29 October 2026).** Branch `stage-2a-bookings`, test report `Reports/Stage-2a-Test-Report.xlsx`; whole-branch review and one fix round done; not yet tried on a phone |
-| 2b | Chat, contact-detail blocking, photos on requests, request limits | Built and reviewed on branch `stage-2b-chat`; merge pending. Test report `Reports/Stage-2b-Test-Report.xlsx`; migrations 0015 and 0016 to be applied to production `kando-main` before the merge; not yet tried on a phone |
+| 2b | Chat, contact-detail blocking, photos on requests, report and block, staff access | **Done: merged as pull request #27 (29 October 2026).** Branch `stage-2b-chat`, test report `Reports/Stage-2b-Test-Report.xlsx`; whole-branch review and one fix round done; not yet tried on a phone or in a browser |
 | 2c | Payments behind the off switch (Stripe test keys are in the owner's local `.env`: `Stripe_Publishable_Key`, `Stripe_Secret_Key`) | Not started |
 | 2d | Finishing, 7-day confirmation, disputes, cancellation, "Stop job", additional tasks, reviews, back-office screens | Not started |
 | 2e | Push notifications, invoices, final README and test report | Not started |
 
 **To resume after an interruption:** (1) `git log --oneline -15` and `gh pr list --state all --limit 10` to see which stage branch and pull request exist and whether they are merged; (2) read the matching plan file, then the "Before 2b" list under "Stage 2a" in "What was built"; (3) a local build ledger with every ruling and deferred point may exist at `.superpowers/sdd/<plan name>/progress.md` (git-ignored, PC only); the summary of rulings is also in the stage's test report (`Open Items` sheet); (4) the next stage starts from an up-to-date `main` on a new branch `stage-2b-chat` and so on; (5) after each stage: update this table and the "What the app does today" section, add the stage's test report, apply new migrations to production `kando-main` before merging, merge, check the deploy on https://skillweb.space.
 
-**Production database:** migrations 0000 to 0014 are applied to `kando-main` (stage 2a's 0012 to 0014 on 29 October 2026, checked: tables `requests`, `quotes`, `bookings` with row-level security, function `busy_times`, 15 migrations). Next stage: apply its new migrations to `kando-main` with `pnpm db:migrate` (owner connection, unpooled string) BEFORE merging.
+**Production database:** migrations 0000 to 0016 are applied to `kando-main` (stage 2a's 0012 to 0014 and stage 2b's 0015 and 0016 on 29 October 2026, checked: chat tables with row-level security, `is_blocked`, `staff_access_log`, 17 migrations, the app role can only read and add messages). Next stage: apply its new migrations to `kando-main` with `pnpm db:migrate` (owner connection, unpooled string) BEFORE merging.
 
 ### Legal points to clear with a lawyer (before payments are built or promised in any text)
 
