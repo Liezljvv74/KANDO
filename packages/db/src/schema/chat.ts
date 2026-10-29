@@ -95,3 +95,18 @@ export const contactAttempts = pgTable('contact_attempts', {
   text: text().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Staff only (rls.ts), only ever inserted: who tried to read which thread, and whether it was allowed (flag_id is the reason).
+// No foreign keys on purpose: the log must survive the deletion of a staff account, a flag or a thread, and never block them.
+export const staffAccessLog = pgTable(
+  'staff_access_log',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    staffId: text('staff_id').notNull(),
+    threadId: text('thread_id').notNull(),
+    flagId: uuid('flag_id'),
+    outcome: text().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check('staff_access_log_outcome_check', sql`outcome in ('allowed','denied')`)],
+)

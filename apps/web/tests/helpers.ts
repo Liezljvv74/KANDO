@@ -50,6 +50,7 @@ export async function cleanupUsers(): Promise<void> {
   const myThreads = `(SELECT id FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
   await pool.query(`DELETE FROM contact_attempts WHERE user_id IN ${mine} OR thread_id IN ${myThreads}`)
   await pool.query(`DELETE FROM staff_flags WHERE user_id IN ${mine}`)
+  await pool.query(`DELETE FROM staff_access_log WHERE staff_id IN ${mine}`)
   await pool.query(`DELETE FROM messages WHERE sender_id IN ${mine} OR thread_id IN ${myThreads}`)
   await pool.query(`DELETE FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM blocks WHERE blocker_id IN ${mine} OR blocked_id IN ${mine}`)

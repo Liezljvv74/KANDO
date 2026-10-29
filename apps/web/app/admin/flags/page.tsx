@@ -15,7 +15,8 @@ export default function FlagsList() {
       <SearchForm formProps={searchFormProps} />
       <Table {...tableProps} rowKey="id">
         <Table.Column dataIndex="kind" title={at('admin.field.kind')} render={(k: string) => at(`admin.flag.kind.${k}` as 'admin.flag.kind.message-reported')} />
-        <Table.Column dataIndex="userEmail" title={at('admin.field.user')} />
+        <Table.Column dataIndex="concernedEmail" title={at('admin.field.user')} />
+        <Table.Column dataIndex="reporterEmail" title={at('admin.field.reportedBy')} />
         <Table.Column dataIndex="createdAt" title={at('admin.field.createdAt')} sorter render={(v: string) => new Date(v).toLocaleString(LOCALE[lang])} />
         <Table.Column dataIndex="resolvedAt" title={at('admin.field.status')} render={(v: string | null) => (v ? <Tag color="green">{at('admin.flag.resolved')}</Tag> : <Tag color="orange">{at('admin.flag.open')}</Tag>)} />
         <Table.Column title="" render={(_, r: { id: string }) => <ShowButton hideText size="small" recordItemId={r.id} />} />

@@ -1,5 +1,5 @@
-import { and, asc, count, desc, eq, ilike, or, sql } from 'drizzle-orm'
-import { contactAttempts, messages, staffFlags, threads, users } from '@kando/db'
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
+import { contactAttempts, db, messages, staffAccessLog, staffFlags, threads, users } from '@kando/db'
 import type { AdminListQuery } from '@kando/contract'
 import { filterOf, isUuid, like, notFound, ok, orderOf, pageOf, textOf } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
@@ -7,15 +7,27 @@ import { fail } from '../providers/http'
 import { chatPhotoLink, TS } from './messages'
 
 /**
- * Staff read a thread only with a reason: one of its messages has a `message-reported` flag (open or resolved).
- * Plan 2d widens this to disputed bookings: this is the single place to do it.
+ * Staff read a thread only with a reason: one of its messages has a `message-reported` flag (open or resolved); the
+ * answer is that flag's id (the earliest), or null. Plan 2d widens this to disputed bookings: this is the single place to do it.
  */
+export async function threadReadReason(exec: Exec, threadId: string): Promise<string | null> {
+  if (!isUuid(threadId)) return null
+  const r = await exec.execute(sql`SELECT f.id FROM staff_flags f JOIN messages m ON m.id::text = f.ref_id
+    WHERE f.kind = 'message-reported' AND m.thread_id = ${threadId}::uuid ORDER BY f.created_at, f.id LIMIT 1`)
+  return (r.rows[0]?.id as string | undefined) ?? null
+}
+
 export async function staffMayReadThread(exec: Exec, threadId: string): Promise<boolean> {
-  if (!isUuid(threadId)) return false
-  const r = await exec.execute(sql`SELECT EXISTS (
-    SELECT 1 FROM staff_flags f JOIN messages m ON m.id::text = f.ref_id
-    WHERE f.kind = 'message-reported' AND m.thread_id = ${threadId}::uuid) AS ok`)
-  return r.rows[0]?.ok === true
+  return (await threadReadReason(exec, threadId)) !== null
+}
+
+/**
+ * One row per staff attempt on a thread, allowed or denied (flag_id is the reason; no message text). Written on the owner
+ * connection, so a denied attempt survives the 404 that rolls the request back. A failed insert fails the read (500): no unlogged reads.
+ */
+export async function logStaffThreadAccess(staffId: string, threadId: string, flagId: string | null): Promise<void> {
+  if (!isUuid(threadId)) return
+  await db.insert(staffAccessLog).values({ staffId, threadId, flagId, outcome: flagId ? 'allowed' : 'denied' })
 }
 
 export type StaffMessage = {
@@ -28,7 +40,7 @@ export type StaffMessage = {
   photoUrl: string | null
   card: unknown
   createdAt: string
-  reports: { flagId: string; reason: string | null; reporterId: string | null; resolved: boolean }[]
+  reports: { flagId: string; reason: string | null; reporterId: string | null; reporterName: string; reporterEmail: string | null; resolved: boolean }[]
 }
 
 /** The whole thread, oldest first, for staff; 404 (not 403) without a reason, so no one learns whether a thread exists. Staff see who reported. */
@@ -36,7 +48,7 @@ export async function staffThread(exec: Exec, threadId: string): Promise<StaffMe
   if (!(await staffMayReadThread(exec, threadId))) return fail(404, { error: 'Not found' })
   const t = (await exec.select().from(threads).where(eq(threads.id, threadId)))[0]!
   const rows = await exec
-    .select({ m: messages, ts: TS, first: users.firstName, last: users.lastName })
+    .select({ m: messages, ts: TS, first: users.firstName, last: users.lastName, email: users.email })
     .from(messages)
     .innerJoin(users, eq(users.id, messages.senderId))
     .where(eq(messages.threadId, threadId))
@@ -46,18 +58,23 @@ export async function staffThread(exec: Exec, threadId: string): Promise<StaffMe
     .from(staffFlags)
     .where(and(eq(staffFlags.kind, 'message-reported'), sql`${staffFlags.refId} IN (SELECT id::text FROM messages WHERE thread_id = ${threadId}::uuid)`))
     .orderBy(asc(staffFlags.createdAt))
+  const reporters = new Map((flags.length ? await exec.select({ id: users.id, first: users.firstName, last: users.lastName, email: users.email }).from(users).where(inArray(users.id, flags.flatMap((f) => (f.userId ? [f.userId] : [])))) : []).map((u) => [u.id, u]))
+  const nameOf = (first: string | null, last: string | null, email: string) => [first, last].filter(Boolean).join(' ') || email
   return Promise.all(
-    rows.map(async ({ m, ts, first, last }) => ({
+    rows.map(async ({ m, ts, first, last, email }) => ({
       id: m.id,
       senderId: m.senderId,
-      senderName: [first, last].filter(Boolean).join(' '),
+      senderName: nameOf(first, last, email),
       senderRole: m.senderId === t.customerId ? ('customer' as const) : ('provider' as const),
       kind: m.kind,
       body: m.body,
       photoUrl: await chatPhotoLink(m.threadId, m.photoKey),
       card: m.card,
       createdAt: ts,
-      reports: flags.filter((f) => f.refId === m.id).map((f) => ({ flagId: f.id, reason: f.note, reporterId: f.userId, resolved: f.resolvedAt !== null })),
+      reports: flags.filter((f) => f.refId === m.id).map((f) => {
+        const u = f.userId ? reporters.get(f.userId) : undefined
+        return { flagId: f.id, reason: f.note, reporterId: f.userId, reporterName: u ? nameOf(u.first, u.last, u.email) : '', reporterEmail: u?.email ?? null, resolved: f.resolvedAt !== null }
+      }),
     })),
   )
 }
@@ -76,7 +93,10 @@ const flagCols = {
   id: staffFlags.id,
   kind: staffFlags.kind,
   userId: staffFlags.userId,
-  userEmail: users.email,
+  // user_id is the REPORTER of a message-reported flag but the person concerned of a contact-attempts flag
+  reporterEmail: sql<string | null>`CASE WHEN ${staffFlags.kind} = 'message-reported' THEN ${users.email} END`,
+  concernedEmail: sql<string | null>`CASE WHEN ${staffFlags.kind} = 'message-reported'
+    THEN (SELECT u.email FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id::text = ${staffFlags.refId}) ELSE ${users.email} END`,
   note: staffFlags.note,
   createdAt: staffFlags.createdAt,
   resolvedAt: staffFlags.resolvedAt,
@@ -100,7 +120,7 @@ export async function listFlags(exec: Exec, q: AdminListQuery) {
     .from(staffFlags)
     .leftJoin(users, eq(users.id, staffFlags.userId))
     .where(where)
-    .orderBy(...orderOf(q.sort, { createdAt: staffFlags.createdAt, kind: staffFlags.kind }, [sql`(${staffFlags.resolvedAt} IS NOT NULL)`, desc(staffFlags.createdAt)]))
+    .orderBy(...orderOf(q.sort, { createdAt: staffFlags.createdAt, kind: staffFlags.kind }, [sql`(${staffFlags.resolvedAt} IS NOT NULL)`, desc(staffFlags.createdAt), desc(staffFlags.id)]))
     .limit(pageOf(q).limit)
     .offset(pageOf(q).offset)
   return ok(rows.map(flagDto), total)

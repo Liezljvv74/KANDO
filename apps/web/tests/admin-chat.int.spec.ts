@@ -50,7 +50,7 @@ it('staff read a thread with a reported message', async () => {
   const { data } = await res.json()
   expect(data.map((x: { body: string }) => x.body)).toEqual(['You are an idiot', 'Calm down'])
   expect(data[0]).toMatchObject({ senderId: U.cust, senderName: 'Cora Customer', senderRole: 'customer' })
-  expect(data[0].reports).toEqual([{ flagId: expect.any(String), reason: 'abusive', reporterId: U.owner, resolved: false }])
+  expect(data[0].reports).toEqual([{ flagId: expect.any(String), reason: 'abusive', reporterId: U.owner, reporterName: EMAIL(U.owner), reporterEmail: EMAIL(U.owner), resolved: false }])
   expect(data[1].reports).toEqual([])
   // every staff read leaves an audit line (ids only)
   const audit = lines.map((l) => { try { return JSON.parse(l) } catch { return null } }).find((l) => l?.audit === 'staff-thread-read')
@@ -80,8 +80,9 @@ it('a reviewer lists flags; only an administrator resolves one', async () => {
   const m = await sendOk(t.id, U.cust, 'Rude words')
   await call(reportRoute.POST, U.owner, 'POST', { reason: 'rude' }, { id: m.id })
   const id = await flagOf('message-reported', m.id)
-  const rows = (await (await flagsList(U.rev)).json()).data as { id: string; kind: string; userEmail: string; createdAt: string; resolvedAt: string | null; threadId: string | null }[]
-  expect(rows.find((r) => r.id === id)).toMatchObject({ kind: 'message-reported', userEmail: EMAIL(U.owner), resolvedAt: null, threadId: t.id })
+  const rows = (await (await flagsList(U.rev)).json()).data as { id: string; kind: string; reporterEmail: string; createdAt: string; resolvedAt: string | null; threadId: string | null }[]
+  // user_id of a message-reported flag is the REPORTER; the person concerned is the sender of the message
+  expect(rows.find((r) => r.id === id)).toMatchObject({ kind: 'message-reported', reporterEmail: EMAIL(U.owner), concernedEmail: EMAIL(U.cust), resolvedAt: null, threadId: t.id })
   expect((await adminCall(item.GET, U.rev, 'GET', '/x', undefined, { resource: 'flags', id })).status).toBe(200)
   // a reviewer cannot resolve; nothing changes
   expect((await adminCall(resolve.POST, U.rev, 'POST', '/x', undefined, { id })).status).toBe(403)
@@ -104,11 +105,40 @@ it('the contact-attempts flag shows the blocked texts to staff', async () => {
   const id = await flagOf('contact-attempts', U.cust2)
   const res = await adminCall(item.GET, U.rev, 'GET', '/x', undefined, { resource: 'flags', id })
   const { data } = await res.json()
-  expect(data.kind).toBe('contact-attempts')
+  expect(data).toMatchObject({ kind: 'contact-attempts', concernedEmail: EMAIL(U.cust2), reporterEmail: null })
   expect(data.attempts.map((a: { text: string }) => a.text).sort()).toEqual(['call me 0151 23456781', 'call me 0151 23456782', 'call me 0151 23456783'])
   // the texts are not attached to the thread, and the flag gives no way into it
   expect(data.threadId).toBeNull()
   expect((await staffThread(U.admin, t.id)).status).toBe(404)
+})
+
+const accessRows = async (threadId: string) => (await pool.query('SELECT staff_id, thread_id, flag_id, outcome FROM staff_access_log WHERE thread_id = $1 ORDER BY created_at', [threadId])).rows
+
+it('every staff attempt on a thread is logged: one row for an allowed read, one for a denied one, never any text', async () => {
+  const t = await newThread()
+  const m = await sendOk(t.id, U.cust, 'Private words here')
+  expect(await staffThread(U.rev, t.id).then((r) => r.status)).toBe(404)
+  expect(await accessRows(t.id)).toEqual([{ staff_id: U.rev, thread_id: t.id, flag_id: null, outcome: 'denied' }])
+  await call(reportRoute.POST, U.owner, 'POST', { reason: 'rude' }, { id: m.id })
+  const flag = await flagOf('message-reported', m.id)
+  expect((await staffThread(U.rev, t.id)).status).toBe(200)
+  const rows = await accessRows(t.id)
+  expect(rows).toHaveLength(2)
+  expect(rows[1]).toEqual({ staff_id: U.rev, thread_id: t.id, flag_id: flag, outcome: 'allowed' })
+  expect(JSON.stringify(rows)).not.toContain('Private')
+  // an id that is not a uuid is not logged; an unknown uuid is
+  expect((await staffThread(U.rev, 'nope')).status).toBe(404)
+  const ghost = '00000000-0000-0000-0000-0000000000aa'
+  expect((await staffThread(U.rev, ghost)).status).toBe(404)
+  expect(await accessRows(ghost)).toEqual([{ staff_id: U.rev, thread_id: ghost, flag_id: null, outcome: 'denied' }])
+  expect((await pool.query("SELECT count(*)::int n FROM staff_access_log WHERE thread_id = 'nope'")).rows[0].n).toBe(0)
+  // a person without a staff role is stopped before anything is logged
+  expect((await staffThread(U.cust, t.id)).status).toBe(403)
+  expect(await accessRows(t.id)).toHaveLength(2)
+})
+
+it('a bad id gives 404, not 500, when resolving a flag', async () => {
+  expect((await adminCall(resolve.POST, U.admin, 'POST', '/x', undefined, { id: 'nope' })).status).toBe(404)
 })
 
 it("the reported person's own view of the thread does not show who reported, or why", async () => {

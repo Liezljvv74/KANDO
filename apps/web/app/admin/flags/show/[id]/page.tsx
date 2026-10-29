@@ -10,7 +10,8 @@ import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 type Flag = {
   id: string
   kind: string
-  userEmail: string | null
+  concernedEmail: string | null
+  reporterEmail: string | null
   note: string | null
   createdAt: string
   resolvedAt: string | null
@@ -31,7 +32,8 @@ export default function FlagShow() {
         <>
           <Descriptions column={1} bordered>
             <Descriptions.Item label={at('admin.field.kind')}>{at(`admin.flag.kind.${result.kind}` as 'admin.flag.kind.message-reported')}</Descriptions.Item>
-            <Descriptions.Item label={at('admin.field.user')}>{result.userEmail}</Descriptions.Item>
+            <Descriptions.Item label={at('admin.field.user')}>{result.concernedEmail}</Descriptions.Item>
+            {result.reporterEmail && <Descriptions.Item label={at('admin.field.reportedBy')}>{result.reporterEmail}</Descriptions.Item>}
             <Descriptions.Item label={at('admin.field.reason')}>{result.note}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.createdAt')}>{when(result.createdAt)}</Descriptions.Item>
             <Descriptions.Item label={at('admin.field.status')}>
