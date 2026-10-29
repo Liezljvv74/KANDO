@@ -231,6 +231,22 @@ Stage 2 of the design: requests, quotes, direct booking, payments with Stripe Co
 
 **Stage 2 design in progress (29 October 2026).** Agreed so far with the owner: the customer asks for a quote, the provider quotes, they may negotiate, the customer accepts, date, time and duration are agreed, the customer pays the full amount up front and it is held until the work is done, both sides review each other (written blind, shown together), the provider is paid if there is no dispute. **Deposits come after the first version.** The payment side is built behind an off switch: real payments stay off until the lawyer has cleared the legal points below. **To do: choose an EU AI provider and sign a data processing agreement for the chat contact-detail check (the same choice as for the document checks, step 19); until then the chat check uses rules only (including numbers written in words).** The customer has 7 days after the provider marks a job finished to confirm or dispute (reminders after 1, 3 and 6 days); after that Stripe releases the payment and the commission goes to KANDO. Contact details are never shared in the chat. **To decide: the commission percentage, before payouts or the Preise page are built.** Design: `docs/superpowers/specs/2026-10-29-stage-2-booking-and-money-design.md`. An extra task during a job reuses the quote and accept flow as an "Additional task" linked to the booking, started only once accepted and paid. Quotes expire after 7 days, shown clearly to the customer.
 
+### Stage 2 build progress (updated after every stage: read this first to resume)
+
+Stage 2 is built as five plans in `docs/superpowers/plans/` (one file each, `2026-10-29-stage-2a` to `2e`) from the design above, by subagent-driven execution: every task is built by a fresh helper and independently reviewed, each stage ends with a whole-branch code review and one fix round, then the owner-approved merge (the owner allowed Claude to merge each stage and to apply database migrations directly to production `kando-main`, 29 October 2026; nobody uses production yet). Real payments stay off (code switch) until the legal points below are cleared. At the very end one combined code review report for all the stage pull requests goes in `Reports/`.
+
+| Stage | What | Status |
+|---|---|---|
+| 2a | Requests, quotes and bookings, no money (plan `2026-10-29-stage-2a-requests-quotes-bookings.md`) | **Built and reviewed; merged when this line says so in git history** (branch `stage-2a-bookings`, test report `Reports/Stage-2a-Test-Report.xlsx`) |
+| 2b | Chat, contact-detail blocking, photos on requests | Not started |
+| 2c | Payments behind the off switch (Stripe test keys are in the owner's local `.env`: `Stripe_Publishable_Key`, `Stripe_Secret_Key`) | Not started |
+| 2d | Finishing, 7-day confirmation, disputes, cancellation, "Stop job", additional tasks, reviews, back-office screens | Not started |
+| 2e | Push notifications, invoices, final README and test report | Not started |
+
+**To resume after an interruption:** (1) `git log --oneline -15` and `gh pr list --state all --limit 10` to see which stage branch and pull request exist and whether they are merged; (2) read the matching plan file, then the "Before 2b" list under "Stage 2a" in "What was built"; (3) a local build ledger with every ruling and deferred point may exist at `.superpowers/sdd/<plan name>/progress.md` (git-ignored, PC only); the summary of rulings is also in the stage's test report (`Open Items` sheet); (4) the next stage starts from an up-to-date `main` on a new branch `stage-2b-chat` and so on; (5) after each stage: update this table and the "What the app does today" section, add the stage's test report, apply new migrations to production `kando-main` before merging, merge, check the deploy on https://skillweb.space.
+
+**Production database:** migrations 0012 to 0014 (stage 2a): see the line below once applied.
+
 ### Legal points to clear with a lawyer (before payments are built or promised in any text)
 
 These are questions to ask, not answers. Do not publish any of the related texts before they are settled.
