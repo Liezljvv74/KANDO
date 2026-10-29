@@ -60,10 +60,10 @@
 
 **Interfaces:**
 - Produces: `RequestInputSchema {providerId, serviceId?, description(1..2000), preferredDate?}`, `RequestSchema`, `QuoteInputSchema {amount, scope(1..2000), startAt, durationMin(15..720)}`, `QuoteSchema`, `DirectBookingInputSchema {serviceId, startAt, durationMin, address:{street?,postcode,city?}, note?}`, `BookingAnswerSchema` (discriminated union on `type`: `accept` | `decline` | `counter {startAt, durationMin}`), `BookingSchema` (includes `payBy`, `state: 'pending'|...` is NOT stored; the DTO has `status`), `BusyTimeSchema {startAt, endAt, state: 'pending'|'booked'}`; status constant arrays `REQUEST_STATUSES`, `QUOTE_STATUSES`, `BOOKING_STATUSES`.
-- [ ] **Step 1: Write tests** `rejects a start in the past`, `rejects duration 0 and 721`, `accepts address with postcode only`, `BookingAnswerSchema parses counter and rejects a counter without startAt`.
+- [ ] **Step 1: Write tests** `rejects a start that is not an ISO datetime`, `rejects duration 0 and 721`, `accepts address with postcode only`, `BookingAnswerSchema parses counter and rejects a counter without startAt`.
 - [ ] **Step 2: Run** `pnpm --filter @kando/contract test`: FAIL.
 - [ ] **Step 3: Implement** following `contract/src/common.ts` helpers (`AmountSchema`, `CurrencySchema`, `text(n)`); "in the past" is checked against the supplied `now` in the domain, the schema only requires an ISO datetime.
-- [ ] **Step 4: Run**: PASS (adjust the first test to the schema: it asserts ISO format only; the past-time check is Task 3).
+- [ ] **Step 4: Run**: PASS (the past-time check lives in the domain, Task 3, not in the schema).
 - [ ] **Step 5: Commit** `feat(contract): request, quote and booking schemas`.
 
 ### Task 3: Rules (pure functions)
