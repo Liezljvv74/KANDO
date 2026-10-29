@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
+import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
 import { threadForRequest } from '../chat/threads'
@@ -79,7 +80,7 @@ const lockRequest = (tx: Tx, requestId: string) =>
 export async function createRequest(tx: Tx, userId: string, input: RequestInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
   await assertNoContactDetails(userId, input.description)
   const provider = (await tx.select().from(providers).where(eq(providers.id, input.providerId)))[0]
-  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return notFound()
+  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
   const offerable = await offerableServiceIds(tx, provider.id)
   if (!offerable.length) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })

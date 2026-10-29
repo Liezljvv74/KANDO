@@ -7,7 +7,7 @@ const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
 /** One email per booking event kind (see bookings/notify.ts). */
-export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested'
+export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received'
 export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | BookingTemplate
 type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
@@ -42,6 +42,7 @@ const KEY: Record<Template, string> = {
   'request-expired': 'email.requestExpired',
   'requests-ignored': 'email.requestsIgnored',
   'pending-slot-requested': 'email.pendingSlotRequested',
+  'message-received': 'email.messageReceived',
 }
 
 function compose(lang: Lang, template: Template, params: Params) {

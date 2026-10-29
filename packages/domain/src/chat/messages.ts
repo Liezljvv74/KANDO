@@ -8,6 +8,7 @@ import { fail } from '../providers/http'
 import type { NormalizedImage } from '../photos'
 import { documentsBucket, removeObject, storage } from '../storage'
 import { assertNoContactDetails } from './flags'
+import { notifyNewMessage } from './notice'
 import { CHAT_PHOTO_LINK_SECONDS } from './rules'
 import { ownThread } from './threads'
 
@@ -50,19 +51,23 @@ async function listWhere(tx: Tx, userId: string, where: SQL, limit = PAGE): Prom
 }
 
 /** A text message. The contact check runs before anything is stored. */
-export async function sendMessage(tx: Tx, userId: string, threadId: string, input: MessageInput, _afterCommit: AfterCommit): Promise<Message> {
+export async function sendMessage(tx: Tx, userId: string, threadId: string, input: MessageInput, afterCommit: AfterCommit): Promise<Message> {
   const t = await writableThread(tx, threadId)
   await assertNoContactDetails(userId, input.body, t.id)
-  return insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'text', body: input.body }, userId)
+  const sent = await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'text', body: input.body }, userId)
+  notifyNewMessage(afterCommit, t, userId)
+  return sent
 }
 
 /** A photo, in the private documents bucket: the object first, then the row; a failed insert removes the object. */
-export async function sendPhoto(tx: Tx, userId: string, threadId: string, photo: NormalizedImage, _afterCommit: AfterCommit): Promise<Message> {
+export async function sendPhoto(tx: Tx, userId: string, threadId: string, photo: NormalizedImage, afterCommit: AfterCommit): Promise<Message> {
   const t = await writableThread(tx, threadId)
   const key = `chat/${t.id}/${randomUUID()}.jpg`
   await storage().put(documentsBucket(), key, photo.data, 'image/jpeg')
   try {
-    return await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'photo', photoKey: key }, userId)
+    const sent = await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'photo', photoKey: key }, userId)
+    notifyNewMessage(afterCommit, t, userId)
+    return sent
   } catch (e) {
     await removeObject(documentsBucket(), key)
     throw e

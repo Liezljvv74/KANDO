@@ -327,6 +327,8 @@ export const de = {
   'email.pendingSlotRequested.body':
     'Ein weiterer Kunde hat einen Termin angefragt, der sich mit einer Buchung überschneidet, die noch auf Zahlung wartet. Zahlt der erste Kunde nicht rechtzeitig, wird der Termin wieder frei und Du kannst antworten.',
   'notification.pendingSlotRequested': 'Ein weiterer Kunde hat einen Termin angefragt, der noch auf Zahlung wartet.',
+  'email.messageReceived.subject': 'Du hast eine neue Nachricht',
+  'email.messageReceived.body': 'Du hast eine neue Nachricht. Bitte lies und beantworte sie in der App.',
   'notification.messageReceived': 'Du hast eine neue Nachricht.',
   'email.suspended.subject': 'Dein Profil wurde gesperrt',
   'email.suspended.body': 'Dein Profil wurde aus folgendem Grund gesperrt: {reason}. Es wird am {date} wieder veröffentlicht.',
@@ -573,4 +575,9 @@ export const de = {
   'booking.confirmWithdraw': 'Wirklich zurückziehen? Du brauchst das dann nicht mehr.',
   'booking.acceptExpiry': 'Dieses Angebot gilt bis {date}. Danach läuft es ab.',
   'chat.contactBlocked': "Kontaktdaten können hier nicht geteilt werden. Bitte bleibt in der App: Zahlungsschutz, Bewertungen und unsere Hilfe bei Streitfällen gelten nur für das, was in der App passiert.",
+  'chat.blocked': 'In dieser Unterhaltung könnt Ihr keine Nachrichten mehr austauschen.',
+  'chat.report.action': 'Nachricht melden',
+  'chat.report.reasonLabel': 'Was ist an dieser Nachricht nicht in Ordnung?',
+  'chat.report.send': 'Meldung senden',
+  'chat.report.done': 'Danke. Wir sehen es uns an.',
 }

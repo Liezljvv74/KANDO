@@ -49,3 +49,15 @@ export const MessagesQuerySchema = z.object({
     .optional(),
 })
 export type MessagesQuery = z.infer<typeof MessagesQuerySchema>
+
+/** POST /messages/:id/report: the reason is for staff only. */
+export const ReportInputSchema = z.object({ reason: requiredText(500) })
+export type ReportInput = z.infer<typeof ReportInputSchema>
+
+/** POST /blocks */
+export const BlockInputSchema = z.object({ userId: z.string().min(1).max(200) })
+export type BlockInput = z.infer<typeof BlockInputSchema>
+
+/** GET /blocks: the people the caller blocked, by the name the app shows for them. */
+export const BlockedUserSchema = z.object({ userId: z.string(), name: z.string() })
+export type BlockedUser = z.infer<typeof BlockedUserSchema>

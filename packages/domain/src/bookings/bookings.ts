@@ -6,6 +6,7 @@ import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import type { AfterCommit } from '../app-request'
+import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { threadForBooking } from '../chat/threads'
 import { assertSlotFree, lockProviderSlots } from './busy'
@@ -28,7 +29,7 @@ const view = (b: Row, userId: string): Booking => {
 export async function createDirectBooking(tx: Tx, userId: string, input: DirectBookingInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   const service = (await tx.select().from(services).where(eq(services.id, input.serviceId)))[0]
   const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
-  if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return notFound()
+  if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
   if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) return fail(400, { error: 'not-bookable' })
   const startAt = new Date(input.startAt)

@@ -328,6 +328,8 @@ export const en: Record<Key, string> = {
   'email.pendingSlotRequested.body':
     'Another customer asked for a time that overlaps a booking still waiting for payment. If the first customer does not pay in time, the time becomes free again and you can answer.',
   'notification.pendingSlotRequested': 'Another customer asked for a time that is waiting for payment.',
+  'email.messageReceived.subject': 'You have a new message',
+  'email.messageReceived.body': 'You have a new message. Please read and answer it in the app.',
   'notification.messageReceived': 'You have a new message.',
   'email.suspended.subject': 'Your profile was suspended',
   'email.suspended.body': 'Your profile was suspended for the following reason: {reason}. It will be published again on {date}.',
@@ -574,4 +576,9 @@ export const en: Record<Key, string> = {
   'booking.confirmWithdraw': 'Withdraw for sure? You will no longer need this.',
   'booking.acceptExpiry': 'This quote is valid until {date}. After that it expires.',
   'chat.contactBlocked': "Contact details can't be shared here. Please keep the conversation in the app: payment protection, reviews and our help with disputes only apply to what happens in the app.",
+  'chat.blocked': 'You can no longer exchange messages in this conversation.',
+  'chat.report.action': 'Report message',
+  'chat.report.reasonLabel': 'What is wrong with this message?',
+  'chat.report.send': 'Send report',
+  'chat.report.done': 'Thank you. We will look at it.',
 }

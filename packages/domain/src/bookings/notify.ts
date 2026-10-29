@@ -9,7 +9,7 @@ import { emailDateTime } from '../notifications'
 import { slotIsHeld } from './busy'
 
 /** The notification kinds that have an email template. */
-export type BookingKind = Exclude<NotificationKind, 'profile-live' | 'message-received'>
+export type BookingKind = Exclude<NotificationKind, 'profile-live'>
 /** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write: here they only get the email. */
 const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored']
 
@@ -31,8 +31,8 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
     const lang = isLang(user.language) ? user.language : DEFAULT_LANG
     if (!WRITTEN_BY_TIMERS.includes(kind)) {
       try {
-        const { requestId, bookingId, quoteId } = params
-        await createNotification(db, userId, kind, { ...(requestId && { requestId }), ...(bookingId && { bookingId }), ...(quoteId && { quoteId }) })
+        const { requestId, bookingId, quoteId, url, threadId } = params
+        await createNotification(db, userId, kind, kind === 'message-received' && url ? { url, ...(threadId && { threadId }) } : { ...(requestId && { requestId }), ...(bookingId && { bookingId }), ...(quoteId && { quoteId }) })
       } catch (e) {
         console.error('[notify] booking notification failed', describeError(e)) // the email must still go out
       }
