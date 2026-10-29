@@ -1,7 +1,20 @@
 {
-  "regions": ["fra1"],
+  "regions": [
+    "fra1"
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "stage-2*": false
+    }
+  },
   "crons": [
-    { "path": "/api/cron/suspensions", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/bookings", "schedule": "0 5 * * *" }
+    {
+      "path": "/api/cron/suspensions",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/bookings",
+      "schedule": "0 5 * * *"
+    }
   ]
 }
