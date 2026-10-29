@@ -25,7 +25,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
   const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
   if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
-  if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) fail(400, { error: 'not-bookable' })
+  if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) return fail(400, { error: 'not-bookable' })
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
@@ -83,7 +83,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     return view(row!, userId)
   }
   if (answer.type === 'decline') return set('declined', { answerBy: null, counterBy: null })
-  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) fail(409, { error: 'provider-unavailable' })
+  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return fail(409, { error: 'provider-unavailable' })
   if (answer.type === 'counter') {
     const startAt = new Date(answer.startAt)
     assertFuture(startAt, now)
