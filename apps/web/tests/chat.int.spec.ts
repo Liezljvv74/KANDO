@@ -202,3 +202,37 @@ it('two first uses of a request thread at once give one thread', async () => {
   expect(new Set(ids).size).toBe(1)
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE request_id = $1', [id])).rows[0].n).toBe(1)
 })
+
+it('an accept note with contact details is 422 and nothing changes', async () => {
+  const r = await newRequest()
+  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 20, scope: 'Fence' }, { id: r.id })).json())
+  const res = await call(accept.POST, U.cust, 'POST', { startAt: day(14), durationMin: 60, onSite: true, address: { postcode: '10115' }, note: 'mail max@example.com' }, { id: q.id })
+  expect([res.status, await res.json()]).toEqual([422, { error: 'CONTACT_DETAILS' }])
+  expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('sent')
+  expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('quoted')
+  expect((await pool.query('SELECT count(*)::int AS n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(0)
+})
+
+it('a failing card write leaves the accept at 200 and the booking created', async () => {
+  const r = await newRequest()
+  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 20, scope: 'Fence' }, { id: r.id })).json())
+  await pool.query("CREATE OR REPLACE FUNCTION ch_no_cards() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cards are down'; END $$")
+  await pool.query("CREATE TRIGGER ch_no_cards BEFORE INSERT ON messages FOR EACH ROW WHEN (NEW.kind = 'card') EXECUTE FUNCTION ch_no_cards()")
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const res = await call(accept.POST, U.cust, 'POST', { startAt: day(15), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q.id })
+    expect(res.status).toBe(200)
+    expect((await pool.query('SELECT count(*)::int AS n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(1)
+    expect(log.mock.calls.some((c) => String(c[0]).includes('could not post a acceptance card'))).toBe(true)
+  } finally {
+    log.mockRestore()
+    await pool.query('DROP TRIGGER ch_no_cards ON messages')
+    await pool.query('DROP FUNCTION ch_no_cards()')
+  }
+})
+
+it('a cursor that is not a real time or id is 400', async () => {
+  const t = await threadOf(U.cust, (await newRequest()).id)
+  expect((await list(t.id, U.cust, `2026-13-45T99:99:99Z|${crypto.randomUUID()}`)).status).toBe(400)
+  expect((await list(t.id, U.cust, '2026-01-01T10:00:00Z|zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz')).status).toBe(400)
+})

@@ -126,6 +126,7 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     const ownThreads = tx.select({ id: threads.id }).from(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
     await tx.delete(contactAttempts).where(sql`${contactAttempts.userId} = ${userId} OR ${contactAttempts.threadId} IN ${ownThreads}`)
     await tx.delete(staffFlags).where(eq(staffFlags.userId, userId))
+    const chatPhotos = await tx.select({ key: messages.photoKey }).from(messages).where(sql`${messages.photoKey} IS NOT NULL AND (${messages.senderId} = ${userId} OR ${messages.threadId} IN ${ownThreads})`)
     await tx.delete(messages).where(sql`${messages.senderId} = ${userId} OR ${messages.threadId} IN ${ownThreads}`)
     await tx.delete(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
     await tx.delete(blocks).where(sql`${blocks.blockerId} = ${userId} OR ${blocks.blockedId} = ${userId}`)
@@ -142,6 +143,8 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
       ...media.map((m) => ({ bucket: mediaBucket(), key: m.key })),
       // The submitted documents' objects stay while they are retained.
       ...[...files, ...(keepUntil ? [] : docs)].map((f) => ({ bucket: documentsBucket(), key: f.key })),
+      // Chat photos of the person's threads (both sides' photos: the thread goes).
+      ...chatPhotos.map((m) => ({ bucket: documentsBucket(), key: m.key! })),
     ]
     const tombstones = owed.length ? (await tx.insert(pendingObjectDeletes).values(owed).returning({ id: pendingObjectDeletes.id })).map((r) => r.id) : []
     return { email: user.email, language: user.language, tombstones, keepUntil }

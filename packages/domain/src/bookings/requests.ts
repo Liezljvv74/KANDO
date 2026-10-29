@@ -158,7 +158,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     .returning()
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
   const threadId = await threadForRequest(tx, requestId)
-  afterCommit(() => postCard(tx, threadId, userId, { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
+  afterCommit(() => postCard(threadId, userId, { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   return toQuote(row!)
 }
@@ -206,7 +206,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
     })
     .returning()
   const threadId = await threadForRequest(tx, req.id)
-  afterCommit(() => postCard(tx, threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: 'EUR' }))
+  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: row!.currency as 'EUR' }))
   notifyProposal(afterCommit, provider, row!)
   return toBooking(row!)
 }

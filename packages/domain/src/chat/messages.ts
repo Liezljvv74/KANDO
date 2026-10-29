@@ -81,7 +81,7 @@ export async function listMessages(tx: Tx, userId: string, threadId: string, aft
  * A card (quote, acceptance, ...) in a thread, written on the owner connection: the app role cannot insert cards, so a party
  * cannot forge one. Call it in afterCommit; a failure is logged and never breaks the action that caused it.
  */
-export async function postCard(_tx: unknown, threadId: string, senderId: string, card: Card): Promise<void> {
+export async function postCard(threadId: string, senderId: string, card: Card): Promise<void> {
   try {
     await db.insert(messages).values({ threadId, senderId, kind: 'card', card })
   } catch (e) {
