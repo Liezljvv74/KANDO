@@ -298,22 +298,22 @@ export const de = {
   'notification.bookingProposed': 'Ein neuer Termin wurde vorgeschlagen. Bitte antworte innerhalb von 24 Stunden.',
   'email.bookingAccepted.subject': 'Deine Buchung wurde angenommen',
   'email.bookingAccepted.body':
-    'Der Anbieter hat Deine Buchung angenommen. Bitte zahle bis zum {date}. Den Zahlungslink bekommst Du anschließend in der App; dort siehst Du ihn, sobald die Zahlung möglich ist.',
+    'Der Anbieter hat Deine Buchung angenommen. Bitte zahle bis {date} Uhr. Den Zahlungslink bekommst Du anschließend in der App; dort siehst Du ihn, sobald die Zahlung möglich ist.',
   'notification.bookingAccepted': 'Der Anbieter hat Deine Buchung angenommen. Zahle bis zu dem in der App angezeigten Datum; der Zahlungslink folgt dort.',
   'email.bookingDeclined.subject': 'Deine Buchung wurde abgelehnt',
   'email.bookingDeclined.body':
-    'Der Anbieter hat Deine Buchung abgelehnt. Du kannst in der App einen anderen Anbieter suchen oder einen anderen Termin vorschlagen.',
+    'Der Anbieter hat Deine Buchung abgelehnt. Du kannst diesem oder einem anderen Anbieter eine neue Anfrage senden.',
   'notification.bookingDeclined': 'Der Anbieter hat Deine Buchung abgelehnt.',
   'email.bookingExpired.subject': 'Eine Buchung ist abgelaufen',
   'email.bookingExpired.body': 'Eine Buchungsanfrage wurde nicht rechtzeitig beantwortet oder bezahlt und ist abgelaufen. Der Termin ist wieder frei.',
   'notification.bookingExpired': 'Eine Buchung ist abgelaufen, weil sie nicht rechtzeitig beantwortet oder bezahlt wurde.',
   'email.paymentReminder.subject': 'Bitte bezahle Deine Buchung',
   'email.paymentReminder.body':
-    'Deine Buchung ist angenommen, aber noch nicht bezahlt. Bitte zahle bis zum {date}, sonst läuft sie ab und der Termin wird für andere frei.',
+    'Deine Buchung ist angenommen, aber noch nicht bezahlt. Bitte zahle bis {date} Uhr, sonst läuft sie ab und der Termin wird für andere frei.',
   'notification.paymentReminder': 'Deine Buchung ist noch nicht bezahlt. Bitte zahle, bevor sie abläuft.',
   'email.quoteExpiring.subject': 'Dein Angebot läuft bald ab',
   'email.quoteExpiring.body':
-    'Ein Angebot, das Du erhalten hast, läuft am {date} ab. Nimm es bis dahin in der App an, sonst verfällt es.',
+    'Ein Angebot, das Du erhalten hast, läuft am {date} Uhr ab. Nimm es bis dahin in der App an, sonst verfällt es.',
   'notification.quoteExpiring': 'Ein Angebot, das Du erhalten hast, läuft bald ab.',
   'email.requestExpired.subject': 'Deine Anfrage wurde nicht beantwortet',
   'email.requestExpired.body':

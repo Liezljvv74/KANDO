@@ -303,7 +303,7 @@ export const en: Record<Key, string> = {
   'notification.bookingAccepted': 'The provider accepted your booking. Pay by the date shown in the app; the pay link follows there.',
   'email.bookingDeclined.subject': 'Your booking was declined',
   'email.bookingDeclined.body':
-    'The provider declined your booking. You can look for a different provider or propose another time in the app.',
+    'The provider declined your booking. You can send a new request to this or another provider.',
   'notification.bookingDeclined': 'The provider declined your booking.',
   'email.bookingExpired.subject': 'A booking expired',
   'email.bookingExpired.body': 'A booking request was not answered or not paid in time and has expired. The time is free again.',

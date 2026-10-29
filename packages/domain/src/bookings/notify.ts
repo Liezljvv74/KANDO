@@ -5,7 +5,7 @@ import type { AfterCommit } from '../app-request'
 import { sendEmail } from '../email'
 import { describeError } from '../log-error'
 import { createNotification, type NotificationKind } from '../notifications-store'
-import { emailDate } from '../notifications'
+import { emailDateTime } from '../notifications'
 import { slotIsHeld } from './busy'
 
 /** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write: here they only get the email. */
@@ -36,7 +36,7 @@ export async function notifyBookingEvent(kind: NotificationKind, userId: string,
       }
     }
     const iso = params.date ?? (await dateOf(kind, params))
-    await sendEmail({ to: user.email, lang, template: kind as Exclude<NotificationKind, 'profile-live'>, params: { date: iso ? emailDate(new Date(iso), lang) : '' } })
+    await sendEmail({ to: user.email, lang, template: kind as Exclude<NotificationKind, 'profile-live'>, params: { date: iso ? emailDateTime(new Date(iso), lang) : '' } })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

@@ -9,6 +9,10 @@ import { isSuspendedNow } from './providers/profile'
 
 export const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
 
+/** A booking deadline: date and time in the platform time zone (a deadline at 04:00 or a 6-hour window needs the time). */
+export const emailDateTime = (d: Date, lang: Lang) =>
+  d.toLocaleString(LOCALE[lang], { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+
 /** Public address of a provider page; the language only when it is not the default. */
 export function providerUrl(slug: string, lang: Lang): string {
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL
