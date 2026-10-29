@@ -107,7 +107,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     return done
   }
   assertFuture(b.startAt, now)
-  await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, b.id)
+  await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)
   const pay = payBy(now, b.startAt)
   const done = await set('awaiting-payment', { payBy: pay, answerBy: null, counterBy: null })
   tell('booking-accepted', pay)

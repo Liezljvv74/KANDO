@@ -7,7 +7,6 @@ const ids = { customer: 'rb-cust', owner: 'rb-owner', other: 'rb-other' }
 let providerId: string
 let requestId: string
 let quoteId: string
-let bookingId: string
 let otherProviderId: string
 
 beforeAll(async () => {
@@ -17,10 +16,10 @@ beforeAll(async () => {
   otherProviderId = await seedProvider('rb-owner2', { name: 'Rb Two', categoryId: (await pool.query('SELECT id FROM categories LIMIT 1')).rows[0].id })
   requestId = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Fix the fence', now() + interval '7 days') RETURNING id", [ids.customer, providerId])).rows[0].id
   quoteId = (await pool.query("INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, expires_at) VALUES ($1, $2, 1, 100, 'EUR', 'Fence', now() + interval '14 days') RETURNING id", [requestId, providerId])).rows[0].id
-  bookingId = (await pool.query(
+  await pool.query(
     "INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site) VALUES ($1, $2, $3, 'quote', 'proposed', now() + interval '3 days', 60, 100, 'EUR', false) RETURNING id",
     [ids.customer, providerId, quoteId],
-  )).rows[0].id
+  )
 })
 
 afterAll(cleanupUsers)

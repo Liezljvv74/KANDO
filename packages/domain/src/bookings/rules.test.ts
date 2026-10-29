@@ -17,6 +17,11 @@ describe('payBy', () => {
   it('is 6h after acceptance when start is exactly 24h away', () => {
     expect(payBy(d('02T10:00'), d('03T10:00'))).toEqual(d('02T16:00'))
   })
+  it('never falls after the start: 2h away gives the start, not +6h', () => {
+    expect(payBy(d('02T10:00'), d('02T12:00'))).toEqual(d('02T12:00'))
+    expect(payBy(d('02T10:00'), d('02T15:00'))).toEqual(d('02T15:00'))
+    expect(payBy(d('02T10:00'), d('02T16:00'))).toEqual(d('02T16:00'))
+  })
   it('is the same instant at exactly 48h away, and follows each side of it', () => {
     const a = d('02T10:00')
     const at = (h: number) => new Date(a.getTime() + h * 3_600_000)

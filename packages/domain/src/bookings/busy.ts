@@ -1,12 +1,12 @@
-import { and, eq, ne, sql } from 'drizzle-orm'
-import { bookings, providers, type Tx } from '@kando/db'
+import { and, eq, gt, ne, sql } from 'drizzle-orm'
+import { bookings, db, providers, type Tx } from '@kando/db'
 import type { BusyTime } from '@kando/contract'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow } from '../providers/profile'
 import { BUFFER_MINUTES, overlaps } from './rules'
 
-/** The provider's busy ranges (time and state only) in [from, to]; 404 for an unknown, unpublished or suspended provider. */
+/** The provider's busy ranges (time and state only) overlapping [from, to) (half-open); 404 for an unknown, unpublished or suspended provider. */
 export async function busyTimes(tx: Tx, slug: string, from: Date, to: Date): Promise<BusyTime[]> {
   const [p] = await tx.select({ id: providers.id }).from(providers).where(and(eq(providers.slug, slug), eq(providers.status, 'published')))
   if (!p || (await isSuspendedNow(tx, p.id))) return fail(404, { error: 'Not found' })
@@ -20,18 +20,19 @@ export const lockProviderSlots = (tx: Tx, providerId: string) =>
 
 /**
  * True when an awaiting-payment booking of the provider overlaps the span (assertSlotFree turns that into 409 slot-pending). The 30-minute buffer applies
- * only when both bookings are on site. Proposed bookings never block.
+ * only when both bookings are on site. Proposed bookings never block, and neither does a booking whose payment window has passed (pay_by), even before a sweep marks it.
  */
-export async function slotIsHeld(tx: Exec, providerId: string, startAt: Date, durationMin: number, onSite: boolean, ignoreBookingId?: string): Promise<boolean> {
+export async function slotIsHeld(tx: Exec, providerId: string, startAt: Date, durationMin: number, onSite: boolean, now: Date, ignoreBookingId?: string): Promise<boolean> {
   const held = await tx
     .select()
     .from(bookings)
-    .where(and(eq(bookings.providerId, providerId), eq(bookings.status, 'awaiting-payment'), ...(ignoreBookingId ? [ne(bookings.id, ignoreBookingId)] : [])))
+    .where(and(eq(bookings.providerId, providerId), eq(bookings.status, 'awaiting-payment'), gt(bookings.payBy, now), ...(ignoreBookingId ? [ne(bookings.id, ignoreBookingId)] : [])))
   const span = { start: startAt, end: new Date(startAt.getTime() + durationMin * 60_000) }
   // ponytail: scans all of the provider's awaiting-payment bookings; add a time-window filter if that list grows large
   return held.some((b) => overlaps(span, { start: b.startAt, end: new Date(b.startAt.getTime() + b.durationMin * 60_000) }, onSite && b.onSite ? BUFFER_MINUTES : 0))
 }
 
-export async function assertSlotFree(tx: Tx, providerId: string, startAt: Date, durationMin: number, onSite: boolean, ignoreBookingId?: string): Promise<void> {
-  if (await slotIsHeld(tx, providerId, startAt, durationMin, onSite, ignoreBookingId)) fail(409, { error: 'slot-pending' })
+/** Reads on the owner connection: a customer's RLS transaction cannot see other customers' holds. The provider lock is held, and other accepts commit before releasing it. */
+export async function assertSlotFree(_tx: Tx, providerId: string, startAt: Date, durationMin: number, onSite: boolean, now: Date, ignoreBookingId?: string): Promise<void> {
+  if (await slotIsHeld(db, providerId, startAt, durationMin, onSite, now, ignoreBookingId)) fail(409, { error: 'slot-pending' })
 }

@@ -24,7 +24,7 @@ const MAX_AHEAD_DAYS = 365
 export const payBy = (acceptedAt: Date, startAt: Date): Date => {
   const a = acceptedAt.getTime()
   const s = startAt.getTime()
-  if (s - a <= SHORT_NOTICE_THRESHOLD_HOURS * HOUR) return new Date(a + SHORT_NOTICE_PAY_HOURS * HOUR)
+  if (s - a <= SHORT_NOTICE_THRESHOLD_HOURS * HOUR) return new Date(Math.min(a + SHORT_NOTICE_PAY_HOURS * HOUR, s)) // never after the start
   return new Date(Math.min(a + PAY_WINDOW_HOURS * HOUR, s - PAY_BEFORE_START_HOURS * HOUR))
 }
 

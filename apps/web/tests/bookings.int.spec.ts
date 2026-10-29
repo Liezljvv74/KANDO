@@ -288,3 +288,24 @@ it('accepting a booking whose start has already passed is 400 start-in-past', as
   expect((await res.json()).error).toBe('start-in-past')
   expect((await row(b.id)).status).toBe('proposed')
 })
+
+it('a customer accepting a provider counter that overlaps another customer\'s awaiting-payment hold gets 409 slot-pending', async () => {
+  const base = day(90)
+  const held = await direct(sOwner, { startAt: base, durationMin: 60 })
+  expect((await answering(held.id, U.owner, { type: 'accept' })).status).toBe(200)
+  const second = await direct(sOwner, { startAt: day(91), durationMin: 60 }, U.cust2)
+  expect((await answering(second.id, U.owner, { type: 'counter', startAt: base, durationMin: 60, onSite: true })).status).toBe(200)
+  const res = await answering(second.id, U.cust2, { type: 'accept' })
+  expect(res.status).toBe(409)
+  expect((await res.json()).error).toBe('slot-pending')
+  expect((await row(second.id)).status).toBe('proposed')
+})
+
+it('a lapsed payment window no longer holds the slot before any sweep runs', async () => {
+  const base = day(95)
+  const held = await direct(sOwner, { startAt: base, durationMin: 60 })
+  expect((await answering(held.id, U.owner, { type: 'accept' })).status).toBe(200)
+  await pool.query("UPDATE bookings SET pay_by = now() - interval '1 minute' WHERE id = $1", [held.id])
+  const second = await direct(sOwner, { startAt: base, durationMin: 60 }, U.cust2)
+  expect((await answering(second.id, U.owner, { type: 'accept' })).status).toBe(200)
+})

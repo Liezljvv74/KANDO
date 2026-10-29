@@ -127,7 +127,10 @@ it('unpaid awaiting-payment past payBy expires and frees the time', async () => 
   await clean()
   const b = await booking('awaiting-payment', { payBy: at(-1), startAt: at(24 * 20) })
   const busy = async () => (await pool.query('SELECT * FROM busy_times($1::uuid, $2::timestamptz, $3::timestamptz)', [prov, at(24 * 19), at(24 * 21)])).rows.length
-  expect(await busy()).toBe(1)
+  expect(await busy()).toBe(1) // window still open by the database clock
+  await pool.query("UPDATE bookings SET pay_by = now() - interval '1 minute' WHERE id = $1", [b])
+  expect(await busy()).toBe(0) // the lapsed window frees the time at once, before any sweep
+  expect(await status('bookings', b)).toBe('awaiting-payment')
   await run(0)
   expect(await status('bookings', b)).toBe('expired')
   expect(await busy()).toBe(0)
