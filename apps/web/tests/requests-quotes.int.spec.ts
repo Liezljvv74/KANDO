@@ -135,14 +135,20 @@ it('two concurrent accepts: one 200, one 409', async () => {
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
   // hold the request's advisory lock: both accepts must wait for it (proves they take it), then exactly one wins
   const holder = await pool.connect()
-  await holder.query('BEGIN')
-  await holder.query("SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext($1))", [r.id])
-  const both = Promise.all([accepting(q.id, U.cust), accepting(q.id, U.cust)])
-  await new Promise((ok) => setTimeout(ok, 500))
-  expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(0)
-  await holder.query('COMMIT')
-  holder.release()
+  let both: Promise<Response[]>
+  try {
+    await holder.query('BEGIN')
+    await holder.query("SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext($1))", [r.id])
+    both = Promise.all([accepting(q.id, U.cust), accepting(q.id, U.cust)])
+    await new Promise((ok) => setTimeout(ok, 500))
+    expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(0)
+    await holder.query('COMMIT')
+  } finally {
+    holder.release()
+  }
   const res = await both
+  const st = (await pool.query('SELECT (SELECT status FROM quotes WHERE id = $1) q, (SELECT status FROM requests WHERE id = $2) r', [q.id, r.id])).rows[0]
+  expect(st).toEqual({ q: 'accepted', r: 'booked' })
   expect(res.map((x) => x.status).sort()).toEqual([200, 409])
   expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(1)
 })
@@ -158,4 +164,43 @@ it('a third user gets 404 on every route; the provider cannot accept', async () 
   expect((await call(requestOne.GET, U.cust, 'GET', undefined, { id: r.id })).status).toBe(200)
   expect((await call(requestOne.GET, U.owner, 'GET', undefined, { id: r.id })).status).toBe(200)
   expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('sent')
+})
+
+const at = (n: number) => new Date(Date.now() + n * 86_400_000)
+const sendAt = async (reqId: string, when: Date, uid = U.owner) => {
+  const { sendQuote } = await import('@kando/domain')
+  const { asUser } = await import('@kando/db')
+  return asUser(uid, (tx) => sendQuote(tx, uid, reqId, { amount: 80, scope: 'rev' }, when)).then(() => 201, (e: Response) => e.status)
+}
+
+it('the 3-day deadline binds the first quote only; a revision follows while the last quote is valid', async () => {
+  const r1 = await newRequest()
+  expect(await sendAt(r1.id, at(1))).toBe(201)
+  expect(await sendAt(r1.id, at(5))).toBe(201) // day 5, quote of day 1 still valid (7 days)
+  const r2 = await newRequest()
+  expect(await sendAt(r2.id, at(4))).toBe(409) // first quote after answerBy
+  const r3 = await newRequest()
+  expect(await sendAt(r3.id, at(1))).toBe(201)
+  expect(await sendAt(r3.id, at(9))).toBe(409) // previous quote expired
+})
+
+it('a booked request takes no further quote', async () => {
+  const r = await newRequest()
+  const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
+  expect((await accepting(q.id, U.cust)).status).toBe(200)
+  expect((await quote(r.id, U.owner)).status).toBe(409)
+})
+
+it('a provider suspended or unpublished after the request cannot quote, and the quote cannot be accepted', async () => {
+  const gone = async (change: string) => {
+    const r = await newRequest(pRemote)
+    const q = QuoteSchema.parse(await (await quote(r.id, U.remote)).json())
+    const r2 = await newRequest(pRemote)
+    await pool.query(change)
+    const out = [(await quote(r2.id, U.remote)).status, (await accepting(q.id, U.cust)).status]
+    await pool.query("UPDATE providers SET status = 'published', suspended_until = NULL WHERE id = $1", [pRemote])
+    return out
+  }
+  expect(await gone(`UPDATE providers SET suspended_until = now() + interval '1 day' WHERE id = '${pRemote}'`)).toEqual([409, 409])
+  expect(await gone(`UPDATE providers SET status = 'draft' WHERE id = '${pRemote}'`)).toEqual([409, 409])
 })

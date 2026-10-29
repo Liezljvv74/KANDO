@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { bookings, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
+import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
@@ -9,7 +10,6 @@ import { assertFuture, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_D
 const DAY = 86_400_000
 const HOUR = 3_600_000
 const NO_ID = '00000000-0000-0000-0000-000000000000'
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const notFound = () => fail(404, { error: 'Not found' })
 const iso = (d: Date) => d.toISOString()
 
@@ -101,7 +101,7 @@ export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'p
 
 /** One request; 404 unless the caller is its customer or the provider owner. */
 export async function getRequest(tx: Tx, userId: string, id: string): Promise<BookingRequest> {
-  const row = UUID.test(id) ? (await tx.select().from(requests).where(eq(requests.id, id)))[0] : undefined
+  const row = isUuid(id) ? (await tx.select().from(requests).where(eq(requests.id, id)))[0] : undefined
   if (!row) return notFound()
   if (row.customerId !== userId && (await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
   return toRequest(row)
@@ -113,13 +113,20 @@ export async function listQuotes(tx: Tx, userId: string, requestId: string): Pro
   return (await tx.select().from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version))).map(toQuote)
 }
 
+const unavailable = () => fail(409, { error: 'provider-unavailable' })
+
 export async function sendQuote(tx: Tx, userId: string, requestId: string, input: QuoteInput, now = new Date()): Promise<Quote> {
   const provider = (await ownProvider(tx, userId)) ?? notFound()
-  if (!UUID.test(requestId)) return notFound()
+  if (!isUuid(requestId)) return notFound()
+  const own = () => tx.select().from(requests).where(and(eq(requests.id, requestId), eq(requests.providerId, provider.id)))
+  if (!(await own())[0]) return notFound() // party check before the lock: a stranger cannot make anyone wait
   await lockRequest(tx, requestId)
-  const req = (await tx.select().from(requests).where(and(eq(requests.id, requestId), eq(requests.providerId, provider.id))))[0]
-  if (!req) return notFound()
-  if (!['open', 'quoted'].includes(req.status) || req.answerBy <= now) fail(409, { error: 'request-closed' })
+  const req = (await own())[0]! // read again after the lock
+  if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
+  if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed' })
+  // The 3-day answer deadline binds the first quote only; a revision may follow while the last quote is still valid.
+  const open = (await tx.select({ e: quotes.expiresAt }).from(quotes).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent'))))[0]
+  if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed' })
   if (input.startAt) assertFuture(new Date(input.startAt), now)
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
@@ -143,17 +150,20 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
 }
 
 export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input: AcceptQuoteInput, now = new Date()): Promise<Booking> {
-  const first = UUID.test(quoteId) ? (await tx.select().from(quotes).where(eq(quotes.id, quoteId)))[0] : undefined
-  if (!first) return notFound()
-  await lockRequest(tx, first.requestId)
-  // read again after the lock: a concurrent accept has committed by now
-  const quote = (await tx.select().from(quotes).where(eq(quotes.id, quoteId)))[0]!
-  const req = (await tx.select().from(requests).where(and(eq(requests.id, quote.requestId), eq(requests.customerId, userId))))[0]
-  if (!req) return notFound() // only the request's customer
+  const find = async () => {
+    const q = isUuid(quoteId) ? (await tx.select().from(quotes).where(eq(quotes.id, quoteId)))[0] : undefined
+    const r = q && (await tx.select().from(requests).where(and(eq(requests.id, q.requestId), eq(requests.customerId, userId))))[0] // only the request's customer
+    return q && r ? { quote: q, req: r } : null
+  }
+  const pre = (await find()) ?? notFound() // party check before the lock: a stranger cannot make anyone wait
+  await lockRequest(tx, pre.req.id)
+  const { quote, req } = (await find()) ?? notFound() // read again after the lock: a concurrent accept has committed by now
   if (quote.status !== 'sent' || req.status !== 'quoted') fail(409, { error: 'quote-not-open' })
   if (quote.expiresAt <= now) fail(409, { error: 'quote-expired' })
   const provider = (await tx.select().from(providers).where(eq(providers.id, req.providerId)))[0]
-  if (!provider || provider.id !== quote.providerId) return notFound()
+  if (quote.providerId !== req.providerId) return notFound()
+  // a suspended or unpublished provider row is hidden from the customer by RLS: that is unavailable too
+  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return unavailable()
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })

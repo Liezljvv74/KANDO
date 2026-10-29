@@ -25,7 +25,7 @@ beforeAll(async () => {
 
 afterAll(cleanupUsers)
 
-const countsFor = (uid: string) =>
+const countsFor = (uid: string | null) =>
   asUser(uid, async (tx) => {
     const n = async (t: string) => (await tx.execute(sql.raw(`SELECT id FROM ${t}`))).rows.length
     return [await n('requests'), await n('quotes'), await n('bookings')]
