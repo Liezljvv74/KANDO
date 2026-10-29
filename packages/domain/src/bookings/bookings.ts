@@ -1,11 +1,12 @@
 import { desc, eq } from 'drizzle-orm'
-import { bookings, providers, services, type Tx } from '@kando/db'
+import { bookings, db, providers, services, type Tx } from '@kando/db'
 import type { Booking, BookingAnswer, DirectBookingInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { assertSlotFree, lockProviderSlots } from './busy'
+import { runDueTimersFor } from './timers'
 import { toBooking } from './requests'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
@@ -54,6 +55,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
 
 /** The caller's bookings, newest first, as customer or as provider owner. */
 export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<Booking[]> {
+  await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   return (await tx.select().from(bookings).where(mine).orderBy(desc(bookings.createdAt), desc(bookings.id))).map((b) => view(b, userId))
 }

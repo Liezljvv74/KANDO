@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { bookings, providers, quotes, requests, type Tx } from '@kando/db'
+import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
+import { runDueTimersFor } from './timers'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
@@ -95,6 +96,7 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
 
 /** The caller's requests, newest first: those they sent (customer) or those addressed to their provider profile. */
 export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<BookingRequest[]> {
+  await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   return (await tx.select().from(requests).where(mine).orderBy(desc(requests.createdAt), desc(requests.id))).map(toRequest)
 }
