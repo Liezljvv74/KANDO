@@ -2,7 +2,7 @@ import { useFocusEffect } from 'expo-router'
 import { useCallback, useMemo, useState } from 'react'
 import { AppState } from 'react-native'
 
-import type { Message } from '@kando/contract'
+import { MESSAGES_PAGE, type Message } from '@kando/contract'
 
 import { listMessages, sendMessage, sendPhoto as sendPhotoApi } from '@/api/chat'
 import { ApiError, type PickedFile } from '@/api/client'
@@ -17,14 +17,16 @@ const byTime = (a: Message, b: Message) => (a.createdAt === b.createdAt ? (a.id 
 /**
  * The messages of one thread, and the poll that keeps them current: `start` loads at once and then every POLL_SECONDS
  * with the cursor of the last polled message; `stop` ends it (an answer still on its way is dropped). A failed poll waits twice
- * as long as the one before, up to a minute. `add` shows a message the person just sent, without moving the cursor
+ * as long as the one before, up to a minute; a 404 (no such thread) ends it. The server answers the OLDEST page first, so a full page is followed
+ * by the next request at once; `onCaughtUp` fires once, when the first partial page has arrived (the screen scrolls down then). `add` shows a message the person just sent, without moving the cursor
  * (a message of the other side that is older than mine must still come in).
  */
-export function createMessageFeed(list: (after?: string) => Promise<Message[]>, onMessages: (m: Message[]) => void, onError: (code: string | null) => void) {
+export function createMessageFeed(list: (after?: string) => Promise<Message[]>, onMessages: (m: Message[]) => void, onError: (code: string | null) => void, onCaughtUp: () => void = () => {}) {
   let messages: Message[] = []
   let cursor: string | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let failures = 0
+  let caughtUp = false
   let epoch = 0 // changes on stop/start: an answer from an older run is ignored
 
   const merge = (incoming: Message[]) => {
@@ -46,8 +48,14 @@ export function createMessageFeed(list: (after?: string) => Promise<Message[]>, 
       const last = docs.at(-1)
       if (last) cursor = `${last.createdAt}|${last.id}`
       merge(docs)
+      if (docs.length >= MESSAGES_PAGE) return tick() // more waiting: no pause
+      if (!caughtUp) {
+        caughtUp = true
+        onCaughtUp()
+      }
     } catch (e) {
       if (run !== epoch) return
+      if (e instanceof ApiError && e.status === 404) return onError('Not found') // nothing to retry
       failures++
       onError(e instanceof ApiError ? e.code : 'network')
     }
@@ -74,8 +82,9 @@ export function createMessageFeed(list: (after?: string) => Promise<Message[]>, 
 export function useThreadMessages(threadId: string) {
   const [messages, setMessages] = useState<Message[]>([])
   const [pollError, setPollError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
-  const feed = useMemo(() => createMessageFeed((after) => listMessages(threadId, after), setMessages, setPollError), [threadId])
+  const feed = useMemo(() => createMessageFeed((after) => listMessages(threadId, after), setMessages, setPollError, () => setLoaded(true)), [threadId])
 
   useFocusEffect(
     useCallback(() => {
@@ -100,6 +109,7 @@ export function useThreadMessages(threadId: string) {
 
   return {
     messages,
+    loaded,
     send: (body: string) => deliver(() => sendMessage(threadId, body)),
     sendPhoto: (file: PickedFile) => deliver(() => sendPhotoApi(threadId, file)),
     error: sendError ?? (pollError ? errorText(pollError) : null),

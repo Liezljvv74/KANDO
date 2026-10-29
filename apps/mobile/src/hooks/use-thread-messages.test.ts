@@ -1,6 +1,8 @@
 import type { Message } from '@kando/contract'
 
 import { ApiError } from '@/api/client'
+import { MESSAGES_PAGE } from '@kando/contract'
+
 import { createMessageFeed, POLL_SECONDS } from './use-thread-messages'
 
 const msg = (n: number, extra: Partial<Message> = {}): Message => ({
@@ -21,8 +23,9 @@ const flush = async () => {
 const setup = (list: jest.Mock) => {
   const seen: Message[][] = []
   const errors: (string | null)[] = []
-  const feed = createMessageFeed(list, (m) => seen.push(m), (e) => errors.push(e))
-  return { feed, seen, errors }
+  const caught = jest.fn()
+  const feed = createMessageFeed(list, (m) => seen.push(m), (e) => errors.push(e), caught)
+  return { feed, seen, errors, caught }
 }
 
 beforeEach(() => jest.useFakeTimers())
@@ -115,5 +118,39 @@ test('a result that arrives after stop is dropped', async () => {
   await flush()
   expect(seen).toEqual([])
   jest.advanceTimersByTime(POLL_SECONDS * 10_000)
+  expect(list).toHaveBeenCalledTimes(1)
+})
+
+const page = (from: number, n: number) =>
+  Array.from({ length: n }, (_, i) => msg(0, { id: `00000000-0000-4000-8000-${String(from + i).padStart(12, '0')}`, createdAt: `2027-01-05T09:00:00.${String(from + i).padStart(3, '0')}Z` }))
+
+test('a long chat is read page after page without waiting, then settles into the interval', async () => {
+  const p1 = page(0, MESSAGES_PAGE)
+  const p2 = page(MESSAGES_PAGE, MESSAGES_PAGE)
+  const p3 = page(2 * MESSAGES_PAGE, 7)
+  const list = jest.fn().mockResolvedValueOnce(p1).mockResolvedValueOnce(p2).mockResolvedValueOnce(p3).mockResolvedValue([])
+  const { feed, seen, caught } = setup(list)
+  feed.start()
+  await flush()
+  expect(list).toHaveBeenCalledTimes(3) // no timer advanced
+  expect(list.mock.calls[1][0]).toBe(cursorOf(p1.at(-1)!))
+  expect(list.mock.calls[2][0]).toBe(cursorOf(p2.at(-1)!))
+  expect(seen.at(-1)).toHaveLength(2 * MESSAGES_PAGE + 7)
+  expect(caught).toHaveBeenCalledTimes(1) // only at the end of the catch-up
+  jest.advanceTimersByTime(POLL_SECONDS * 1000)
+  await flush()
+  expect(list).toHaveBeenCalledTimes(4)
+  expect(caught).toHaveBeenCalledTimes(1)
+  feed.stop()
+})
+
+test('a thread that does not exist (404) stops the polling for good', async () => {
+  const list = jest.fn().mockRejectedValue(new ApiError(404, 'Not found'))
+  const { feed, errors } = setup(list)
+  feed.start()
+  await flush()
+  expect(errors.at(-1)).toBe('Not found')
+  jest.advanceTimersByTime(POLL_SECONDS * 100_000)
+  await flush()
   expect(list).toHaveBeenCalledTimes(1)
 })

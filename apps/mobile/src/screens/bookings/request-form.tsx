@@ -37,8 +37,8 @@ export function RequestForm({ providerId, serviceId }: { providerId: string; ser
     let failed = false
     try {
       const thread = await threadIdForRequest(requestId)
-      for (const file of photos) await sendPhoto(thread!, file).catch(() => (failed = true))
       if (!thread) failed = true
+      else for (const file of photos) await sendPhoto(thread, file).catch(() => (failed = true))
     } catch {
       failed = true
     }
@@ -67,7 +67,7 @@ export function RequestForm({ providerId, serviceId }: { providerId: string; ser
       <Field label={t('booking.description')} value={description} onChangeText={setDescription} multiline editable={!busy} />
       <Field label={t('booking.preferredDate')} value={preferredDate} onChangeText={setPreferredDate} placeholder="2027-01-31" keyboardType="numbers-and-punctuation" autoCapitalize="none" editable={!busy} />
       <SmallButton label={t('chat.photosForRequest')} onPress={() => askPhotoSource(addPhoto)} disabled={busy} />
-      {photos.length > 0 && <Info text={t('chat.photosAdded', { n: photos.length })} />}
+      {photos.length > 0 && <Info text={photos.length === 1 ? t('chat.photosAdded.one') : t('chat.photosAdded.other', { n: photos.length })} />}
       {denied && <DeniedNotice />}
       <ErrorText text={error} />
       <Button label={t('booking.sendRequest')} onPress={submit} busy={busy} />

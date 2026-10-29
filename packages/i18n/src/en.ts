@@ -597,7 +597,8 @@ export const en: Record<Key, string> = {
   'chat.card.acceptance': 'Quote accepted: {amount}',
   'chat.card.additionalTask': 'Additional task: {amount}',
   'chat.photosForRequest': 'Photos for the provider (optional)',
-  'chat.photosAdded': '{n} photo(s) added',
+  'chat.photosAdded.one': '1 photo added',
+  'chat.photosAdded.other': '{n} photos added',
   'chat.photosFailed': 'Your request was sent, but some photos could not be added. You can add them in the chat.',
   'notification.open': 'Open',
 }

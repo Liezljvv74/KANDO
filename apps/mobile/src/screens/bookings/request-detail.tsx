@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
 import { getRequest, listQuotes } from '@/api/bookings'
+import { threadIdForRequest } from '@/api/chat'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
@@ -10,6 +11,7 @@ import { useMe } from '@/hooks/use-me'
 import { t, useLang, type Key } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
 import { go } from '@/lib/go'
+import { OpenChat } from '@/screens/chat/open-chat'
 import { QuoteCard } from '@/screens/bookings/quote-card'
 import { SendQuoteForm } from '@/screens/bookings/send-quote-form'
 
@@ -44,6 +46,7 @@ export default function RequestDetail() {
         <Text style={styles.small}>{t(`requestStatus.${request.status}` as Key)}</Text>
         {open && <Text style={styles.small}>{t('booking.answerBy', { date: formatWhen(request.answerBy) })}</Text>}
       </Card>
+      <OpenChat find={() => threadIdForRequest(request.id)} />
       <SectionTitle text={t('booking.quotes')} />
       {quotes.length === 0 && <Text style={styles.small}>{t('booking.noQuotes')}</Text>}
       {quotes.map((q) => (

@@ -30,15 +30,15 @@ test('a photo goes to the thread photo route as the file part', async () => {
 test('report and block calls use their routes, methods and bodies', async () => {
   await reportMessage('m1', 'Rude')
   expect(last()).toEqual(['/app-api/v1/messages/m1/report', { method: 'POST', body: { reason: 'Rude' } }])
-  await blockUser('u1')
-  expect(last()).toEqual(['/app-api/v1/blocks', { method: 'POST', body: { userId: 'u1' } }])
+  await blockUser('t1')
+  expect(last()).toEqual(['/app-api/v1/blocks', { method: 'POST', body: { threadId: 't1' } }])
   await unblockUser('u 1')
   expect(last()).toEqual(['/app-api/v1/blocks/u%201', { method: 'DELETE' }])
   await listBlocks()
   expect(last()).toEqual(['/app-api/v1/blocks'])
 })
 
-const thread = (id: string, extra: object) => ({ id, requestId: null, bookingId: null, otherName: 'A', otherUserId: 'u', lastMessageAt: null, blocked: false, ...extra })
+const thread = (id: string, extra: object) => ({ id, requestId: null, bookingId: null, otherName: 'A', lastMessageAt: null, blocked: false, ...extra })
 const booking = { id: 'b1', quoteId: null, customerId: 'c1', providerId: 'p1' }
 
 test('the chat of a request is found by its request id', async () => {

@@ -1,10 +1,11 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm'
-import { blocks, db, messages, providers, threads, users, type Tx } from '@kando/db'
+import { and, eq, inArray, sql } from 'drizzle-orm'
+import { blocks, db, messages, providers, users, type Tx } from '@kando/db'
 import type { BlockedUser, ReportInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { fail } from '../providers/http'
 import { publicNameFor } from '../providers/public-name'
 import { flagForStaff } from './flags'
+import { ownThread } from './threads'
 
 const notFound = () => fail(404, { error: 'Not found' })
 
@@ -16,16 +17,13 @@ export async function reportMessage(tx: Tx, userId: string, messageId: string, i
   await flagForStaff(db, { kind: 'message-reported', refId: messageId, userId, note: input.reason })
 }
 
-/** Block someone the caller shares a thread with (anyone else: 404, so no one can probe who exists). Idempotent. */
-export async function blockUser(tx: Tx, userId: string, otherId: string): Promise<void> {
-  // owner connection: the other side's provider row may be hidden from the caller; only the caller's own relationship is read
-  const shared = await db
-    .select({ id: threads.id })
-    .from(threads)
-    .innerJoin(providers, eq(providers.id, threads.providerId))
-    .where(or(and(eq(threads.customerId, userId), eq(providers.ownerId, otherId)), and(eq(providers.ownerId, userId), eq(threads.customerId, otherId))))
-    .limit(1)
-  if (!shared.length || otherId === userId) return notFound()
+/** Block the other side of a thread the caller belongs to (RLS hides any other thread, and a bad id: 404, so no one can probe who exists). Idempotent. */
+export async function blockUser(tx: Tx, userId: string, threadId: string): Promise<void> {
+  const t = await ownThread(tx, threadId)
+  // owner connection: the provider row may be hidden from the customer
+  const ownerId = (await db.select({ o: providers.ownerId }).from(providers).where(eq(providers.id, t.providerId)))[0]?.o
+  const otherId = t.customerId === userId ? ownerId : t.customerId
+  if (!otherId || otherId === userId) return notFound()
   await tx.insert(blocks).values({ blockerId: userId, blockedId: otherId }).onConflictDoNothing()
 }
 

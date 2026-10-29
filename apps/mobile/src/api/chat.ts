@@ -13,7 +13,7 @@ export const sendMessage = (threadId: string, body: string) => api<Message>(`${B
 export const sendPhoto = (threadId: string, file: PickedFile) => upload<Message>(`${BASE}/threads/${threadId}/photos`, file, {})
 export const reportMessage = (id: string, reason: string) => api<null>(`${BASE}/messages/${id}/report`, { method: 'POST', body: { reason } })
 export const listBlocks = async () => (await api<{ docs: BlockedUser[] }>(`${BASE}/blocks`)).docs
-export const blockUser = (userId: string) => api<null>(`${BASE}/blocks`, { method: 'POST', body: { userId } })
+export const blockUser = (threadId: string) => api<null>(`${BASE}/blocks`, { method: 'POST', body: { threadId } })
 export const unblockUser = (userId: string) => api<null>(`${BASE}/blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' })
 
 /** The chat of a request (opened with the request), or null. */

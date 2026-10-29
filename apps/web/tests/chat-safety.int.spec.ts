@@ -30,7 +30,7 @@ const threadOf = async (as: string, requestId: string) => ThreadSchema.array().p
 const send = (thread: string, as: string, body: string) => call(messagesRoute.POST, as, 'POST', { body }, { id: thread })
 const sendOk = async (thread: string, as: string, body: string) => MessageSchema.parse(await (await send(thread, as, body)).json())
 const report = (id: string, as: string, reason = 'rude') => call(reportRoute.POST, as, 'POST', { reason }, { id })
-const block = (as: string, userId: string) => call(blocksRoute.POST, as, 'POST', { userId })
+const block = (as: string, threadId: string) => call(blocksRoute.POST, as, 'POST', { threadId })
 const unblock = (as: string, userId: string) => call(blockOne.DELETE, as, 'DELETE', undefined, { userId })
 
 it('reporting a message creates one staff flag; reporting it twice does not add another', async () => {
@@ -57,8 +57,8 @@ it('a user cannot report their own message (400) or one in another thread (404)'
 
 it('after a block, neither side can send (403 BLOCKED) and the thread says blocked: true', async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)
-  expect((await block(U.owner, U.cust)).status).toBe(204)
-  expect((await block(U.owner, U.cust)).status).toBe(204) // idempotent
+  expect((await block(U.owner, t.id)).status).toBe(204)
+  expect((await block(U.owner, t.id)).status).toBe(204) // idempotent
   expect((await send(t.id, U.cust, 'hi')).status).toBe(403)
   expect(await (await send(t.id, U.owner, 'hi')).json()).toEqual({ error: 'BLOCKED' })
   expect((await threadOf(U.cust, t.requestId!)).blocked).toBe(true)
@@ -71,8 +71,8 @@ it('after a block, neither side can send (403 BLOCKED) and the thread says block
 })
 
 it("a blocked customer cannot create a request to the blocker's provider (404)", async () => {
-  await newRequest()
-  await block(U.owner, U.cust)
+  const t = await threadOf(U.cust, (await newRequest()).id)
+  await block(U.owner, t.id)
   const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Another job' })
   expect([res.status, await res.json()]).toEqual([404, { error: 'Not found' }])
   const direct = await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
@@ -84,15 +84,18 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
 })
 
 it('blocking is only for someone you share a thread with (404)', async () => {
-  await newRequest()
-  expect((await block(U.other, U.owner)).status).toBe(404)
-  expect((await block(U.cust, U.other)).status).toBe(404)
-  expect((await block(U.cust, U.cust)).status).toBe(404)
+  const t = await threadOf(U.cust, (await newRequest()).id)
+  expect((await block(U.third, t.id)).status).toBe(404) // not a party of the thread
+  expect((await block(U.other, t.id)).status).toBe(404)
+  expect((await block(U.cust, 'not-a-uuid')).status).toBe(404)
+  expect((await block(U.cust, '00000000-0000-4000-8000-000000000000')).status).toBe(404)
+  expect((await pool.query('SELECT count(*)::int n FROM blocks WHERE blocker_id = ANY($1)', [[U.third, U.other, U.cust]])).rows[0].n).toBe(0)
+  expect(Object.keys(t).sort()).toEqual(['blocked', 'bookingId', 'id', 'lastMessageAt', 'otherName', 'requestId'])
 })
 
 it('unblock restores sending', async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)
-  await block(U.cust, U.owner) // the customer blocks the provider
+  await block(U.cust, t.id) // the customer blocks the provider
   expect((await send(t.id, U.owner, 'hi')).status).toBe(403)
   expect((await unblock(U.cust, U.owner)).status).toBe(204)
   expect((await unblock(U.cust, U.owner)).status).toBe(204) // idempotent

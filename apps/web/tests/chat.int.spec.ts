@@ -57,8 +57,6 @@ it('creating a request opens a thread; both parties list it', async () => {
   expect(mine.id).toBe(theirs.id)
   expect(mine).toMatchObject({ bookingId: null, blocked: false })
   expect(mine.otherName).not.toBe('')
-  expect(mine.otherUserId).toBe(U.owner)
-  expect(theirs.otherUserId).toBe(U.cust)
   expect(await threadOf(U.third, r.id)).toBeUndefined()
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE request_id = $1', [r.id])).rows[0].n).toBe(1)
 })

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, sql, type SQL } from 'drizzle-orm'
 import { db, messages, type Tx } from '@kando/db'
-import type { Card, Message, MessageInput } from '@kando/contract'
+import { MESSAGES_PAGE, type Card, type Message, type MessageInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { describeError } from '../log-error'
 import { fail } from '../providers/http'
@@ -13,7 +13,7 @@ import { CHAT_PHOTO_LINK_SECONDS } from './rules'
 import { ownThread } from './threads'
 
 type Row = typeof messages.$inferSelect
-const PAGE = 100
+const PAGE = MESSAGES_PAGE
 /** created_at with microseconds, as text: a JS Date would cut them and a cursor on it would repeat a row. */
 const TS = sql<string>`to_char(${messages.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
 

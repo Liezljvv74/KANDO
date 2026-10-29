@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { useRef, useState } from 'react'
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -15,6 +15,8 @@ import { useThreadMessages } from '@/hooks/use-thread-messages'
 import { errorText, t, useLang } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { confirmDanger } from '@/lib/confirm'
+import { goBack } from '@/lib/go'
+import { nearBottom } from '@/lib/scroll'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
 import { MessageBubble } from '@/screens/chat/message-bubble'
@@ -27,12 +29,15 @@ const load = async () => {
 /** One conversation. Deep link `skilled://threads/<id>` (the new-message notice) lands here. */
 export default function ThreadScreen() {
   useLang()
-  const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { messages, send, sendPhoto, error } = useThreadMessages(id)
+  const { messages, loaded, send, sendPhoto, error } = useThreadMessages(id)
   const { data, error: loadError, retry } = useLoad(load)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const working = useRef(false) // a ref: two quick taps in one render must not send twice
+  const stick = useRef(false) // the next growth scrolls down (after my own send)
+  const atBottom = useRef(true)
+  const arrived = useRef(false) // the first scroll after the catch-up happened
   const [denied, setDenied] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const list = useRef<FlatList>(null)
@@ -41,56 +46,72 @@ export default function ThreadScreen() {
   if (!data || !thread)
     return (
       <SafeAreaView style={styles.root}>
-        <LinkText label={t('common.back')} onPress={() => router.back()} />
-        {loadError || data ? <ErrorRetry code={loadError ?? 'Not found'} onRetry={retry} /> : <Loading />}
+        <LinkText label={t('common.back')} onPress={goBack} />
+        {loadError || data ? <ErrorRetry code={loadError ?? "Not found"} onRetry={retry} /> : <Loading />}
       </SafeAreaView>
     )
-  const blockedByMe = data.blocks.some((b) => b.userId === thread.otherUserId)
+  // GET /blocks names people, not threads: my block is the one whose name is this thread's other side.
+  const blockedByMe = thread.blocked ? data.blocks.find((b) => b.name === thread.otherName) : undefined
 
   async function submit() {
     const body = text.trim()
-    if (!body || busy) return
+    if (!body || working.current) return
+    working.current = true
     setBusy(true)
     try {
       await send(body)
       setText('')
-    } catch {
+      stick.current = true
+    } catch (e) {
       // The text stays so it can be rewritten; `error` shows the reason under the input.
+      if (e instanceof ApiError && e.code === 'BLOCKED') retry() // the thread is blocked now: the input goes away
     }
+    working.current = false
     setBusy(false)
   }
 
   async function attach(source: 'camera' | 'library') {
+    if (working.current) return
+    working.current = true
     setBusy(true)
     setDenied(false)
     setProblem(null)
     try {
       const file = await pickPhoto(source, false)
       if (file === 'denied') setDenied(true)
-      else if (file) await sendPhoto(file)
+      else if (file) {
+        await sendPhoto(file)
+        stick.current = true
+      }
     } catch (e) {
       // A refused upload already set `error`; a photo that could not be read or converted has no server answer.
       if (!(e instanceof ApiError)) setProblem(errorText(uploadErrorCode(e)))
+      else if (e.code === 'BLOCKED') retry()
     }
+    working.current = false
     setBusy(false)
   }
 
   async function toggleBlock() {
-    const unblock = blockedByMe
-    if (!(await confirmDanger(t(unblock ? 'chat.unblockAsk' : 'chat.blockAsk', { name: thread!.otherName }), t(unblock ? 'chat.unblock' : 'chat.block')))) return
+    if (working.current) return
+    working.current = true
+    const unblock = !!blockedByMe
     try {
-      await (unblock ? unblockUser(thread!.otherUserId) : blockUser(thread!.otherUserId))
-      retry()
+      if (await confirmDanger(t(unblock ? 'chat.unblockAsk' : 'chat.blockAsk', { name: thread!.otherName }), t(unblock ? 'chat.unblock' : 'chat.block'))) {
+        await (unblock ? unblockUser(blockedByMe!.userId) : blockUser(id))
+        retry()
+      }
     } catch (e) {
       setProblem(errorText(e instanceof ApiError ? e.code : 'network'))
     }
+    working.current = false
   }
 
   return (
     <SafeAreaView style={styles.root}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <LinkText label={t('common.back')} onPress={() => router.back()} />
+          <LinkText label={t('common.back')} onPress={goBack} />
           <Text style={styles.title} numberOfLines={1}>{thread.otherName}</Text>
           {(!thread.blocked || blockedByMe) && <SmallButton label={t(blockedByMe ? 'chat.unblock' : 'chat.block')} onPress={toggleBlock} />}
         </View>
@@ -101,7 +122,18 @@ export default function ThreadScreen() {
           data={messages}
           keyExtractor={(m) => m.id}
           renderItem={({ item }) => <MessageBubble message={item} />}
-          onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
+          onScroll={(e) => {
+            const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent
+            atBottom.current = nearBottom({ contentHeight: contentSize.height, viewHeight: layoutMeasurement.height, offsetY: contentOffset.y })
+          }}
+          scrollEventThrottle={100}
+          onContentSizeChange={() => {
+            // Only after the catch-up, after my own send, or when I am already at the end: never while reading history.
+            if (!loaded || !(!arrived.current || stick.current || atBottom.current)) return
+            arrived.current = true
+            stick.current = false
+            list.current?.scrollToEnd({ animated: false })
+          }}
           ListEmptyComponent={<Text style={styles.empty}>{t('chat.noMessages')}</Text>}
           keyboardShouldPersistTaps="handled"
         />

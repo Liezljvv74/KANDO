@@ -33,8 +33,8 @@ export async function ownThread(tx: Tx, threadId: string) {
   return t ?? notFound()
 }
 
-/** The other side's public name and account id; the names are read on the owner connection, for threads the caller already is a party of. */
-async function otherSides(userId: string, rows: (typeof threads.$inferSelect)[]): Promise<Map<string, { name: string; userId: string }>> {
+/** The other side's public name; the names are read on the owner connection, for threads the caller already is a party of. */
+async function otherSides(userId: string, rows: (typeof threads.$inferSelect)[]): Promise<Map<string, string>> {
   if (!rows.length) return new Map()
   const found = await db
     .select({ id: threads.id, customerId: threads.customerId, first: users.firstName, last: users.lastName, p: providers })
@@ -48,7 +48,7 @@ async function otherSides(userId: string, rows: (typeof threads.$inferSelect)[])
     found.map((f) => {
       const owner = byId.get(f.p.ownerId)
       const name = f.customerId === userId ? f.p.publicName || publicNameFor(owner?.first ?? null, owner?.last ?? null, f.p.businessName, f.p.type) : publicNameFor(f.first, f.last, null, null)
-      return [f.id, { name, userId: f.customerId === userId ? f.p.ownerId : f.customerId }]
+      return [f.id, name]
     }),
   )
 }
@@ -64,8 +64,7 @@ export async function listThreads(tx: Tx, userId: string): Promise<Thread[]> {
     id: t.id,
     requestId: t.requestId,
     bookingId: t.bookingId,
-    otherName: others.get(t.id)?.name ?? '',
-    otherUserId: others.get(t.id)?.userId ?? '',
+    otherName: others.get(t.id) ?? '',
     lastMessageAt: last ? new Date(last).toISOString() : null,
     blocked,
   }))
