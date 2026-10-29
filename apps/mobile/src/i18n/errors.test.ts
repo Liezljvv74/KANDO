@@ -1,7 +1,7 @@
 import { de } from '@kando/i18n/src/de'
 import { en } from '@kando/i18n/src/en'
 import { accountError } from '@/lib/account-data'
-import { errorKeys, errorText, setLang } from './index'
+import { errorKeys, errorText, setLang, t } from './index'
 
 test('every mapped error code has a non-empty German and English text', () => {
   for (const key of Object.values(errorKeys)) {
@@ -41,4 +41,12 @@ test('every booking rule code from the server has its own text in both languages
   }
   setLang('en')
   expect(errorText('slot-pending')).toContain('pending booking')
+})
+
+test('the chat rejections have their own text in both languages', () => {
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(errorText('CONTACT_DETAILS')).toBe(t('chat.contactBlocked'))
+    expect(errorText('BLOCKED')).toBe(t('chat.blocked'))
+  }
 })

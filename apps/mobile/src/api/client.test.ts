@@ -235,3 +235,8 @@ test('a time limit given in milliseconds is used instead of the default one', as
     jest.useRealTimers()
   }
 })
+
+test('a 204 No Content answer (report, block) succeeds without a body', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers(), json: async () => Promise.reject(new SyntaxError('Unexpected end of JSON')) })
+  await expect(api('/app-api/v1/blocks', { method: 'POST', body: { userId: 'u' } })).resolves.toBeNull()
+})

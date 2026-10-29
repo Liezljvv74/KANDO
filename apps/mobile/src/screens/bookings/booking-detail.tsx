@@ -4,10 +4,11 @@ import { StyleSheet, Text } from 'react-native'
 
 import type { Booking } from '@kando/contract'
 
+import { threadIdForBooking } from '@/api/chat'
 import { answerBooking, listBookings, withdrawBooking } from '@/api/bookings'
 import { ApiError } from '@/api/client'
 import { Button, ErrorText } from '@/components/auth-ui'
-import { Card, FormScreen } from '@/components/form-ui'
+import { Card, FormScreen, SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang, type Key } from '@/i18n'
@@ -40,6 +41,7 @@ export default function BookingDetail() {
   const fetch = useCallback(() => find(id), [id])
   const { data, done, error, retry } = useLoad(fetch)
   const [busy, setBusy] = useState(false)
+  const [opening, setOpening] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const title = t('booking.bookings')
   if (!done || !data)
@@ -49,6 +51,19 @@ export default function BookingDetail() {
       </FormScreen>
     )
   const { booking: b, viewer } = data
+
+  async function openChat() {
+    setOpening(true)
+    setProblem(null)
+    try {
+      const thread = await threadIdForBooking(b, viewer)
+      if (thread) go(`/threads/${thread}`)
+      else setProblem(errorText('Not found'))
+    } catch (e) {
+      setProblem(errorText(e instanceof ApiError ? e.code : 'network'))
+    }
+    setOpening(false)
+  }
 
   async function act(action: BookingAction) {
     if (action === 'counter') return go('/bookings/counter', { id: b.id })
@@ -78,6 +93,7 @@ export default function BookingDetail() {
           <Text style={styles.small}>{t('booking.payPlaceholder')}</Text>
         </Card>
       )}
+      <SmallButton label={t('chat.open')} onPress={openChat} busy={opening} />
       <ErrorText text={problem} />
       {bookingActions(b, viewer).map((a) => (
         <Button key={a} label={t(`booking.${a}` as Key)} onPress={() => act(a)} busy={busy} danger={a === 'decline' || a === 'withdraw'} />

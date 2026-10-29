@@ -35,6 +35,8 @@ export const ThreadSchema = z.object({
   requestId: z.string().nullable(),
   bookingId: z.string().nullable(),
   otherName: z.string(),
+  /** The other person's account id: what a block names (the app shows only otherName). */
+  otherUserId: z.string(),
   lastMessageAt: z.string().nullable(),
   blocked: z.boolean(),
 })
@@ -50,8 +52,11 @@ export const MessagesQuerySchema = z.object({
 })
 export type MessagesQuery = z.infer<typeof MessagesQuerySchema>
 
+/** Longest report reason in characters. */
+export const MAX_REPORT_CHARS = 500
+
 /** POST /messages/:id/report: the reason is for staff only. */
-export const ReportInputSchema = z.object({ reason: requiredText(500) })
+export const ReportInputSchema = z.object({ reason: requiredText(MAX_REPORT_CHARS) })
 export type ReportInput = z.infer<typeof ReportInputSchema>
 
 /** POST /blocks */

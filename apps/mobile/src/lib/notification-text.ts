@@ -31,3 +31,9 @@ export function splitBanners(list: Notification[], max = MAX_BANNERS): { shown: 
 
 /** The profile link of a "profile is live" message to share; other kinds (booking ids, a chat link) have none. */
 export const notificationUrl = (n: Pick<Notification, 'kind' | 'payload'>): string | null => (n.kind === 'profile-live' && 'url' in n.payload && typeof n.payload.url === 'string' ? n.payload.url : null)
+
+/** The thread a "new message" notice opens: the payload's threadId, else the id in its own `skilled://threads/<id>` link; null for any other kind or link. */
+export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>): string | null => {
+  if (n.kind !== 'message-received' || !('url' in n.payload)) return null
+  return n.payload.threadId ?? /^skilled:\/\/threads\/([^/?#]+)$/.exec(n.payload.url)?.[1] ?? null
+}

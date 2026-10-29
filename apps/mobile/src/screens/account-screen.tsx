@@ -99,6 +99,7 @@ export default function AccountScreen() {
             </>
           )}
           <LinkText label={t('booking.myBookings')} onPress={() => go('/bookings')} />
+          <LinkText label={t('chat.title')} onPress={() => go('/threads')} />
           <LinkText label={t('account.offerServices')} onPress={offer} />
           <LanguageSwitch />
         </View>

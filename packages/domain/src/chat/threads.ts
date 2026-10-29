@@ -33,8 +33,8 @@ export async function ownThread(tx: Tx, threadId: string) {
   return t ?? notFound()
 }
 
-/** The other side's public name; the names are read on the owner connection, for threads the caller already is a party of. */
-async function otherNames(userId: string, rows: (typeof threads.$inferSelect)[]): Promise<Map<string, string>> {
+/** The other side's public name and account id; the names are read on the owner connection, for threads the caller already is a party of. */
+async function otherSides(userId: string, rows: (typeof threads.$inferSelect)[]): Promise<Map<string, { name: string; userId: string }>> {
   if (!rows.length) return new Map()
   const found = await db
     .select({ id: threads.id, customerId: threads.customerId, first: users.firstName, last: users.lastName, p: providers })
@@ -48,7 +48,7 @@ async function otherNames(userId: string, rows: (typeof threads.$inferSelect)[])
     found.map((f) => {
       const owner = byId.get(f.p.ownerId)
       const name = f.customerId === userId ? f.p.publicName || publicNameFor(owner?.first ?? null, owner?.last ?? null, f.p.businessName, f.p.type) : publicNameFor(f.first, f.last, null, null)
-      return [f.id, name]
+      return [f.id, { name, userId: f.customerId === userId ? f.p.ownerId : f.customerId }]
     }),
   )
 }
@@ -59,12 +59,13 @@ export async function listThreads(tx: Tx, userId: string): Promise<Thread[]> {
     .select({ t: threads, last: sql<Date | null>`(SELECT max(m.created_at) FROM messages m WHERE m.thread_id = ${threads.id})`, blocked: sql<boolean>`is_blocked(${threads.customerId}, ${threads.providerId})` })
     .from(threads)
     .orderBy(desc(sql`coalesce((SELECT max(m.created_at) FROM messages m WHERE m.thread_id = ${threads.id}), ${threads.createdAt})`), desc(threads.id))
-  const names = await otherNames(userId, rows.map((r) => r.t))
+  const others = await otherSides(userId, rows.map((r) => r.t))
   return rows.map(({ t, last, blocked }) => ({
     id: t.id,
     requestId: t.requestId,
     bookingId: t.bookingId,
-    otherName: names.get(t.id) ?? '',
+    otherName: others.get(t.id)?.name ?? '',
+    otherUserId: others.get(t.id)?.userId ?? '',
     lastMessageAt: last ? new Date(last).toISOString() : null,
     blocked,
   }))

@@ -105,6 +105,8 @@ async function send(path: string, { method = 'GET', body, timeLimit = method ===
     if (timer) clearTimeout(timer)
   }
   if (detached === undefined) await storeCookies(res)
+  // No Content (report, block, unblock): nothing to read, and not a failed read.
+  if (res.status === 204) return { res, data: null as never }
   // `text`: a successful answer is read as text (the CSV export); errors are always JSON.
   let data: unknown = null
   try {

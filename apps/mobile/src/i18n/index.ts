@@ -83,6 +83,9 @@ export const errorKeys: Record<string, Key> = {
   'quote-not-open': 'error.booking.quote-not-open',
   'request-closed': 'error.booking.request-closed',
   'Unknown service': 'error.booking.unknown-service',
+  // Chat (`error`)
+  CONTACT_DETAILS: 'chat.contactBlocked',
+  BLOCKED: 'chat.blocked',
   // Auth server (`code`)
   INVALID_EMAIL_OR_PASSWORD: 'error.invalidLogin',
   USER_ALREADY_EXISTS: 'error.emailTaken',
