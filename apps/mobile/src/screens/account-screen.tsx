@@ -1,5 +1,6 @@
 import type { Me, Photo } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
+import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -10,7 +11,7 @@ import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { NotificationBanners } from '@/components/notification-banner'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useFlash } from '@/hooks/use-flash'
-import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
+import { loadMe, markNotificationsSeen, unseenOf, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
@@ -34,7 +35,6 @@ export default function AccountScreen() {
     try {
       const m = await loadMe()
       setMe(m)
-      markNotificationsSeen().catch(() => {}) // the account page is where a customer reads their messages
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
       setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
@@ -45,6 +45,15 @@ export default function AccountScreen() {
   useEffect(() => {
     load()
   }, [load])
+
+  // The account page is where a customer reads their messages: clear the dot on every focus, and again if one arrives while it is open.
+  // Marking updates the shared copy, so unseen turns false and the effect does not loop.
+  const hasUnseen = unseenOf(shared?.notifications).length > 0
+  useFocusEffect(
+    useCallback(() => {
+      if (hasUnseen) markNotificationsSeen().catch(() => {})
+    }, [hasUnseen]),
+  )
 
   async function offer() {
     if (busy) return

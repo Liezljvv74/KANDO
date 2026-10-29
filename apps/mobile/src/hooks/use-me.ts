@@ -36,8 +36,11 @@ export function clearMe() {
 }
 
 /** Marks every unseen notification seen (opening the setup page); a failure only leaves the dot a little longer. */
+/** The notifications the customer has not seen yet. */
+export const unseenOf = <T extends { seenAt: string | null }>(notifications: T[] | undefined) => (notifications ?? []).filter((n) => !n.seenAt)
+
 export async function markNotificationsSeen() {
-  const unseen = me?.notifications.filter((n) => !n.seenAt) ?? []
+  const unseen = unseenOf(me?.notifications)
   if (!unseen.length) return
   await Promise.all(unseen.map((n) => notificationsApi.mark(n.id, { seen: true }))).catch(() => {})
   const now = new Date().toISOString()

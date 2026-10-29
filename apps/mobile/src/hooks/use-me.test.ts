@@ -1,5 +1,5 @@
 import { getMe } from '@/api/client'
-import { clearMe, currentMe, loadMe } from './use-me'
+import { clearMe, currentMe, loadMe, unseenOf } from './use-me'
 
 jest.mock('@/api/client', () => ({ getMe: jest.fn() }))
 jest.mock('@/api/my-profile', () => ({ notificationsApi: { mark: jest.fn() } }))
@@ -24,4 +24,10 @@ test('the newest loadMe wins: an older, slower response never overwrites a newer
   resolvers[0]({ id: 'old', notifications: [] })
   await older
   expect(currentMe()?.id).toBe('new')
+})
+
+test('unseenOf keeps only notifications without a seenAt and copes with no list', () => {
+  expect(unseenOf([{ seenAt: null }, { seenAt: 'x' }])).toEqual([{ seenAt: null }])
+  expect(unseenOf([{ seenAt: 'x' }])).toEqual([])
+  expect(unseenOf(undefined)).toEqual([])
 })

@@ -134,6 +134,7 @@ Everything below is merged into `main`; no pull request is open. The site is liv
 - A declined or lapsed quote-born booking leaves the request closed (owner decision: reopen the request or the quote).
 - `withdrawBooking` and slot-freed notices.
 - `customerId` is exposed to providers in the booking DTOs.
+- Payment code in 2b must refuse payment when `pay_by <= now` (a lapsed hold stays `awaiting-payment` until a sweep, so two overlapping awaiting-payment rows can exist for a moment), and `pay_by` has no CHECK (an awaiting-payment row with null `pay_by` never holds a slot and never expires): add a constraint in the 2b migration.
 
 ### How it works now
 
