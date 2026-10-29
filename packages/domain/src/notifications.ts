@@ -5,6 +5,7 @@ import { sendEmail, type Template } from './email'
 import { describeError } from './log-error'
 import { createNotification } from './notifications-store'
 import { offerableServiceIds } from './providers/eligibility'
+import { isSuspendedNow } from './providers/profile'
 
 const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
 
@@ -48,7 +49,7 @@ async function decideApprovalEmail(userId: string, requirement: string, lang: La
   const affected = mine.filter((s) => s.required.includes(requirement))
   if (!affected.length) return plain
   if (provider.status !== 'published') return { template: 'document-approved-offline', params: {} }
-  if (provider.suspendedUntil && provider.suspendedUntil > new Date()) {
+  if (provider.suspendedUntil && (await isSuspendedNow(db, provider.id))) {
     return { template: 'document-approved-suspended', params: { date: emailDate(provider.suspendedUntil, lang) } }
   }
   const offerable = new Set(await offerableServiceIds(db, provider.id))

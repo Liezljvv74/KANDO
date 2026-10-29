@@ -1,5 +1,5 @@
-import { eq, sql } from 'drizzle-orm'
-import { lookupPostcode, providers, services, users, type Tx } from '@kando/db'
+import { and, eq, sql } from 'drizzle-orm'
+import { lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
 import type { Missing, MyProfile, ProfileInput } from '@kando/contract'
 import { fail } from './http'
 import { publicNameFor } from './public-name'
@@ -29,6 +29,11 @@ const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
 /** The caller's provider row (RLS also shows published rows of others; the owner filter picks the caller's). */
 export async function ownProvider(tx: Tx, userId: string): Promise<Row | null> {
   return (await tx.select().from(providers).where(eq(providers.ownerId, userId)))[0] ?? null
+}
+
+/** Whether the provider is suspended now, by the database clock (the same one the SQL checks use). */
+export async function isSuspendedNow(tx: Pick<Tx, 'select'>, providerId: string): Promise<boolean> {
+  return (await tx.select({ id: providers.id }).from(providers).where(and(eq(providers.id, providerId), sql`NOT ${notSuspendedSql('providers')}`))).length > 0
 }
 
 /** Serialises one user's profile writes (a double-tapped first save waits, then takes the update path). */
@@ -168,7 +173,7 @@ export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
   await lockProfile(tx, userId) // serialises with a concurrent profile edit between this check and the status change
   const row = await ownProvider(tx, userId)
   if (!row) return fail(404, { error: 'Not found' })
-  if (row.suspendedUntil && row.suspendedUntil > new Date()) fail(409, { error: 'Profile suspended' })
+  if (await isSuspendedNow(tx, row.id)) fail(409, { error: 'Profile suspended' })
   const current = (await view(tx, userId, row)).missing
   if (current.length) fail(409, { error: 'Profile incomplete', missing: current })
   await syncIdentity(tx, userId, row)
