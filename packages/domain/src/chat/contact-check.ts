@@ -23,7 +23,7 @@ const LABEL = '[a-z0-9-]{1,63}'
 const EMAIL_PLAIN = /[a-z0-9._%+-]@[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){0,4}\.[a-z]{2,}/
 const EMAIL_SPELLED = new RegExp(`[a-z0-9]${AT}${LABEL}(?:${DOT_EMAIL}${LABEL}){0,4}${DOT_EMAIL}[a-z]{2,}`)
 
-const LINK_SCHEME = /https?:\/\/|www\s*\./
+const LINK_SCHEME = /https?:\/\/|www\s*\.[a-z0-9]/
 const LINK_BARE = new RegExp(String.raw`[a-z0-9-]\.${TLD}(?![a-z0-9])`)
 // Spelled dot only counts when a known tld word follows ("example dot com", not "a dot on the i").
 const LINK_SPELLED = new RegExp(`[a-z0-9-](?:${DOT_BRACKET}|${DOT_WORD})${TLD}(?![a-z0-9])`)

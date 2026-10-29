@@ -56,7 +56,7 @@ export async function listBlocks(tx: Tx, userId: string): Promise<BlockedUser[]>
   })
 }
 
-/** True when the caller and the provider's owner blocked each other, either way (callers answer 404: the block is never revealed). */
+/** True when the caller and the provider's owner blocked each other, either way (creating a request or direct booking answers 404; quotes and acceptances answer 403 BLOCKED). */
 export async function blockedWithProvider(tx: Tx, userId: string, providerId: string): Promise<boolean> {
   const r = await tx.execute(sql`SELECT is_blocked(${userId}, ${providerId}::uuid) AS b`)
   return r.rows[0]?.b === true

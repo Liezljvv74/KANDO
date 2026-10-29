@@ -67,20 +67,15 @@ export async function sendMessage(tx: Tx, userId: string, threadId: string, inpu
   return sent
 }
 
-/** A photo, in the private documents bucket: the object first, then the row; a failed insert removes the object. */
+/** A photo, in the private documents bucket: the object first, then the row; the object is removed once, by the caller's `onFailure`, when the insert or the commit fails. */
 export async function sendPhoto(tx: Tx, userId: string, threadId: string, photo: NormalizedImage, afterCommit: AfterCommit, onFailure: AfterCommit = () => {}): Promise<Message> {
   const t = await writableThread(tx, threadId)
   const key = `chat/${t.id}/${randomUUID()}.jpg`
   await storage().put(documentsBucket(), key, photo.data, 'image/jpeg')
-  onFailure(() => removeObject(documentsBucket(), key)) // also when the commit fails (the route cleans up)
-  try {
-    const sent = await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'photo', photoKey: key }, userId)
-    notifyNewMessage(afterCommit, t, userId)
-    return sent
-  } catch (e) {
-    await removeObject(documentsBucket(), key)
-    throw e
-  }
+  onFailure(() => removeObject(documentsBucket(), key))
+  const sent = await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'photo', photoKey: key }, userId)
+  notifyNewMessage(afterCommit, t, userId)
+  return sent
 }
 
 /** Oldest first, at most 100, after the cursor `<createdAt>|<id>` (each message is returned once even when two share a time). */
