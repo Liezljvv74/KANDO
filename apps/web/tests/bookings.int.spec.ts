@@ -190,7 +190,7 @@ it('slot rules: proposed never blocks; buffer only when both are on site; touchi
 
 it('concurrent accept and withdraw: serialised on the booking row, no half-written result', async () => {
   const b = await direct(sOwner, { startAt: day(50) })
-  // hold the booking row: both calls must wait for it (proves they lock it), then they run one after the other
+  // hold the booking row so both calls start together; the outcome must be consistent either way
   const holder = await pool.connect()
   let both: Promise<Response[]>
   try {
@@ -243,5 +243,45 @@ it('accept after the provider was suspended is 409', async () => {
   const status = (await answering(b.id, U.remote, { type: 'accept' })).status
   await pool.query('UPDATE providers SET suspended_until = NULL WHERE id = $1', [pRemote])
   expect(status).toBe(409)
+  expect((await row(b.id)).status).toBe('proposed')
+})
+
+const provAddr = async (id: string) => (await listAs(U.owner, 'provider')).find((x) => x.id === id)!.address
+
+it('the provider never sees the address of a booking that was not accepted; an accepted one stays visible after withdrawal', async () => {
+  const declined = await direct(sOwner)
+  await answering(declined.id, U.owner, { type: 'decline' })
+  expect(await provAddr(declined.id)).toBeNull()
+  const withdrawn = await direct(sOwner)
+  await withdrawing(withdrawn.id, U.cust)
+  expect(await provAddr(withdrawn.id)).toBeNull()
+  const accepted = await direct(sOwner)
+  await answering(accepted.id, U.owner, { type: 'accept' })
+  await withdrawing(accepted.id, U.cust)
+  expect(await provAddr(accepted.id)).toMatchObject({ postcode: '10115' })
+  expect((await listAs(U.cust, 'customer')).find((x) => x.id === declined.id)!.address).toMatchObject({ postcode: '10115' })
+})
+
+it('a counter to remote clears the stored address', async () => {
+  const b = await direct(sRemote)
+  const c = BookingSchema.parse(await (await answering(b.id, U.remote, { type: 'counter', startAt: day(80), durationMin: 60, onSite: false })).json())
+  expect(c).toMatchObject({ onSite: false, address: null })
+  expect((await pool.query('SELECT address_postcode FROM bookings WHERE id = $1', [b.id])).rows[0].address_postcode).toBeNull()
+})
+
+it('a counter after the provider was suspended is 409', async () => {
+  const b = await direct(sRemote)
+  await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE id = $1", [pRemote])
+  const status = (await answering(b.id, U.remote, { type: 'counter', startAt: day(81), durationMin: 60, onSite: true })).status
+  await pool.query('UPDATE providers SET suspended_until = NULL WHERE id = $1', [pRemote])
+  expect(status).toBe(409)
+})
+
+it('accepting a booking whose start has already passed is 400 start-in-past', async () => {
+  const b = await direct()
+  await pool.query("UPDATE bookings SET start_at = now() - interval '1 hour' WHERE id = $1", [b.id])
+  const res = await answering(b.id, U.owner, { type: 'accept' })
+  expect(res.status).toBe(400)
+  expect((await res.json()).error).toBe('start-in-past')
   expect((await row(b.id)).status).toBe('proposed')
 })

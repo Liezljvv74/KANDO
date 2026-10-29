@@ -14,10 +14,10 @@ const NO_ID = '00000000-0000-0000-0000-000000000000'
 const notFound = () => fail(404, { error: 'Not found' })
 type Row = typeof bookings.$inferSelect
 
-/** The job address stays private to the customer until the provider has accepted. */
+/** The job address stays private to the customer; the provider sees it only once the booking was accepted (payBy is set then). */
 const view = (b: Row, userId: string): Booking => {
   const dto = toBooking(b)
-  return b.customerId !== userId && b.status === 'proposed' ? { ...dto, address: null } : dto
+  return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
 }
 
 export async function createDirectBooking(tx: Tx, userId: string, input: DirectBookingInput, now = new Date()): Promise<Booking> {
@@ -83,14 +83,16 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     return view(row!, userId)
   }
   if (answer.type === 'decline') return set('declined', { answerBy: null, counterBy: null })
+  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) fail(409, { error: 'provider-unavailable' })
   if (answer.type === 'counter') {
     const startAt = new Date(answer.startAt)
     assertFuture(startAt, now)
-    if (!answer.onSite && !provider?.worksRemotely) fail(400, { error: 'on-site-required' })
+    if (!answer.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
+    // limitation: the answer schema carries no address, so a remote booking cannot be countered to on-site
     if (answer.onSite && !b.addressPostcode) fail(400, { error: 'address-required' })
-    return set('proposed', { startAt, durationMin: answer.durationMin, onSite: answer.onSite, counterBy: role, answerBy: new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR) })
+    const noAddress = answer.onSite ? {} : { addressStreet: null, addressPostcode: null, addressCity: null } // remote needs no address
+    return set('proposed', { startAt, durationMin: answer.durationMin, onSite: answer.onSite, ...noAddress, counterBy: role, answerBy: new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR) })
   }
-  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) fail(409, { error: 'provider-unavailable' })
   assertFuture(b.startAt, now)
   await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, b.id)
   return set('awaiting-payment', { payBy: payBy(now, b.startAt), answerBy: null, counterBy: null })
