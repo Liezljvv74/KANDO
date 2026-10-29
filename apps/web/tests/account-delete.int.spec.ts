@@ -253,3 +253,21 @@ it('two staff operations at once (delete-self, demote) never deadlock and leave 
     for (const id of [a, b, c]) await pool.query('UPDATE users SET staff_role = NULL WHERE id = $1', [id])
   }
 })
+
+it('chat photos of the deleted person\'s threads are owed and removed from the private bucket', async () => {
+  const a = await fullPerson('ad9')
+  await person('ad9c')
+  const req = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('ad9c', $1, 'x', now() + interval '3 days') RETURNING id", [a.providerId])).rows[0].id
+  const thread = (await pool.query("INSERT INTO threads (request_id, customer_id, provider_id) VALUES ($1, 'ad9c', $2) RETURNING id", [req, a.providerId])).rows[0].id
+  const key = `chat/${thread}/p.jpg`
+  store.objects.set(`documents/${key}`, Buffer.from('x'))
+  await pool.query("INSERT INTO messages (thread_id, sender_id, kind, photo_key) VALUES ($1, 'ad9c', 'photo', $2)", [thread, key])
+  setStorageForTests({ ...store, delete: async () => { throw new Error('down') } })
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  expect((await del('ad9')).status).toBe(200)
+  expect((await pool.query("SELECT count(*)::int AS n FROM pending_object_deletes WHERE bucket = 'documents' AND key = $1", [key])).rows[0].n).toBe(1) // owed, so the retry job removes it
+  vi.restoreAllMocks()
+  setStorageForTests(store)
+  await runCron()
+  expect(store.objects.has(`documents/${key}`)).toBe(false)
+})

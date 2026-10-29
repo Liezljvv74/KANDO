@@ -43,6 +43,6 @@ export const accessControlProvider: AccessControlProvider = {
     const me = (await authProvider.getIdentity!()) as Me | undefined
     if (!me) return { can: false }
     if (me.staffRole === 'admin') return { can: true }
-    return { can: ['documents', 'users', 'providers'].includes(resource ?? '') && ['list', 'show'].includes(action) }
+    return { can: ['documents', 'users', 'providers', 'flags'].includes(resource ?? '') && ['list', 'show'].includes(action) }
   },
 }

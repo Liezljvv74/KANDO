@@ -86,6 +86,12 @@ export default function AdminShell({ lang, children }: { lang: Lang; children: R
       edit: '/admin/pages/edit/:id',
       meta: { label: at('admin.resource.pages') },
     },
+    {
+      name: 'flags',
+      list: '/admin/flags',
+      show: '/admin/flags/show/:id',
+      meta: { label: at('admin.resource.flags') },
+    },
     { name: 'staff', list: '/admin/staff', meta: { label: at('admin.resource.staff') } },
   ]
   const signIn = usePathname() === '/admin/sign-in'

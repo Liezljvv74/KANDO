@@ -20,7 +20,7 @@
 - The AI check is NOT built. One marked extension point only; it may be added once an EU provider and a data processing agreement exist (spec 9a, README step 19).
 - One thread per request or per booking; text and photos only; messages cannot be edited or deleted; readable by the two people, and by staff only for a reported message's thread or a disputed booking.
 - Constants (my calls, one place each, `packages/domain/src/chat/rules.ts`): `MAX_MESSAGE_CHARS = 2000`; `CONTACT_ATTEMPTS_LIMIT = 3` blocked attempts within `CONTACT_ATTEMPTS_WINDOW_HOURS = 24` flag the sender to staff; `CHAT_EMAIL_THROTTLE_MINUTES = 30` (at most one "new message" email per thread and recipient); `POLL_SECONDS = 4` (mobile); photo signed links last 600 seconds; photo size limit is the existing `MAX_PHOTO_BYTES`.
-- Enums are `text` plus `check(...)`. Migration numbers continue after plan 2a's `0013`: this plan uses `0014`. Every new table is classified in exactly one map in `packages/db/src/rls.ts` and gets an isolation test; `cleanupUsers()` in `apps/web/tests/helpers.ts` deletes from every new table first.
+- Enums are `text` plus `check(...)`. Migration numbers continue after plan 2a's `0014`: this plan uses `0015`. Every new table is classified in exactly one map in `packages/db/src/rls.ts` and gets an isolation test; `cleanupUsers()` in `apps/web/tests/helpers.ts` deletes from every new table first.
 - Currency stays the literal `'EUR'` as today; no new Germany-only assumptions (the number-word lists are per language, not per country).
 - The owner merges every pull request; a test report goes in `Reports/`; no AI co-author or "Generated with" lines.
 
@@ -34,7 +34,7 @@
 
 ## File structure
 
-- `packages/db/src/schema/chat.ts` (new): `threads`, `messages`, `blocks`, `staff_flags`, `contact_attempts`; export from `schema/index.ts`. Modify `schema/notifications.ts` (kind `message-received`). Migration `packages/db/migrations/0014_chat.sql` (generated).
+- `packages/db/src/schema/chat.ts` (new): `threads`, `messages`, `blocks`, `staff_flags`, `contact_attempts`; export from `schema/index.ts`. Modify `schema/notifications.ts` (kind `message-received`). Migration `packages/db/migrations/0015_chat.sql` (generated).
 - `packages/db/src/rls.ts`: new map `APPEND_ONLY_TABLES`; definer function `is_blocked`.
 - `packages/contract/src/chat.ts` (new).
 - `packages/domain/src/chat/rules.ts`, `contact-check.ts`, `threads.ts`, `messages.ts`, `blocks.ts`, `flags.ts` (new); `packages/domain/src/photos.ts` (extract `normalizeImage`); plan 2a's `bookings/requests.ts`, `bookings/bookings.ts` (create threads, post cards, run the check).
@@ -43,7 +43,7 @@
 
 ### Task 1: Tables and row-level security
 
-**Files:** Create `packages/db/src/schema/chat.ts`, migration `0014_chat.sql`; modify `schema/index.ts`, `schema/notifications.ts`, `rls.ts`, `apps/web/tests/helpers.ts`; test `apps/web/tests/rls-chat.int.spec.ts`.
+**Files:** Create `packages/db/src/schema/chat.ts`, migration `0015_chat.sql`; modify `schema/index.ts`, `schema/notifications.ts`, `rls.ts`, `apps/web/tests/helpers.ts`; test `apps/web/tests/rls-chat.int.spec.ts`.
 
 **Interfaces:**
 - Consumes: plan 2a's `requests.id`, `bookings.id`, `providers.id`, `users.id`.
@@ -59,7 +59,7 @@
 
 - [ ] **Step 1: Write `rls-chat.int.spec.ts`**: `both parties read the thread and its messages; a third user reads none`, `app_user cannot update or delete a message, even their own` (expect permission denied), `a party cannot insert a message as the other party`, `a blocked party's raw insert is refused by RLS`, `blocks are visible only to the blocker`, `app_user cannot read staff_flags or contact_attempts`; `db-migrations.int.spec.ts` must still pass.
 - [ ] **Step 2: Run** `pnpm --filter web exec vitest run tests/rls-chat.int.spec.ts tests/db-migrations.int.spec.ts`: FAIL (tables missing).
-- [ ] **Step 3: Implement** the schema in the style of plan 2a's `bookings.ts`, the new map and function in `rls.ts`, `pnpm db:generate` for `0014` (if drizzle-kit does not emit the widened `notifications_kind_check`, hand-write it into `0014` as plan 2a did in `0013`). Add the five tables to `cleanupUsers()` before plan 2a's tables (`contact_attempts`, `staff_flags`, `messages`, `threads`, `blocks`).
+- [ ] **Step 3: Implement** the schema in the style of plan 2a's `bookings.ts`, the new map and function in `rls.ts`, `pnpm db:generate` for `0015` (if drizzle-kit does not emit the widened `notifications_kind_check`, hand-write it into `0015` as plan 2a did in `0013`); add the new tables to account deletion (`ACCOUNT_TABLES` and the deletion order in `packages/domain/src/account.ts`, which has a guard test) as plan 2a's Task 1 did; add `message-received` to the contract's `NOTIFICATION_KINDS` list and the exhaustive kind-to-text map in `apps/mobile/src/lib/notification-text.ts` (German and English) so the app renders it. Add the five tables to `cleanupUsers()` before plan 2a's tables (`contact_attempts`, `staff_flags`, `messages`, `threads`, `blocks`).
 - [ ] **Step 4: Run** the Step 2 command: PASS.
 - [ ] **Step 5: Commit** `feat(db): chat threads, messages, blocks and staff flags`.
 
@@ -160,6 +160,16 @@
 
 **Files:** Create `Reports/Stage-2b-Test-Report.xlsx` (same sheets as earlier reports); modify `README.md` ("What the app does today", "Not built": the AI chat check and numbers in photos; whether realtime or polling is used).
 - [ ] **Step 1: Run** `pnpm typecheck && pnpm lint && pnpm test`; record the counts. **Step 2: Add** phone-test rows (send text, photo, blocked phone number in digits and in words, report, block, request with photos). **Step 3: Commit** `docs: stage 2b report and README`. The owner merges.
+
+### Task 8: Carry-over from the Stage 2a review (abuse limits and the data export)
+
+**Files:** modify `packages/domain/src/bookings/requests.ts`, `bookings/bookings.ts`, `packages/domain/src/export.ts`, `packages/contract/src/*` as needed, `packages/i18n/src/en.ts` and `de.ts`, mobile error mapping; tests `apps/web/tests/abuse-limits.int.spec.ts`, `apps/web/tests/export-bookings.int.spec.ts`.
+
+**Interfaces:**
+- Produces: constants `MAX_OPEN_REQUESTS_PER_PAIR = 1` and `MAX_REQUESTS_PER_DAY = 10` in `packages/domain/src/bookings/rules.ts` (my calls); `createRequest` refuses (409 `request-limit`) a second `open` or `quoted` request from the same customer to the same provider and more than `MAX_REQUESTS_PER_DAY` requests plus direct bookings per customer in 24 hours (409 `daily-limit`); the data export (`Export my data`, JSON and CSV) includes the person's own requests, quotes, bookings (as customer or provider) and chat messages they sent, with the job address only where the person is the customer.
+- [ ] **Step 1: Write tests**: `a second open request to the same provider is 409 request-limit; after it expires or is booked a new one is allowed`, `the 11th request or direct booking in 24 hours is 409 daily-limit`, `the export contains my requests, quotes, bookings and my sent messages and nothing of other people's`, `a provider's export does not contain the customer's address`.
+- [ ] **Step 2: Run**: FAIL. **Step 3: Implement**, with German and English error texts and the mobile error mapping. **Step 4: Run** the files plus the existing export test: PASS.
+- [ ] **Step 5: Commit** `feat: request limits and booking data in the export`.
 
 ## Self-review
 

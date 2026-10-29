@@ -28,7 +28,14 @@ export async function preparePhoto(request: Request): Promise<PreparedPhoto> {
   if (kind !== 'profile' && kind !== 'portfolio') return fail(400, { error: 'Invalid kind' })
   if (typeof alt !== 'string' || alt.length > 200) return fail(400, { error: 'Invalid alt' })
   if (file.size > MAX_PHOTO_BYTES) return fail(413, { error: 'File too large' })
-  const bytes = Buffer.from(await file.arrayBuffer())
+  const out = await normalizeImage(Buffer.from(await file.arrayBuffer()))
+  return { kind, alt: alt || null, ...out }
+}
+
+export type NormalizedImage = { data: Buffer; width: number; height: number }
+
+/** Re-encodes to JPEG, at most 1600 px (drops EXIF incl. GPS). 400 on anything that is not a decodable jpeg, png or webp. */
+export async function normalizeImage(bytes: Buffer): Promise<NormalizedImage> {
   try {
     const img = sharp(bytes, { limitInputPixels: MAX_PIXELS })
     if (!['jpeg', 'png', 'webp'].includes((await img.metadata()).format ?? '')) throw new Error('format')
@@ -37,10 +44,18 @@ export async function preparePhoto(request: Request): Promise<PreparedPhoto> {
       .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 82 })
       .toBuffer({ resolveWithObject: true })
-    return { kind, alt: alt || null, data: out.data, width: out.info.width, height: out.info.height }
+    return { data: out.data, width: out.info.width, height: out.info.height }
   } catch {
     return fail(400, { error: 'Unsupported file type' })
   }
+}
+
+/** The multipart form of a chat photo (field `file`, same limits as a profile photo); runs before the transaction. */
+export async function prepareChatPhoto(request: Request): Promise<NormalizedImage> {
+  const file = (await request.formData().catch(() => new FormData())).get('file')
+  if (!(file instanceof File)) return fail(400, { error: 'Missing file' })
+  if (file.size > MAX_PHOTO_BYTES) return fail(413, { error: 'File too large' })
+  return normalizeImage(Buffer.from(await file.arrayBuffer()))
 }
 
 type Row = typeof photos.$inferSelect

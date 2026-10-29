@@ -12,3 +12,11 @@ it('an old kind and a new kind parse; an unknown kind is dropped without failing
   })
   expect(parsed.notifications.map((x) => x.id)).toEqual(['1', '2', '4'])
 })
+
+it('a message-received notification with url and threadId parses, and profile-live with just a url still does', () => {
+  const r = MeSchema.parse({ ...me, notifications: [n('1', 'message-received', { url: 'skilled://threads/t1', threadId: 't1' }), n('2', 'profile-live', { url: 'https://x.test/p' })] })
+  expect(r.notifications.map((x) => [x.kind, x.payload])).toEqual([
+    ['message-received', { url: 'skilled://threads/t1', threadId: 't1' }],
+    ['profile-live', { url: 'https://x.test/p' }],
+  ])
+})

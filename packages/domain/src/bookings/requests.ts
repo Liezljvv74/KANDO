@@ -1,14 +1,18 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
+import { blockedWithProvider } from '../chat/blocks'
+import { assertNoContactDetails } from '../chat/flags'
+import { postCard } from '../chat/messages'
+import { threadForRequest } from '../chat/threads'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
-import { assertFuture, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
+import { assertFuture, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -73,9 +77,29 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
 const lockRequest = (tx: Tx, requestId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext(${requestId}))`)
 
+/**
+ * Abuse limits, checked before anything is saved. The customer's advisory lock (held to the end of the transaction) makes two
+ * parallel creates take turns, so both cannot pass. The customer reads all their own rows, so the caller's tx counts them.
+ * The messages say nothing about other people. `providerId` is null for a direct booking (only the daily limit applies).
+ */
+export async function assertWithinLimits(tx: Tx, userId: string, providerId: string | null, now: Date): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('request_limit'), hashtext(${userId}))`)
+  if (providerId) {
+    const open = or(and(eq(requests.status, 'open'), gt(requests.answerBy, now)), and(eq(requests.status, 'quoted'), sql`EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ${requests.id} AND q.status = 'sent' AND q.expires_at > ${now.toISOString()}::timestamptz)`)) // a quoted request counts only while its quote is live (the timer leaves it 'quoted' after expiry); an open request past its deadline is as good as expired
+    const n = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(eq(requests.customerId, userId), eq(requests.providerId, providerId), open)))[0]!.n
+    if (n >= MAX_OPEN_REQUESTS_PER_PAIR) fail(409, { error: 'request-limit' })
+  }
+  const since = new Date(now.getTime() - DAY)
+  const r = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(eq(requests.customerId, userId), gt(requests.createdAt, since))))[0]!.n
+  const b = (await tx.select({ n: sql<number>`count(*)::int` }).from(bookings).where(and(eq(bookings.customerId, userId), eq(bookings.source, 'direct'), gt(bookings.createdAt, since))))[0]!.n
+  if (r + b >= MAX_REQUESTS_PER_DAY) fail(409, { error: 'daily-limit' })
+}
+
 export async function createRequest(tx: Tx, userId: string, input: RequestInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
+  await assertWithinLimits(tx, userId, isUuid(input.providerId) ? input.providerId : null, now)
+  await assertNoContactDetails(userId, input.description)
   const provider = (await tx.select().from(providers).where(eq(providers.id, input.providerId)))[0]
-  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return notFound()
+  if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
   const offerable = await offerableServiceIds(tx, provider.id)
   if (!offerable.length) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
@@ -93,6 +117,7 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       updatedAt: now,
     })
     .returning()
+  await threadForRequest(tx, row!.id) // the chat opens with the request
   afterCommit(() => notifyBookingEvent('request-received', provider.ownerId, { requestId: row!.id }))
   return toRequest(row!)
 }
@@ -124,7 +149,10 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   const provider = (await ownProvider(tx, userId)) ?? notFound()
   if (!isUuid(requestId)) return notFound()
   const own = () => tx.select().from(requests).where(and(eq(requests.id, requestId), eq(requests.providerId, provider.id)))
-  if (!(await own())[0]) return notFound() // party check before the lock: a stranger cannot make anyone wait
+  const first = (await own())[0]
+  if (!first) return notFound() // party check before the lock: a stranger cannot make anyone wait
+  if (await blockedWithProvider(tx, first.customerId, provider.id)) fail(403, { error: 'BLOCKED' }) // either side blocked the other
+  await assertNoContactDetails(userId, input.scope)
   await lockRequest(tx, requestId)
   const req = (await own())[0]! // read again after the lock
   if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
@@ -151,6 +179,8 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     })
     .returning()
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
+  const threadId = await threadForRequest(tx, requestId)
+  afterCommit(() => postCard(threadId, userId, { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   return toQuote(row!)
 }
@@ -162,6 +192,8 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
     return q && r ? { quote: q, req: r } : null
   }
   const pre = (await find()) ?? notFound() // party check before the lock: a stranger cannot make anyone wait
+  if (await blockedWithProvider(tx, userId, pre.req.providerId)) fail(403, { error: 'BLOCKED' })
+  if (input.note) await assertNoContactDetails(userId, input.note)
   await lockRequest(tx, pre.req.id)
   const { quote, req } = (await find()) ?? notFound() // read again after the lock: a concurrent accept has committed by now
   if (quote.status !== 'sent' || req.status !== 'quoted') fail(409, { error: 'quote-not-open' })
@@ -196,6 +228,8 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
       updatedAt: now,
     })
     .returning()
+  const threadId = await threadForRequest(tx, req.id)
+  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: row!.currency as 'EUR' }))
   notifyProposal(afterCommit, provider, row!)
   return toBooking(row!)
 }

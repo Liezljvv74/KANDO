@@ -1,7 +1,7 @@
 import { de } from '@kando/i18n/src/de'
 import { en } from '@kando/i18n/src/en'
 import { accountError } from '@/lib/account-data'
-import { errorKeys, errorText, setLang } from './index'
+import { errorKeys, errorText, setLang, t } from './index'
 
 test('every mapped error code has a non-empty German and English text', () => {
   for (const key of Object.values(errorKeys)) {
@@ -34,11 +34,19 @@ test('the delete and export texts say what happened and have no status numbers',
 })
 
 test('every booking rule code from the server has its own text in both languages', () => {
-  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'Unknown service']
+  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service']
   for (const lang of ['de', 'en'] as const) {
     setLang(lang)
     for (const code of codes) expect(errorText(code)).not.toBe(errorText('unmapped'))
   }
   setLang('en')
   expect(errorText('slot-pending')).toContain('pending booking')
+})
+
+test('the chat rejections have their own text in both languages', () => {
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(errorText('CONTACT_DETAILS')).toBe(t('chat.contactBlocked'))
+    expect(errorText('BLOCKED')).toBe(t('chat.blocked'))
+  }
 })

@@ -15,6 +15,7 @@ const KEY: Record<Notification['kind'], Key> = {
   'request-expired': 'notification.requestExpired',
   'requests-ignored': 'notification.requestsIgnored',
   'pending-slot-requested': 'notification.pendingSlotRequested',
+  'message-received': 'notification.messageReceived',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */
@@ -28,5 +29,11 @@ export function splitBanners(list: Notification[], max = MAX_BANNERS): { shown: 
   return { shown: open.slice(0, max), more: Math.max(0, open.length - max) }
 }
 
-/** The profile link of a "profile is live" message; booking kinds carry ids only. */
-export const notificationUrl = (n: Pick<Notification, 'payload'>): string | null => ('url' in n.payload && typeof n.payload.url === 'string' ? n.payload.url : null)
+/** The profile link of a "profile is live" message to share; other kinds (booking ids, a chat link) have none. */
+export const notificationUrl = (n: Pick<Notification, 'kind' | 'payload'>): string | null => (n.kind === 'profile-live' && 'url' in n.payload && typeof n.payload.url === 'string' ? n.payload.url : null)
+
+/** The thread a "new message" notice opens: the payload's threadId, else the id in its own `skilled://threads/<id>` link; null for any other kind or link. */
+export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>): string | null => {
+  if (n.kind !== 'message-received' || !('url' in n.payload)) return null
+  return n.payload.threadId ?? /^skilled:\/\/threads\/([^/?#]+)$/.exec(n.payload.url)?.[1] ?? null
+}

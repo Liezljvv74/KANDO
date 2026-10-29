@@ -1,0 +1,71 @@
+import { desc, eq, inArray, sql } from 'drizzle-orm'
+import { bookings, db, providers, quotes, requests, threads, users, type Tx } from '@kando/db'
+import type { Thread } from '@kando/contract'
+import { isUuid } from '../admin/common'
+import { fail } from '../providers/http'
+import { publicNameFor } from '../providers/public-name'
+
+const notFound = () => fail(404, { error: 'Not found' })
+
+/** The thread of a request, created on first use. Two first uses at once give one thread (unique request_id, ON CONFLICT). 404 for a non-party. */
+export async function threadForRequest(tx: Tx, requestId: string): Promise<string> {
+  const r = isUuid(requestId) ? (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] : undefined
+  if (!r) return notFound()
+  await tx.insert(threads).values({ requestId: r.id, customerId: r.customerId, providerId: r.providerId }).onConflictDoNothing()
+  return (await tx.select({ id: threads.id }).from(threads).where(eq(threads.requestId, r.id)))[0]!.id
+}
+
+/** The thread of a booking: a booking from a quote shares its request's thread, a direct booking has its own (created on first use). */
+export async function threadForBooking(tx: Tx, bookingId: string): Promise<string> {
+  const b = isUuid(bookingId) ? (await tx.select().from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
+  if (!b) return notFound()
+  if (b.quoteId) {
+    const q = (await tx.select({ requestId: quotes.requestId }).from(quotes).where(eq(quotes.id, b.quoteId)))[0]
+    if (q) return threadForRequest(tx, q.requestId)
+  }
+  await tx.insert(threads).values({ bookingId: b.id, customerId: b.customerId, providerId: b.providerId }).onConflictDoNothing()
+  return (await tx.select({ id: threads.id }).from(threads).where(eq(threads.bookingId, b.id)))[0]!.id
+}
+
+/** Who may read a thread: its customer or the provider's owner. Anyone else (and a bad id) gets 404. */
+export async function ownThread(tx: Tx, threadId: string) {
+  const t = isUuid(threadId) ? (await tx.select().from(threads).where(eq(threads.id, threadId)))[0] : undefined // RLS hides it from a third person
+  return t ?? notFound()
+}
+
+/** The other side's public name; the names are read on the owner connection, for threads the caller already is a party of. */
+async function otherSides(userId: string, rows: (typeof threads.$inferSelect)[]): Promise<Map<string, string>> {
+  if (!rows.length) return new Map()
+  const found = await db
+    .select({ id: threads.id, customerId: threads.customerId, first: users.firstName, last: users.lastName, p: providers })
+    .from(threads)
+    .innerJoin(users, eq(users.id, threads.customerId))
+    .innerJoin(providers, eq(providers.id, threads.providerId))
+    .where(inArray(threads.id, rows.map((r) => r.id)))
+  const owners = await db.select({ id: users.id, first: users.firstName, last: users.lastName }).from(users).where(inArray(users.id, found.map((f) => f.p.ownerId)))
+  const byId = new Map(owners.map((o) => [o.id, o]))
+  return new Map(
+    found.map((f) => {
+      const owner = byId.get(f.p.ownerId)
+      const name = f.customerId === userId ? f.p.publicName || publicNameFor(owner?.first ?? null, owner?.last ?? null, f.p.businessName, f.p.type) : publicNameFor(f.first, f.last, null, null)
+      return [f.id, name]
+    }),
+  )
+}
+
+/** The caller's threads, most recently active first. */
+export async function listThreads(tx: Tx, userId: string): Promise<Thread[]> {
+  const rows = await tx
+    .select({ t: threads, last: sql<Date | null>`(SELECT max(m.created_at) FROM messages m WHERE m.thread_id = ${threads.id})`, blocked: sql<boolean>`is_blocked(${threads.customerId}, ${threads.providerId})` })
+    .from(threads)
+    .orderBy(desc(sql`coalesce((SELECT max(m.created_at) FROM messages m WHERE m.thread_id = ${threads.id}), ${threads.createdAt})`), desc(threads.id))
+  const others = await otherSides(userId, rows.map((r) => r.t))
+  return rows.map(({ t, last, blocked }) => ({
+    id: t.id,
+    requestId: t.requestId,
+    bookingId: t.bookingId,
+    otherName: others.get(t.id) ?? '',
+    lastMessageAt: last ? new Date(last).toISOString() : null,
+    blocked,
+  }))
+}

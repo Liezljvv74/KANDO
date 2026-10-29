@@ -6,10 +6,13 @@ import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import type { AfterCommit } from '../app-request'
+import { blockedWithProvider } from '../chat/blocks'
+import { assertNoContactDetails } from '../chat/flags'
+import { threadForBooking } from '../chat/threads'
 import { assertSlotFree, lockProviderSlots } from './busy'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
-import { toBooking } from './requests'
+import { assertWithinLimits, toBooking } from './requests'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
 const HOUR = 3_600_000
@@ -24,14 +27,16 @@ const view = (b: Row, userId: string): Booking => {
 }
 
 export async function createDirectBooking(tx: Tx, userId: string, input: DirectBookingInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
+  await assertWithinLimits(tx, userId, null, now)
   const service = (await tx.select().from(services).where(eq(services.id, input.serviceId)))[0]
   const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
-  if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return notFound()
+  if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
   if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) return fail(400, { error: 'not-bookable' })
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
+  if (input.note) await assertNoContactDetails(userId, input.note)
   const [row] = await tx
     .insert(bookings)
     .values({
@@ -52,6 +57,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
       updatedAt: now,
     })
     .returning()
+  await threadForBooking(tx, row!.id) // a direct booking gets its own chat
   notifyProposal(afterCommit, provider, row!)
   return view(row!, userId)
 }

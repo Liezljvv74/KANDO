@@ -47,6 +47,13 @@ export async function cleanupUsers(): Promise<void> {
   const mine = "(SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')"
   await pool.query(`DELETE FROM notifications WHERE user_id IN ${mine}`)
   const myProviders = `(SELECT id FROM providers WHERE owner_id IN ${mine})`
+  const myThreads = `(SELECT id FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
+  await pool.query(`DELETE FROM contact_attempts WHERE user_id IN ${mine} OR thread_id IN ${myThreads}`)
+  await pool.query(`DELETE FROM staff_flags WHERE user_id IN ${mine}`)
+  await pool.query(`DELETE FROM staff_access_log WHERE staff_id IN ${mine}`)
+  await pool.query(`DELETE FROM messages WHERE sender_id IN ${mine} OR thread_id IN ${myThreads}`)
+  await pool.query(`DELETE FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  await pool.query(`DELETE FROM blocks WHERE blocker_id IN ${mine} OR blocked_id IN ${mine}`)
   await pool.query(`DELETE FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM quotes WHERE provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM requests WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
@@ -145,4 +152,13 @@ export function adminCall(handler: Route, uid: string, method = 'GET', path = '/
 export const seedUser = (id: string, staffRole: string | null = null, name: string | null = null) => {
   const [first = null, ...rest] = name?.split(' ') ?? []
   return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null])
+}
+
+/**
+ * Tests that legitimately create many requests or bookings for one customer call this first: it closes the customer's open
+ * requests and moves their earlier requests and direct bookings out of the 24-hour window, so the abuse limits (abuse-limits.int.spec.ts) stay out of the way.
+ */
+export async function relaxLimits(uid: string): Promise<void> {
+  await pool.query("UPDATE requests SET status = CASE WHEN status IN ('open','quoted') THEN 'withdrawn' ELSE status END, created_at = created_at - interval '2 days' WHERE customer_id = $1 AND created_at > now() - interval '1 day'", [uid])
+  await pool.query("UPDATE bookings SET created_at = created_at - interval '2 days' WHERE customer_id = $1 AND source = 'direct' AND created_at > now() - interval '1 day'", [uid])
 }

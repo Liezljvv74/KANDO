@@ -1,9 +1,8 @@
 import { sql, type SQL } from 'drizzle-orm'
 import type { db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
-import { notifyBookingEvent } from './notify'
+import { notifyBookingEvent, type BookingKind } from './notify'
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
-import type { NotificationKind } from '../notifications-store'
 
 export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number }
 
@@ -12,7 +11,7 @@ export type TimerReport = { requestsExpired: number; quotesExpired: number; prop
  * process a row twice and a second run finds nothing. Deadlines are the stored columns, so a late run is still right.
  * Notification payloads carry ids only. userId narrows every rule to rows of that user (customer or provider owner).
  */
-type TimerEvent = { userId: string; kind: NotificationKind; payload: Record<string, string> }
+type TimerEvent = { userId: string; kind: BookingKind; payload: Record<string, string> }
 /** Counts the rows of CTE `from` and returns the notification rows CTE `n` inserted (ids only), so their emails can follow. */
 const result = (from: string) => sql`SELECT (SELECT count(*) FROM ${sql.identifier(from)})::int AS n, (SELECT coalesce(jsonb_agg(jsonb_build_object('userId', user_id, 'kind', kind, 'payload', payload)), '[]'::jsonb) FROM n) AS ev`
 

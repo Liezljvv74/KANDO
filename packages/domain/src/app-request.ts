@@ -24,6 +24,8 @@ type Handler<P> = (ctx: {
   prepared: P
   /** Queues work (storage deletes) that must only happen once the transaction has committed. */
   afterCommit: AfterCommit
+  /** Queues cleanup (a storage object put before the commit) that runs when the request fails or the commit does not happen. */
+  onFailure: AfterCommit
 }) => Promise<Response>
 
 /**
@@ -37,6 +39,7 @@ export function createAppRequest(getSession: SessionResolver) {
   return <P = undefined>(opts: Opts<P>, handler: Handler<P>): RouteHandler =>
     async (request, ctx) => {
       const requestId = crypto.randomUUID()
+      const failQueue: (() => Promise<void>)[] = []
       try {
         if (isCrossSiteWrite(request)) return Response.json({ error: 'Forbidden' }, { status: 403 })
         const found = await getSession(request)
@@ -62,11 +65,14 @@ export function createAppRequest(getSession: SessionResolver) {
         const params = await ctx.params
         const queue: (() => Promise<void>)[] = []
         const afterCommit: AfterCommit = (fn) => void queue.push(fn)
-        const response = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit }))
+        const onFailure: AfterCommit = (fn) => void failQueue.push(fn)
+        const response = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit, onFailure }))
+        failQueue.length = 0 // committed: nothing to undo
         // The transaction has committed: only now touch storage. A failing task is logged, never turns the answer into a 500.
         for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed ${describeError(e)}`))
         return response
       } catch (error) {
+        for (const fn of failQueue) await fn().catch((e) => console.error(`[app-request ${requestId}] cleanup failed ${describeError(e)}`))
         // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
         if (error instanceof Response) return error
         if (error instanceof SessionGoneError) return Response.json({ error: 'Unauthorized' }, { status: 401 })

@@ -4,11 +4,13 @@ import { StyleSheet, Text } from 'react-native'
 
 import type { Booking } from '@kando/contract'
 
+import { threadIdForBooking } from '@/api/chat'
 import { answerBooking, listBookings, withdrawBooking } from '@/api/bookings'
 import { ApiError } from '@/api/client'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
+import { OpenChat } from '@/screens/chat/open-chat'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { bookingActions, bookingStatusText, type BookingAction, type Viewer } from '@/lib/booking-status'
@@ -78,6 +80,7 @@ export default function BookingDetail() {
           <Text style={styles.small}>{t('booking.payPlaceholder')}</Text>
         </Card>
       )}
+      <OpenChat find={() => threadIdForBooking(b, viewer)} />
       <ErrorText text={problem} />
       {bookingActions(b, viewer).map((a) => (
         <Button key={a} label={t(`booking.${a}` as Key)} onPress={() => act(a)} busy={busy} danger={a === 'decline' || a === 'withdraw'} />

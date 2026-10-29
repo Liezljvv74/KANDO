@@ -5,14 +5,16 @@ import type { Me, Notification } from '@kando/contract'
 import { dismissNotification } from '@/hooks/use-me'
 import { Card, SmallButton } from '@/components/form-ui'
 import { getLang, t } from '@/i18n'
-import { notificationText, notificationUrl, splitBanners } from '@/lib/notification-text'
+import { go } from '@/lib/go'
+import { notificationText, notificationThreadId, notificationUrl, splitBanners } from '@/lib/notification-text'
 import { shareProfile } from '@/lib/share-profile'
 
-/** One message with a dismiss ×; "your profile is live" also gets Share (`payload.url` is the link). A kind this app does not know renders nothing. */
+/** One message with a dismiss ×; "your profile is live" also gets Share (`payload.url` is the link); "new message" gets Open (the thread). A kind this app does not know renders nothing. */
 export function NotificationBanner({ notification, canShare, onDismiss }: { notification: Notification; canShare: boolean; onDismiss: () => void }) {
   const text = notificationText(notification.kind)
   if (!text) return null
   const url = notificationUrl(notification)
+  const threadId = notificationThreadId(notification)
   return (
     <Card>
       <View style={styles.row}>
@@ -21,6 +23,7 @@ export function NotificationBanner({ notification, canShare, onDismiss }: { noti
           {'×'}
         </Text>
       </View>
+      {threadId && <SmallButton label={t('notification.open')} onPress={() => go(`/threads/${threadId}`)} />}
       {canShare && url && <SmallButton label={t('setup.share')} onPress={() => shareProfile(url, getLang())} />}
     </Card>
   )
