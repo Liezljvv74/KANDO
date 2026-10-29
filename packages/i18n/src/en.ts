@@ -296,10 +296,9 @@ export const en: Record<Key, string> = {
   'email.quoteReceived.body':
     'A provider sent you a quote. Please look at it in the app. The quote is open until {date}: a quote you do not accept expires 7 days after it was sent.',
   'notification.quoteReceived': 'You have a new quote. It is open until you accept it or 7 days have passed.',
-  'email.bookingProposed.subject': 'A customer proposed a time',
-  'email.bookingProposed.body':
-    'A customer proposed a time for a booking. Please accept, decline or suggest another time in the app within 24 hours.',
-  'notification.bookingProposed': 'A customer proposed a time. Please answer within 24 hours.',
+  'email.bookingProposed.subject': 'A new time was proposed',
+  'email.bookingProposed.body': 'A new date and time has been proposed for your booking request. Please answer in the app within 24 hours.',
+  'notification.bookingProposed': 'A new date and time was proposed. Please answer within 24 hours.',
   'email.bookingAccepted.subject': 'Your booking was accepted',
   'email.bookingAccepted.body':
     'The provider accepted your booking. Please pay by {date}. The pay link follows in the app; you will see it there as soon as payment is available.',
@@ -309,8 +308,7 @@ export const en: Record<Key, string> = {
     'The provider declined your booking. You can look for a different provider or propose another time in the app.',
   'notification.bookingDeclined': 'The provider declined your booking.',
   'email.bookingExpired.subject': 'A booking expired',
-  'email.bookingExpired.body':
-    'A booking was not answered or not paid in time and has expired. You can book again in the app.',
+  'email.bookingExpired.body': 'A booking request was not answered or not paid in time and has expired. The time is free again.',
   'notification.bookingExpired': 'A booking expired because it was not answered or paid in time.',
   'email.paymentReminder.subject': 'Please pay for your booking',
   'email.paymentReminder.body':
@@ -325,9 +323,8 @@ export const en: Record<Key, string> = {
     'Your request was not answered in time. The provider is not available at the moment. Please contact a different provider.',
   'notification.requestExpired': 'Your request was not answered. The provider is not available at the moment, please contact a different provider.',
   'email.requestsIgnored.subject': 'Please answer your requests',
-  'email.requestsIgnored.body':
-    'Several requests to you went unanswered. This hurts your business: customers leave, trust and visibility suffer, and the app shows you as unavailable. Please confirm in the app that you still want to be on the platform, or withdraw your services.',
-  'notification.requestsIgnored': 'Several requests to you went unanswered. Please confirm that you still want to be on the platform, or withdraw your services.',
+  'email.requestsIgnored.body': 'Several requests to you went unanswered. This hurts your business: customers leave, trust and visibility suffer, and the app shows you as unavailable. Please write to {contact} to confirm that you still want to be on the platform, or to withdraw your services.',
+  'notification.requestsIgnored': 'Several requests to you went unanswered. Please write to {contact} to confirm that you want to stay, or to withdraw your services.',
   'email.pendingSlotRequested.subject': 'Another customer asked for a taken time',
   'email.pendingSlotRequested.body':
     'Another customer asked for a time that overlaps a booking still waiting for payment. If the first customer does not pay in time, the time becomes free again and you can answer.',

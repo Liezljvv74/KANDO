@@ -107,3 +107,54 @@ it('never throws: unknown user, broken ids', async () => {
   await expect(notifyBookingEvent('quote-received', 'nobody', { quoteId: 'not-a-uuid' })).resolves.toBeUndefined()
   await expect(notifyBookingEvent('payment-reminder', U.cust, { bookingId: 'not-a-uuid' })).resolves.toBeUndefined()
 })
+
+it('a counter notifies the other side, in both directions, with one row and one email each', async () => {
+  const b = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust, 'POST', proposal(50))).json())
+  await pool.query("DELETE FROM notifications WHERE user_id LIKE 'bn-%'")
+  clearOutbox()
+  await call(answer.POST, U.owner, 'POST', { type: 'counter', startAt: day(51), durationMin: 60, onSite: true }, { id: b.id })
+  expect(await rows(U.cust)).toEqual([{ kind: 'booking-proposed', payload: { bookingId: b.id } }])
+  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Ein neuer Termin wurde vorgeschlagen'])
+  expect(await rows(U.owner)).toEqual([])
+  await pool.query("DELETE FROM notifications WHERE user_id LIKE 'bn-%'")
+  clearOutbox()
+  await call(answer.POST, U.cust, 'POST', { type: 'counter', startAt: day(52), durationMin: 60, onSite: true }, { id: b.id })
+  expect(await rows(U.owner)).toEqual([{ kind: 'booking-proposed', payload: { bookingId: b.id } }])
+  expect(subjects(U.owner)).toHaveLength(1)
+  expect(await rows(U.cust)).toEqual([])
+})
+
+it('the quote email states the 7-day expiry in German too', async () => {
+  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x' })).json())
+  clearOutbox()
+  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r.id })).json())
+  const mail = subjects(U.cust)[0]!
+  expect(mail.text).toContain(new Date(q.expiresAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }))
+  expect(mail.text).toContain('7 Tage')
+})
+
+it('real sweeps: quote-expiring and payment-reminder emails carry their dates, one row each', async () => {
+  const stamp = new Date(Date.now() + 60 * 86_400_000)
+  const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', 'quoted', $3) RETURNING id", [U.cust, prov, new Date(stamp.getTime() + 86_400_000)])).rows[0].id
+  const expires = new Date(stamp.getTime() + 12 * 3_600_000)
+  await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at) VALUES ($1, $2, 50, 's', $3)", [r, prov, expires])
+  const payBy = new Date(stamp.getTime() + 2 * 3_600_000)
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, pay_by, updated_at) VALUES ($1, $2, $3, 'direct', 'awaiting-payment', $4, 60, 10, $5, $6)", [U.cust, prov, service, new Date(stamp.getTime() + 5 * 86_400_000), payBy, new Date(stamp.getTime() - 86_400_000)])
+  await runDueTimers(db, stamp)
+  expect((await rows(U.cust)).map((x) => x.kind).sort()).toEqual(['payment-reminder', 'quote-expiring'])
+  const de = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })
+  const mails = subjects(U.cust)
+  expect(mails.find((m) => m.subject === 'Dein Angebot läuft bald ab')!.text).toContain(de(expires))
+  expect(mails.find((m) => m.subject === 'Bitte bezahle Deine Buchung')!.text).toContain(de(payBy))
+  expect(mails).toHaveLength(2)
+})
+
+it('real sweep: requests-ignored goes to the provider as one row and one email', async () => {
+  const stamp = new Date(Date.now() + 70 * 86_400_000)
+  for (let i = 0; i < 3; i++) await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by, updated_at) VALUES ($1, $2, 'x', 'expired', $3, $4)", [U.cust, prov, new Date(stamp.getTime() - 86_400_000), new Date(stamp.getTime() - 3_600_000)])
+  await runDueTimers(db, stamp)
+  expect(await rows(U.owner)).toEqual([{ kind: 'requests-ignored', payload: {} }])
+  const mails = subjects(U.owner)
+  expect(mails).toHaveLength(1)
+  expect(mails[0]!.text).toContain('info@skillweb.space')
+})

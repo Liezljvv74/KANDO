@@ -101,7 +101,10 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     // limitation: the answer schema carries no address, so a remote booking cannot be countered to on-site
     if (answer.onSite && !b.addressPostcode) fail(400, { error: 'address-required' })
     const noAddress = answer.onSite ? {} : { addressStreet: null, addressPostcode: null, addressCity: null } // remote needs no address
-    return set('proposed', { startAt, durationMin: answer.durationMin, onSite: answer.onSite, ...noAddress, counterBy: role, answerBy: new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR) })
+    const done = await set('proposed', { startAt, durationMin: answer.durationMin, onSite: answer.onSite, ...noAddress, counterBy: role, answerBy: new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR) })
+    // the other side hears of the new time (neutral text: it reads right for both directions)
+    afterCommit(() => notifyBookingEvent('booking-proposed', role === 'customer' ? provider.ownerId : b.customerId, { bookingId: b.id }))
+    return done
   }
   assertFuture(b.startAt, now)
   await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, b.id)
