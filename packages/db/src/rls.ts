@@ -19,6 +19,21 @@ export const PRIVATE_TABLES: Record<string, string> = {
   bookings: `customer_id = app_current_user_id() OR ${OWN_SERVICE}`,
 }
 
+// Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.
+export const INSERT_RULES: Record<string, string> = {
+  requests: 'customer_id = app_current_user_id()',
+  bookings: 'customer_id = app_current_user_id()',
+  // Only the provider's owner quotes, and only on a request addressed to that provider (qualified: requests has provider_id too).
+  quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id)`,
+}
+
+// Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
+export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
+  requests: ['customer_id', 'provider_id'],
+  quotes: ['request_id', 'provider_id'],
+  bookings: ['customer_id', 'provider_id'],
+}
+
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
 // the set_provider_* SECURITY DEFINER functions below. Works for private and public-owned tables.
 export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
@@ -73,7 +88,7 @@ export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
 
 // Every policy name any map creates, dropped first so a table can move between the maps.
-export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read']
+export const POLICY_NAMES = ['owner_only', 'public_read', 'owner_insert', 'owner_update', 'owner_delete', 'app_insert', 'published_read', 'insert_rule']
 
 /** Every schema table must be in exactly one map. */
 export function classifyTables(): { unclassified: string[]; duplicated: string[] } {
@@ -115,11 +130,20 @@ function policyStatements(table: string): string[] {
   const head = [`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`, ...drops]
   const priv = PRIVATE_TABLES[table]
   if (priv) {
+    const rule = INSERT_RULES[table]
+    const immutable = IMMUTABLE_COLUMNS[table]
     return [
       `GRANT INSERT, UPDATE, DELETE ON ${t} TO ${APP_ROLE}`,
       ...columnRestrictions(table),
       ...head,
       `CREATE POLICY owner_only ON ${t} TO ${APP_ROLE} USING (${priv}) WITH CHECK (${priv})`,
+      ...(rule ? [`CREATE POLICY insert_rule ON ${t} AS RESTRICTIVE FOR INSERT TO ${APP_ROLE} WITH CHECK (${rule})`] : []),
+      ...(immutable
+        ? [
+            `DROP TRIGGER IF EXISTS keep_parties ON ${t}`,
+            `CREATE TRIGGER keep_parties BEFORE UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION reject_column_change(${immutable.map((c) => `'${c}'`).join(', ')})`,
+          ]
+        : []),
     ]
   }
   const pub = PUBLIC_OWNED_TABLES[table]
@@ -256,6 +280,14 @@ export function rlsStatements(
         IF to_regclass(format('public.%I', t)) IS NOT NULL THEN EXECUTE format('REVOKE ALL ON public.%I FROM ${APP_ROLE}', t); END IF;
       END LOOP;
     END $$`,
+    `CREATE OR REPLACE FUNCTION reject_column_change() RETURNS trigger LANGUAGE plpgsql AS $$
+      DECLARE c text;
+      BEGIN
+        FOREACH c IN ARRAY TG_ARGV LOOP
+          IF to_jsonb(NEW) -> c IS DISTINCT FROM to_jsonb(OLD) -> c THEN RAISE EXCEPTION '% cannot be changed', c; END IF;
+        END LOOP;
+        RETURN NEW;
+      END $$`,
     ...policies,
     ...PROVIDER_FUNCTIONS,
     ...ELIGIBILITY_FUNCTIONS,

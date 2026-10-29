@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, integer, numeric, date, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, uniqueIndex, integer, numeric, date, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { providers, services } from './providers'
 import { users } from './users'
 
@@ -56,7 +56,7 @@ export const quotes = pgTable(
     check('quotes_status_check', sql`status in ('sent','accepted','superseded','expired','declined')`),
     index('quotes_provider_id_status_idx').on(t.providerId, t.status),
     index('quotes_start_at_idx').on(t.startAt),
-    index('quotes_request_id_idx').on(t.requestId),
+    uniqueIndex('quotes_request_id_version_idx').on(t.requestId, t.version),
   ],
 )
 
