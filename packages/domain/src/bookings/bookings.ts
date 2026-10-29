@@ -13,6 +13,7 @@ import { assertSlotFree, lockProviderSlots } from './busy'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
 import { assertWithinLimits, toBooking } from './requests'
+import { canTransact } from '../payments/rules'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
 const HOUR = 3_600_000
@@ -32,6 +33,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
   const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
   if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
+  if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // payout set-up unfinished: the app offers "notify me"
   if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) return fail(400, { error: 'not-bookable' })
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
@@ -98,6 +100,9 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     return done
   }
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return fail(409, { error: 'provider-unavailable' })
+  // Accepting or proposing a time leads to an obligation (a counter accepted by the other side becomes awaiting-payment):
+  // only with payout set-up done. Declining stays possible; bookings accepted earlier are not touched.
+  if (!canTransact(provider)) fail(409, { error: role === 'provider' ? 'PAYOUT_SETUP_FIRST' : 'PROVIDER_NOT_READY' })
   if (answer.type === 'counter') {
     const startAt = new Date(answer.startAt)
     assertFuture(startAt, now)

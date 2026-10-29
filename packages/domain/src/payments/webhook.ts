@@ -6,6 +6,7 @@ import { flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
 import { gateway, type GatewayEvent } from './gateway'
 import { addLedger } from './ledger'
+import { refreshAccount } from './onboarding'
 import { COMMISSION_RATE, PAY_GRACE_MINUTES, toCents } from './rules'
 
 type Paid = Extract<GatewayEvent, { type: 'checkout-paid' }>
@@ -34,7 +35,7 @@ type After = (() => Promise<void>)[]
  */
 export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Promise<void> {
   if (e.type === 'other') return
-  if (e.type === 'account-updated') return onAccountUpdated(e)
+  if (e.type === 'account-updated') return refreshAccount(db, e.accountId) // reads the state from the gateway: safe to repeat, no event row needed
   const after: After = []
   await db.transaction(async (tx) => {
     const fresh = await tx.insert(stripeEvents).values({ id: e.id, type: e.type }).onConflictDoNothing().returning({ id: stripeEvents.id })
@@ -48,9 +49,6 @@ export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Pro
   })
   for (const fn of after) await fn().catch((err) => console.error(`[payments] message after ${e.type} failed ${describeError(err)}`))
 }
-
-/** Task 5 hook: a connected account changed (payout set-up finished or restricted). Not handled yet: ignored. */
-async function onAccountUpdated(_e: Extract<GatewayEvent, { type: 'account-updated' }>): Promise<void> {}
 
 /** The booking a payment belongs to, from its charge row (kept even when the booking was deleted). */
 async function bookingOfPayment(tx: Tx, paymentRef: string): Promise<string | undefined> {

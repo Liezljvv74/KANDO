@@ -2,10 +2,10 @@ import { sql, type SQL } from 'drizzle-orm'
 import type { db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
 import { notifyBookingEvent, type BookingKind } from './notify'
-import { PAY_GRACE_MINUTES } from '../payments/rules'
+import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
 
-export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number }
+export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number; customersWaiting: number }
 
 /**
  * Every rule is ONE statement (UPDATE .. RETURNING feeding the notification INSERT), so a concurrent run cannot
@@ -55,7 +55,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
       FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING user_id, kind, payload)
     ${result('e')}`)
 
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -87,7 +87,22 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('n')}`)
   })
 
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, events }
+  // "Customers want to book you" (payments on only): a provider without payout set-up who has watches newer than their
+  // last such notice, and no notice within CUSTOMERS_WAITING_NOTICE_HOURS. The row carries nothing; the email the count.
+  const customersWaiting = !paymentsEnabled()
+    ? 0
+    : await (exec as typeof db).transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('customers_waiting'))`) // as above: overlapping runs take turns
+        return countOn(tx, sql`
+    WITH last AS (SELECT user_id, max(created_at) AS at FROM notifications WHERE kind = 'customers-waiting' GROUP BY user_id),
+    d AS (SELECT DISTINCT p.owner_id FROM providers p JOIN availability_watches w ON w.provider_id = p.id LEFT JOIN last l ON l.user_id = p.owner_id
+      WHERE p.payouts_ready_at IS NULL AND w.notified_at IS NULL AND w.created_at > coalesce(l.at, '-infinity')
+        AND coalesce(l.at, '-infinity') <= ${t}::timestamptz - make_interval(hours => ${CUSTOMERS_WAITING_NOTICE_HOURS})),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT owner_id, 'customers-waiting', '{}'::jsonb, ${t}::timestamptz FROM d RETURNING user_id, kind, payload)
+    ${result('n')}`)
+      })
+
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, events }
 }
 
 /**
