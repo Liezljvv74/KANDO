@@ -79,6 +79,22 @@ const rows: [string, ContactHit | null][] = [
   ['t.me/max', 'link'],
   ['meine seite: shop.example.ch/kontakt', 'link'],
 
+  // invisible characters, keycap emoji, unicode dashes, pictographs, commas between number words
+  ['0\u200b1\u200b5\u200b1 23456789', 'phone'],
+  ['0151\u00ad2345\ufeff6789', 'phone'],
+  ['0\ufe0f\u20e31\ufe0f\u20e35\ufe0f\u20e31\ufe0f\u20e32\ufe0f\u20e33\ufe0f\u20e34\ufe0f\u20e35\ufe0f\u20e36\ufe0f\u20e37\ufe0f\u20e38\ufe0f\u20e3', 'phone'],
+  ['0151\u20132345\u20146789', 'phone'],
+  ['0151\u22122345\u22126789', 'phone'],
+  ['0\u{1F600}1\u{1F600}5\u{1F600}1\u{1F600}2\u{1F600}3\u{1F600}4\u{1F600}5\u{1F600}6\u{1F600}7\u{1F600}8', 'phone'],
+  ['null, eins, fünf, eins, zwei, drei, vier, fünf, sechs, sieben', 'phone'],
+  ['zero one five one, two three four five six seven eight', 'phone'],
+  ['2026-10-29-1234567', 'phone'],
+  // allowed: commas between digits, ISO dates
+  ['Es dauert 1,5 Stunden', null],
+  ['Ich brauche 3, 4, 5 Stunden', null],
+  ['Auftrag Nr. 2026-10-29-001', null],
+  ['Termin am 2026-10-29', null],
+  ['eins, zwei, drei Uhr', null],
   // allowed stays allowed
   ['Preis 1.250,00 EUR inkl. MwSt', null],
   ['Das macht 85 Euro pro Stunde', null],
@@ -129,6 +145,12 @@ describe('findContactDetails', () => {
       'a.'.repeat(25000),
       '€ '.repeat(25000),
       '1.000'.repeat(10000),
+      'eins, '.repeat(8000),
+      '1,'.repeat(25000),
+      '0\u{1F600}1'.repeat(15000),
+      '\u200b'.repeat(50000),
+      '0\ufe0f\u20e3'.repeat(15000),
+      '2026-10-29-'.repeat(4500),
     ]
     for (const s of inputs) {
       const start = performance.now()

@@ -30,6 +30,7 @@ const LINK_SPELLED = new RegExp(`[a-z0-9-](?:${DOT_BRACKET}|${DOT_WORD})${TLD}(?
 
 // Dates, times and prices are removed before counting digits. Prices may not start with
 // 0 (except "0,50"), so "€ 0151 2345678" is not treated as a price.
+const ISO_DATE = /(?<!\d)(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:-\d{1,4})?(?!-?\d)/g
 const DATE = /(?<![\d.])(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?:\d{4}|\d{2})(?!\d)/g
 const TIME_COLON = /(?<!\d)(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?!\d)/g
 const TIME_UHR = /(?<![\d.])(?:[01]?\d|2[0-3])\.[0-5]\d\s*uhr/g
@@ -48,6 +49,8 @@ const NUM = String.raw`(?:\d+|${WORD})`
 // 3 or more number tokens in a row (words or digits). A single "ein"/"one" never counts.
 const NUMBER_RUN = new RegExp(String.raw`(?<![\d${LETTERS}])${NUM}(?:[ \t._\-/()]{1,3}${NUM}){2,}`, 'g')
 const WORD_ONLY = new RegExp(WORD, 'g')
+// Commas count as a separator only between two number words, never between digits ("1,5", "3, 4, 5").
+const WORD_COMMA = new RegExp(String.raw`(${WORD})\s*,\s*(?=${WORD})`, 'g')
 const PLUS_WORD = new RegExp(String.raw`(?<![${LETTERS}])plus\s*(?=\d)`, 'g')
 
 // Digit groups joined by spaces . - / ( ) _ but never by a comma or a line break.
@@ -58,17 +61,27 @@ const DIGIT_RUN = /(?<!\d)(\+?)\d(?:[ .\-/()_]{0,3}\d)*/g
  * Order matters: email, link, then the digit rules on text with dates/times/prices removed.
  */
 export function findContactDetails(text: string): ContactHit | null {
-  const s = text.normalize('NFKC').toLowerCase()
+  const s = text
+    .normalize('NFKC')
+    .toLowerCase()
+    // invisible characters, variation selector and keycap mark (keycap digits fold to digits)
+    .replace(/[\u200b-\u200f\u2060\ufeff\u00ad\ufe0f\u20e3]/g, '')
+    // en/em/figure dash and minus sign read as a hyphen
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    // pictographs between digits read as spaces
+    .replace(/\p{Extended_Pictographic}/gu, ' ')
 
   if (EMAIL_PLAIN.test(s) || EMAIL_SPELLED.test(s)) return 'email'
   if (LINK_SCHEME.test(s) || LINK_BARE.test(s) || LINK_SPELLED.test(s)) return 'link'
 
   const t = s
+    .replace(ISO_DATE, ' ')
     .replace(DATE, ' ')
     .replace(TIME_COLON, ' ')
     .replace(TIME_UHR, ' ')
     .replace(PRICE_AFTER, ' ')
     .replace(PRICE_BEFORE, ' ')
+    .replace(WORD_COMMA, '$1 ')
     .replace(NUMBER_RUN, (run) => run.replace(WORD_ONLY, (w) => WORD_DIGITS[w] ?? w))
     .replace(PLUS_WORD, '+')
 
