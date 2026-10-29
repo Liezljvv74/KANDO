@@ -441,6 +441,7 @@ export const en: Record<Key, string> = {
   'admin.flag.kind.message-reported': 'Reported message',
   'admin.flag.kind.chargeback': 'Card payment disputed (chargeback)',
   'admin.flag.kind.refund-failed': 'Refund failed',
+  'admin.flag.kind.payment-unprocessed': 'Payment received but not processed',
   'admin.flag.open': 'Open',
   'admin.flag.resolved': 'Handled',
   'admin.action.resolve': 'Mark as resolved',

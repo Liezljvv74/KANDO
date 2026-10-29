@@ -440,6 +440,7 @@ export const de = {
   'admin.flag.kind.message-reported': 'Gemeldete Nachricht',
   'admin.flag.kind.chargeback': 'Kartenzahlung angefochten (Rückbuchung)',
   'admin.flag.kind.refund-failed': 'Erstattung fehlgeschlagen',
+  'admin.flag.kind.payment-unprocessed': 'Zahlung eingegangen, aber nicht verarbeitet',
   'admin.flag.open': 'Offen',
   'admin.flag.resolved': 'Bearbeitet',
   'admin.action.resolve': 'Als erledigt markieren',

@@ -45,7 +45,7 @@ describe('overlaps', () => {
 })
 
 describe('canTransition', () => {
-  const all = ['proposed', 'awaiting-payment', 'expired', 'declined', 'withdrawn'] as const
+  const all = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn'] as const
   const allowed = new Set([
     'proposed>proposed',
     'proposed>awaiting-payment',
@@ -54,6 +54,7 @@ describe('canTransition', () => {
     'proposed>withdrawn',
     'awaiting-payment>expired',
     'awaiting-payment>withdrawn',
+    'awaiting-payment>confirmed', // the payment webhook (owner connection); confirmed has no exits for the app
   ])
   it('allows exactly the table, nothing leaves a final state', () => {
     for (const from of all) for (const to of all) expect(canTransition(from, to), `${from}>${to}`).toBe(allowed.has(`${from}>${to}`))

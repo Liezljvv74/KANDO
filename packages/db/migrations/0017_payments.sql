@@ -55,4 +55,4 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_kind_check" CHECK (kin
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_pay_by_check" CHECK (status <> 'awaiting-payment' OR pay_by IS NOT NULL);--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_accepted_at_check" CHECK (status <> 'awaiting-payment' OR accepted_at IS NOT NULL);--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_status_check" CHECK (status in ('proposed','awaiting-payment','confirmed','expired','declined','withdrawn'));--> statement-breakpoint
-ALTER TABLE "staff_flags" ADD CONSTRAINT "staff_flags_kind_check" CHECK (kind in ('contact-attempts','message-reported','chargeback','refund-failed'));
+ALTER TABLE "staff_flags" ADD CONSTRAINT "staff_flags_kind_check" CHECK (kind in ('contact-attempts','message-reported','chargeback','refund-failed','payment-unprocessed'));

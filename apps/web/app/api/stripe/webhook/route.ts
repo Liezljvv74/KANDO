@@ -1,4 +1,5 @@
-import { BadSignatureError, describeError, gateway, handleGatewayEvent, paymentsEnabled, type GatewayEvent } from '@kando/domain'
+import { db } from '@kando/db'
+import { BadSignatureError, describeError, flagForStaff, gateway, handleGatewayEvent, paymentsEnabled, type GatewayEvent } from '@kando/domain'
 
 // Stripe events are a few kilobytes; anything far larger is not one.
 const MAX_BYTES = 256 * 1024
@@ -27,6 +28,13 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ received: true })
   } catch (e) {
     console.error(`[stripe-webhook] ${event.type} ${event.id} failed ${describeError(e)}`)
+    // A payment we could not process (until a retry succeeds) must not go unseen: Stripe stops retrying after 3 days.
+    // Own owner-connection insert, outside the rolled-back transaction; one open flag per booking.
+    if (event.type === 'checkout-paid') {
+      await flagForStaff(db, { kind: 'payment-unprocessed', refId: event.bookingId, note: `payment ${event.paymentRef}, session ${event.sessionId}` }).catch((f) =>
+        console.error(`[stripe-webhook] could not flag ${event.id} ${describeError(f)}`),
+      )
+    }
     return Response.json({ error: 'Server error' }, { status: 500 })
   }
 }

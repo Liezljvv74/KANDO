@@ -12,6 +12,7 @@ const webhook = await import('../app/api/stripe/webhook/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const busyRoute = await import('../app/app-api/v1/providers/[slug]/busy/route')
+const withdrawRoute = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
 
 const U = { cust: 'py-cust', cust2: 'py-cust2', owner: 'py-owner', third: 'py-third', gone: 'py-gone' }
 const HOUR = 3_600_000
@@ -444,4 +445,95 @@ it('unknown events are ignored with 200 and not recorded', async () => {
   const e = { id: `evt_${randomUUID()}`, type: 'other' } as const
   expect((await deliver(e)).status).toBe(200)
   expect(await eventRows(e.id)).toBe(0)
+})
+
+it('a checkout-paid event that cannot be processed answers 500 and leaves exactly one payment-unprocessed flag', async () => {
+  const b = await awaiting()
+  const e = paid(b.id) as Extract<GatewayEvent, { type: 'checkout-paid' }>
+  await pool.query("CREATE FUNCTION pay_test_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'crash'; END $$")
+  await pool.query('CREATE TRIGGER pay_test_fail BEFORE INSERT ON stripe_events FOR EACH ROW EXECUTE FUNCTION pay_test_fail()')
+  try {
+    expect((await deliver(e)).status).toBe(500) // Stripe retries
+    expect((await deliver(e)).status).toBe(500)
+  } finally {
+    await pool.query('DROP TRIGGER pay_test_fail ON stripe_events')
+    await pool.query('DROP FUNCTION pay_test_fail()')
+  }
+  expect(await flags('payment-unprocessed', b.id)).toEqual([{ ref_id: b.id, user_id: null, note: expect.stringContaining(e.paymentRef) }])
+  expect((await row(b.id)).status).toBe('awaiting-payment')
+  await pool.query("DELETE FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [b.id])
+})
+
+it('refund done, then the commit fails: the retry makes no second refund and writes the rows once', async () => {
+  const b = await awaiting({ status: 'expired' })
+  const e = paid(b.id)
+  await pool.query("CREATE FUNCTION pay_test_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.kind = 'refund' THEN RAISE EXCEPTION 'crash'; END IF; RETURN NEW; END $$")
+  await pool.query('CREATE TRIGGER pay_test_fail BEFORE INSERT ON ledger_entries FOR EACH ROW EXECUTE FUNCTION pay_test_fail()')
+  try {
+    expect((await deliver(e)).status).toBe(500)
+  } finally {
+    await pool.query('DROP TRIGGER pay_test_fail ON ledger_entries')
+    await pool.query('DROP FUNCTION pay_test_fail()')
+  }
+  expect(callsOf('refund')).toHaveLength(1) // the money went back already
+  expect(await ledger(b.id)).toEqual([])
+  expect(await eventRows(e.id)).toBe(0)
+  g.forgetKeys() // even after the 24-hour key window: found by its metadata key
+  expect((await deliver(e)).status).toBe(200)
+  expect(callsOf('refund')).toHaveLength(1)
+  expect((await ledger(b.id)).map((r) => r.kind)).toEqual(['charge', 'refund'])
+  await pool.query("DELETE FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [b.id])
+})
+
+it('withdrawing a confirmed booking is 409', async () => {
+  const b = await awaiting()
+  await deliver(paid(b.id))
+  const res = await call(withdrawRoute.POST, U.cust, 'POST', undefined, { id: b.id })
+  expect(res.status).toBe(409)
+  expect((await row(b.id)).status).toBe('confirmed')
+})
+
+it('the pay link is 409 provider-unavailable for an unpublished or suspended provider', async () => {
+  const b = await awaiting()
+  await pool.query("UPDATE providers SET status = 'draft' WHERE id = $1", [providerId])
+  try {
+    const res = await payLink(b.id)
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('provider-unavailable')
+  } finally {
+    await pool.query("UPDATE providers SET status = 'published' WHERE id = $1", [providerId])
+  }
+  await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE id = $1", [providerId])
+  try {
+    expect((await payLink(b.id)).status).toBe(409)
+  } finally {
+    await pool.query('UPDATE providers SET suspended_until = NULL WHERE id = $1', [providerId])
+  }
+  expect(g.attempts.createCheckout ?? 0).toBe(0)
+})
+
+it('a stored session expiring within 5 minutes is not reused; a gateway RangeError near the edge is 409 PAY_WINDOW_TOO_SHORT', async () => {
+  const now = new Date()
+  const b = await awaiting({ payBy: new Date(now.getTime() + 40 * HOUR) })
+  const first = await createPayLink(db, U.cust, b.id, now)
+  const { expiresAt } = JSON.parse((await row(b.id)).checkout_ref)
+  const late = await createPayLink(db, U.cust, b.id, new Date(new Date(expiresAt).getTime() - 4 * 60_000))
+  expect(g.attempts.createCheckout).toBe(2)
+  expect(late.url).not.toBe(first.url)
+  const edge = await awaiting()
+  g.createCheckout = async () => {
+    throw new RangeError('Checkout expiresAt must be 30 minutes to 24 hours from now')
+  }
+  const res = await payLink(edge.id)
+  expect(res.status).toBe(409)
+  expect((await res.json()).error).toBe('PAY_WINDOW_TOO_SHORT')
+})
+
+it('a payment made just after the deadline is not lost to the sweep: the timers wait PAY_GRACE_MINUTES', async () => {
+  const b = await awaiting({ payBy: new Date(Date.now() - 5 * 60_000) })
+  await runDueTimers(db, new Date())
+  expect((await row(b.id)).status).toBe('awaiting-payment')
+  expect((await payLink(b.id)).status).toBe(409) // no new pay link after the deadline
+  expect((await deliver(paid(b.id))).status).toBe(200)
+  expect((await row(b.id)).status).toBe('confirmed')
 })

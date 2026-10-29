@@ -70,7 +70,7 @@ async function paid(tx: Tx, e: Paid, now: Date, after: After): Promise<void> {
     now.getTime() <= b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 &&
     toCents(Number(b.amount)) === e.amountCents &&
     b.currency === e.currency &&
-    !(await slotIsHeld(db, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) // committed state; other slot writers wait on our lock
+    !(await slotIsHeld(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) // owner connection sees every booking; other slot writers wait on our lock
 
   if (confirmable) {
     // booking first, then its charge row: both or neither

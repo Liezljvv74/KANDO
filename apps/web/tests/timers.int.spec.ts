@@ -132,7 +132,10 @@ it('unpaid awaiting-payment past payBy expires and frees the time', async () => 
   await pool.query("UPDATE bookings SET pay_by = now() - interval '1 minute' WHERE id = $1", [b])
   expect(await busy()).toBe(0) // the lapsed window frees the time at once, before any sweep
   expect(await status('bookings', b)).toBe('awaiting-payment')
-  await run(0)
+  await runDueTimers(db, new Date())
+  expect(await status('bookings', b)).toBe('awaiting-payment') // PAY_GRACE_MINUTES: a payment made at the deadline may still arrive
+  await pool.query("UPDATE bookings SET pay_by = now() - interval '11 minutes' WHERE id = $1", [b])
+  await runDueTimers(db, new Date())
   expect(await status('bookings', b)).toBe('expired')
   expect(await busy()).toBe(0)
   expect((await notes('booking-expired')).map((n) => n.user_id).sort()).toEqual([U.cust, U.owner])
@@ -165,7 +168,7 @@ it('listRequests and listBookings show a just-due row as expired and leave other
   expect(reqs.find((r) => r.id === mine)?.status).toBe('expired')
   expect(await status('requests', theirs)).toBe('open') // another customer's due row is untouched
   expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).find((x) => x.id === b)?.status).toBe('expired')
-  const b2 = await booking('awaiting-payment', { payBy: past() }) // the provider side is lazy too
+  const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // the provider side is lazy too (after PAY_GRACE_MINUTES)
   expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).find((x) => x.id === b2)?.status).toBe('expired')
 })
 

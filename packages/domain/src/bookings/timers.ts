@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import type { db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
 import { notifyBookingEvent, type BookingKind } from './notify'
+import { PAY_GRACE_MINUTES } from '../payments/rules'
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
 
 export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number }
@@ -45,8 +46,10 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM e RETURNING user_id, kind, payload)
     ${result('e')}`)
 
+  // PAY_GRACE_MINUTES after pay_by: a payment made at the deadline may still be on its way (the webhook confirms it if the
+  // time is still free). The slot itself stops being held at pay_by (slotIsHeld, busy_times) and no pay link is given after it.
   const unpaidExpired = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'awaiting-payment' AND pay_by <= ${t}::timestamptz ${bookingScope} RETURNING id, customer_id, provider_id),
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope} RETURNING id, customer_id, provider_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
       SELECT u, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz
       FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING user_id, kind, payload)
