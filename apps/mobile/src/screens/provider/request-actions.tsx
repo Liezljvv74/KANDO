@@ -7,6 +7,7 @@ import { SmallButton } from '@/components/form-ui'
 import { useMe } from '@/hooks/use-me'
 import { t } from '@/i18n'
 import { go } from '@/lib/go'
+import { requestTarget } from '@/lib/request-target'
 
 /** False on the person's own profile (and until that is known): nobody books themselves. The server refuses it too. */
 export function useCanRequest(slug: string): boolean {
@@ -24,10 +25,7 @@ type Service = ProviderDetail['services'][number]
 
 /** "Book" for a fixed-price service, "Request a quote" for the others (`service` left out: a general request). */
 export function RequestButton({ provider, service }: { provider: ProviderDetail; service?: Service }) {
-  const fixed = service?.priceType === 'fixed' && service.price !== null
-  const open = () =>
-    fixed
-      ? go('/bookings/book', { slug: provider.slug, serviceId: service.id, ...(provider.worksRemotely && { remote: '1' }) })
-      : go('/bookings/new-request', { providerId: provider.providerId, ...(service && { serviceId: service.id }) })
-  return <SmallButton label={t(fixed ? 'booking.book' : 'booking.requestQuote')} onPress={open} />
+  const target = requestTarget(provider, service)
+  if (!target) return null
+  return <SmallButton label={t(target.book ? 'booking.book' : 'booking.requestQuote')} onPress={() => go(target.path, target.params)} />
 }

@@ -12,6 +12,7 @@ import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { bookingActions, bookingStatusText, type BookingAction, type Viewer } from '@/lib/booking-status'
+import { confirmDanger } from '@/lib/confirm'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 import { go } from '@/lib/go'
@@ -51,6 +52,7 @@ export default function BookingDetail() {
 
   async function act(action: BookingAction) {
     if (action === 'counter') return go('/bookings/counter', { id: b.id })
+    if ((action === 'decline' || action === 'withdraw') && !(await confirmDanger(t(action === 'decline' ? 'booking.confirmDecline' : 'booking.confirmWithdraw'), t(`booking.${action}` as Key)))) return
     setBusy(true)
     setProblem(null)
     try {

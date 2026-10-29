@@ -73,6 +73,7 @@ it('an older cached response without the field still parses (empty list)', () =>
     slug: 's', publicName: 'n', photoUrl: null, place: null, categories: [], services: [], references: [], photos: [], isNew: true, translatable: false,
   })
   expect(ProviderDetailSchema.parse(old).checkedDocuments).toEqual([])
+  expect(ProviderDetailSchema.parse(old).providerId).toBeUndefined() // an older response without the provider id parses too
 })
 
 it('RLS: app_user cannot read the documents table; the function returns type keys only, and nothing for a hidden provider', async () => {

@@ -6,6 +6,7 @@ import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
 import { Button, ErrorText, Field } from '@/components/auth-ui'
 import { errorText, t } from '@/i18n'
+import { parseAmount } from '@/lib/amount'
 import { toMinutes, toStartAt } from '@/lib/booking-time'
 
 /** The provider's quote: amount, scope and an optional time suggestion (the customer confirms the time when accepting). */
@@ -19,8 +20,9 @@ export function SendQuoteForm({ requestId, onSent }: { requestId: string; onSent
   const [busy, setBusy] = useState(false)
 
   async function submit() {
-    const value = Number(amount.trim().replace(',', '.'))
-    if (!amount.trim() || !Number.isFinite(value) || value <= 0 || !scope.trim()) return setError(t('booking.invalidAmount'))
+    const value = parseAmount(amount)
+    if (value === null) return setError(t('booking.invalidAmountFormat'))
+    if (!scope.trim()) return setError(t('booking.invalidAmount'))
     const suggest = date.trim() || time.trim()
     const startAt = suggest ? toStartAt(date, time) : null
     const durationMin = toMinutes(duration)

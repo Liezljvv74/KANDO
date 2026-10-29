@@ -503,7 +503,7 @@ export const de = {
   'booking.durationField': 'Dauer in Minuten',
   'booking.onSite': 'Vor Ort (am Einsatzort)',
   'booking.noteField': 'Hinweis (optional)',
-  'booking.invalidTime': 'Bitte Datum, Uhrzeit und Dauer prüfen (Dauer 15 bis 720 Minuten).',
+  'booking.invalidTime': 'Bitte Datum, Uhrzeit und Dauer prüfen.',
   'booking.invalidDate': 'Bitte das Datum als JJJJ-MM-TT angeben.',
   'booking.invalidAmount': 'Bitte einen Betrag und die Leistung angeben.',
   'booking.proposeTitle': 'Termin vorschlagen',
@@ -566,4 +566,8 @@ export const de = {
   'error.booking.request-closed': 'Diese Anfrage ist geschlossen.',
   'error.booking.unknown-service': 'Diese Leistung gibt es nicht mehr.',
   'booking.descriptionMissing': 'Bitte beschreibe kurz, was gemacht werden soll.',
+  'booking.invalidAmountFormat': 'Bitte den Betrag nur mit Ziffern und höchstens zwei Nachkommastellen angeben, ohne Tausendertrennzeichen (z. B. 1250,50).',
+  'booking.confirmDecline': 'Diese Buchung ablehnen?',
+  'booking.confirmWithdraw': 'Wirklich zurückziehen? Du brauchst das dann nicht mehr.',
+  'booking.acceptExpiry': 'Dieses Angebot gilt bis {date}. Danach läuft es ab.',
 }

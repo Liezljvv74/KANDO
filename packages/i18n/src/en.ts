@@ -504,7 +504,7 @@ export const en: Record<Key, string> = {
   'booking.durationField': 'Duration in minutes',
   'booking.onSite': 'On site (at the job address)',
   'booking.noteField': 'Note (optional)',
-  'booking.invalidTime': 'Please check the date, time and duration (15 to 720 minutes).',
+  'booking.invalidTime': 'Please check the date, time and duration.',
   'booking.invalidDate': 'Please enter the date as YYYY-MM-DD.',
   'booking.invalidAmount': 'Please enter an amount and the scope.',
   'booking.proposeTitle': 'Propose a time',
@@ -567,4 +567,8 @@ export const en: Record<Key, string> = {
   'error.booking.request-closed': 'This request is closed.',
   'error.booking.unknown-service': 'This service no longer exists.',
   'booking.descriptionMissing': 'Please describe briefly what needs to be done.',
+  'booking.invalidAmountFormat': 'Please enter the amount with digits only and at most two decimals, without thousands separators (e.g. 1250.50).',
+  'booking.confirmDecline': 'Decline this booking?',
+  'booking.confirmWithdraw': 'Withdraw for sure? You will no longer need this.',
+  'booking.acceptExpiry': 'This quote is valid until {date}. After that it expires.',
 }

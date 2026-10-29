@@ -47,7 +47,7 @@ export default function RequestDetail() {
       <SectionTitle text={t('booking.quotes')} />
       {quotes.length === 0 && <Text style={styles.small}>{t('booking.noQuotes')}</Text>}
       {quotes.map((q) => (
-        <QuoteCard key={q.id} quote={q} onAccept={isCustomer ? () => go('/bookings/accept', { quoteId: q.id }) : undefined} />
+        <QuoteCard key={q.id} quote={q} onAccept={isCustomer ? () => go('/bookings/accept', { quoteId: q.id, expiresAt: q.expiresAt }) : undefined} />
       ))}
       {!isCustomer && open && <SendQuoteForm requestId={request.id} onSent={retry} />}
     </FormScreen>
