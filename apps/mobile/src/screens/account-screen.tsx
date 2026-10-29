@@ -12,6 +12,7 @@ import { useFlash } from '@/hooks/use-flash'
 import { loadMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
+import { go } from '@/lib/go'
 import { startOffering } from '@/lib/start-offering'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
@@ -84,6 +85,7 @@ export default function AccountScreen() {
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}
+          <LinkText label={t('booking.myBookings')} onPress={() => go('/bookings')} />
           <LinkText label={t('account.offerServices')} onPress={offer} />
           <LanguageSwitch />
         </View>

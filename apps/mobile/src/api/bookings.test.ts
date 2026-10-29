@@ -1,0 +1,59 @@
+import { api } from '@/api/client'
+import {
+  acceptQuote,
+  answerBooking,
+  createDirectBooking,
+  createRequest,
+  getBusyTimes,
+  getRequest,
+  listBookings,
+  listQuotes,
+  listRequests,
+  sendQuote,
+  withdrawBooking,
+} from './bookings'
+
+jest.mock('@/api/client', () => ({ api: jest.fn() }))
+
+const time = { startAt: '2027-01-05T09:00:00.000Z', durationMin: 60, onSite: false }
+
+beforeEach(() => (api as jest.Mock).mockReset().mockResolvedValue({ docs: [] }))
+const last = () => (api as jest.Mock).mock.calls.at(-1)
+
+test('requests and quotes use their routes, methods and bodies', async () => {
+  const request = { providerId: 'p1', description: 'Fix the tap' }
+  await createRequest(request)
+  expect(last()).toEqual(['/app-api/v1/requests', { method: 'POST', body: request }])
+  await listRequests('provider')
+  expect(last()).toEqual(['/app-api/v1/requests?role=provider'])
+  await getRequest('r1')
+  expect(last()).toEqual(['/app-api/v1/requests/r1'])
+  await listQuotes('r1')
+  expect(last()).toEqual(['/app-api/v1/requests/r1/quotes'])
+  await sendQuote('r1', { amount: 90, scope: 'All of it' })
+  expect(last()).toEqual(['/app-api/v1/requests/r1/quotes', { method: 'POST', body: { amount: 90, scope: 'All of it' } }])
+  await acceptQuote('q1', time)
+  expect(last()).toEqual(['/app-api/v1/quotes/q1/accept', { method: 'POST', body: time }])
+})
+
+test('bookings use their routes, methods and bodies', async () => {
+  await createDirectBooking({ ...time, serviceId: 's1' })
+  expect(last()).toEqual(['/app-api/v1/bookings', { method: 'POST', body: { ...time, serviceId: 's1' } }])
+  await listBookings('customer')
+  expect(last()).toEqual(['/app-api/v1/bookings?role=customer'])
+  await answerBooking('b1', { type: 'counter', startAt: time.startAt, durationMin: 90, onSite: true })
+  expect(last()).toEqual(['/app-api/v1/bookings/b1/answer', { method: 'POST', body: { type: 'counter', startAt: time.startAt, durationMin: 90, onSite: true } }])
+  await answerBooking('b1', { type: 'accept' })
+  expect(last()![1].body).toEqual({ type: 'accept' })
+  await withdrawBooking('b1')
+  expect(last()).toEqual(['/app-api/v1/bookings/b1/withdraw', { method: 'POST', body: undefined }])
+})
+
+test('busy times pass the range as ISO dates and return the list', async () => {
+  const busy = [{ startAt: 'a', endAt: 'b', state: 'pending' }]
+  ;(api as jest.Mock).mockResolvedValueOnce({ docs: busy })
+  const from = new Date('2027-01-01T00:00:00Z')
+  const to = new Date('2027-01-31T00:00:00Z')
+  expect(await getBusyTimes('anna h', from, to)).toEqual(busy)
+  expect(last()![0]).toBe('/app-api/v1/providers/anna%20h/busy?from=2027-01-01T00%3A00%3A00.000Z&to=2027-01-31T00%3A00%3A00.000Z')
+})

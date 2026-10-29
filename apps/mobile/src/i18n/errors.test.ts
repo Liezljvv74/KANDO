@@ -32,3 +32,13 @@ test('the delete and export texts say what happened and have no status numbers',
   expect(accountError('delete', 'network')).toContain('info@skillweb.space') // the {contact} placeholder is filled
   expect(accountError('export', 'EMAIL_MISMATCH')).toContain('could not be exported') // a delete code never shows on export
 })
+
+test('every booking rule code from the server has its own text in both languages', () => {
+  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'Unknown service']
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    for (const code of codes) expect(errorText(code)).not.toBe(errorText('unmapped'))
+  }
+  setLang('en')
+  expect(errorText('slot-pending')).toContain('pending booking')
+})

@@ -53,6 +53,8 @@ export const ProviderReferenceSchema = z.object({
 })
 
 export const ProviderDetailSchema = z.object({
+  /** The provider's id: a request or booking names the provider by it. */
+  providerId: z.string(),
   slug: z.string(),
   publicName: z.string(),
   providerType: z.string().nullish(),
