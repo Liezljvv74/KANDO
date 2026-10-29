@@ -589,6 +589,8 @@ export const de = {
   'error.booking.quote-expired': 'Dieses Angebot ist abgelaufen.',
   'error.booking.quote-not-open': 'Dieses Angebot kann nicht mehr angenommen werden.',
   'error.booking.request-closed': 'Diese Anfrage ist geschlossen.',
+  'error.booking.request-limit': 'Du hast bei diesem Anbieter schon eine offene Anfrage. Warte auf die Antwort oder ziehe sie zurück.',
+  'error.booking.daily-limit': 'Du hast heute schon sehr viele Anfragen gesendet. Bitte versuche es morgen wieder.',
   'error.booking.unknown-service': 'Diese Leistung gibt es nicht mehr.',
   'booking.descriptionMissing': 'Bitte beschreibe kurz, was gemacht werden soll.',
   'booking.invalidAmountFormat': 'Bitte den Betrag nur mit Ziffern und höchstens zwei Nachkommastellen angeben, ohne Tausendertrennzeichen (z. B. 1250,50).',

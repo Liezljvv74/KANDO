@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
@@ -37,7 +37,10 @@ const day = (n: number, h = 0) => new Date(Date.now() + n * 86_400_000 + h * 3_6
 let nextDay = 100 // every default proposal gets its own day, so accepted bookings never collide by accident
 const proposal = (extra: object = {}) => ({ startAt: day(nextDay++), durationMin: 120, onSite: true, address: { postcode: '10115', street: 'Hauptstr. 1' }, ...extra })
 const book = (as: string, serviceId: string, extra: object = {}) => call(bookingsRoute.POST, as, 'POST', { serviceId, ...proposal(extra) })
-const direct = async (serviceId = sOwner, extra: object = {}, as = U.cust) => BookingSchema.parse(await (await book(as, serviceId, extra)).json())
+const direct = async (serviceId = sOwner, extra: object = {}, as = U.cust) => {
+  await relaxLimits(as)
+  return BookingSchema.parse(await (await book(as, serviceId, extra)).json())
+}
 const answering = (id: string, as: string, body: object) => call(answer.POST, as, 'POST', body, { id })
 const withdrawing = (id: string, as: string) => call(withdraw.POST, as, 'POST', undefined, { id })
 const row = async (id: string) => (await pool.query('SELECT status, pay_by, answer_by, counter_by, start_at, on_site FROM bookings WHERE id = $1', [id])).rows[0]

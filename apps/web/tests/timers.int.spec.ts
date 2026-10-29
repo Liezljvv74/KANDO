@@ -40,9 +40,9 @@ const notes = async (kind: string) => (await pool.query('SELECT user_id, payload
 it('a request open 3 days and 1 minute expires and the customer is notified', async () => {
   await clean()
   // created through createRequest: its own 3-day answerBy decides
-  const make = async (description: string, createdAt: Date) => (await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId: prov, description }, createdAt))).id
+  const make = async (description: string, createdAt: Date, providerId = prov) => (await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId, description }, createdAt))).id
   const old = await make('old request', new Date(NOW.getTime() - 3 * 86_400_000 - 60_000))
-  const fresh = await make('fresh request', new Date(NOW.getTime() - 3 * 86_400_000 + 60_000))
+  const fresh = await make('fresh request', new Date(NOW.getTime() - 3 * 86_400_000 + 60_000), prov2) // another provider: one open request per pair
   expect((await run(0)).requestsExpired).toBeGreaterThanOrEqual(1)
   expect(await status('requests', old)).toBe('expired')
   expect(await status('requests', fresh)).toBe('open')

@@ -12,7 +12,7 @@ import { threadForBooking } from '../chat/threads'
 import { assertSlotFree, lockProviderSlots } from './busy'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
-import { toBooking } from './requests'
+import { assertWithinLimits, toBooking } from './requests'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
 const HOUR = 3_600_000
@@ -27,6 +27,7 @@ const view = (b: Row, userId: string): Booking => {
 }
 
 export async function createDirectBooking(tx: Tx, userId: string, input: DirectBookingInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
+  await assertWithinLimits(tx, userId, null, now)
   const service = (await tx.select().from(services).where(eq(services.id, input.serviceId)))[0]
   const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
   if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()

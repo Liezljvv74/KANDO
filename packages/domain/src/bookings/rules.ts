@@ -14,6 +14,8 @@ export const PAY_WINDOW_HOURS = 48
 export const PAY_BEFORE_START_HOURS = 24
 export const SHORT_NOTICE_PAY_HOURS = 6
 export const SHORT_NOTICE_THRESHOLD_HOURS = 24
+export const MAX_OPEN_REQUESTS_PER_PAIR = 1
+export const MAX_REQUESTS_PER_DAY = 10
 
 export type Span = { start: Date; end: Date }
 

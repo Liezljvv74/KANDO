@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -25,8 +25,10 @@ afterAll(cleanupUsers)
 
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
 const proposal = (extra: object = {}) => ({ startAt: day(10), durationMin: 120, onSite: true, address: { postcode: '10115' }, ...extra })
-const newRequest = async (providerId = pOwner, as = U.cust) =>
-  RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId, description: 'Fix the fence' })).json())
+const newRequest = async (providerId = pOwner, as = U.cust) => {
+  await relaxLimits(as)
+  return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId, description: 'Fix the fence' })).json())
+}
 const quote = (reqId: string, as: string, body: object = { amount: 100, scope: 'Fence' }) => call(quotes.POST, as, 'POST', body, { id: reqId })
 const accepting = (quoteId: string, as: string, body: object = proposal()) => call(accept.POST, as, 'POST', body, { id: quoteId })
 const ids = (j: { docs: { id: string }[] }) => j.docs.map((d) => d.id)
@@ -195,7 +197,7 @@ it('a provider suspended or unpublished after the request cannot quote, and the 
   const gone = async (change: string) => {
     const r = await newRequest(pRemote)
     const q = QuoteSchema.parse(await (await quote(r.id, U.remote)).json())
-    const r2 = await newRequest(pRemote)
+    const r2 = await newRequest(pRemote, U.third) // another customer: one open request per pair
     await pool.query(change)
     const out = [(await quote(r2.id, U.remote)).status, (await accepting(q.id, U.cust)).status]
     await pool.query("UPDATE providers SET status = 'published', suspended_until = NULL WHERE id = $1", [pRemote])

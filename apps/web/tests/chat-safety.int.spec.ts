@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MessageSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { clearOutbox, notifyNewMessage, outboxForTests } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -24,7 +24,10 @@ beforeAll(async () => {
 })
 afterAll(cleanupUsers)
 
-const newRequest = async (as = U.cust) => RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence' })).json())
+const newRequest = async (as = U.cust) => {
+  await relaxLimits(as)
+  return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence' })).json())
+}
 const threadOf = async (as: string, requestId: string) => ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs).find((t) => t.requestId === requestId)!
 const send = (thread: string, as: string, body: string) => call(messagesRoute.POST, as, 'POST', { body }, { id: thread })
 const sendOk = async (thread: string, as: string, body: string) => MessageSchema.parse(await (await send(thread, as, body)).json())
@@ -73,6 +76,7 @@ it('after a block, neither side can send (403 BLOCKED) and the thread says block
 it("a blocked customer cannot create a request to the blocker's provider (404)", async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)
   await block(U.owner, t.id)
+  await relaxLimits(U.cust)
   const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Another job' })
   expect([res.status, await res.json()]).toEqual([404, { error: 'Not found' }])
   const direct = await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })

@@ -153,3 +153,12 @@ export const seedUser = (id: string, staffRole: string | null = null, name: stri
   const [first = null, ...rest] = name?.split(' ') ?? []
   return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null])
 }
+
+/**
+ * Tests that legitimately create many requests or bookings for one customer call this first: it closes the customer's open
+ * requests and moves their earlier requests and direct bookings out of the 24-hour window, so the abuse limits (abuse-limits.int.spec.ts) stay out of the way.
+ */
+export async function relaxLimits(uid: string): Promise<void> {
+  await pool.query("UPDATE requests SET status = CASE WHEN status IN ('open','quoted') THEN 'withdrawn' ELSE status END, created_at = created_at - interval '2 days' WHERE customer_id = $1 AND created_at > now() - interval '1 day'", [uid])
+  await pool.query("UPDATE bookings SET created_at = created_at - interval '2 days' WHERE customer_id = $1 AND source = 'direct' AND created_at > now() - interval '1 day'", [uid])
+}

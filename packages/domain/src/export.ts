@@ -1,5 +1,7 @@
-import { asc, eq, getTableColumns, sql } from 'drizzle-orm'
-import { documents, notifications, photos, privateFiles, providerReferences, providers, services, users, type Tx } from '@kando/db'
+import { asc, eq, getTableColumns, or, sql } from 'drizzle-orm'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
+import { bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quotes, requests, services, threads, users, type Tx } from '@kando/db'
+import { listBlocks } from './chat/blocks'
 import { documentsBucket, photoUrl, storage } from './storage'
 
 const LINK_SECONDS = 300 // signed document links live five minutes
@@ -20,6 +22,19 @@ export async function exportMyData(tx: Tx, userId: string) {
   const link = (key: string) => storage().getSignedUrl(documentsBucket(), key, LINK_SECONDS)
   const docs = await tx.select().from(documents).where(eq(documents.ownerId, userId)).orderBy(asc(documents.createdAt))
   const files = await tx.select().from(privateFiles).where(eq(privateFiles.ownerId, userId)).orderBy(asc(privateFiles.createdAt))
+  // Requests, quotes and bookings the person is a party of. Only their own side is named: no other person's id or email,
+  // and the job address only where they are the booking's customer (a provider sees it in the app after acceptance, and here never).
+  const mine = (customerId: AnyPgColumn, providerId: AnyPgColumn) => (own ? or(eq(customerId, userId), eq(providerId, own)) : eq(customerId, userId))
+  const roleOf = (customerId: string) => (customerId === userId ? 'customer' : 'provider')
+  const myRequests = await tx.select().from(requests).where(mine(requests.customerId, requests.providerId)).orderBy(asc(requests.createdAt))
+  const myQuotes = myRequests.length ? await tx.select().from(quotes).where(or(...myRequests.map((r) => eq(quotes.requestId, r.id)))).orderBy(asc(quotes.createdAt)) : []
+  const myBookings = await tx.select().from(bookings).where(mine(bookings.customerId, bookings.providerId)).orderBy(asc(bookings.createdAt))
+  const sent = await tx
+    .select({ m: messages, requestId: threads.requestId, bookingId: threads.bookingId })
+    .from(messages)
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(eq(messages.senderId, userId))
+    .orderBy(asc(messages.createdAt), asc(messages.id))
   return {
     exportedAt: new Date().toISOString(),
     user: user && {
@@ -43,10 +58,31 @@ export async function exportMyData(tx: Tx, userId: string) {
       docs.map(async (d) => ({ requirement: d.requirement, status: d.status, staffNote: d.note, reviewedAt: d.reviewedAt, createdAt: d.createdAt, downloadUrl: await link(d.key) })),
     ),
     privateFiles: await Promise.all(files.map(async (f) => ({ createdAt: f.createdAt, downloadUrl: await link(f.key) }))),
+    requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.description, preferredDate: r.preferredDate, answerBy: r.answerBy, createdAt: r.createdAt })),
+    quotes: myQuotes.map((q) => ({ id: q.id, requestId: q.requestId, version: q.version, amount: Number(q.amount), currency: q.currency, scope: q.scope, suggestedStart: q.startAt, durationMin: q.durationMin, status: q.status, expiresAt: q.expiresAt, createdAt: q.createdAt })),
+    bookings: myBookings.map((b) => ({
+      id: b.id,
+      role: roleOf(b.customerId),
+      source: b.source,
+      quoteId: b.quoteId,
+      status: b.status,
+      startAt: b.startAt,
+      durationMin: b.durationMin,
+      amount: Number(b.amount),
+      currency: b.currency,
+      onSite: b.onSite,
+      address: b.customerId === userId && b.addressPostcode ? { street: b.addressStreet, postcode: b.addressPostcode, city: b.addressCity } : null,
+      note: b.note,
+      createdAt: b.createdAt,
+    })),
+    // only what the person sent themselves; a photo by its file name, not the file
+    messages: sent.map(({ m, requestId, bookingId }) => ({ id: m.id, threadId: m.threadId, requestId, bookingId, kind: m.kind, body: m.body, photo: m.photoKey?.split('/').pop() ?? null, card: m.card, createdAt: m.createdAt })),
+    blocks: (await listBlocks(tx, userId)).map((b) => ({ name: b.name })),
     notifications: await tx.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(asc(notifications.createdAt)),
     notes: [
       'Not included: your password (the sign-in service keeps only a one-way hash) and the sign-in sessions.',
       'Not included: rate-limit records (a time stamp per translation request, an address hash for others), kept for 24 hours.',
+      'Not included: messages other people wrote to you, contact details of other people, and notes kept by the support team.',
       'Not included: emails already sent to you, which the email provider holds.',
       `Document and file download links work for ${LINK_SECONDS / 60} minutes; photo links are public addresses.`,
     ],
@@ -70,7 +106,7 @@ export function exportRows(data: Export): string[][] {
   add('export', 1, { exportedAt: data.exportedAt })
   if (data.user) add('user', 1, data.user)
   if (data.provider) add('provider', 1, data.provider)
-  for (const section of ['services', 'references', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
+  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'messages', 'blocks', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
     data[section].forEach((r, i) => add(section, i + 1, r))
   }
   data.notes.forEach((n, i) => rows.push(['notes', String(i + 1), 'text', n]))

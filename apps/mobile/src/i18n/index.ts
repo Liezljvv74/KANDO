@@ -82,6 +82,8 @@ export const errorKeys: Record<string, Key> = {
   'quote-expired': 'error.booking.quote-expired',
   'quote-not-open': 'error.booking.quote-not-open',
   'request-closed': 'error.booking.request-closed',
+  'request-limit': 'error.booking.request-limit',
+  'daily-limit': 'error.booking.daily-limit',
   'Unknown service': 'error.booking.unknown-service',
   // Chat (`error`)
   CONTACT_DETAILS: 'chat.contactBlocked',
