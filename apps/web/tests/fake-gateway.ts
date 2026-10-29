@@ -11,31 +11,35 @@ export type FakeGateway = PaymentsGateway & {
 }
 
 /**
- * In-memory gateway for tests. Like Stripe, a repeated idempotency key returns the first result and is recorded once.
+ * In-memory gateway for tests. Like Stripe, a repeated idempotency key with identical parameters returns the first
+ * result and is recorded once; the same key with different parameters throws (Stripe's idempotency_error).
+ * It does not check the Checkout expiry range (tests may pass a fixed `now`).
  * To simulate a failure, replace a method: `g.transfer = async () => { throw new Error('down') }`.
  */
 export function fakeGateway(): FakeGateway {
   const calls: FakeGateway['calls'] = []
-  const byKey = new Map<string, unknown>()
+  const byKey = new Map<string, { params: string; result: unknown }>()
   const signed = new Map<string, string>() // signature -> body
   let n = 0
 
   const record = (method: string, args: unknown) => calls.push({ method, args })
   async function once<T>(method: string, args: { idempotencyKey: string }, make: (id: number) => T): Promise<T> {
-    if (byKey.has(args.idempotencyKey)) return byKey.get(args.idempotencyKey) as T
+    const params = JSON.stringify([method, args])
+    const seen = byKey.get(args.idempotencyKey)
+    if (seen) {
+      if (seen.params !== params) throw new Error(`idempotency_error: key ${args.idempotencyKey} was used with different parameters`)
+      return seen.result as T
+    }
     record(method, args)
     const result = make(++n)
-    byKey.set(args.idempotencyKey, result)
+    byKey.set(args.idempotencyKey, { params, result })
     return result
   }
 
   const g: FakeGateway = {
     calls,
     ready: new Set(),
-    async createAccount(args) {
-      record('createAccount', args)
-      return { accountId: `acct_fake_${++n}` }
-    },
+    createAccount: (args) => once('createAccount', args, (i) => ({ accountId: `acct_fake_${i}` })),
     async onboardingLink(args) {
       record('onboardingLink', args)
       return { url: `https://stripe.fake/onboarding/${args.accountId}` }

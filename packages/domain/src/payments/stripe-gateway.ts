@@ -9,18 +9,22 @@
  * - transfer_group = booking id on the PaymentIntent (and so on its charge) and on the transfer.
  * - source_transaction = the charge: "the transfer request returns success regardless of your available balance if the
  *   related charge hasn't settled yet", and the transfer can never exceed that charge.
- * - Hold limit: MAX_HOLD_DAYS in rules.ts (90 days, https://docs.stripe.com/connect/manual-payouts). The platform
- *   balance must be on manual payouts in the Dashboard, or Stripe pays it out to KANDO's bank account.
+ * - Hold bound: MAX_HOLD_DAYS / MAX_PAY_AHEAD_DAYS in rules.ts (Stripe states no limit for the platform's own balance;
+ *   the bound is borrowed from https://docs.stripe.com/connect/manual-payouts). The platform balance must be on manual
+ *   payouts in the Dashboard, or Stripe pays it out to KANDO's bank account.
  *
  * Connected accounts: Accounts v2 (https://docs.stripe.com/connect/marketplace/tasks/create) with the `recipient`
  * configuration (stripe_balance.stripe_transfers), Express dashboard, fees and losses collected by the application
  * (required for that combination), Stripe-hosted onboarding through a v2 account link
  * (https://docs.stripe.com/api/v2/core/account-links/create), daily automatic payouts set with the Balance Settings API
- * (Accounts v2 cannot set payout settings: https://docs.stripe.com/connect/manual-payouts). Ready means the
- * stripe_transfers capability is `active`.
+ * (Accounts v2 cannot set payout settings: https://docs.stripe.com/connect/manual-payouts), applied before every
+ * onboarding link so a failure there never loses a created account. Account creation carries an idempotency key (v2
+ * replays it for 30 days: https://docs.stripe.com/api-v2-overview#idempotency). Ready means stripe_transfers is
+ * `active`, and stripe_balance.payouts too when Stripe reports that capability (money must reach the bank).
  *
  * paymentRef is the PaymentIntent id: it is on the Checkout Session in the webhook (the charge id is not), refunds take
- * it directly (`payment_intent`), a dispute names it, and `transfer` looks up its latest_charge for source_transaction.
+ * it directly (`payment_intent`), a dispute names it, and `transfer` looks up its latest_charge for source_transaction
+ * (only for a succeeded PaymentIntent).
  *
  * Webhooks (https://docs.stripe.com/webhooks#verify-events, https://docs.stripe.com/connect/webhooks): the raw body and
  * the Stripe-Signature header go to constructEvent. Two endpoints, two secrets: STRIPE_WEBHOOK_SECRET ("Your account":
@@ -40,27 +44,31 @@ export const STRIPE_API_VERSION = '2026-09-30.endive'
 /** Tags KANDO's Checkout Sessions in the Stripe Dashboard (fixed: a random part would break idempotent retries). */
 const INTEGRATION_ID = 'kando-booking-pay-qzvhkmrt'
 
-// Stripe accepts a Checkout expiry 30 minutes to 24 hours after creation; a minute of margin each side.
-const MIN_EXPIRY_MS = 31 * 60_000
-const MAX_EXPIRY_MS = 24 * 3_600_000 - 60_000
+// Stripe accepts a Checkout expiry 30 minutes to 24 hours after creation (SDK docs of expires_at); half a minute of
+// margin at the low end because the session is created a moment after this check.
+const MIN_EXPIRY_MS = 30.5 * 60_000
+const MAX_EXPIRY_MS = 24 * 3_600_000
 
 export const stripeClient = (key: string): Stripe => new Stripe(key, { apiVersion: STRIPE_API_VERSION, maxNetworkRetries: 2 })
 
 export function stripeGateway(client: Stripe): PaymentsGateway {
   return {
-    async createAccount({ email, country }) {
-      const account = await client.v2.core.accounts.create({
-        contact_email: email,
-        dashboard: 'express',
-        identity: { country: country.toLowerCase() },
-        defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
-        configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
-      })
-      await client.balanceSettings.update({ payments: { payouts: { schedule: { interval: 'daily' } } } }, { stripeAccount: account.id })
+    async createAccount({ email, country, idempotencyKey }) {
+      const account = await client.v2.core.accounts.create(
+        {
+          contact_email: email,
+          dashboard: 'express',
+          identity: { country: country.toLowerCase() },
+          defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
+          configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+        },
+        { idempotencyKey },
+      )
       return { accountId: account.id }
     },
 
     async onboardingLink({ accountId, returnUrl, refreshUrl }) {
+      await client.balanceSettings.update({ payments: { payouts: { schedule: { interval: 'daily' } } } }, { stripeAccount: accountId })
       const link = await client.v2.core.accountLinks.create({
         account: accountId,
         use_case: {
@@ -74,12 +82,13 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
 
     async accountReady(accountId) {
       const account = await client.v2.core.accounts.retrieve(accountId, { include: ['configuration.recipient'] })
-      return account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === 'active'
+      const balance = account.configuration?.recipient?.capabilities?.stripe_balance
+      return balance?.stripe_transfers?.status === 'active' && (!balance.payouts || balance.payouts.status === 'active')
     },
 
     async createCheckout(i) {
-      const now = Date.now()
-      const expiresMs = Math.min(Math.max(i.expiresAt.getTime(), now + MIN_EXPIRY_MS), now + MAX_EXPIRY_MS)
+      const ahead = i.expiresAt.getTime() - Date.now()
+      if (!(ahead >= MIN_EXPIRY_MS && ahead <= MAX_EXPIRY_MS)) throw new RangeError('Checkout expiresAt must be 30 minutes to 24 hours from now')
       const session = await client.checkout.sessions.create(
         {
           mode: 'payment',
@@ -89,7 +98,7 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           payment_intent_data: { transfer_group: i.bookingId, metadata: { bookingId: i.bookingId } },
           success_url: i.successUrl,
           cancel_url: i.cancelUrl,
-          expires_at: Math.floor(expiresMs / 1000),
+          expires_at: Math.floor(i.expiresAt.getTime() / 1000),
           integration_identifier: INTEGRATION_ID,
         },
         { idempotencyKey: i.idempotencyKey },
@@ -100,6 +109,7 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
 
     async transfer(i) {
       const intent = await client.paymentIntents.retrieve(i.paymentRef)
+      if (intent.status !== 'succeeded') throw new Error(`PaymentIntent ${i.paymentRef} has not succeeded (${intent.status})`)
       const charge = typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id
       if (!charge) throw new Error(`PaymentIntent ${i.paymentRef} has no charge to transfer from`)
       const transfer = await client.transfers.create(
@@ -149,15 +159,17 @@ function toGatewayEvent(event: Stripe.Event): GatewayEvent {
       const s = event.data.object
       const bookingId = s.metadata?.bookingId
       const paymentRef = typeof s.payment_intent === 'string' ? s.payment_intent : s.payment_intent?.id
-      if (s.payment_status !== 'paid' || !bookingId || !paymentRef || s.amount_total == null || !s.currency) return other
+      if (s.payment_status !== 'paid') return other // delayed method: async_payment_succeeded follows
+      // A paid session we cannot attribute must not be dropped: throwing makes the route answer 500, so Stripe retries.
+      if (!bookingId || !paymentRef || s.amount_total == null || !s.currency) throw new Error(`Paid Checkout Session ${s.id} lacks bookingId, amount, PaymentIntent or currency`)
       return { id: event.id, type: 'checkout-paid', bookingId, sessionId: s.id, paymentRef, amountCents: s.amount_total, currency: s.currency.toUpperCase() }
     }
     case 'account.updated':
       return { id: event.id, type: 'account-updated', accountId: event.account ?? event.data.object.id }
     case 'charge.dispute.created': {
-      const d = event.data.object
-      const ref = d.payment_intent ?? d.charge
-      return { id: event.id, type: 'charge-disputed', paymentRef: typeof ref === 'string' ? ref : ref.id }
+      const pi = event.data.object.payment_intent // every KANDO charge comes from a Checkout PaymentIntent
+      if (!pi) return other
+      return { id: event.id, type: 'charge-disputed', paymentRef: typeof pi === 'string' ? pi : pi.id }
     }
     default:
       return other

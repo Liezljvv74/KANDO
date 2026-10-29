@@ -15,7 +15,7 @@ function mockClient() {
     accountLinksCreate: vi.fn().mockResolvedValue({ url: 'https://connect.stripe.test/onboard' }),
     balanceSettingsUpdate: vi.fn().mockResolvedValue({}),
     sessionsCreate: vi.fn().mockResolvedValue({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }),
-    paymentIntentsRetrieve: vi.fn().mockResolvedValue({ id: 'pi_1', latest_charge: 'ch_1' }),
+    paymentIntentsRetrieve: vi.fn().mockResolvedValue({ id: 'pi_1', status: 'succeeded', latest_charge: 'ch_1' }),
     transfersCreate: vi.fn().mockResolvedValue({ id: 'tr_1' }),
     refundsCreate: vi.fn().mockResolvedValue({ id: 're_1' }),
   }
@@ -39,26 +39,30 @@ const signed = (event: object, secret = SECRET) => {
 afterEach(() => vi.unstubAllEnvs())
 
 describe('stripeGateway: calls', () => {
-  it('createAccount makes a v2 recipient account with the Express dashboard and daily payouts', async () => {
+  it('createAccount makes one v2 recipient account (Express dashboard) under the idempotency key, nothing else', async () => {
     const { m, g } = mockClient()
-    expect(await g.createAccount({ email: 'p@example.com', country: 'DE' })).toEqual({ accountId: 'acct_1' })
-    expect(m.accountsCreate).toHaveBeenCalledWith({
-      contact_email: 'p@example.com',
-      dashboard: 'express',
-      identity: { country: 'de' },
-      defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
-      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
-    })
+    expect(await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })).toEqual({ accountId: 'acct_1' })
+    expect(m.accountsCreate).toHaveBeenCalledWith(
+      {
+        contact_email: 'p@example.com',
+        dashboard: 'express',
+        identity: { country: 'de' },
+        defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
+        configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+      },
+      { idempotencyKey: 'account:p-1' },
+    )
+    expect(m.balanceSettingsUpdate).not.toHaveBeenCalled()
+  })
+
+  it('onboardingLink sets daily payouts first, then makes a v2 onboarding account link', async () => {
+    const { m, g } = mockClient()
+    const r = await g.onboardingLink({ accountId: 'acct_1', returnUrl: 'https://k/ret', refreshUrl: 'https://k/ref' })
+    expect(r).toEqual({ url: 'https://connect.stripe.test/onboard' })
     expect(m.balanceSettingsUpdate).toHaveBeenCalledWith(
       { payments: { payouts: { schedule: { interval: 'daily' } } } },
       { stripeAccount: 'acct_1' },
     )
-  })
-
-  it('onboardingLink makes a v2 onboarding account link', async () => {
-    const { m, g } = mockClient()
-    const r = await g.onboardingLink({ accountId: 'acct_1', returnUrl: 'https://k/ret', refreshUrl: 'https://k/ref' })
-    expect(r).toEqual({ url: 'https://connect.stripe.test/onboard' })
     expect(m.accountLinksCreate).toHaveBeenCalledWith({
       account: 'acct_1',
       use_case: {
@@ -68,19 +72,25 @@ describe('stripeGateway: calls', () => {
     })
   })
 
-  it('accountReady is true only when stripe_transfers is active', async () => {
+  it('accountReady needs stripe_transfers active, and payouts active when Stripe reports that capability', async () => {
     const { m, g } = mockClient()
-    const acct = (status: string | undefined) => ({
+    const acct = (transfers: string | undefined, payouts?: string) => ({
       id: 'acct_1',
-      configuration: status ? { recipient: { capabilities: { stripe_balance: { stripe_transfers: { status } } } } } : null,
+      configuration: transfers
+        ? { recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: transfers }, ...(payouts ? { payouts: { status: payouts } } : {}) } } } }
+        : null,
     })
-    m.accountsRetrieve.mockResolvedValueOnce(acct('active'))
-    expect(await g.accountReady('acct_1')).toBe(true)
+    const ready = async (a: object) => {
+      m.accountsRetrieve.mockResolvedValueOnce(a)
+      return g.accountReady('acct_1')
+    }
+    expect(await ready(acct('active'))).toBe(true) // payouts capability absent
     expect(m.accountsRetrieve).toHaveBeenCalledWith('acct_1', { include: ['configuration.recipient'] })
-    m.accountsRetrieve.mockResolvedValueOnce(acct('pending'))
-    expect(await g.accountReady('acct_1')).toBe(false)
-    m.accountsRetrieve.mockResolvedValueOnce(acct(undefined))
-    expect(await g.accountReady('acct_1')).toBe(false)
+    expect(await ready(acct('active', 'active'))).toBe(true)
+    expect(await ready(acct('active', 'restricted'))).toBe(false) // payouts present but inactive
+    expect(await ready(acct('active', 'pending'))).toBe(false)
+    expect(await ready(acct('pending', 'active'))).toBe(false)
+    expect(await ready(acct(undefined))).toBe(false)
   })
 
   it('createCheckout sends the booking id, transfer_group and the idempotency key', async () => {
@@ -112,15 +122,27 @@ describe('stripeGateway: calls', () => {
     expect(params).not.toHaveProperty('payment_method_types')
   })
 
-  it('createCheckout keeps expires_at inside Stripe’s 30 minutes to 24 hours', async () => {
+  it('createCheckout never changes expiresAt: the same input gives the same parameters (idempotent retry)', async () => {
     const { m, g } = mockClient()
     const base = { bookingId: 'b', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
-    const now = Date.now() / 1000
-    await g.createCheckout({ ...base, expiresAt: new Date(Date.now() + 60_000) })
-    await g.createCheckout({ ...base, expiresAt: new Date(Date.now() + 5 * 86_400_000) })
-    const [soon, far] = m.sessionsCreate.mock.calls.map((c) => c[0].expires_at as number)
-    expect(soon).toBeGreaterThanOrEqual(now + 30 * 60)
-    expect(far).toBeLessThanOrEqual(now + 24 * 3600)
+    const expiresAt = new Date(Date.now() + 2 * 3_600_000)
+    await g.createCheckout({ ...base, expiresAt })
+    await new Promise((r) => setTimeout(r, 1100)) // a retry a second later
+    await g.createCheckout({ ...base, expiresAt })
+    const [a, b] = m.sessionsCreate.mock.calls
+    expect(b).toEqual(a)
+  })
+
+  it('createCheckout refuses an expiresAt outside 30 minutes to 24 hours from now (RangeError, no call)', async () => {
+    const { m, g } = mockClient()
+    const base = { bookingId: 'b', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
+    const at = (ms: number) => ({ ...base, expiresAt: new Date(Date.now() + ms) })
+    await expect(g.createCheckout(at(29 * 60_000))).rejects.toThrow(RangeError)
+    await expect(g.createCheckout(at(24 * 3_600_000 + 60_000))).rejects.toThrow(RangeError)
+    expect(m.sessionsCreate).not.toHaveBeenCalled()
+    await g.createCheckout(at(31 * 60_000))
+    await g.createCheckout(at(24 * 3_600_000 - 60_000))
+    expect(m.sessionsCreate).toHaveBeenCalledTimes(2)
   })
 
   it('transfer uses the charge of the PaymentIntent as source_transaction', async () => {
@@ -134,12 +156,13 @@ describe('stripeGateway: calls', () => {
     )
   })
 
-  it('transfer refuses a PaymentIntent without a charge', async () => {
+  it('transfer refuses a PaymentIntent that has not succeeded or has no charge', async () => {
     const { m, g } = mockClient()
-    m.paymentIntentsRetrieve.mockResolvedValueOnce({ id: 'pi_1', latest_charge: null })
-    await expect(
-      g.transfer({ accountId: 'a', amountCents: 1, currency: 'EUR', paymentRef: 'pi_1', bookingId: 'b', idempotencyKey: 'k' }),
-    ).rejects.toThrow(/charge/)
+    const t = { accountId: 'a', amountCents: 1, currency: 'EUR', paymentRef: 'pi_1', bookingId: 'b', idempotencyKey: 'k' }
+    m.paymentIntentsRetrieve.mockResolvedValueOnce({ id: 'pi_1', status: 'processing', latest_charge: 'ch_1' })
+    await expect(g.transfer(t)).rejects.toThrow(/succeeded/)
+    m.paymentIntentsRetrieve.mockResolvedValueOnce({ id: 'pi_1', status: 'succeeded', latest_charge: null })
+    await expect(g.transfer(t)).rejects.toThrow(/charge/)
     expect(m.transfersCreate).not.toHaveBeenCalled()
   })
 
@@ -199,6 +222,29 @@ describe('stripeGateway: verifyEvent', () => {
     const { g } = mockClient()
     const { body, signature } = signed(ev('charge.dispute.created', { id: 'dp_1', object: 'dispute', charge: 'ch_1', payment_intent: 'pi_1' }))
     expect(g.verifyEvent(body, signature)).toEqual({ id: 'evt_1', type: 'charge-disputed', paymentRef: 'pi_1' })
+  })
+
+  it('a dispute without a PaymentIntent is other (not one of ours)', () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET)
+    const { g } = mockClient()
+    const { body, signature } = signed(ev('charge.dispute.created', { id: 'dp_1', object: 'dispute', charge: 'ch_1', payment_intent: null }))
+    expect(g.verifyEvent(body, signature)).toEqual({ id: 'evt_1', type: 'other' })
+  })
+
+  it('a paid session missing bookingId, amount_total, PaymentIntent or currency throws (the route answers 500, Stripe retries)', () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET)
+    const { g } = mockClient()
+    for (const broken of [
+      { ...session('paid'), metadata: {} },
+      { ...session('paid'), amount_total: null },
+      { ...session('paid'), payment_intent: null },
+      { ...session('paid'), currency: null },
+    ]) {
+      const { body, signature } = signed(ev('checkout.session.completed', broken))
+      expect(() => g.verifyEvent(body, signature)).toThrow(/cs_1/)
+    }
+    const unpaid = signed(ev('checkout.session.completed', { ...session('unpaid'), metadata: {} }))
+    expect(g.verifyEvent(unpaid.body, unpaid.signature)).toEqual({ id: 'evt_1', type: 'other' })
   })
 
   it('maps everything else, and any live-mode event, to other', () => {

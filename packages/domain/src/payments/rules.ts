@@ -8,16 +8,21 @@ export const LIVE_PAYMENTS_ALLOWED = false
 export const CUSTOMERS_WAITING_NOTICE_HOURS = 24
 
 /**
- * The longest Stripe lets funds sit in a balance before they must be paid out, for a business outside the US and Thailand.
- * Source (read 29 Oct 2026), https://docs.stripe.com/connect/manual-payouts : "If you set the value of
- * payments.payouts.schedule.interval to `manual`, we hold funds in the account holder's balance until you specify
- * otherwise. You must pay out the funds within the time period specified below, based on the business's country:
- * Thailand 10 days, United States 2 years, All other countries 90 days." KANDO keeps a booking's money in its own
- * platform balance (separate charges and transfers), so that balance must be on manual payouts (or the money would go
- * to KANDO's bank account), and the German platform gets 90 days. The separate-charges-and-transfers page states no
- * limit of its own. The whole hold (payment, the job, 7 days after "Finished", a dispute) must fit inside this.
+ * A conservative bound on how long a booking's money is held, in days. Stripe states no limit for funds held in the
+ * platform's own balance (separate charges and transfers; https://docs.stripe.com/connect/separate-charges-and-transfers
+ * and https://docs.stripe.com/connect/charges, read 29 Oct 2026). The bound is borrowed from the manual-payouts table for
+ * a connected account's balance, https://docs.stripe.com/connect/manual-payouts : "You must pay out the funds within the
+ * time period specified below, based on the business's country: Thailand 10 days, United States 2 years, All other
+ * countries 90 days."
  */
 export const MAX_HOLD_DAYS = 90
+
+/**
+ * A booking whose start is more than this many days away cannot be paid (TOO_FAR_AHEAD; controller's ruling). 60 days +
+ * the job + 7 days after "Finished" + slack stay within MAX_HOLD_DAYS. Card disputes can arrive up to about 120 days after
+ * the charge, so no hold covers them: a dispute after the payout is a platform loss handled manually.
+ */
+export const MAX_PAY_AHEAD_DAYS = 60
 
 export const paymentsEnabled = (): boolean => process.env.PAYMENTS_ENABLED === 'true'
 

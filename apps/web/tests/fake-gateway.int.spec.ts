@@ -9,7 +9,7 @@ const checkout = (key: string) => ({
   description: 'job',
   successUrl: 's',
   cancelUrl: 'c',
-  expiresAt: new Date(),
+  expiresAt: new Date('2026-11-02T10:00:00Z'),
   idempotencyKey: key,
 })
 
@@ -28,9 +28,25 @@ describe('fakeGateway', () => {
     expect(g.calls.map((x) => x.method)).toEqual(['createCheckout', 'createCheckout', 'transfer', 'refund'])
   })
 
+  it('a reused key with different parameters throws like Stripe’s idempotency_error and records nothing', async () => {
+    const g = fakeGateway()
+    await g.createCheckout(checkout('checkout:b-1'))
+    await expect(g.createCheckout({ ...checkout('checkout:b-1'), expiresAt: new Date(Date.now() + 1000) })).rejects.toThrow(/idempotency/)
+    await expect(g.createCheckout({ ...checkout('checkout:b-1'), amountCents: 999 })).rejects.toThrow(/idempotency/)
+    expect(g.calls).toHaveLength(1)
+  })
+
+  it('createAccount is idempotent by key', async () => {
+    const g = fakeGateway()
+    const a = await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })
+    expect(await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })).toEqual(a)
+    expect((await g.createAccount({ email: 'q@example.com', country: 'DE', idempotencyKey: 'account:p-2' })).accountId).not.toBe(a.accountId)
+    expect(g.calls.filter((c) => c.method === 'createAccount')).toHaveLength(2)
+  })
+
   it('accountReady follows the ready set', async () => {
     const g = fakeGateway()
-    const { accountId } = await g.createAccount({ email: 'p@example.com', country: 'DE' })
+    const { accountId } = await g.createAccount({ email: 'p@example.com', country: 'DE', idempotencyKey: 'account:p-1' })
     expect(await g.accountReady(accountId)).toBe(false)
     g.ready.add(accountId)
     expect(await g.accountReady(accountId)).toBe(true)

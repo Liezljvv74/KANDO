@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateway, setGatewayForTests, type PaymentsGateway } from './gateway'
-import { canTransact, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, paymentsEnabled, toCents } from './rules'
+import { canTransact, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, toCents } from './rules'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -65,6 +65,10 @@ describe('paymentsEnabled and canTransact', () => {
   it('live payments stay off and the hold limit is a positive number of days', () => {
     expect(LIVE_PAYMENTS_ALLOWED).toBe(false)
     expect(MAX_HOLD_DAYS).toBeGreaterThan(0)
+  })
+  it('the pay-ahead limit leaves at least 28 days of the hold bound for the job, Finished + 7 days and slack', () => {
+    expect(MAX_PAY_AHEAD_DAYS).toBe(60)
+    expect(MAX_PAY_AHEAD_DAYS).toBeLessThan(MAX_HOLD_DAYS - 28)
   })
 })
 

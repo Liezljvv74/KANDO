@@ -3,9 +3,17 @@ import { stripeClient, stripeGateway } from './stripe-gateway'
 
 /** Everything KANDO asks of the payment provider. Amounts are integer cents; idempotency keys make retries safe. */
 export interface PaymentsGateway {
-  createAccount(i: { email: string; country: string }): Promise<{ accountId: string }>
+  /** Creates the connected account only; key e.g. `account:<providerId>` (Stripe replays it for 30 days). Store the id at once. */
+  createAccount(i: { email: string; country: string; idempotencyKey: string }): Promise<{ accountId: string }>
+  /** Sets the account's payout schedule (daily, safe to repeat) and returns a fresh Stripe-hosted onboarding link. */
   onboardingLink(i: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{ url: string }>
   accountReady(accountId: string): Promise<boolean>
+  /**
+   * `expiresAt` must be 30 minutes to 24 hours from now (else RangeError); it is sent unchanged, so a retry with the same
+   * idempotency key sends the same parameters (Stripe refuses a reused key with different ones). The caller computes the
+   * expiry once, stores it with the session (checkoutRef) and, while that session is still open, reuses it instead of
+   * calling again; a new session needs a new key.
+   */
   createCheckout(i: {
     bookingId: string
     amountCents: number
