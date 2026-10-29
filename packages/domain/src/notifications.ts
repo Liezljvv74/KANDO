@@ -7,7 +7,7 @@ import { createNotification } from './notifications-store'
 import { offerableServiceIds } from './providers/eligibility'
 import { isSuspendedNow } from './providers/profile'
 
-const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
+export const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
 
 /** Public address of a provider page; the language only when it is not the default. */
 export function providerUrl(slug: string, lang: Lang): string {

@@ -288,6 +288,50 @@ export const en: Record<Key, string> = {
   'email.documentApproved.offline.body': 'Your document is approved. Your profile is offline at the moment; the service becomes visible as soon as you publish again.',
   'email.documentApproved.suspended.body': 'Your document is approved. Your profile is suspended until {date}; the service becomes visible when the suspension ends.',
   'notification.profileLive': 'Your profile is live. Tell people about it.',
+  'email.requestReceived.subject': 'You have a new request',
+  'email.requestReceived.body':
+    'A customer sent you a request. Please answer within 3 days, either with a quote or a short reply in the app. Requests that stay unanswered expire and make you look unavailable.',
+  'notification.requestReceived': 'You have a new request. Please answer within 3 days.',
+  'email.quoteReceived.subject': 'You have received a quote',
+  'email.quoteReceived.body':
+    'A provider sent you a quote. Please look at it in the app. The quote is open until {date}: a quote you do not accept expires 7 days after it was sent.',
+  'notification.quoteReceived': 'You have a new quote. It is open until you accept it or 7 days have passed.',
+  'email.bookingProposed.subject': 'A customer proposed a time',
+  'email.bookingProposed.body':
+    'A customer proposed a time for a booking. Please accept, decline or suggest another time in the app within 24 hours.',
+  'notification.bookingProposed': 'A customer proposed a time. Please answer within 24 hours.',
+  'email.bookingAccepted.subject': 'Your booking was accepted',
+  'email.bookingAccepted.body':
+    'The provider accepted your booking. Please pay by {date}. The pay link follows in the app; you will see it there as soon as payment is available.',
+  'notification.bookingAccepted': 'The provider accepted your booking. Pay by the date shown in the app; the pay link follows there.',
+  'email.bookingDeclined.subject': 'Your booking was declined',
+  'email.bookingDeclined.body':
+    'The provider declined your booking. You can look for a different provider or propose another time in the app.',
+  'notification.bookingDeclined': 'The provider declined your booking.',
+  'email.bookingExpired.subject': 'A booking expired',
+  'email.bookingExpired.body':
+    'A booking was not answered or not paid in time and has expired. You can book again in the app.',
+  'notification.bookingExpired': 'A booking expired because it was not answered or paid in time.',
+  'email.paymentReminder.subject': 'Please pay for your booking',
+  'email.paymentReminder.body':
+    'Your booking is accepted but not paid yet. Please pay by {date}, otherwise it expires and the time becomes free for others.',
+  'notification.paymentReminder': 'Your booking is not paid yet. Please pay before it expires.',
+  'email.quoteExpiring.subject': 'Your quote expires soon',
+  'email.quoteExpiring.body':
+    'A quote you received expires on {date}. Accept it in the app before then, or it expires.',
+  'notification.quoteExpiring': 'A quote you received expires soon.',
+  'email.requestExpired.subject': 'Your request was not answered',
+  'email.requestExpired.body':
+    'Your request was not answered in time. The provider is not available at the moment. Please contact a different provider.',
+  'notification.requestExpired': 'Your request was not answered. The provider is not available at the moment, please contact a different provider.',
+  'email.requestsIgnored.subject': 'Please answer your requests',
+  'email.requestsIgnored.body':
+    'Several requests to you went unanswered. This hurts your business: customers leave, trust and visibility suffer, and the app shows you as unavailable. Please confirm in the app that you still want to be on the platform, or withdraw your services.',
+  'notification.requestsIgnored': 'Several requests to you went unanswered. Please confirm that you still want to be on the platform, or withdraw your services.',
+  'email.pendingSlotRequested.subject': 'Another customer asked for a taken time',
+  'email.pendingSlotRequested.body':
+    'Another customer asked for a time that overlaps a booking still waiting for payment. If the first customer does not pay in time, the time becomes free again and you can answer.',
+  'notification.pendingSlotRequested': 'Another customer asked for a time that is waiting for payment.',
   'email.suspended.subject': 'Your profile was suspended',
   'email.suspended.body': 'Your profile was suspended for the following reason: {reason}. It will be published again on {date}.',
   'email.accountDeleted.subject': 'Your account has been deleted',

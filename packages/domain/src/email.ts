@@ -6,7 +6,9 @@ const FROM = 'SkillWeb <noreply@skillweb.space>'
 const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
-export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained'
+/** One email per booking event kind (see bookings/notify.ts). */
+export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested'
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | BookingTemplate
 type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
 
@@ -29,6 +31,17 @@ const KEY: Record<Template, string> = {
   'published-again': 'email.publishedAgain',
   'account-deleted': 'email.accountDeleted',
   'account-deleted-retained': 'email.accountDeleted.retained',
+  'request-received': 'email.requestReceived',
+  'quote-received': 'email.quoteReceived',
+  'booking-proposed': 'email.bookingProposed',
+  'booking-accepted': 'email.bookingAccepted',
+  'booking-declined': 'email.bookingDeclined',
+  'booking-expired': 'email.bookingExpired',
+  'payment-reminder': 'email.paymentReminder',
+  'quote-expiring': 'email.quoteExpiring',
+  'request-expired': 'email.requestExpired',
+  'requests-ignored': 'email.requestsIgnored',
+  'pending-slot-requested': 'email.pendingSlotRequested',
 }
 
 function compose(lang: Lang, template: Template, params: Params) {

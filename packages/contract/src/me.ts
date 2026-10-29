@@ -14,10 +14,12 @@ export const AddressSchema = z.object({
 export type Address = z.infer<typeof AddressSchema>
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
+export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested'] as const
 export const NotificationSchema = z.object({
   id: z.string(),
-  kind: z.enum(['profile-live']),
-  payload: z.object({ url: z.string().url() }),
+  kind: z.enum(NOTIFICATION_KINDS),
+  /** profile-live carries the link; the booking kinds carry ids only (none for requests-ignored). */
+  payload: z.union([z.object({ url: z.string().url() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional() })]),
   createdAt: z.string(),
   seenAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),

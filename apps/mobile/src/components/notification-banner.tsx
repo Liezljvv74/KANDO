@@ -4,19 +4,23 @@ import type { Notification } from '@kando/contract'
 
 import { Card, SmallButton } from '@/components/form-ui'
 import { getLang, t } from '@/i18n'
+import { notificationText, notificationUrl } from '@/lib/notification-text'
 import { shareProfile } from '@/lib/share-profile'
 
-/** "Your profile is live" with Share and a dismiss ×; `payload.url` is the link. */
+/** One message with a dismiss ×; "your profile is live" also gets Share (`payload.url` is the link). A kind this app does not know renders nothing. */
 export function NotificationBanner({ notification, canShare, onDismiss }: { notification: Notification; canShare: boolean; onDismiss: () => void }) {
+  const text = notificationText(notification.kind)
+  if (!text) return null
+  const url = notificationUrl(notification)
   return (
     <Card>
       <View style={styles.row}>
-        <Text style={styles.text}>{t('setup.liveMessage')}</Text>
+        <Text style={styles.text}>{text}</Text>
         <Text style={styles.close} accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={onDismiss}>
           {'×'}
         </Text>
       </View>
-      {canShare && <SmallButton label={t('setup.share')} onPress={() => shareProfile(notification.payload.url, getLang())} />}
+      {canShare && url && <SmallButton label={t('setup.share')} onPress={() => shareProfile(url, getLang())} />}
     </Card>
   )
 }

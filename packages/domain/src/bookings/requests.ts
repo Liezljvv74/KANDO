@@ -1,6 +1,8 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
+import type { AfterCommit } from '../app-request'
+import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
@@ -71,7 +73,7 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
 const lockRequest = (tx: Tx, requestId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext(${requestId}))`)
 
-export async function createRequest(tx: Tx, userId: string, input: RequestInput, now = new Date()): Promise<BookingRequest> {
+export async function createRequest(tx: Tx, userId: string, input: RequestInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
   const provider = (await tx.select().from(providers).where(eq(providers.id, input.providerId)))[0]
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return notFound()
   const offerable = await offerableServiceIds(tx, provider.id)
@@ -91,6 +93,7 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       updatedAt: now,
     })
     .returning()
+  afterCommit(() => notifyBookingEvent('request-received', provider.ownerId, { requestId: row!.id }))
   return toRequest(row!)
 }
 
@@ -117,7 +120,7 @@ export async function listQuotes(tx: Tx, userId: string, requestId: string): Pro
 
 const unavailable = () => fail(409, { error: 'provider-unavailable' })
 
-export async function sendQuote(tx: Tx, userId: string, requestId: string, input: QuoteInput, now = new Date()): Promise<Quote> {
+export async function sendQuote(tx: Tx, userId: string, requestId: string, input: QuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Quote> {
   const provider = (await ownProvider(tx, userId)) ?? notFound()
   if (!isUuid(requestId)) return notFound()
   const own = () => tx.select().from(requests).where(and(eq(requests.id, requestId), eq(requests.providerId, provider.id)))
@@ -148,10 +151,11 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     })
     .returning()
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
+  afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   return toQuote(row!)
 }
 
-export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input: AcceptQuoteInput, now = new Date()): Promise<Booking> {
+export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input: AcceptQuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   const find = async () => {
     const q = isUuid(quoteId) ? (await tx.select().from(quotes).where(eq(quotes.id, quoteId)))[0] : undefined
     const r = q && (await tx.select().from(requests).where(and(eq(requests.id, q.requestId), eq(requests.customerId, userId))))[0] // only the request's customer
@@ -192,5 +196,6 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
       updatedAt: now,
     })
     .returning()
+  notifyProposal(afterCommit, provider, row!)
   return toBooking(row!)
 }

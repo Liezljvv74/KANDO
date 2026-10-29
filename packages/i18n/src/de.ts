@@ -287,6 +287,50 @@ export const de = {
   'email.documentApproved.offline.body': 'Dein Dokument wurde freigegeben. Dein Profil ist im Moment offline; die Leistung wird sichtbar, sobald Du es wieder veröffentlichst.',
   'email.documentApproved.suspended.body': 'Dein Dokument wurde freigegeben. Dein Profil ist bis zum {date} gesperrt; die Leistung wird sichtbar, wenn die Sperre endet.',
   'notification.profileLive': 'Dein Profil ist online. Erzähl anderen davon.',
+  'email.requestReceived.subject': 'Du hast eine neue Anfrage',
+  'email.requestReceived.body':
+    'Ein Kunde hat Dir eine Anfrage geschickt. Bitte antworte innerhalb von 3 Tagen, mit einem Angebot oder einer kurzen Antwort in der App. Unbeantwortete Anfragen laufen ab und lassen Dich nicht verfügbar wirken.',
+  'notification.requestReceived': 'Du hast eine neue Anfrage. Bitte antworte innerhalb von 3 Tagen.',
+  'email.quoteReceived.subject': 'Du hast ein Angebot erhalten',
+  'email.quoteReceived.body':
+    'Ein Anbieter hat Dir ein Angebot geschickt. Sieh es Dir bitte in der App an. Das Angebot gilt bis zum {date}: Ein Angebot, das Du nicht annimmst, läuft 7 Tage nach dem Versand ab.',
+  'notification.quoteReceived': 'Du hast ein neues Angebot. Es gilt, bis Du es annimmst oder 7 Tage vergangen sind.',
+  'email.bookingProposed.subject': 'Ein Kunde hat einen Termin vorgeschlagen',
+  'email.bookingProposed.body':
+    'Ein Kunde hat einen Termin für eine Buchung vorgeschlagen. Bitte nimm an, lehne ab oder schlage in der App innerhalb von 24 Stunden einen anderen Termin vor.',
+  'notification.bookingProposed': 'Ein Kunde hat einen Termin vorgeschlagen. Bitte antworte innerhalb von 24 Stunden.',
+  'email.bookingAccepted.subject': 'Deine Buchung wurde angenommen',
+  'email.bookingAccepted.body':
+    'Der Anbieter hat Deine Buchung angenommen. Bitte zahle bis zum {date}. Den Zahlungslink bekommst Du anschließend in der App; dort siehst Du ihn, sobald die Zahlung möglich ist.',
+  'notification.bookingAccepted': 'Der Anbieter hat Deine Buchung angenommen. Zahle bis zu dem in der App angezeigten Datum; der Zahlungslink folgt dort.',
+  'email.bookingDeclined.subject': 'Deine Buchung wurde abgelehnt',
+  'email.bookingDeclined.body':
+    'Der Anbieter hat Deine Buchung abgelehnt. Du kannst in der App einen anderen Anbieter suchen oder einen anderen Termin vorschlagen.',
+  'notification.bookingDeclined': 'Der Anbieter hat Deine Buchung abgelehnt.',
+  'email.bookingExpired.subject': 'Eine Buchung ist abgelaufen',
+  'email.bookingExpired.body':
+    'Eine Buchung wurde nicht rechtzeitig beantwortet oder bezahlt und ist abgelaufen. Du kannst in der App erneut buchen.',
+  'notification.bookingExpired': 'Eine Buchung ist abgelaufen, weil sie nicht rechtzeitig beantwortet oder bezahlt wurde.',
+  'email.paymentReminder.subject': 'Bitte bezahle Deine Buchung',
+  'email.paymentReminder.body':
+    'Deine Buchung ist angenommen, aber noch nicht bezahlt. Bitte zahle bis zum {date}, sonst läuft sie ab und der Termin wird für andere frei.',
+  'notification.paymentReminder': 'Deine Buchung ist noch nicht bezahlt. Bitte zahle, bevor sie abläuft.',
+  'email.quoteExpiring.subject': 'Dein Angebot läuft bald ab',
+  'email.quoteExpiring.body':
+    'Ein Angebot, das Du erhalten hast, läuft am {date} ab. Nimm es bis dahin in der App an, sonst verfällt es.',
+  'notification.quoteExpiring': 'Ein Angebot, das Du erhalten hast, läuft bald ab.',
+  'email.requestExpired.subject': 'Deine Anfrage wurde nicht beantwortet',
+  'email.requestExpired.body':
+    'Deine Anfrage wurde nicht rechtzeitig beantwortet. Der Anbieter ist im Moment nicht verfügbar. Bitte wende Dich an einen anderen Anbieter.',
+  'notification.requestExpired': 'Deine Anfrage wurde nicht beantwortet. Der Anbieter ist im Moment nicht verfügbar, bitte wende Dich an einen anderen Anbieter.',
+  'email.requestsIgnored.subject': 'Bitte beantworte Deine Anfragen',
+  'email.requestsIgnored.body':
+    'Mehrere Anfragen an Dich blieben unbeantwortet. Das schadet Deinem Geschäft: Kunden wandern ab, Vertrauen und Sichtbarkeit leiden, und die App zeigt Dich als nicht verfügbar an. Bitte bestätige in der App, dass Du weiter auf der Plattform sein möchtest, oder ziehe Deine Leistungen zurück.',
+  'notification.requestsIgnored': 'Mehrere Anfragen an Dich blieben unbeantwortet. Bitte bestätige, dass Du weiter auf der Plattform sein möchtest, oder ziehe Deine Leistungen zurück.',
+  'email.pendingSlotRequested.subject': 'Ein weiterer Kunde fragt einen belegten Termin an',
+  'email.pendingSlotRequested.body':
+    'Ein weiterer Kunde hat einen Termin angefragt, der sich mit einer Buchung überschneidet, die noch auf Zahlung wartet. Zahlt der erste Kunde nicht rechtzeitig, wird der Termin wieder frei und Du kannst antworten.',
+  'notification.pendingSlotRequested': 'Ein weiterer Kunde hat einen Termin angefragt, der noch auf Zahlung wartet.',
   'email.suspended.subject': 'Dein Profil wurde gesperrt',
   'email.suspended.body': 'Dein Profil wurde aus folgendem Grund gesperrt: {reason}. Es wird am {date} wieder veröffentlicht.',
   'email.accountDeleted.subject': 'Dein Konto wurde gelöscht',

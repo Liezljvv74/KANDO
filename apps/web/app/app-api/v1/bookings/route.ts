@@ -7,7 +7,7 @@ export const GET = appRequest({ auth: 'required' }, async ({ tx, user, request }
   return Response.json({ docs: await listBookings(tx, user!.id, role) })
 })
 
-export const POST = appRequest({ auth: 'required', maxBodyBytes: 16_384 }, async ({ tx, user, request }) => {
+export const POST = appRequest({ auth: 'required', maxBodyBytes: 16_384 }, async ({ tx, user, request, afterCommit }) => {
   const input = await parseBody(DirectBookingInputSchema, request)
-  return Response.json(await createDirectBooking(tx, user!.id, input), { status: 201 })
+  return Response.json(await createDirectBooking(tx, user!.id, input, new Date(), afterCommit), { status: 201 })
 })

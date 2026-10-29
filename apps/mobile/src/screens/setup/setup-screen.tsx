@@ -57,11 +57,11 @@ export default function SetupScreen() {
   const { profile, services, references, photos, verifications } = data
   const name = profile.publicName ?? ''
   const docRows = documentRows(services, categories ?? [], verifications)
-  const banner = me?.notifications.find((n) => n.kind === 'profile-live' && !n.dismissedAt)
+  const banners = me?.notifications.filter((n) => !n.dismissedAt) ?? []
 
   return (
     <FormScreen title={title} back={false}>
-      {banner && <NotificationBanner notification={banner} canShare={canShare(services)} onDismiss={() => dismissNotification(banner.id).catch(() => {})} />}
+      {banners.map((n) => <NotificationBanner key={n.id} notification={n} canShare={canShare(services)} onDismiss={() => dismissNotification(n.id).catch(() => {})} />)}
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />
