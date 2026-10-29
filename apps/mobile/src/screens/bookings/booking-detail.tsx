@@ -10,11 +10,11 @@ import { ApiError } from '@/api/client'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
-import { PaidCard, PayCard } from '@/screens/bookings/pay-card'
+import { PayPanel } from '@/screens/bookings/pay-card'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang, type Key } from '@/i18n'
-import { bookingActions, bookingStatusText, canPay, type BookingAction, type Viewer } from '@/lib/booking-status'
+import { bookingActions, bookingStatusText, type BookingAction, type Viewer } from '@/lib/booking-status'
 import { confirmDanger } from '@/lib/confirm'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
@@ -76,8 +76,7 @@ export default function BookingDetail() {
         <Text style={styles.text}>{`${t('booking.mode')}: ${placeOf(b)}`}</Text>
         {!!b.note && <Text style={styles.small}>{b.note}</Text>}
       </Card>
-      {canPay(b, viewer) && <PayCard booking={b} onReturn={retry} />}
-      {b.status === 'confirmed' && <PaidCard />}
+      <PayPanel booking={b} viewer={viewer} onRefresh={retry} />
       <OpenChat find={() => threadIdForBooking(b)} />
       <ErrorText text={problem} />
       {bookingActions(b, viewer).map((a) => (

@@ -25,7 +25,3 @@ export function bookingActions(b: Booking, viewer: Viewer): BookingAction[] {
   if (b.status === 'proposed') return waitingFor(b) === viewer ? ['accept', 'decline', 'counter', ...withdraw] : withdraw
   return b.status === 'awaiting-payment' ? withdraw : []
 }
-
-/** "Pay now": the customer, while the booking awaits payment and before the pay-by time. The server decides again when the link is asked for. */
-export const canPay = (b: Pick<Booking, 'status' | 'payBy'>, viewer: Viewer, now = new Date()): boolean =>
-  viewer === 'customer' && b.status === 'awaiting-payment' && !!b.payBy && new Date(b.payBy) > now
