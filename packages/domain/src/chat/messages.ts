@@ -15,18 +15,21 @@ import { ownThread } from './threads'
 type Row = typeof messages.$inferSelect
 const PAGE = MESSAGES_PAGE
 /** created_at with microseconds, as text: a JS Date would cut them and a cursor on it would repeat a row. */
-const TS = sql<string>`to_char(${messages.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+export const TS = sql<string>`to_char(${messages.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+
+/** A signed link to a photo of this thread; never signs a key that is not the thread's own. */
+export async function chatPhotoLink(threadId: string, key: string | null): Promise<string | null> {
+  return key?.startsWith(`chat/${threadId}/`) ? storage().getSignedUrl(documentsBucket(), key, CHAT_PHOTO_LINK_SECONDS) : null
+}
 
 async function toMessage(r: Row & { ts: string }, userId: string): Promise<Message> {
-  // never sign a key that is not this thread's own
-  const ownKey = r.photoKey?.startsWith(`chat/${r.threadId}/`) ? r.photoKey : null
   return {
     id: r.id,
     threadId: r.threadId,
     mine: r.senderId === userId,
     kind: r.kind as Message['kind'],
     body: r.body,
-    photoUrl: ownKey ? await storage().getSignedUrl(documentsBucket(), ownKey, CHAT_PHOTO_LINK_SECONDS) : null,
+    photoUrl: await chatPhotoLink(r.threadId, r.photoKey),
     card: (r.card as Card | null) ?? null,
     createdAt: r.ts,
   }

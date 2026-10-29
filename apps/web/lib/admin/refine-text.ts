@@ -30,9 +30,10 @@ const RESOURCES = new Map<string, Key>(Object.entries({
   categories: 'admin.resource.categories',
   pages: 'admin.resource.pages',
   staff: 'admin.resource.staff',
+  flags: 'admin.resource.flags',
 } as Record<string, Key>))
 // Maps: a lookup never reaches an inherited property such as "constructor"
-const ONES = new Map<string, Key>(Object.entries({ users: 'admin.one.users', providers: 'admin.one.providers', categories: 'admin.one.categories', documents: 'admin.one.documents', pages: 'admin.kind.page', staff: 'admin.one.staff' } as Record<string, Key>))
+const ONES = new Map<string, Key>(Object.entries({ users: 'admin.one.users', providers: 'admin.one.providers', categories: 'admin.one.categories', documents: 'admin.one.documents', pages: 'admin.kind.page', staff: 'admin.one.staff', flags: 'admin.one.flags' } as Record<string, Key>))
 const TITLES = new Map<string, Key>([['create', 'admin.title.create'], ['edit', 'admin.title.edit'], ['show', 'admin.title.show']])
 
 /** Refine's `translate(key, options?, defaultMessage?)`; texts we do not know keep Refine's own default. */
