@@ -34,13 +34,14 @@ test('the delete and export texts say what happened and have no status numbers',
 })
 
 test('every booking rule code from the server has its own text in both languages', () => {
-  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service', 'TOO_FAR_AHEAD', 'PAY_WINDOW_TOO_SHORT']
+  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service', 'TOO_FAR_AHEAD', 'PAY_WINDOW_TOO_SHORT', 'PAYMENTS_OFF', 'PROVIDER_NOT_READY', 'PAYOUT_SETUP_FIRST', 'ALREADY_BOOKABLE']
   for (const lang of ['de', 'en'] as const) {
     setLang(lang)
     for (const code of codes) expect(errorText(code)).not.toBe(errorText('unmapped'))
   }
   setLang('en')
   expect(errorText('slot-pending')).toContain('pending booking')
+  expect(errorText('PAYMENTS_OFF')).toBe('Payments are not switched on yet')
 })
 
 test('the chat rejections have their own text in both languages', () => {

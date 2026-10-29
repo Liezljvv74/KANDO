@@ -48,3 +48,11 @@ export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>):
   if (n.kind !== 'message-received' || !('url' in n.payload)) return null
   return n.payload.threadId ?? /^skilled:\/\/threads\/([^/?#]+)$/.exec(n.payload.url)?.[1] ?? null
 }
+
+/** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting"; null for the rest. */
+export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): { path: string } | null => {
+  if (n.kind === 'customers-waiting') return { path: '/my-profile' }
+  if (n.kind !== 'provider-available' || !('url' in n.payload)) return null
+  const slug = /^https?:\/\/[^/]+\/providers\/([^/?#]+)/.exec(n.payload.url)?.[1]
+  return slug ? { path: `/provider/${slug}` } : null
+}

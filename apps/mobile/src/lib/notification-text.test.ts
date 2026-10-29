@@ -1,4 +1,4 @@
-import { notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
+import { notificationTarget, notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
 
 jest.mock('@/i18n', () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k} ${JSON.stringify(p)}` : k) }))
 
@@ -37,4 +37,13 @@ test('customers-waiting shows the count, singular or plural; without a count the
   expect(notificationText('customers-waiting', { count: 1 })).toBe('notification.customersWaitingOne')
   expect(notificationText('customers-waiting', { count: 3 })).toBe('notification.customersWaitingMany {"count":3}')
   expect(notificationText('customers-waiting', {})).toBe('notification.customersWaiting')
+})
+
+test('where a notice leads: provider-available to the provider page, customers-waiting to the payout card, the rest nowhere', () => {
+  const at = (kind: 'provider-available' | 'customers-waiting' | 'payout-setup-complete', payload: object) => notificationTarget({ kind, payload } as never)
+  expect(at('provider-available', { url: 'https://skillweb.space/providers/anna-b?lang=en' })).toEqual({ path: '/provider/anna-b' })
+  expect(at('provider-available', { url: 'https://skillweb.space/other' })).toBeNull()
+  expect(at('provider-available', {})).toBeNull()
+  expect(at('customers-waiting', { count: 2 })).toEqual({ path: '/my-profile' })
+  expect(at('payout-setup-complete', {})).toBeNull()
 })

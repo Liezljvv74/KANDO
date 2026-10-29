@@ -1,6 +1,6 @@
 import type { Booking } from '@kando/contract'
 
-import { bookingActions, bookingStatusText } from './booking-status'
+import { bookingActions, bookingStatusText, canPay } from './booking-status'
 
 jest.mock('@/i18n', () => ({ t: (key: string, p?: { date?: string }) => (p?.date ? `${key} ${p.date}` : key) }))
 jest.mock('@/lib/booking-time', () => ({ formatWhen: (iso: string) => iso }))
@@ -41,4 +41,14 @@ test('a confirmed (paid) booking says so for both sides and has no actions here 
     expect(bookingStatusText(b({ status: 'confirmed', payBy: '2027-01-05' }), viewer)).toBe('bookingStatus.confirmed')
     expect(bookingActions(b({ status: 'confirmed' }), viewer)).toEqual([])
   }
+})
+
+test('Pay now: only the customer, only while awaiting payment and before the pay-by time', () => {
+  const now = new Date('2027-01-04T10:00:00Z')
+  const open = b({ status: 'awaiting-payment', payBy: '2027-01-05T10:00:00Z' })
+  expect(canPay(open, 'customer', now)).toBe(true)
+  expect(canPay(open, 'provider', now)).toBe(false)
+  expect(canPay(b({ status: 'awaiting-payment', payBy: '2027-01-04T09:00:00Z' }), 'customer', now)).toBe(false)
+  expect(canPay(b({ status: 'awaiting-payment', payBy: null }), 'customer', now)).toBe(false)
+  expect(canPay(b({ status: 'confirmed', payBy: '2027-01-05T10:00:00Z' }), 'customer', now)).toBe(false)
 })

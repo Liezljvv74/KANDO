@@ -87,6 +87,10 @@ export const errorKeys: Record<string, Key> = {
   'Unknown service': 'error.booking.unknown-service',
   TOO_FAR_AHEAD: 'error.booking.too-far-ahead',
   PAY_WINDOW_TOO_SHORT: 'error.booking.pay-window-too-short',
+  PAYMENTS_OFF: 'payments.off',
+  PROVIDER_NOT_READY: 'payments.providerNotReady',
+  PAYOUT_SETUP_FIRST: 'payments.payoutSetupFirst',
+  ALREADY_BOOKABLE: 'payments.alreadyBookable',
   // Chat (`error`)
   CONTACT_DETAILS: 'chat.contactBlocked',
   BLOCKED: 'chat.blocked',
