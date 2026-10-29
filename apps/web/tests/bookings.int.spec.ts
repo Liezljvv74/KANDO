@@ -25,7 +25,10 @@ beforeAll(async () => {
   pRemote = await seedProvider(U.remote, { name: 'Bk Remote', categoryId, remote: true, price: 40 })
   pSusp = await seedProvider(U.susp, { name: 'Bk Susp', categoryId, suspended: true })
   pDraft = await seedProvider(U.draft, { name: 'Bk Draft', categoryId, status: 'draft' })
-  ;[sOwner, sRemote, sSusp, sDraft] = await Promise.all([pOwner, pRemote, pSusp, pDraft].map(serviceOf))
+  ;sOwner = await serviceOf(pOwner)
+  sRemote = await serviceOf(pRemote)
+  sSusp = await serviceOf(pSusp)
+  sDraft = await serviceOf(pDraft)
   sHourly = (await pool.query("INSERT INTO services (provider_id, category_id, title, price_type, price) VALUES ($1, $2, 'Hourly', 'hourly', 30) RETURNING id", [pOwner, categoryId])).rows[0].id
 })
 afterAll(cleanupUsers)
