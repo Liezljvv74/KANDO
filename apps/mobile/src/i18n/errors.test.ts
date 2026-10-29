@@ -34,7 +34,7 @@ test('the delete and export texts say what happened and have no status numbers',
 })
 
 test('every booking rule code from the server has its own text in both languages', () => {
-  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service']
+  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'not-bookable', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service', 'TOO_FAR_AHEAD', 'PAY_WINDOW_TOO_SHORT']
   for (const lang of ['de', 'en'] as const) {
     setLang(lang)
     for (const code of codes) expect(errorText(code)).not.toBe(errorText('unmapped'))

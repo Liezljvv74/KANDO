@@ -35,3 +35,10 @@ test('closed bookings have a status text and no actions', () => {
     expect(bookingActions(b({ status }), 'customer')).toEqual([])
   }
 })
+
+test('a confirmed (paid) booking says so for both sides and has no actions here (finishing and cancelling come with plan 2d)', () => {
+  for (const viewer of ['customer', 'provider'] as const) {
+    expect(bookingStatusText(b({ status: 'confirmed', payBy: '2027-01-05' }), viewer)).toBe('bookingStatus.confirmed')
+    expect(bookingActions(b({ status: 'confirmed' }), viewer)).toEqual([])
+  }
+})

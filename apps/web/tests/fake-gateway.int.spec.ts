@@ -5,6 +5,7 @@ import { fakeGateway } from './fake-gateway'
 const checkout = (key: string) => ({
   bookingId: 'b-1',
   providerId: 'p-1',
+  customerId: 'u-1',
   amountCents: 1000,
   currency: 'EUR',
   description: 'job',

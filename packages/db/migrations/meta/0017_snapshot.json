@@ -2694,7 +2694,7 @@
       "checkConstraints": {
         "staff_flags_kind_check": {
           "name": "staff_flags_kind_check",
-          "value": "kind in ('contact-attempts','message-reported','chargeback')"
+          "value": "kind in ('contact-attempts','message-reported','chargeback','refund-failed')"
         }
       },
       "isRLSEnabled": false

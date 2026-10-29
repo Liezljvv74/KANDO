@@ -53,7 +53,7 @@ export function notifyProposal(afterCommit: AfterCommit, provider: { id: string;
   afterCommit(async () => {
     await notifyBookingEvent('booking-proposed', provider.ownerId, { bookingId: b.id })
     try {
-      if (await slotIsHeld(db, provider.id, b.startAt, b.durationMin, b.onSite, new Date(), b.id)) await notifyBookingEvent('pending-slot-requested', provider.ownerId, { bookingId: b.id })
+      if (await slotIsHeld(db, provider.id, b.startAt, b.durationMin, b.onSite, new Date(), b.id, true)) await notifyBookingEvent('pending-slot-requested', provider.ownerId, { bookingId: b.id })
     } catch (e) {
       console.error('[notify] pending slot check failed', describeError(e))
     }

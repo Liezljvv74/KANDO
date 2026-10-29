@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import type { GatewayEvent, PaymentsGateway } from '@kando/domain'
+import { BadSignatureError, type GatewayEvent, type PaymentsGateway } from '@kando/domain'
 
 export type FakeGateway = PaymentsGateway & {
   /** Objects created (a replay is not recorded again). */
@@ -74,7 +74,7 @@ export function fakeGateway(): FakeGateway {
     transfer: (args) => lookup('transfer', args, (i) => ({ transferId: `tr_fake_${i}` })),
     refund: (args) => lookup('refund', args, (i) => ({ refundId: `re_fake_${i}` })),
     verifyEvent(rawBody, signature) {
-      if (signed.get(signature) !== rawBody) throw new Error('Invalid signature')
+      if (signed.get(signature) !== rawBody) throw new BadSignatureError('Invalid signature')
       return JSON.parse(rawBody) as GatewayEvent
     },
     event(e) {

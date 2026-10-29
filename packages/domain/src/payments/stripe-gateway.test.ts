@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { BadSignatureError } from './gateway'
 import { STRIPE_API_VERSION, stripeClient, stripeGateway } from './stripe-gateway'
 
 const SECRET = 'whsec_test_fake'
@@ -108,6 +109,7 @@ describe('stripeGateway: calls', () => {
       expiresAt,
       idempotencyKey: 'checkout:b-1:x',
       providerId: 'p-1',
+      customerId: 'u-1',
     })
     expect(r).toEqual({ sessionId: 'cs_1', url: 'https://checkout.stripe.test/cs_1' })
     const [params, opts] = m.sessionsCreate.mock.calls[0]!
@@ -116,9 +118,9 @@ describe('stripeGateway: calls', () => {
       mode: 'payment',
       line_items: [{ quantity: 1, price_data: { currency: 'eur', unit_amount: 12_345, product_data: { name: 'Garden work' } } }],
       client_reference_id: 'b-1',
-      // providerId too: the payment webhook can record a refund of a booking deleted while the customer paid
-      metadata: { bookingId: 'b-1', providerId: 'p-1' },
-      payment_intent_data: { transfer_group: 'b-1', metadata: { bookingId: 'b-1', providerId: 'p-1' } },
+      // providerId and customerId too: the payment webhook can record a refund of a booking deleted while the customer paid, and tell the customer
+      metadata: { bookingId: 'b-1', providerId: 'p-1', customerId: 'u-1' },
+      payment_intent_data: { transfer_group: 'b-1', metadata: { bookingId: 'b-1', providerId: 'p-1', customerId: 'u-1' } },
       success_url: 'https://k/done',
       cancel_url: 'https://k/cancel',
       expires_at: Math.floor(expiresAt.getTime() / 1000),
@@ -128,7 +130,7 @@ describe('stripeGateway: calls', () => {
 
   it('createCheckout never changes expiresAt: the same input gives the same parameters (idempotent retry)', async () => {
     const { m, g } = mockClient()
-    const base = { bookingId: 'b', providerId: 'p', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
+    const base = { bookingId: 'b', providerId: 'p', customerId: 'u', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
     const expiresAt = new Date(Date.now() + 2 * 3_600_000)
     await g.createCheckout({ ...base, expiresAt })
     await new Promise((r) => setTimeout(r, 1100)) // a retry a second later
@@ -139,7 +141,7 @@ describe('stripeGateway: calls', () => {
 
   it('createCheckout refuses an expiresAt outside 30 minutes to 24 hours from now (RangeError, no call)', async () => {
     const { m, g } = mockClient()
-    const base = { bookingId: 'b', providerId: 'p', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
+    const base = { bookingId: 'b', providerId: 'p', customerId: 'u', amountCents: 100, currency: 'EUR', description: 'd', successUrl: 's', cancelUrl: 'c', idempotencyKey: 'k' }
     const at = (ms: number) => ({ ...base, expiresAt: new Date(Date.now() + ms) })
     await expect(g.createCheckout(at(29 * 60_000))).rejects.toThrow(RangeError)
     await expect(g.createCheckout(at(24 * 3_600_000 + 60_000))).rejects.toThrow(RangeError)
@@ -209,7 +211,7 @@ describe('stripeGateway: verifyEvent', () => {
     payment_intent: 'pi_1',
     amount_total: 12_345,
     currency: 'eur',
-    metadata: { bookingId: 'b-1' },
+    metadata: { bookingId: 'b-1', providerId: 'p-1', customerId: 'u-1' },
   })
   const ev = (type: string, object: object, extra: object = {}) => ({ id: 'evt_1', object: 'event', type, livemode: false, data: { object }, ...extra })
 
@@ -221,6 +223,8 @@ describe('stripeGateway: verifyEvent', () => {
       id: 'evt_1',
       type: 'checkout-paid',
       bookingId: 'b-1',
+      providerId: 'p-1',
+      customerId: 'u-1',
       sessionId: 'cs_1',
       paymentRef: 'pi_1',
       amountCents: 12_345,
@@ -259,11 +263,13 @@ describe('stripeGateway: verifyEvent', () => {
     expect(g.verifyEvent(body, signature)).toEqual({ id: 'evt_1', type: 'other' })
   })
 
-  it('a paid session missing bookingId, amount_total, PaymentIntent or currency throws (the route answers 500, Stripe retries)', () => {
+  it('a paid session missing bookingId, providerId, customerId, amount_total, PaymentIntent or currency throws (the route answers 500, Stripe retries)', () => {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET)
     const { g } = mockClient()
     for (const broken of [
       { ...session('paid'), metadata: {} },
+      { ...session('paid'), metadata: { bookingId: 'b-1', customerId: 'u-1' } },
+      { ...session('paid'), metadata: { bookingId: 'b-1', providerId: 'p-1' } },
       { ...session('paid'), amount_total: null },
       { ...session('paid'), payment_intent: null },
       { ...session('paid'), currency: null },
@@ -273,6 +279,20 @@ describe('stripeGateway: verifyEvent', () => {
     }
     const unpaid = signed(ev('checkout.session.completed', { ...session('unpaid'), metadata: {} }))
     expect(g.verifyEvent(unpaid.body, unpaid.signature)).toEqual({ id: 'evt_1', type: 'other' })
+  })
+
+  it('maps a failed refund (refund.failed, or charge.refund.updated with status failed) to refund-failed; other refund updates are other', () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET)
+    const { g } = mockClient()
+    const refund = (status: string, metadata: object = { bookingId: 'b-1' }) => ({ id: 're_1', object: 'refund', status, payment_intent: 'pi_1', metadata })
+    for (const type of ['refund.failed', 'charge.refund.updated']) {
+      const a = signed(ev(type, refund('failed')))
+      expect(g.verifyEvent(a.body, a.signature)).toEqual({ id: 'evt_1', type: 'refund-failed', paymentRef: 'pi_1', refundId: 're_1', bookingId: 'b-1' })
+    }
+    const outside = signed(ev('refund.failed', refund('failed', {})))
+    expect(g.verifyEvent(outside.body, outside.signature)).toMatchObject({ type: 'refund-failed', bookingId: null })
+    const ok = signed(ev('charge.refund.updated', refund('succeeded')))
+    expect(g.verifyEvent(ok.body, ok.signature)).toEqual({ id: 'evt_1', type: 'other' })
   })
 
   it('maps everything else, and any live-mode event, to other', () => {
@@ -288,11 +308,18 @@ describe('stripeGateway: verifyEvent', () => {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET)
     const { g } = mockClient()
     const { body, signature } = signed(ev('checkout.session.completed', session('paid')))
-    expect(() => g.verifyEvent(body, 'garbage')).toThrow()
-    expect(() => g.verifyEvent(body.replace('12345', '1'), signature)).toThrow()
+    expect(() => g.verifyEvent(body, 'garbage')).toThrow(BadSignatureError) // the route answers 400 to this one only
+    expect(() => g.verifyEvent(body.replace('12345', '1'), signature)).toThrow(BadSignatureError)
     const other = signed(ev('checkout.session.completed', session('paid')), 'whsec_someone_else')
-    expect(() => g.verifyEvent(other.body, other.signature)).toThrow()
+    expect(() => g.verifyEvent(other.body, other.signature)).toThrow(BadSignatureError)
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', '')
     expect(() => g.verifyEvent(body, signature)).toThrow(/STRIPE_WEBHOOK_SECRET/)
+    let missing: unknown
+    try {
+      g.verifyEvent(body, signature)
+    } catch (e) {
+      missing = e
+    }
+    expect(missing).not.toBeInstanceOf(BadSignatureError) // a set-up error is a 500 (Stripe retries), not a 400
   })
 })

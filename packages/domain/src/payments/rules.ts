@@ -24,6 +24,24 @@ export const MAX_HOLD_DAYS = 90
  */
 export const MAX_PAY_AHEAD_DAYS = 60
 
+/** A payment that arrives up to this many minutes after payBy still confirms the booking (in-flight at the deadline), if the booking is still awaiting payment and the time still free. */
+export const PAY_GRACE_MINUTES = 10
+
+const CHECKOUT_MIN_MS = 31 * 60_000 // Stripe: at least 30 minutes; one minute of margin for the time to the call
+const CHECKOUT_STEP_MS = 23 * 3_600_000 // under Stripe's 24-hour maximum by more than the margin
+
+/**
+ * When a Checkout session for a booking expires: payBy, or payBy minus a whole number of 23-hour steps, whichever is the
+ * first at least 31 minutes from now. So it is 31 min to 23 h 31 min ahead (Stripe allows 30 min to 24 h), never after
+ * payBy, and the same for every call within one step: a retry after a crash sends the same parameters under the same
+ * idempotency key. Null when payBy is less than 31 minutes away: the booking cannot be paid any more (PAY_WINDOW_TOO_SHORT).
+ */
+export function checkoutExpiry(payBy: Date, now: Date): Date | null {
+  const room = payBy.getTime() - now.getTime() - CHECKOUT_MIN_MS
+  if (room < 0) return null
+  return new Date(payBy.getTime() - Math.floor(room / CHECKOUT_STEP_MS) * CHECKOUT_STEP_MS)
+}
+
 export const paymentsEnabled = (): boolean => process.env.PAYMENTS_ENABLED === 'true'
 
 /** Integer cents for the gateway. toPrecision(15) drops binary noise (19.99 * 100 = 1998.9999999999998). */

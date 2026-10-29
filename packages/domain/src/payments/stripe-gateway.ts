@@ -28,7 +28,7 @@
  *
  * Webhooks (https://docs.stripe.com/webhooks#verify-events, https://docs.stripe.com/connect/webhooks): the raw body and
  * the Stripe-Signature header go to constructEvent. Two endpoints, two secrets: STRIPE_WEBHOOK_SECRET ("Your account":
- * checkout.session.completed, checkout.session.async_payment_succeeded, charge.dispute.created) and the optional
+ * checkout.session.completed, checkout.session.async_payment_succeeded, charge.dispute.created, refund.failed) and the optional
  * STRIPE_CONNECT_WEBHOOK_SECRET ("Connected accounts": v1 account.updated is only sent in that scope). A completed
  * session is paid only when payment_status is 'paid'; delayed methods (SEPA debit) pay later with
  * checkout.session.async_payment_succeeded (the event table on the separate-charges-and-transfers page). The
@@ -36,7 +36,7 @@
  */
 import Stripe from 'stripe'
 
-import type { GatewayEvent, PaymentsGateway } from './gateway'
+import { BadSignatureError, type GatewayEvent, type PaymentsGateway } from './gateway'
 import { LIVE_PAYMENTS_ALLOWED } from './rules'
 
 export const STRIPE_API_VERSION = '2026-09-30.endive'
@@ -95,8 +95,8 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           mode: 'payment',
           line_items: [{ quantity: 1, price_data: { currency: i.currency.toLowerCase(), unit_amount: i.amountCents, product_data: { name: i.description } } }],
           client_reference_id: i.bookingId,
-          metadata: { bookingId: i.bookingId, providerId: i.providerId },
-          payment_intent_data: { transfer_group: i.bookingId, metadata: { bookingId: i.bookingId, providerId: i.providerId } },
+          metadata: { bookingId: i.bookingId, providerId: i.providerId, customerId: i.customerId },
+          payment_intent_data: { transfer_group: i.bookingId, metadata: { bookingId: i.bookingId, providerId: i.providerId, customerId: i.customerId } },
           success_url: i.successUrl,
           cancel_url: i.cancelUrl,
           expires_at: Math.floor(i.expiresAt.getTime() / 1000),
@@ -154,7 +154,7 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           error = e
         }
       }
-      if (!event) throw error
+      if (!event) throw error instanceof Stripe.errors.StripeSignatureVerificationError ? new BadSignatureError(error.message) : error
       return toGatewayEvent(event)
     },
   }
@@ -167,12 +167,19 @@ function toGatewayEvent(event: Stripe.Event): GatewayEvent {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded': {
       const s = event.data.object
-      const bookingId = s.metadata?.bookingId
+      const { bookingId, providerId, customerId } = s.metadata ?? {}
       const paymentRef = typeof s.payment_intent === 'string' ? s.payment_intent : s.payment_intent?.id
       if (s.payment_status !== 'paid') return other // delayed method: async_payment_succeeded follows
       // A paid session we cannot attribute must not be dropped: throwing makes the route answer 500, so Stripe retries.
-      if (!bookingId || !paymentRef || s.amount_total == null || !s.currency) throw new Error(`Paid Checkout Session ${s.id} lacks bookingId, amount, PaymentIntent or currency`)
-      return { id: event.id, type: 'checkout-paid', bookingId, sessionId: s.id, paymentRef, amountCents: s.amount_total, currency: s.currency.toUpperCase() }
+      if (!bookingId || !providerId || !customerId || !paymentRef || s.amount_total == null || !s.currency) throw new Error(`Paid Checkout Session ${s.id} lacks bookingId, providerId, customerId, amount, PaymentIntent or currency`)
+      return { id: event.id, type: 'checkout-paid', bookingId, providerId, customerId, sessionId: s.id, paymentRef, amountCents: s.amount_total, currency: s.currency.toUpperCase() }
+    }
+    case 'refund.failed':
+    case 'charge.refund.updated': {
+      const r = event.data.object
+      const pi = typeof r.payment_intent === 'string' ? r.payment_intent : r.payment_intent?.id
+      if (r.status !== 'failed' || !pi) return other
+      return { id: event.id, type: 'refund-failed', paymentRef: pi, refundId: r.id, bookingId: r.metadata?.bookingId ?? null }
     }
     case 'account.updated':
       return { id: event.id, type: 'account-updated', accountId: event.account ?? event.data.object.id }

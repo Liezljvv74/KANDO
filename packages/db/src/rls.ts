@@ -289,7 +289,7 @@ const ELIGIBILITY_FUNCTIONS = [
 
 // A provider's calendar for everyone: bookings are private (RLS), so this runs as the table owner and returns only
 // the time range and a state, for a published, non-suspended provider, in a window of at most 62 days.
-// 'pending' = awaiting-payment; 'booked' is added when a confirmed status exists.
+// 'pending' = awaiting-payment within its payment window; 'booked' = confirmed (paid).
 const BUSY_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION busy_times(p_provider uuid, p_from timestamptz, p_to timestamptz)
     RETURNS TABLE (start_at timestamptz, end_at timestamptz, state text)
@@ -297,9 +297,9 @@ const BUSY_FUNCTIONS = [
     BEGIN
       IF p_to <= p_from OR p_to - p_from > interval '62 days' THEN RAISE EXCEPTION 'busy_times: range must be 1 to 62 days'; END IF;
       RETURN QUERY
-        SELECT b.start_at, b.start_at + b.duration_min * interval '1 minute', 'pending'::text
+        SELECT b.start_at, b.start_at + b.duration_min * interval '1 minute', CASE WHEN b.status = 'confirmed' THEN 'booked' ELSE 'pending' END::text
         FROM bookings b JOIN providers p ON p.id = b.provider_id
-        WHERE b.provider_id = p_provider AND b.status = 'awaiting-payment' AND b.pay_by > now()
+        WHERE b.provider_id = p_provider AND (b.status = 'confirmed' OR (b.status = 'awaiting-payment' AND b.pay_by > now()))
           AND p.status = 'published' AND ${notSuspended('p')}
           AND b.start_at < p_to AND b.start_at + b.duration_min * interval '1 minute' > p_from
         ORDER BY 1, 2;

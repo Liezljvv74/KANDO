@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateway, setGatewayForTests, type PaymentsGateway } from './gateway'
-import { canTransact, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, toCents } from './rules'
+import { canTransact, checkoutExpiry, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, toCents } from './rules'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -107,5 +107,32 @@ describe('gateway()', () => {
     const fake = {} as PaymentsGateway
     setGatewayForTests(fake)
     expect(gateway()).toBe(fake)
+  })
+})
+
+describe('checkoutExpiry', () => {
+  const now = new Date('2027-01-10T12:00:00Z')
+  const min = 60_000
+  const h = 60 * min
+  const exp = (payByIn: number, at = now) => checkoutExpiry(new Date(now.getTime() + payByIn), at)?.getTime()
+  it('is payBy itself when payBy is 31 minutes to 23 h 31 min away', () => {
+    expect(exp(31 * min)).toBe(now.getTime() + 31 * min)
+    expect(exp(23 * h + 30 * min)).toBe(now.getTime() + 23 * h + 30 * min)
+  })
+  it('steps back from payBy in 23-hour steps, so it is always 31 min to 24 h ahead and never after payBy', () => {
+    for (let ahead = 31 * min; ahead <= 72 * h; ahead += 17 * min) {
+      const e = exp(ahead)! - now.getTime()
+      expect(e).toBeGreaterThanOrEqual(31 * min)
+      expect(e).toBeLessThan(24 * h)
+      expect(e).toBeLessThanOrEqual(ahead)
+      expect((ahead - e) % (23 * h)).toBe(0)
+    }
+  })
+  it('is the same a few minutes later (a retry reuses the idempotency key with the same parameters)', () => {
+    expect(exp(47 * h, new Date(now.getTime() + 5 * min))).toBe(exp(47 * h))
+  })
+  it('is null under 31 minutes before payBy (PAY_WINDOW_TOO_SHORT)', () => {
+    expect(exp(31 * min - 1)).toBeUndefined()
+    expect(exp(-min)).toBeUndefined()
   })
 })

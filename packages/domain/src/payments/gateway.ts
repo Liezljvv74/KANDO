@@ -13,13 +13,14 @@ export interface PaymentsGateway {
    * idempotency key sends the same parameters (Stripe refuses a reused key with different ones). The caller computes the
    * expiry once, stores it with the session (checkoutRef) and, while that session is still open, reuses it instead of
    * calling again; a new session needs a new key.
-   * `providerId` goes into the session's and the PaymentIntent's metadata: a booking can be deleted with an account while
-   * the customer pays (awaiting-payment does not block deletion), and the Task 4 webhook must still refund that charge and
-   * write its ledger rows (charge, refund) with the provider id although the booking row is gone.
+   * `providerId` and `customerId` go into the session's and the PaymentIntent's metadata: a booking can be deleted with an
+   * account while the customer pays (awaiting-payment does not block deletion), and the webhook must still refund that
+   * charge, write its ledger rows (charge, refund) with the provider id and tell the customer, although the booking row is gone.
    */
   createCheckout(i: {
     bookingId: string
     providerId: string
+    customerId: string
     amountCents: number
     currency: string
     description: string
@@ -36,14 +37,21 @@ export interface PaymentsGateway {
    */
   transfer(i: { accountId: string; amountCents: number; currency: string; paymentRef: string; bookingId: string; idempotencyKey: string }): Promise<{ transferId: string }>
   refund(i: { paymentRef: string; amountCents: number; bookingId: string; idempotencyKey: string }): Promise<{ refundId: string }>
-  /** Throws on a bad signature. */
+  /** Throws BadSignatureError on a missing or wrong signature; any other error (a paid event we cannot read, no secret set) is a server error, so Stripe retries. */
   verifyEvent(rawBody: string, signature: string): GatewayEvent
 }
 
+/** The webhook body is not signed by the payment provider (the route answers 400). */
+export class BadSignatureError extends Error {
+  override name = 'BadSignatureError'
+}
+
 export type GatewayEvent =
-  | { id: string; type: 'checkout-paid'; bookingId: string; sessionId: string; paymentRef: string; amountCents: number; currency: string }
+  | { id: string; type: 'checkout-paid'; bookingId: string; providerId: string; customerId: string; sessionId: string; paymentRef: string; amountCents: number; currency: string }
   | { id: string; type: 'account-updated'; accountId: string }
   | { id: string; type: 'charge-disputed'; paymentRef: string }
+  /** A refund failed after it was accepted (Stripe: refund.failed, or charge.refund.updated with status failed). bookingId from the refund's metadata, null for a refund made elsewhere. */
+  | { id: string; type: 'refund-failed'; paymentRef: string; refundId: string; bookingId: string | null }
   | { id: string; type: 'other' }
 
 function fromEnv(): PaymentsGateway {

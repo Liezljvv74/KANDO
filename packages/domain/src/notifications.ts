@@ -13,11 +13,15 @@ export const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[la
 export const emailDateTime = (d: Date, lang: Lang) =>
   d.toLocaleString(LOCALE[lang], { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 
+/** The website's address, no trailing slash. */
+export function siteBase(): string {
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  return (process.env.NEXT_PUBLIC_SERVER_URL || (host ? `https://${host}` : 'http://localhost:3000')).replace(/\/$/, '')
+}
+
 /** Public address of a provider page; the language only when it is not the default. */
 export function providerUrl(slug: string, lang: Lang): string {
-  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  const base = (process.env.NEXT_PUBLIC_SERVER_URL || (host ? `https://${host}` : 'http://localhost:3000')).replace(/\/$/, '')
-  return `${base}/providers/${slug}${lang !== DEFAULT_LANG ? `?lang=${lang}` : ''}`
+  return `${siteBase()}/providers/${slug}${lang !== DEFAULT_LANG ? `?lang=${lang}` : ''}`
 }
 
 /**

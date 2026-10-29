@@ -85,6 +85,8 @@ export const errorKeys: Record<string, Key> = {
   'request-limit': 'error.booking.request-limit',
   'daily-limit': 'error.booking.daily-limit',
   'Unknown service': 'error.booking.unknown-service',
+  TOO_FAR_AHEAD: 'error.booking.too-far-ahead',
+  PAY_WINDOW_TOO_SHORT: 'error.booking.pay-window-too-short',
   // Chat (`error`)
   CONTACT_DETAILS: 'chat.contactBlocked',
   BLOCKED: 'chat.blocked',
