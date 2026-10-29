@@ -37,7 +37,8 @@ export const RequestSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 })
-export type BookingRequest =z.infer<typeof RequestSchema>
+export type BookingRequest = z.infer<typeof RequestSchema>
+export type RequestInput = z.infer<typeof RequestInputSchema>
 
 /** A quote's start and duration are only a suggestion; the customer confirms the time when accepting. */
 export const QuoteInputSchema = z.object({
@@ -46,6 +47,8 @@ export const QuoteInputSchema = z.object({
   startAt: IsoSchema.optional(),
   durationMin: DurationSchema.optional(),
 })
+
+export type QuoteInput = z.infer<typeof QuoteInputSchema>
 
 export const QuoteSchema = z.object({
   id: z.string(),
@@ -77,6 +80,7 @@ export type TimeProposal = z.infer<typeof TimeProposalSchema>
 
 /** POST /quotes/[id]/accept: the customer's proposed time. */
 export const AcceptQuoteInputSchema = TimeProposalSchema
+export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
 
 /** POST /bookings: a booking without a prior request. */
 export const DirectBookingInputSchema = z.intersection(TimeProposalSchema, z.object({ serviceId: z.string().uuid() }))
