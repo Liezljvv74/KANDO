@@ -60,15 +60,27 @@ describe('paymentsEnabled and canTransact', () => {
     vi.stubEnv('PAYMENTS_ENABLED', 'true')
     expect(paymentsEnabled()).toBe(true)
   })
+  const ready = { payoutsReadyAt: new Date(), invoiceConsentAt: new Date(), legalStatus: null, vatId: null, taxNumber: null }
   it('is true for any provider when payments are off', () => {
     vi.stubEnv('PAYMENTS_ENABLED', '')
-    expect(canTransact({ payoutsReadyAt: null })).toBe(true)
-    expect(canTransact({ payoutsReadyAt: new Date() })).toBe(true)
+    expect(canTransact({ ...ready, payoutsReadyAt: null, invoiceConsentAt: null, legalStatus: 'business' })).toBe(true)
+    expect(canTransact(ready)).toBe(true)
   })
   it('is false without payoutsReadyAt when payments are on', () => {
     vi.stubEnv('PAYMENTS_ENABLED', 'true')
-    expect(canTransact({ payoutsReadyAt: null })).toBe(false)
-    expect(canTransact({ payoutsReadyAt: new Date() })).toBe(true)
+    expect(canTransact({ ...ready, payoutsReadyAt: null })).toBe(false)
+    expect(canTransact(ready)).toBe(true)
+  })
+  it('with payments on needs the invoicing consent, and a VAT id or tax number for Kleinunternehmer and business', () => {
+    vi.stubEnv('PAYMENTS_ENABLED', 'true')
+    expect(canTransact({ ...ready, invoiceConsentAt: null })).toBe(false)
+    expect(canTransact({ ...ready, legalStatus: 'private' })).toBe(true)
+    for (const legalStatus of ['kleinunternehmer', 'business']) {
+      expect(canTransact({ ...ready, legalStatus })).toBe(false)
+      expect(canTransact({ ...ready, legalStatus, taxNumber: '  ' })).toBe(false)
+      expect(canTransact({ ...ready, legalStatus, taxNumber: '12/345/67890' })).toBe(true)
+      expect(canTransact({ ...ready, legalStatus, vatId: 'DE123456789' })).toBe(true)
+    }
   })
   it('live payments stay off and the hold limit is a positive number of days', () => {
     expect(LIVE_PAYMENTS_ALLOWED).toBe(false)

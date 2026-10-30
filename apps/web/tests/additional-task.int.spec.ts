@@ -41,7 +41,7 @@ beforeAll(async () => {
   await seedUser(U.cust)
   await seedUser(U.third)
   providerId = await seedProvider(U.owner, { name: 'At Owner', categoryId, price: 100 })
-  await pool.query("UPDATE providers SET stripe_account_id = 'acct_at_1', payouts_ready_at = now() WHERE id = $1", [providerId])
+  await pool.query("UPDATE providers SET stripe_account_id = 'acct_at_1', payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1", [providerId])
   await pool.query("UPDATE users SET language = 'en' WHERE id = ANY($1)", [[U.cust, U.owner]]) // the texts below are checked in English
 })
 beforeEach(async () => {

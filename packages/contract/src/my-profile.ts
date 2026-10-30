@@ -26,6 +26,9 @@ export const MyProfileSchema = z.object({
   slug: z.string().nullish(),
   suspendedUntil: z.string().nullable(),
   missing: z.array(MissingSchema),
+  /** Invoicing (payout set-up card): the tax number, and whether the provider agreed that the platform issues invoices in their name. */
+  taxNumber: z.string().nullish(),
+  invoiceConsent: z.boolean().optional(),
 })
 export type MyProfile = z.infer<typeof MyProfileSchema>
 
@@ -42,6 +45,9 @@ export const ProfileInputSchema = z
     basePostcode: text(16).nullable(), // the country's postcode lookup is the real check
     serviceRadiusKm: z.number().int().min(1).max(200),
     worksRemotely: z.boolean(),
+    taxNumber: text(40).nullable(),
+    /** true records the consent (its first time is kept), false withdraws it. */
+    invoiceConsent: z.boolean(),
   })
   .partial()
 export type ProfileInput = z.infer<typeof ProfileInputSchema>

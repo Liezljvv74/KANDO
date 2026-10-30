@@ -63,5 +63,12 @@ export function commissionFor(share: number, rate: number): number {
   return Math.round(Number((toCents(share) * rate).toPrecision(15))) / 100
 }
 
-/** With payments off every provider can transact; with payments on only one whose payout set-up is complete. */
-export const canTransact = (p: { payoutsReadyAt: Date | null }): boolean => !paymentsEnabled() || p.payoutsReadyAt !== null
+export type TransactFacts = { payoutsReadyAt: Date | null; invoiceConsentAt: Date | null; legalStatus: string | null; vatId: string | null; taxNumber: string | null }
+
+/**
+ * With payments off every provider can transact. With payments on only one whose payout set-up is complete, who agreed
+ * that the platform issues invoices in their name, and (Kleinunternehmer or business) has a VAT id or tax number for them.
+ */
+export const canTransact = (p: TransactFacts): boolean =>
+  !paymentsEnabled() ||
+  (p.payoutsReadyAt !== null && p.invoiceConsentAt !== null && (!(p.legalStatus === 'kleinunternehmer' || p.legalStatus === 'business') || !!(p.vatId?.trim() || p.taxNumber?.trim())))

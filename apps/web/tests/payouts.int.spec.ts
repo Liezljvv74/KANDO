@@ -48,6 +48,7 @@ afterAll(cleanupUsers)
 async function provider(): Promise<{ uid: string; id: string; slug: string; serviceId: string }> {
   const uid = `po-p${++n}`
   const id = await seedProvider(uid, { name: `Po Prov ${n}`, categoryId, price: 80 })
+  await pool.query('UPDATE providers SET invoice_consent_at = now() WHERE id = $1', [id]) // invoicing agreed: these tests are about the payout set-up
   const serviceId = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [id])).rows[0].id
   return { uid, id, slug: `${uid}-slug`, serviceId }
 }
@@ -60,7 +61,7 @@ const unwatch = (slug: string, as: string) => call(notifyMe.DELETE, as, 'DELETE'
 const kindsFor = async (uid: string, kind: string) => (await pool.query('SELECT payload FROM notifications WHERE user_id = $1 AND kind = $2', [uid, kind])).rows
 const day = (k: number) => new Date(Date.now() + k * DAY).toISOString()
 const proposal = { startAt: day(10), durationMin: 60, onSite: true, address: { postcode: '10115' } }
-const ready = (id: string) => pool.query('UPDATE providers SET payouts_ready_at = now() WHERE id = $1', [id])
+const ready = (id: string) => pool.query('UPDATE providers SET payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1', [id])
 /** With payments off (as before the switch): a request, a direct booking and a quote are made the normal way. */
 async function whilePaymentsOff<T>(fn: () => Promise<T>): Promise<T> {
   vi.stubEnv('PAYMENTS_ENABLED', 'false')

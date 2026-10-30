@@ -84,6 +84,10 @@ export async function cleanupUsers(): Promise<void> {
     await q("SELECT set_config('kando.ledger_cleanup', 'on', true)")
     await q(`DELETE FROM ledger_entries WHERE provider_id IN ${myProviders} OR booking_id IN (SELECT id FROM bookings WHERE customer_id IN ${mine})`)
   })
+  // Invoices keep plain ids (they outlive account deletion): a test's invoices go by its people, its providers, or a
+  // booking of theirs (a deleted customer's invoice still has the provider), and their numbering series with them.
+  await pool.query(`DELETE FROM invoice_counters WHERE left(series, 8) IN (SELECT upper(left(id::text, 8)) FROM providers WHERE owner_id IN ${mine})`)
+  await pool.query(`DELETE FROM invoices WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   const myBookings = `(SELECT id FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
   await pool.query(`DELETE FROM disputes WHERE booking_id IN ${myBookings}`)
   await pool.query(`DELETE FROM reviews WHERE booking_id IN ${myBookings} OR author_id IN ${mine} OR subject_id IN ${mine}`)

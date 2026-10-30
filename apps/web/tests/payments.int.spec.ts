@@ -27,7 +27,7 @@ beforeAll(async () => {
   for (const u of [U.cust, U.cust2, U.third]) await seedUser(u)
   providerId = await seedProvider(U.owner, { name: 'Py Owner', categoryId, price: 100 })
   serviceId = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id
-  await pool.query('UPDATE providers SET payouts_ready_at = now() WHERE id = $1', [providerId]) // payout set-up done: with payments on only such a provider accepts (payouts.int.spec.ts)
+  await pool.query('UPDATE providers SET payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1', [providerId]) // payout set-up done (and invoicing agreed): with payments on only such a provider accepts (payouts.int.spec.ts)
 })
 beforeEach(() => {
   vi.stubEnv('PAYMENTS_ENABLED', 'true')

@@ -134,13 +134,15 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
   disputes: `EXISTS (SELECT 1 FROM bookings b WHERE b.id = booking_id AND (b.customer_id = app_current_user_id() OR EXISTS (SELECT 1 FROM providers p WHERE p.id = b.provider_id AND p.owner_id = app_current_user_id())))`,
   // Blind until visible (both written, or the time ran out); hidden ones only for their author.
   reviews: '(NOT hidden AND visible_at IS NOT NULL AND visible_at <= now()) OR author_id = app_current_user_id()',
+  // The customer and the provider's owner of an issued invoice (plain ids, no foreign keys: it outlives the accounts).
+  invoices: PARTY,
 }
 
 // Readable by app_user, written only by staff (owner connection).
 export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events']
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']

@@ -25,6 +25,10 @@ type Row = {
   base_postcode: string | null
   photo_key: string | null
   payouts_ready_at: Date | string | null
+  invoice_consent_at: Date | string | null
+  legal_status: string | null
+  vat_id: string | null
+  tax_number: string | null
 }
 
 /**
@@ -35,7 +39,8 @@ type Row = {
 export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promise<ProviderDetail | null> {
   const { rows } = await tx.execute<Row>(sql`
     SELECT p.id, p.owner_id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
-           p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key, p.payouts_ready_at
+           p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key, p.payouts_ready_at,
+           p.invoice_consent_at, p.legal_status, p.vat_id, p.tax_number
     FROM providers p LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
     WHERE p.slug = ${slug} AND p.status = 'published' AND ${notSuspendedSql('p')}`)
   const p = rows[0]
@@ -93,7 +98,13 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     rating: ratings.get(p.owner_id) ?? null,
     reviews,
     verified: paymentsEnabled() && p.payouts_ready_at !== null, // payout set-up done (Stripe checked identity); means nothing while payments are off
-    canBook: canTransact({ payoutsReadyAt: p.payouts_ready_at === null ? null : new Date(p.payouts_ready_at) }),
+    canBook: canTransact({
+      payoutsReadyAt: p.payouts_ready_at === null ? null : new Date(p.payouts_ready_at),
+      invoiceConsentAt: p.invoice_consent_at === null ? null : new Date(p.invoice_consent_at),
+      legalStatus: p.legal_status,
+      vatId: p.vat_id,
+      taxNumber: p.tax_number,
+    }),
     translatable: false,
   }
   detail.translatable = needsTranslation(textsOf(detail), lang)
