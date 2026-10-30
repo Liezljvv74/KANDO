@@ -43,7 +43,14 @@ export const INSERT_RULES: Record<string, string> = {
  * 'customer' = the customer proposed last, so the provider answers; 'provider' = the customer answers).
  */
 export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'answerer'>> = {
-  requests: { 'open>quoted': 'provider', 'quoted>booked': 'customer' },
+  requests: {
+    'open>quoted': 'provider',
+    'quoted>booked': 'customer',
+    'open>withdrawn': 'customer',
+    'quoted>withdrawn': 'customer',
+    'open>declined': 'provider',
+    'quoted>declined': 'provider',
+  },
   quotes: { 'sent>superseded': 'provider', 'sent>accepted': 'customer' },
   bookings: {
     'proposed>awaiting-payment': 'answerer',
@@ -466,6 +473,16 @@ const BOOKING_TRIGGERS = [
     `DROP TRIGGER IF EXISTS ${t}_app_status_guard ON ${t}`,
     `CREATE TRIGGER ${t}_app_status_guard BEFORE UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION app_status_guard()`,
   ]),
+  // A request its customer withdrew or its provider declined takes no accept and no reminder: its sent quote is declined,
+  // on every path (domain, timers, staff). SECURITY DEFINER: the customer's app role may not move a quote itself.
+  `CREATE OR REPLACE FUNCTION close_request_quotes() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      UPDATE quotes SET status = 'declined' WHERE request_id = NEW.id AND status = 'sent';
+      RETURN NULL;
+    END $$`,
+  `DROP TRIGGER IF EXISTS requests_close_quotes ON requests`,
+  `CREATE TRIGGER requests_close_quotes AFTER UPDATE OF status ON requests FOR EACH ROW
+    WHEN (NEW.status IN ('withdrawn', 'declined') AND OLD.status IS DISTINCT FROM NEW.status) EXECUTE FUNCTION close_request_quotes()`,
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
   // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that
   // request's parent (and an ordinary request makes no additional task). Invoker rights: a parent the inserting customer

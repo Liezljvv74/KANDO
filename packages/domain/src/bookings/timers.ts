@@ -231,8 +231,8 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
       ON CONFLICT DO NOTHING RETURNING id)
     SELECT count(*)::int AS n FROM i`)
 
-  // A provider still published IGNORED_FLAG_DAYS after their latest requests-ignored notice, with no quote sent and no
-  // booking answered (accepted, declined or a new time proposed) since: one flag per notice. Nothing is removed
+  // A provider still published IGNORED_FLAG_DAYS after their latest requests-ignored notice, with no quote sent, no request
+  // declined and no booking answered (accepted, declined or a new time proposed) since: one flag per notice. Nothing is removed
   // automatically; staff decide (the existing suspension tool).
   const ignoredNoticeFlags = await count(sql`
     WITH n AS (SELECT user_id, max(created_at) AS at FROM notifications WHERE kind = 'requests-ignored' GROUP BY user_id),
@@ -240,6 +240,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
       WHERE p.status = 'published' AND n.at + make_interval(days => ${IGNORED_FLAG_DAYS}) <= ${t}::timestamptz
         AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.provider_id = p.id AND q.created_at > n.at)
         AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.provider_id = p.id AND (b.accepted_at > n.at OR (b.updated_at > n.at AND (b.status = 'declined' OR b.counter_by = 'provider'))))
+        AND NOT EXISTS (SELECT 1 FROM requests r WHERE r.provider_id = p.id AND r.status = 'declined' AND r.updated_at > n.at)
         AND NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'ignored-requests' AND f.ref_id = p.id::text AND f.created_at >= n.at)),
     i AS (INSERT INTO staff_flags (kind, ref_id, user_id, note, created_at)
       SELECT 'ignored-requests', id::text, owner_id, ${`no answer ${IGNORED_FLAG_DAYS} days after the requests-ignored notice`}, ${t}::timestamptz FROM c

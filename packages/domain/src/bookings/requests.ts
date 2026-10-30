@@ -221,6 +221,35 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   return toQuote(row!)
 }
 
+/**
+ * Closes an open or quoted request: the customer withdraws it, the provider's owner declines it, and the other side is told.
+ * The other party gets 403, anyone else 404. Its sent quote is declined by the trigger requests_close_quotes; the request lock
+ * makes a parallel sendQuote either see the closed request (409) or have its new quote declined.
+ */
+async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'customer' | 'provider', now: Date, afterCommit: AfterCommit): Promise<BookingRequest> {
+  const read = async () => (isUuid(requestId) ? (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] : undefined) ?? notFound()
+  const first = await read() // party check before the lock: a stranger cannot make anyone wait
+  const side = first.customerId === userId ? 'customer' : (await ownProvider(tx, userId))?.id === first.providerId ? 'provider' : notFound()
+  if (side !== by) fail(403, { error: 'not-your-turn' })
+  await lockRequest(tx, requestId)
+  const req = await read() // read again after the lock
+  if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed' })
+  const [row] = await tx.update(requests).set({ status: by === 'customer' ? 'withdrawn' : 'declined', updatedAt: now }).where(eq(requests.id, requestId)).returning()
+  afterCommit(async () => {
+    if (by === 'provider') return notifyBookingEvent('request-declined', req.customerId, { requestId })
+    // the owner connection: RLS may hide a suspended provider's row from its customer
+    const owner = (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, req.providerId)))[0]
+    if (owner) await notifyBookingEvent('request-withdrawn', owner.id, { requestId })
+  })
+  return toRequest(row!)
+}
+
+export const withdrawRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>
+  closeRequest(tx, userId, requestId, 'customer', now, afterCommit)
+
+export const declineRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>
+  closeRequest(tx, userId, requestId, 'provider', now, afterCommit)
+
 export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input: AcceptQuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   const find = async () => {
     const q = isUuid(quoteId) ? (await tx.select().from(quotes).where(eq(quotes.id, quoteId)))[0] : undefined
