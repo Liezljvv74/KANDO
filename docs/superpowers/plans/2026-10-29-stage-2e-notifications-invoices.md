@@ -19,7 +19,7 @@
 - Monthly commission invoice from the platform to each provider for the commission rows of the previous calendar month in `TIME_ZONE` (Europe/Berlin). The legal entity does not exist yet: name, address, register entry, VAT id and VAT wording are placeholders in one file (`PLATFORM_ENTITY`), with a README launch item. While `LIVE_PAYMENTS_ALLOWED` (plan 2c) is false, every PDF carries "TESTDOKUMENT / TEST DOCUMENT".
 - Issued invoices are never changed or deleted, including on account deletion (legal retention; the privacy notice must say so, README item). Numbers are unique, per provider and year, without gaps: `<first 8 characters of the provider id, upper case>-<YYYY>-<0001>`; commission invoices `K-<YYYY>-<00001>`.
 - Currency formatting through `formatMoney` from `@kando/i18n`; no "EUR" in labels; no new Germany-only assumptions beyond `VAT_RATES` and the German legal wording, both per country or per language. No competitor names; never "Treuhand", "Escrow" or "Garantie". The product name comes from the existing single setting, never typed into templates.
-- Enums `text` plus `check`. Migrations `0017` (push, Task 1), `0018` (invoices, Task 4), `0019` (commission invoices, Task 6), each generated in its task. Every new table classified in `rls.ts` with an isolation test and in `cleanupUsers()`. Owner merges; report in `Reports/`; no AI co-author lines.
+- Enums `text` plus `check`. Migrations `0019` (push, Task 1), `0020` (invoices, Task 4), `0021` (commission invoices, Task 6), each generated in its task. Every new table classified in `rls.ts` with an isolation test and in `cleanupUsers()`. Owner merges; report in `Reports/`; no AI co-author lines.
 
 ## Review Focus
 
@@ -31,14 +31,14 @@
 
 ## File structure
 
-- `packages/db/src/schema/invoices.ts` (new): `invoices`, `commission_invoices`, `invoice_counters`; `packages/db/src/schema/push.ts` (new): `push_tokens`. Modify `schema/users.ts` (push switches), `schema/providers.ts` (`taxNumber`, `invoiceConsentAt`), `schema/notifications.ts`. Migrations `0017_push.sql`, `0018_invoices.sql`, `0019_commission_invoices.sql` (generated).
+- `packages/db/src/schema/invoices.ts` (new): `invoices`, `commission_invoices`, `invoice_counters`; `packages/db/src/schema/push.ts` (new): `push_tokens`. Modify `schema/users.ts` (push switches), `schema/providers.ts` (`taxNumber`, `invoiceConsentAt`), `schema/notifications.ts`. Migrations `0019_push.sql`, `0020_invoices.sql`, `0021_commission_invoices.sql` (generated).
 - `packages/domain/src/push.ts`, `packages/domain/src/invoices/{rules,entity,build,numbering,pdf,issue,commission,export}.ts` (new); modify plan 2a's `bookings/notify.ts`, plan 2b's `chat/messages.ts`, plan 2c's `canTransact`, plan 2d's `releaseBooking`, `cancel.ts`, `decideDispute`, plan 2a's `timers.ts`.
 - Routes: `apps/web/app/app-api/v1/push-tokens/route.ts`, `me/push/route.ts`, `invoices/route.ts`, `invoices/[id]/pdf/route.ts`, `invoices/export/route.ts`, `commission-invoices/route.ts`, `commission-invoices/[id]/pdf/route.ts`.
 - Mobile: `apps/mobile/src/api/push.ts`, `apps/mobile/src/api/invoices.ts` (+ tests), `apps/mobile/src/lib/push.ts`, screens for invoices and push settings.
 
 ### Task 1: Push tokens and switches
 
-**Files:** Create `packages/db/src/schema/push.ts`, migration `0017_push.sql` (generated); modify `schema/users.ts`, `rls.ts`, `apps/web/tests/helpers.ts`; routes `push-tokens/route.ts` (POST, DELETE), `me/push/route.ts` (GET, PATCH); create `packages/domain/src/push.ts` (token part); mobile `apps/mobile/src/lib/push.ts`, `apps/mobile/src/api/push.ts` (+ test), settings row on the Account tab, `app.json` plugin entry; test `apps/web/tests/push-tokens.int.spec.ts`.
+**Files:** Create `packages/db/src/schema/push.ts`, migration `0019_push.sql` (generated); modify `schema/users.ts`, `rls.ts`, `apps/web/tests/helpers.ts`; routes `push-tokens/route.ts` (POST, DELETE), `me/push/route.ts` (GET, PATCH); create `packages/domain/src/push.ts` (token part); mobile `apps/mobile/src/lib/push.ts`, `apps/mobile/src/api/push.ts` (+ test), settings row on the Account tab, `app.json` plugin entry; test `apps/web/tests/push-tokens.int.spec.ts`.
 
 **Interfaces:**
 - Tables: `push_tokens` (`id`, `userId`, `token` unique, `platform` check `ios|android`, `createdAt`, `lastSeenAt`), `PRIVATE_TABLES` with `user_id = app_current_user_id()`. `users` gains `pushChat boolean not null default true`, `pushReminders boolean not null default true` (writable by the user).
@@ -72,7 +72,7 @@
 
 ### Task 4: Issuing, numbering, PDF and download
 
-**Files:** Create `packages/db/src/schema/invoices.ts` (migration `0018_invoices.sql`, which also adds the notification kind `invoice-ready`), `packages/domain/src/invoices/numbering.ts`, `pdf.ts`, `issue.ts`; routes `invoices/route.ts`, `invoices/[id]/pdf/route.ts`; modify `rls.ts`, `helpers.ts`, `schema/providers.ts`, plan 2c's `canTransact`, plan 2d's `releaseBooking`, `cancelBooking` timer path and `decideDispute` (each schedules `issueDueInvoices` after commit), plan 2a's `timers.ts` (`TimerReport.invoicesIssued`), the payout set-up card (tax number and the invoicing consent tick); test `apps/web/tests/invoices.int.spec.ts`.
+**Files:** Create `packages/db/src/schema/invoices.ts` (migration `0020_invoices.sql`, which also adds the notification kind `invoice-ready`), `packages/domain/src/invoices/numbering.ts`, `pdf.ts`, `issue.ts`; routes `invoices/route.ts`, `invoices/[id]/pdf/route.ts`; modify `rls.ts`, `helpers.ts`, `schema/providers.ts`, plan 2c's `canTransact`, plan 2d's `releaseBooking`, `cancelBooking` timer path and `decideDispute` (each schedules `issueDueInvoices` after commit), plan 2a's `timers.ts` (`TimerReport.invoicesIssued`), the payout set-up card (tax number and the invoicing consent tick); test `apps/web/tests/invoices.int.spec.ts`.
 
 **Interfaces:**
 - Changes to existing tables: `providers.taxNumber` (text, nullable, provider-writable), `providers.invoiceConsentAt` (timestamptz, set when the provider ticks "The platform issues invoices in my name", consent text with a placeholder until the lawyer approves it). `canTransact` (plan 2c) additionally requires `invoiceConsentAt`, and for `kleinunternehmer` or `business` a `vatId` or `taxNumber`, when payments are enabled.
@@ -93,7 +93,7 @@
 
 ### Task 6: Monthly commission invoice
 
-**Files:** Create `packages/domain/src/invoices/commission.ts`; routes `commission-invoices/route.ts`, `commission-invoices/[id]/pdf/route.ts`; modify the invoices schema (migration `0019_commission_invoices.sql`, which also adds the notification kind `commission-invoice-ready`; `commission_invoices`: `id`, `providerId` (no foreign key), `month` text `YYYY-MM`, `number` unique, `total`, `currency`, `issuedAt`, `fileKey`; unique `(provider_id, month)`; `PUBLISHED_READ_TABLES`, provider owner), `rls.ts`, plan 2a's `timers.ts` (`TimerReport.commissionInvoices`); test `apps/web/tests/commission-invoices.int.spec.ts`.
+**Files:** Create `packages/domain/src/invoices/commission.ts`; routes `commission-invoices/route.ts`, `commission-invoices/[id]/pdf/route.ts`; modify the invoices schema (migration `0021_commission_invoices.sql`, which also adds the notification kind `commission-invoice-ready`; `commission_invoices`: `id`, `providerId` (no foreign key), `month` text `YYYY-MM`, `number` unique, `total`, `currency`, `issuedAt`, `fileKey`; unique `(provider_id, month)`; `PUBLISHED_READ_TABLES`, provider owner), `rls.ts`, plan 2a's `timers.ts` (`TimerReport.commissionInvoices`); test `apps/web/tests/commission-invoices.int.spec.ts`.
 
 **Interfaces:**
 - Produces: `issueCommissionInvoices(exec: Exec, now: Date): Promise<number>` (for the previous month in `TIME_ZONE`, every provider with `commission` ledger rows in it and no invoice for it: one invoice, series `commission:<YYYY>`, issuer `PLATFORM_ENTITY`, recipient the provider as on their invoices, one line per booking with the commission, VAT wording `PLATFORM_ENTITY.vatNote`; PDF as in Task 4; notifies `commission-invoice-ready`); runs from `runDueTimers` (idempotent: the unique key makes a second run do nothing).
@@ -120,5 +120,5 @@
 ## Self-review
 
 - **Spec coverage:** push for every event and email otherwise (3.10, 3.11 count notice): Tasks 1, 2. Invoices and receipts in the provider's name with labour and material and status wording, several lines per booking including additional tasks, PDF, yearly export (spec 4, foundation goal 4): Tasks 3 to 5, 7. Monthly commission invoice with placeholders for the missing legal entity (foundation section 9): Task 6. README and test report for Stage 2 (spec 5): Task 8. DAC7 data is Stripe's (plan 2c); nothing is collected here.
-- **Types:** plan 2a's `notifyBookingEvent`, `runDueTimers`, `TimerReport`; plan 2b's message notice and `CHAT_EMAIL_THROTTLE_MINUTES`; plan 2c's `canTransact`, `LIVE_PAYMENTS_ALLOWED`, ledger kinds `transfer` and `commission`, `bookings.commission_rate`; plan 2d's `releaseBooking`, `cancelBooking`, `decideDispute`, `materialAmount`, `parentBookingId`, statuses `completed|cancelled|refunded`, `cancelledBy`, `noShow` are used as those plans define them. New kinds `invoice-ready` (`0018`) and `commission-invoice-ready` (`0019`) are added to the notification check, and the parity test of Task 2 then covers them.
+- **Types:** plan 2a's `notifyBookingEvent`, `runDueTimers`, `TimerReport`; plan 2b's message notice and `CHAT_EMAIL_THROTTLE_MINUTES`; plan 2c's `canTransact`, `LIVE_PAYMENTS_ALLOWED`, ledger kinds `transfer` and `commission`, `bookings.commission_rate`; plan 2d's `releaseBooking`, `cancelBooking`, `decideDispute`, `materialAmount`, `parentBookingId`, statuses `completed|cancelled|refunded`, `cancelledBy`, `noShow` are used as those plans define them. New kinds `invoice-ready` (`0020`) and `commission-invoice-ready` (`0021`) are added to the notification check, and the parity test of Task 2 then covers them.
 - **Proportion:** eight tasks; the invoice draft type is spelled out because the PDF, the export and the tests all read it; everything else is signatures, values and tests.

@@ -8,6 +8,7 @@ import { REVIEW_VISIBLE_DAYS } from '../bookings/ending-rules'
 import { attemptMoney, lockRow, RELEASE_FAILED } from '../bookings/finish'
 import { notifyBookingEvent } from '../bookings/notify'
 import { logStaffThreadAccess } from '../chat/staff'
+import { issueInvoiceFor } from '../invoices/issue'
 import { paidAmount } from '../payments/ledger'
 import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
@@ -198,6 +199,7 @@ export async function staffRefund(exec: Exec, staffId: string, bookingId: string
     return row!
   })
   await tellBoth('refund-issued', r, input.reason, r.status, now)
+  await issueInvoiceFor(r.id, now) // settled: its group may now be due (never throws)
   return { id: r.id, status: r.status }
 }
 

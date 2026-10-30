@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { sql } from 'drizzle-orm'
-import { editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, setGatewayForTests, writeReview } from '@kando/domain'
-import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { clearOutbox, clearPushOutbox, outboxForTests, pushOutboxForTests, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, setGatewayForTests, writeReview } from '@kando/domain'
+import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -63,6 +63,18 @@ const write = (uid: string, bookingId: string, now: Date, input: { stars: number
 const mine = (uid: string, now = new Date()) => asUser(uid, (tx) => listMyReviews(tx, uid, now))
 const post = (uid: string, body: unknown) => call(reviewsRoute.POST, uid, 'POST', body)
 const rows = async (bookingId: string) => (await pool.query('SELECT author_id, subject_id, author_role, stars, text, visible_at, created_at FROM reviews WHERE booking_id = $1 ORDER BY author_role', [bookingId])).rows
+/** review-visible emails and pushes per person (each side has one device in these tests). */
+const told = () => ({
+  mails: outboxForTests().filter((m) => [EMAIL(U.cust), EMAIL(U.owner)].includes(m.to) && /Bewertung|review/i.test(m.subject)).map((m) => m.to).sort(),
+  pushes: pushOutboxForTests().filter((m) => m.data.kind === 'review-visible').map((m) => m.to).sort(),
+})
+const withDevices = async () => {
+  await pool.query("DELETE FROM push_tokens WHERE user_id LIKE 'rv-%'")
+  for (const u of [U.cust, U.owner]) await pool.query("INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, $2, 'ios')", [u, `ExponentPushToken[${u}]`])
+  clearOutbox()
+  clearPushOutbox()
+}
+const BOTH = { mails: [EMAIL(U.cust), EMAIL(U.owner)].sort(), pushes: ['ExponentPushToken[rv-cust]', 'ExponentPushToken[rv-owner]'] }
 const visibleNotes = async (bookingId: string) => (await pool.query("SELECT user_id FROM notifications WHERE kind = 'review-visible' AND payload->>'bookingId' = $1 ORDER BY user_id", [bookingId])).rows.map((r) => r.user_id)
 const publicPage = (slug: string) => asUser(null, (tx) => getPublicProfile(tx, slug, 'de'))
 /** What a party can read straight from the table under row-level security (no domain filter). */
@@ -88,7 +100,9 @@ it("neither side sees the other's review until both are in", async () => {
 
 it('both appear together when the second is written', async () => {
   const { id } = await done()
+  await withDevices()
   await write(U.cust, id, new Date(), { stars: 5, text: 'Top' })
+  expect(told()).toEqual({ mails: [], pushes: [] })
   const now = new Date()
   const second = await write(U.owner, id, now, { stars: 4 })
   expect(second).toMatchObject({ authorRole: 'provider', stars: 4, text: null, visibleAt: now.toISOString() })
@@ -112,11 +126,13 @@ it('both appear together when the second is written', async () => {
   expect((await pool.query('SELECT reveal_told_at FROM reviews WHERE booking_id = $1', [id])).rows[0].reveal_told_at).not.toBeNull()
   await runDueTimers(db, new Date())
   expect(await visibleNotes(id)).toEqual([U.cust, U.owner].sort())
+  expect(told()).toEqual(BOTH) // one email and one push per side, none again from the timer
 })
 
 it('one review alone appears after 7 days', async () => {
   // completed 7 days and a minute ago: the customer wrote on day 1, the provider never did
   const { id, completedAt } = await done({ completedAt: new Date(Date.now() - 7 * DAY - MIN) })
+  await withDevices()
   const own = await write(U.cust, id, new Date(completedAt.getTime() + DAY), { stars: 3 })
   const at = completedAt.getTime() + 7 * DAY
   expect(new Date(own.visibleAt!).getTime()).toBe(at)
@@ -134,6 +150,7 @@ it('one review alone appears after 7 days', async () => {
   expect((await pool.query('SELECT reveal_told_at FROM reviews WHERE booking_id = $1', [id])).rows[0].reveal_told_at).not.toBeNull()
   await runDueTimers(db, new Date())
   expect(await visibleNotes(id)).toEqual([U.cust, U.owner].sort())
+  expect(told()).toEqual(BOTH) // the timer's reveal: one email and one push per side, once
 })
 
 it('a review written one millisecond before the 7 days end still reveals both at once', async () => {

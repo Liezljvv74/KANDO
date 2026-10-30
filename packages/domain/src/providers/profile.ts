@@ -24,6 +24,8 @@ const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
   slug: r.slug,
   suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
   missing,
+  taxNumber: r.taxNumber,
+  invoiceConsent: r.invoiceConsentAt !== null,
 })
 
 /** The caller's provider row (RLS also shows published rows of others; the owner filter picks the caller's). */
@@ -159,6 +161,9 @@ export async function upsertMyProfile(
     ...(basePostcode !== undefined && { basePostcode }),
     ...(input.serviceRadiusKm !== undefined && { serviceRadiusKm: input.serviceRadiusKm }),
     ...(input.worksRemotely !== undefined && { worksRemotely: input.worksRemotely }),
+    ...(input.taxNumber !== undefined && { taxNumber: clean(input.taxNumber) }),
+    // the consent keeps its first time; unticking withdraws it (canTransact then refuses new work while payments are on)
+    ...(input.invoiceConsent !== undefined && { invoiceConsentAt: input.invoiceConsent ? (existing.invoiceConsentAt ?? new Date()) : null }),
   }
   await tx.update(providers).set({ ...values, updatedAt: new Date() }).where(eq(providers.id, existing.id))
   await syncIdentity(tx, userId, (await ownProvider(tx, userId))!)

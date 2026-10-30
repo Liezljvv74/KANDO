@@ -421,7 +421,7 @@ it('a booking with an open chargeback flag is not picked by the release', async 
   expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [id])).rows[0].n).toBe(0) // not tried, so not flagged
 })
 
-it('the releases run last: the other rules and their emails happen even when the release loop fails', async () => {
+it('the other rules and their emails happen even when the release loop fails (the releases run before the emails)', async () => {
   const T = new Date('2028-04-03T10:00:00Z')
   const reminded = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: new Date(T.getTime() + 6 * DAY) }) // reminder 1 due at T + 7 d
   const asked = await paidBooking({ startAt: new Date(T.getTime() + 5 * DAY) }) // ends T + 5 d 1 h: asked at T + 7 d

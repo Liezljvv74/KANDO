@@ -127,12 +127,12 @@ export function exportRows(data: Export): string[][] {
 
 const PLAIN_NUMBER = /^-?\d+([.,]\d+)?$/
 /**
- * A spreadsheet program runs a cell that starts with = + @ (or a tab, a carriage return, or a minus that is not a plain
- * number) as a formula: such a cell gets a leading single quote. The quote is intentional and part of the CSV value; the JSON export is unchanged.
+ * A spreadsheet program runs a cell that starts with = + @ - (or a tab or carriage return), also after leading blanks or
+ * quote marks, as a formula: such a cell gets a leading single quote, unless it is a plain number (-5 stays -5). The quote is intentional and part of the CSV value; the JSON export is unchanged.
  */
-const noFormula = (s: string) => (/^[=+@\t\r]/.test(s) || (s.startsWith('-') && !PLAIN_NUMBER.test(s)) ? `'${s}` : s)
+export const noFormula = (s: string) => (/^[\s"']*[=+@\t\r-]/.test(s) && !PLAIN_NUMBER.test(s) ? `'${s}` : s)
 
-const quote = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s)
+export const quote = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s)
 
 /** RFC 4180 text (CRLF lines) with a UTF-8 byte order mark, so spreadsheet programs show umlauts correctly. */
 export const exportCsv = (data: Export): string =>

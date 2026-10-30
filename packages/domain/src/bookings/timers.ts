@@ -11,6 +11,9 @@ import { resolveNoShows, trySettleCancelled } from './cancel'
 import { openSystemDispute } from './disputes'
 import { tryApplyDecision } from '../admin/bookings'
 import { describeError } from '../log-error'
+import { issueDueInvoices, withDeferredInvoices } from '../invoices/issue'
+import { withPushBatch } from '../push'
+import { issueCommissionInvoices } from '../invoices/commission'
 
 /**
  * The automatic releases stop starting new ones after this time: about half of the cron route's maxDuration (60 s), as
@@ -46,6 +49,10 @@ export type TimerReport = {
   reviewsShown: number
   /** Staff decisions whose money step failed before, carried out now (admin/bookings.ts applyDecision). */
   decisionsApplied: number
+  /** Invoices and receipts issued for booking groups now final (the ending paths issue at once; this is the retry). */
+  invoicesIssued: number
+  /** KANDO's monthly commission invoices issued for the previous month (idempotent: one per provider and month). */
+  commissionInvoices: number
 }
 
 /**
@@ -103,7 +110,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -135,7 +142,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
     ${result('n')}`)
   })
 
-  // A review shown by its 7 days (the other side wrote none) tells both sides once (`review-visible`, in-app only; a second
+  // A review shown by its 7 days (the other side wrote none) tells both sides once (`review-visible`; a second
   // review shows both at once and writeReview tells them). One statement marking reveal_told_at, so a concurrent run
   // cannot tell twice. Looks back REVIEW_VISIBLE_DAYS only, so a long-past reveal is never told late.
   const reviewsShown = await count(sql`
@@ -143,8 +150,8 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
       WHERE reveal_told_at IS NULL AND NOT hidden AND visible_at <= ${t}::timestamptz AND visible_at > ${t}::timestamptz - make_interval(days => ${REVIEW_VISIBLE_DAYS})
       RETURNING booking_id, author_id, subject_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
-      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING 1)
-    SELECT count(*)::int AS n FROM s`)
+      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING user_id, kind, payload)
+    ${result('s')}`)
 
   // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
   // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.
@@ -153,7 +160,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   const customersWaiting = waiting.length
 
   const endings = await endingRules(exec, now, count, timeUp)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, events }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, events }
 }
 
 // The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
@@ -309,9 +316,10 @@ async function releaseDue(exec: Exec, now: Date, timeUp: () => boolean): Promise
 }
 
 /**
- * Sends the emails of the in-app rows a sweep just wrote (the SQL writes the row, notifyBookingEvent sends only the email
- * for these kinds, so there is one row and one email per event). Never throws; the sweep is committed before this runs
- * (unless the caller passed an open transaction).
+ * Sends the emails and pushes of the in-app rows a sweep just wrote (the SQL writes the row, notifyBookingEvent sends only
+ * the email and push for these kinds, so there is one row, one email and one push per event). Never throws. The sweep has
+ * committed before this runs: the runners take the pool only (each statement and step commits on its own), never an open
+ * transaction, so no email or push can go out for a write that is later rolled back.
  */
 async function sendEmails({ events, ...report }: TimerReport & { events: TimerEvent[] }): Promise<TimerReport> {
   for (const e of events) await notifyBookingEvent(e.kind, e.userId, e.payload)
@@ -319,18 +327,32 @@ async function sendEmails({ events, ...report }: TimerReport & { events: TimerEv
 }
 
 /**
- * The scheduled sweep (owner connection or a transaction). The money releases run LAST, after every other rule and its
- * emails: a timeout or an error in the release loop can no longer drop the day's reminders, expiries or silent-provider steps.
+ * The scheduled sweep (the pool, never an open transaction: see sendEmails), in one time budget measured from its start.
+ * Order: the SQL rules (each one statement: their in-app rows are written, their emails wait), then the money (no-show
+ * resolutions and releases, invoicing deferred), then the waiting emails (also when the money loop throws), then the documents (invoices, commission
+ * invoices) with whatever budget is left. Every push of the run is held back and sent at the very end in requests of 100
+ * (withPushBatch), so a slow push service never eats the budget of the releases. A release whose invoice the budget did not
+ * reach leaves its group due: the next run issues it (and tells both, in-app row and PDF key in one transaction).
  */
-export async function runDueTimers(exec: Exec, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
-  // one budget for the whole run, measured from its start: the loops before the releases count against it too
+export async function runDueTimers(exec: typeof db, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
   const { budgetMs = RELEASE_BUDGET_MS, clock = Date.now } = release
   const started = clock()
   const timeUp = () => clock() - started >= budgetMs
-  const report = await sendEmails(await sweep(exec, now, undefined, false, timeUp))
-  const noShowsResolved = await resolveNoShows(exec, now, timeUp)
-  return { ...report, noShowsResolved, ...(await releaseDue(exec, now, timeUp)) }
+  return withPushBatch(async () => {
+    const swept = await sweep(exec, now, undefined, false, timeUp)
+    let money: { noShowsResolved: number } & Awaited<ReturnType<typeof releaseDue>>
+    let report: TimerReport
+    try {
+      const noShowsResolved = await resolveNoShows(exec, now, timeUp)
+      money = { noShowsResolved, ...(await withDeferredInvoices(() => releaseDue(exec, now, timeUp))) }
+    } finally {
+      report = await sendEmails(swept) // the rules' emails go out even when the money loop fails (their rows are written)
+    }
+    // the groups the releases made final, a group ended by an expiry, a PDF a storage failure left out: all due here
+    const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
+    return { ...report, ...money, invoicesIssued, commissionInvoices: await issueCommissionInvoices(exec, now, { timeUp }) }
+  })
 }
 
 /** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */
-export const runDueTimersFor = async (exec: Exec, userId: string, now = new Date()): Promise<TimerReport> => sendEmails(await sweep(exec, now, userId, true))
+export const runDueTimersFor = async (exec: typeof db, userId: string, now = new Date()): Promise<TimerReport> => sendEmails(await sweep(exec, now, userId, true))

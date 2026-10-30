@@ -8,6 +8,7 @@ import { photosApi } from '@/api/my-profile'
 import { clearMe, loadMe } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
 import { clearPending, loadPending, savePending, type PendingSignup } from '@/lib/pending-signup'
+import { registerForPush, unregisterPush } from '@/lib/push'
 
 type User = auth.SessionUser
 type State = { user: User | null; loading: boolean; offline: boolean }
@@ -21,8 +22,11 @@ function set(next: State) {
   listeners.forEach((l) => l())
 }
 
-/** Only a confirmed email counts as signed in; until then the auth screens stay. */
-const signedIn = (user: User | null) => set({ user: user?.emailVerified ? user : null, loading: false, offline: false })
+/** Only a confirmed email counts as signed in; until then the auth screens stay. A session start registers for push (never awaited). */
+function signedIn(user: User | null) {
+  set({ user: user?.emailVerified ? user : null, loading: false, offline: false })
+  if (state.user) registerForPush()
+}
 
 /** Loads the signed-in user. A lost connection sets `offline` (cookie kept) so the app can offer a retry instead of the login form. */
 export async function loadSession() {
@@ -121,6 +125,7 @@ export async function verify(email: string, code: string) {
 export async function signOut() {
   clearMe()
   set({ user: null, loading: false, offline: false })
+  await unregisterPush() // while the session still exists
   await auth.signOut()
 }
 
@@ -133,7 +138,8 @@ export function chooseLanguage(lang: Lang) {
 export const getSession = () => state
 
 // The server no longer accepts the session: back to the login (Stack.Protected follows `user`).
-setOnUnauthorized(() => (clearMe(), set({ user: null, loading: false, offline: false })))
+// The push token is forgotten too, so the next sign-in registers it again.
+setOnUnauthorized(() => (clearMe(), unregisterPush(), set({ user: null, loading: false, offline: false })))
 
 /** Test helper. */
 export const resetSession = () => {

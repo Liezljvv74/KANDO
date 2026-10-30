@@ -1,4 +1,4 @@
-import type { Me, Photo } from '@kando/contract'
+import type { Me, Photo, PushSettings } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
@@ -6,8 +6,10 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { API_URL, ApiError, updateMe } from '@/api/client'
+import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
+import { SwitchRow } from '@/components/form-ui'
 import { NotificationBanners } from '@/components/notification-banner'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useFlash } from '@/hooks/use-flash'
@@ -15,8 +17,10 @@ import { loadMe, markNotificationsSeen, unseenOf, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
+import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { AccountDataSection } from '@/screens/account-data-section'
+import { InvoicesCard } from '@/screens/invoices/invoices-card'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -103,6 +107,8 @@ export default function AccountScreen() {
           <LinkText label={t('account.offerServices')} onPress={offer} />
           <LanguageSwitch />
         </View>
+        <PushSwitches />
+        <InvoicesCard me={shared ?? me} />
         <Button label={t('auth.logOut')} onPress={signOut} />
         <AccountDataSection />
         {/* Staff shortcut while testing; release builds never show it. The in-app browser's ✕ returns here (createTask false:
@@ -117,6 +123,28 @@ export default function AccountScreen() {
   )
 }
 
+/** The two push switches; everything else about bookings and payments is always pushed. Hidden until loaded; a failed save flips back. */
+function PushSwitches() {
+  const [settings, setSettings] = useState<PushSettings | null>(null)
+  useEffect(() => {
+    getPushSettings().then(setSettings, () => {})
+  }, [])
+  if (!settings) return null
+  const change = (key: keyof PushSettings) => (value: boolean) => {
+    setSettings({ ...settings, [key]: value })
+    if (value) registerForPush() // a phone that refused or failed earlier gets another try
+    setPushSettings({ [key]: value }).then(setSettings, () => setSettings(settings))
+  }
+  return (
+    <View style={styles.card}>
+      <Text style={styles.heading}>{t('account.pushHeading')}</Text>
+      <SwitchRow label={t('account.pushChat')} value={settings.chat} onChange={change('chat')} />
+      <SwitchRow label={t('account.pushReminders')} value={settings.reminders} onChange={change('reminders')} />
+      <Text style={styles.hint}>{t('account.pushHint')}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F2FBF8' },
   scroll: { padding: 16, gap: 12 },
@@ -124,5 +152,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
   saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
   email: { fontSize: 16, color: '#14352E' },
+  heading: { fontSize: 17, fontWeight: '700', color: '#14352E' },
+  hint: { fontSize: 14, color: '#4B6B63' },
   link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#0E8A6B', textDecorationLine: 'underline' },
 })

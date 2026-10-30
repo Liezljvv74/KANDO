@@ -2,14 +2,17 @@ import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useState } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
+import type { MyProfile } from '@kando/contract'
+
+import { getMyProfile, saveMyProfile } from '@/api/my-profile'
 import { payoutStatus, startPayoutSetup } from '@/api/payments'
-import { ErrorText } from '@/components/auth-ui'
-import { Card, SmallButton } from '@/components/form-ui'
+import { ErrorText, Field } from '@/components/auth-ui'
+import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
-import { payoutState } from '@/lib/payouts'
+import { payoutState, saveSwitch } from '@/lib/payouts'
 import { isHttps } from '@/lib/safe-url'
 
 /** "Set up payouts": the status and the Stripe link. `useLoad` re-checks the status on focus and when the app returns to the front (no polling). */
@@ -61,7 +64,45 @@ export function PayoutCard() {
           <SmallButton label={t(state === 'waiting' ? 'payouts.continue' : 'payouts.setUp')} onPress={open} busy={busy} />
         ))}
       <ErrorText text={problem} />
+      <Invoicing />
     </Card>
+  )
+}
+
+/** Invoicing, part of being ready to take work while payments are on: the tax number printed on invoices, and the consent tick. */
+function Invoicing() {
+  const fetch = useCallback(() => getMyProfile(), [])
+  const { data } = useLoad(fetch)
+  return data ? <InvoicingFields initial={data} /> : null
+}
+
+function InvoicingFields({ initial }: { initial: MyProfile }) {
+  const [taxNumber, setTaxNumber] = useState(initial.taxNumber ?? '')
+  const [consent, setConsent] = useState(!!initial.invoiceConsent)
+  const [problem, setProblem] = useState<string | null>(null)
+  async function save(body: object) {
+    setProblem(null)
+    try {
+      await saveMyProfile(body)
+    } catch (e) {
+      setProblem(paymentsProblem(e))
+    }
+  }
+  return (
+    <>
+      <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={setTaxNumber} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />
+      <SwitchRow
+        label={t('payouts.invoiceConsent')}
+        value={consent}
+        onChange={(v) => {
+          setProblem(null)
+          // a failed save puts the switch back, so it never shows a consent the server does not have
+          saveSwitch(v, setConsent, (x) => saveMyProfile({ invoiceConsent: x })).catch((e) => setProblem(paymentsProblem(e)))
+        }}
+      />
+      {!consent && <Text style={styles.small}>{t('payouts.invoiceConsentNeeded')}</Text>}
+      <ErrorText text={problem} />
+    </>
   )
 }
 

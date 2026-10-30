@@ -4,6 +4,7 @@ import type { Booking, FinishInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
+import { issueInvoiceFor } from '../invoices/issue'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
@@ -146,5 +147,7 @@ export async function attemptMoney(what: string, bookingId: string, customerId: 
     .set({ resolvedAt: now, resolvedBy: 'system' })
     .where(and(eq(staffFlags.kind, 'payment-unprocessed'), eq(staffFlags.refId, bookingId), isNull(staffFlags.resolvedAt), like(staffFlags.note, `${RELEASE_FAILED}%`)))
     .catch((err) => console.error(`[${what}] staff flag not resolved ${describeError(err)}`))
+  // the money step has committed: the booking's group may now be final and due for its invoice (never throws)
+  await issueInvoiceFor(bookingId, now)
   return true
 }

@@ -134,6 +134,27 @@
       "when": 1793322206506,
       "tag": "0018_endings",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793340888177,
+      "tag": "0019_push",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793346542890,
+      "tag": "0020_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793350239207,
+      "tag": "0021_commission_invoices",
+      "breakpoints": true
     }
   ]
 }

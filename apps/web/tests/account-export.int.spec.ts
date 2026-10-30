@@ -143,13 +143,13 @@ it('format=csv for a person without a provider has no provider rows; an unknown 
 })
 
 it('format=csv neutralises spreadsheet formulas (the leading quote is intentional) and keeps empty objects and nulls as rows', async () => {
-  const names = ['=HYPERLINK("http://x.test","hi")', '+cmd|calc', '@SUM(A1:A2)', '-5', '-1+2', '\tTabbed', 'safe']
+  const names = ['=HYPERLINK("http://x.test","hi")', '+cmd|calc', '@SUM(A1:A2)', '-5', '-1+2', '\tTabbed', 'safe', '  =1+1', '"=cmd', ' -2']
   for (const n of names) await pool.query("INSERT INTO provider_references (provider_id, client_name, description) SELECT id, $2, 'x' FROM providers WHERE owner_id = $1", ['ex1', n])
   const text = Buffer.from(await (await csv('ex1')).arrayBuffer()).toString('utf8').slice(1)
   const rows = parseCsv(text)
   const clients = rows.filter((r) => r[0] === 'references' && r[2] === 'clientName').map((r) => r[3])
   // Read back as written: the quote prefix is part of the value on purpose.
-  expect(clients).toEqual(expect.arrayContaining(["'=HYPERLINK(\"http://x.test\",\"hi\")", "'+cmd|calc", "'@SUM(A1:A2)", '-5', "'-1+2", "'\tTabbed", 'safe']))
+  expect(clients).toEqual(expect.arrayContaining(["'=HYPERLINK(\"http://x.test\",\"hi\")", "'+cmd|calc", "'@SUM(A1:A2)", '-5', "'-1+2", "'\tTabbed", 'safe', "'  =1+1", "'\"=cmd", "' -2"])) // a formula behind blanks or a quote mark too; " -2" is not a plain number
   expect(clients).not.toContain('-1+2')
   // The JSON export is unchanged.
   const json = await (await call(exportRoute.GET, 'ex1')).json()

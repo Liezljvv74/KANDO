@@ -39,6 +39,8 @@ const KEY: Record<Notification['kind'], Key> = {
   'review-requested': 'notification.reviewRequested',
   'review-visible': 'notification.reviewVisible',
   'provider-warning': 'notification.providerWarning',
+  'invoice-ready': 'notification.invoiceReady',
+  'commission-invoice-ready': 'notification.commissionInvoiceReady',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */
@@ -65,9 +67,10 @@ export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>):
   return n.payload.threadId ?? /^skilled:\/\/threads\/([^/?#]+)$/.exec(n.payload.url)?.[1] ?? null
 }
 
-/** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting"; null for the rest. */
+/** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting", the commission invoice list for a new commission invoice; null for the rest. */
 export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): { path: string } | null => {
   if (n.kind === 'customers-waiting') return { path: '/my-profile' }
+  if (n.kind === 'commission-invoice-ready') return { path: '/invoices/commission' }
   if (n.kind !== 'provider-available' || !('url' in n.payload)) return null
   const slug = /^https?:\/\/[^/]+\/providers\/([^/?#]+)/.exec(n.payload.url)?.[1]
   return slug ? { path: `/provider/${slug}` } : null

@@ -23,6 +23,7 @@ import { FinishSheet } from '@/screens/bookings/finish-sheet'
 import { PayPanel } from '@/screens/bookings/pay-card'
 import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
+import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
 
 type Found = { booking: Booking; viewer: Viewer } | null
@@ -108,6 +109,7 @@ export default function BookingDetail() {
         {!!b.parentBookingId && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
       </Card>
       <PayPanel booking={b} viewer={viewer} onRefresh={retry} />
+      <BookingInvoiceRow booking={b} />
       {b.status === 'disputed' && <DisputeInfo booking={b} />}
       {b.status === 'completed' && !b.parentBookingId && <ReviewPanel booking={b} />}
       <OpenChat find={() => threadIdForBooking(b)} />
