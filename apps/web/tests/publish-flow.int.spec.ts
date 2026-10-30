@@ -132,3 +132,19 @@ it('a user suspension that has ended no longer blocks publishing; a running one 
   await pool.query("UPDATE users SET suspended_until = now() - interval '1 minute' WHERE id = 'pf2'")
   expect((await call(publish.POST, 'pf2', 'POST')).status).toBe(200)
 })
+
+it('two providers with the same name publish at once', async () => {
+  for (let i = 0; i < 5; i++) {
+    const uids = [`rc${i}a`, `rc${i}b`]
+    for (const u of uids) {
+      await pool.query("INSERT INTO users (id, email, first_name, last_name) VALUES ($1, $2, $3, 'Zed') ON CONFLICT (id) DO NOTHING", [u, EMAIL(u), `Twin${i}`])
+      await call(profileRoute.PUT, u, 'PUT', profile)
+      await givePhoto(u)
+      await call(services.POST, u, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+    }
+    const res = await Promise.all(uids.map((u) => call(publish.POST, u, 'POST')))
+    expect(res.map((r) => r.status)).toEqual([200, 200])
+    const slugs = (await pool.query('SELECT slug FROM providers WHERE owner_id = ANY($1) ORDER BY slug', [uids])).rows.map((r) => r.slug)
+    expect(slugs[1]).toBe(`${slugs[0]}-2`)
+  }
+})

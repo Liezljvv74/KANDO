@@ -99,3 +99,9 @@ it('notifications: the owner reads and marks own rows; another user sees none, c
     await cleanupPeople()
   }
 })
+
+it('applyRls is all or nothing', async () => {
+  await expect(applyRls([`DROP POLICY owner_only ON "users"`, 'SELECT no_such_function()'])).rejects.toThrow()
+  const r = await pool.query("SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'owner_only'")
+  expect(r.rowCount).toBe(1)
+})

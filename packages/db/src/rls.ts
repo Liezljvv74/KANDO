@@ -273,6 +273,8 @@ const PROVIDER_FUNCTIONS = [
       END IF;
       IF p_published AND r.slug IS NULL THEN
         s := p_slug_base;
+        -- one publisher per base at a time (the lock lasts to commit), else both pick the same free slug
+        PERFORM pg_advisory_xact_lock(hashtext('kando.slug'), hashtext(p_slug_base));
         WHILE EXISTS (SELECT 1 FROM providers WHERE slug = s) LOOP n := n + 1; s := p_slug_base || '-' || n; END LOOP;
         UPDATE providers SET slug = s WHERE id = r.id;
       END IF;
@@ -564,7 +566,10 @@ export function rlsStatements(
   ]
 }
 
-export async function applyRls(): Promise<void> {
+/** All statements in one transaction: a failure leaves the previous grants and policies untouched (the parameter is for the test). */
+export async function applyRls(statements: string[] = rlsStatements()): Promise<void> {
   const { db } = await import('./client')
-  for (const statement of rlsStatements()) await db.execute(sql.raw(statement))
+  await db.transaction(async (tx) => {
+    for (const statement of statements) await tx.execute(sql.raw(statement))
+  })
 }
