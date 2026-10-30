@@ -70,6 +70,11 @@ test('a requestId alone opens the request', () => {
   expect(at('request-declined', { requestId: 'r-1' })).toEqual({ path: '/bookings/request/r-1' })
 })
 
+test('request-withdrawn and request-declined also open the request when both ids are named (same list as the server push)', () => {
+  expect(at('request-withdrawn', { requestId: 'r-1', bookingId: 'b-1' })).toEqual({ path: '/bookings/request/r-1' })
+  expect(at('request-declined', { requestId: 'r-1', bookingId: 'b-1' })).toEqual({ path: '/bookings/request/r-1' })
+})
+
 test('request-reopened opens the request, not the ended booking', () => {
   expect(at('request-reopened', { requestId: 'r-1', bookingId: 'b-1' })).toEqual({ path: '/bookings/request/r-1' })
 })

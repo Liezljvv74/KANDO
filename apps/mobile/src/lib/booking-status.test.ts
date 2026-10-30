@@ -204,3 +204,15 @@ test('the customer asks for an "Additional task", the provider for a "Scope/quot
   expect(actionLabel('additionalTask', 'provider')).toBe('booking.scopeReview')
   expect(actionLabel('finish', 'provider')).toBe('booking.finish')
 })
+
+test('late fee is rounded from cents: 33.33 -> 16.67', () => {
+  expect(lateFee(33.33)).toBe(16.67)
+  expect(lateFee(100)).toBe(50)
+})
+
+test('the exact 24 h mark is free, one minute inside is late (same numbers as the server)', () => {
+  const booking = b({ startAt: '2027-01-05T12:00:00.000Z', amount: 100 })
+  const mark = new Date('2027-01-04T12:00:00.000Z')
+  expect(cancelStatement(booking, 'customer', mark)).toBe('booking.cancelFree booking.cancelChildren')
+  expect(cancelStatement(booking, 'customer', new Date(mark.getTime() + 60_000))).toContain('booking.cancelLate 50')
+})

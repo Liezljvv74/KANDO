@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Text } from 'react-native'
 
 import { notifyMe, stopNotifyMe } from '@/api/payments'
@@ -12,6 +12,7 @@ import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
 export function NotifyMe({ slug, watching }: { slug: string; watching: boolean }) {
   const me = useMe()
   const [on, setOn] = useState(watching)
+  useEffect(() => setOn(watching), [watching])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   async function toggle() {

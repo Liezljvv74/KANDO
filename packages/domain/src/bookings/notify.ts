@@ -1,3 +1,4 @@
+import { REQUEST_SCREEN_KINDS } from '@kando/contract'
 import { eq } from 'drizzle-orm'
 import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t, type Key } from '@kando/i18n'
@@ -15,12 +16,9 @@ export type BookingKind = Extract<NotificationKind, BookingTemplate>
 const WITH_URL: NotificationKind[] = ['message-received', 'provider-available', 'commission-invoice-ready']
 
 
-/** Kinds about a request whose booking (if named) has ended: they open the request. */
-const REQUEST_SCREEN: NotificationKind[] = ['request-withdrawn', 'request-declined', 'request-reopened']
-
 /** The app screen a push opens: the booking, the request, the provider, the thread (`params.url`), else the profile tab. */
 const appUrl = (kind: NotificationKind, p: Record<string, string>): string =>
-  p.bookingId && !(REQUEST_SCREEN.includes(kind) && p.requestId) ? `skilled://bookings/${p.bookingId}`
+  p.bookingId && !(REQUEST_SCREEN_KINDS.includes(kind) && p.requestId) ? `skilled://bookings/${p.bookingId}`
   : p.requestId ? `skilled://bookings/request/${p.requestId}`
   : p.slug ? `skilled://provider/${p.slug}`
   : p.url?.startsWith('skilled://') ? p.url

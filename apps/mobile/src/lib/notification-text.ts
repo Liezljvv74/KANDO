@@ -1,4 +1,4 @@
-import type { Notification } from '@kando/contract'
+import { REQUEST_SCREEN_KINDS, type Notification } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 
@@ -76,7 +76,7 @@ const idOf = (payload: object, key: 'bookingId' | 'requestId'): string | null =>
   return typeof v === 'string' ? v : null
 }
 
-/** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting", the commission invoice list for a new commission invoice, else the booking, or the request (always for request-reopened: its booking has ended), or the list; null for the rest or a malformed id. */
+/** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting", the commission invoice list for a new commission invoice, else the booking, or the request (first for request-withdrawn, -declined and -reopened: their booking has ended), or the list; null for the rest or a malformed id. */
 export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): { path: string } | null => {
   if (n.kind === 'customers-waiting') return { path: '/my-profile' }
   if (n.kind === 'commission-invoice-ready') return { path: '/invoices/commission' }
@@ -87,7 +87,7 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): {
   }
   const bookingId = idOf(n.payload, 'bookingId')
   const requestId = idOf(n.payload, 'requestId')
-  const [first, second] = n.kind === 'request-reopened' ? [['request', requestId], ['booking', bookingId]] as const : [['booking', bookingId], ['request', requestId]] as const
+  const [first, second] = REQUEST_SCREEN_KINDS.includes(n.kind) ? [['request', requestId], ['booking', bookingId]] as const : [['booking', bookingId], ['request', requestId]] as const
   for (const [what, id] of [first, second]) {
     if (id === null) continue
     if (!ID.test(id)) return null

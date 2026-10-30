@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '@/components/auth-ui'
-import { useSession } from '@/hooks/use-session'
+import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { pushRoute } from '@/lib/push'
@@ -26,7 +26,7 @@ export default function RootLayout() {
           <ActivityIndicator size="large" color="#0E8A6B" />
         ) : (
           <>
-            <Text style={styles.text}>{t('error.network')}</Text>
+            <Text style={styles.text}>{t(isAuthBusy() ? 'error.authBusy' : 'error.network')}</Text>
             <Button label={t('common.retry')} onPress={retry} />
           </>
         )}

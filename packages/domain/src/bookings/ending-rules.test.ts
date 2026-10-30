@@ -157,3 +157,16 @@ describe('reviews', () => {
     expect(canEditReview(c, new Date(c.getTime() + 20 * D), new Date(c.getTime() + 14 * D))).toBe(false)
   })
 })
+
+describe('late cancellation, hard-coded numbers', () => {
+  const start = iso('2027-01-05T12:00:00.000Z')
+  it('exactly 24 h before is free, one minute inside is late', () => {
+    expect(isLate(start, new Date(start.getTime() - 24 * H))).toBe(false)
+    expect(isLate(start, new Date(start.getTime() - 24 * H + 60_000))).toBe(true)
+    expect(customerCancelShare(100, start, new Date(start.getTime() - 24 * H))).toBe(0)
+    expect(customerCancelShare(100, start, new Date(start.getTime() - 24 * H + 60_000))).toBe(50)
+  })
+  it('33.33 rounds from cents to 16.67', () => {
+    expect(customerCancelShare(33.33, start, new Date(start.getTime() - H))).toBe(16.67)
+  })
+})
