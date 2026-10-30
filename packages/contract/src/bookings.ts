@@ -116,6 +116,12 @@ export const BookingSchema = z.object({
   answerBy: z.string().nullable(),
   payBy: z.string().nullable(),
   counterBy: z.enum(['provider', 'customer']).nullable(),
+  /** When the provider tapped "Finished" (or the customer said it was done). */
+  finishedAt: z.string().nullable(),
+  /** When the payment to the provider is made unless the customer confirms earlier or reports a problem. */
+  confirmBy: z.string().nullable(),
+  /** When the customer was asked "Was the job done?" (the provider never tapped "Finished"); from then on they can confirm. */
+  askedDoneAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

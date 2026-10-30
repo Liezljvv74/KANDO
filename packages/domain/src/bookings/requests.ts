@@ -72,6 +72,9 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   answerBy: b.answerBy ? iso(b.answerBy) : null,
   payBy: b.payBy ? iso(b.payBy) : null,
   counterBy: b.counterBy as Booking['counterBy'],
+  finishedAt: b.finishedAt ? iso(b.finishedAt) : null,
+  confirmBy: b.confirmBy ? iso(b.confirmBy) : null,
+  askedDoneAt: b.askedDoneAt ? iso(b.askedDoneAt) : null,
   createdAt: iso(b.createdAt),
   updatedAt: iso(b.updatedAt),
 })

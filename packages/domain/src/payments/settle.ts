@@ -1,5 +1,5 @@
-import { eq, inArray } from 'drizzle-orm'
-import { bookings, db, ledgerEntries, providers } from '@kando/db'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { bookings, db, disputes, ledgerEntries, providers, staffFlags } from '@kando/db'
 import { isUuid } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
@@ -13,6 +13,8 @@ import { commissionFor, toCents } from './rules'
  * for app_user before any money moves). The caller sets the booking status (plan 2d). The commission needs no gateway
  * call: it is the part of the charge that stays on the platform; its ledger row records it.
  * 404 unknown booking; 409 NOT_PAID; 409 NO_CHARGE (paid_at set but no charge in the ledger); 409 ALREADY_SETTLED once released_at is set; 400 share not 0..paid in whole cents;
+ * 409 DISPUTE_OPEN while the booking has an undecided dispute or an open chargeback flag (a staff decision records its
+ * decision on the dispute in the same transaction before it settles; a chargeback flag is resolved by staff first);
  * 409 NO_PAYOUT_ACCOUNT when a transfer is due and the provider has no payout account; 409 SETTLEMENT_MISMATCH when an
  * earlier, partly done run moved a different split.
  *
@@ -37,6 +39,9 @@ export async function settle(exec: Exec, bookingId: string, providerShare: numbe
     if (!b) return fail(404, { error: 'Not found' })
     if (!b.paidAt) fail(409, { error: 'NOT_PAID' })
     if (b.releasedAt) fail(409, { error: 'ALREADY_SETTLED' })
+    const openDispute = await tx.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.bookingId, b.id), isNull(disputes.decidedAt)))
+    const chargeback = await tx.select({ id: staffFlags.id }).from(staffFlags).where(and(eq(staffFlags.kind, 'chargeback'), eq(staffFlags.refId, b.id), isNull(staffFlags.resolvedAt)))
+    if (openDispute.length || chargeback.length) fail(409, { error: 'DISPUTE_OPEN' })
     if (!b.paymentRef || b.commissionRate === null) throw new Error(`paid booking ${b.id} lacks its payment ref or commission rate`)
     const key = { refund: `refund:${b.id}`, transfer: `transfer:${b.id}`, commission: `commission:${b.id}` }
     // what an earlier, interrupted run of this settlement already recorded (cents by key)

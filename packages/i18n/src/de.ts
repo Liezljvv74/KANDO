@@ -358,6 +358,21 @@ export const de = {
     'Kunden, die bei dir buchen möchten: {count}. Schließe in der App die Einrichtung deiner Auszahlung ab, damit sie dir Anfragen senden und bei dir buchen können. Wir sagen ihnen Bescheid, sobald du so weit bist. Zum Schutz ihrer Privatsphäre sagen wir nicht, wer sie sind.',
   'email.providerAvailable.subject': 'Jetzt verfügbar',
   'email.providerAvailable.body': 'Ein Anbieter, über den du benachrichtigt werden wolltest, ist jetzt buchbar: {url}',
+  'email.jobFinished.subject': 'Der Auftrag wurde als erledigt markiert',
+  'email.jobFinished.body':
+    'Der Anbieter hat deinen Auftrag als erledigt markiert. Die Zahlung an den Anbieter wird am {date} Uhr ausgeführt. Wenn die Arbeit erledigt ist, bestätige sie in der App, dann wird die Zahlung sofort ausgeführt. Wenn etwas nicht stimmt, melde vorher in der App ein Problem.',
+  'email.confirmReminder.subject': 'Die Zahlung an den Anbieter steht bevor',
+  'email.confirmReminder.body':
+    'Die Zahlung an den Anbieter wird am {date} Uhr ausgeführt. Wenn die Arbeit erledigt ist, bestätige sie in der App. Wenn etwas nicht stimmt, melde vorher in der App ein Problem.',
+  'email.paymentReleased.subject': 'Die Zahlung wurde ausgeführt',
+  'email.paymentReleased.body': 'Der Auftrag ist abgeschlossen und die Zahlung an den Anbieter wurde ausgeführt. Danke, dass du die App nutzt.',
+  'email.paymentReleased.provider.subject': 'Deine Auszahlung ist unterwegs',
+  'email.paymentReleased.provider.body': 'Der Auftrag ist abgeschlossen. Deine Auszahlung ist unterwegs und kommt in der Regel innerhalb von 7 Tagen auf deinem Bankkonto an.',
+  'email.wasJobDone.subject': 'Wurde der Auftrag erledigt?',
+  'email.wasJobDone.body':
+    'Der Termin deiner Buchung ist vorbei, aber der Anbieter hat den Auftrag nicht als erledigt markiert. Wurde der Auftrag erledigt? Bestätige ihn in der App oder melde ein Problem. Bis dahin wird keine Zahlung an den Anbieter ausgeführt.',
+  'email.reviewRequested.subject': 'Wie lief der Auftrag?',
+  'email.reviewRequested.body': 'Der Auftrag ist abgeschlossen. Schreib in der App eine kurze Bewertung: Sie hilft anderen bei der Wahl.',
   'email.messageReceived.subject': 'Du hast eine neue Nachricht',
   'email.messageReceived.body': 'Du hast eine neue Nachricht. Bitte lies und beantworte sie in der App.',
   'notification.messageReceived': 'Du hast eine neue Nachricht.',

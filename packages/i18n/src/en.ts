@@ -359,6 +359,21 @@ export const en: Record<Key, string> = {
     'Customers waiting to book you: {count}. Finish your payout set-up in the app so they can send you requests and book you. We tell them as soon as you are ready. To protect their privacy we do not say who they are.',
   'email.providerAvailable.subject': 'Now available',
   'email.providerAvailable.body': 'A provider you asked to hear about can now be booked: {url}',
+  'email.jobFinished.subject': 'The job was marked as finished',
+  'email.jobFinished.body':
+    'The provider marked your job as finished. The payment to the provider will be made on {date}. If the work is done, confirm it in the app and the payment is made at once. If something is wrong, report a problem in the app before then.',
+  'email.confirmReminder.subject': 'The payment to the provider is coming',
+  'email.confirmReminder.body':
+    'The payment to the provider will be made on {date}. If the work is done, confirm it in the app. If something is wrong, report a problem in the app before then.',
+  'email.paymentReleased.subject': 'The payment has been made',
+  'email.paymentReleased.body': 'The job is completed and the payment to the provider has been made. Thank you for using the app.',
+  'email.paymentReleased.provider.subject': 'Your payout is on its way',
+  'email.paymentReleased.provider.body': 'The job is completed. Your payout is on its way and usually reaches your bank account within 7 days.',
+  'email.wasJobDone.subject': 'Was the job done?',
+  'email.wasJobDone.body':
+    'The time of your booking has passed, but the provider has not marked the job as finished. Was the job done? Confirm it in the app, or report a problem. Until then no payment is made to the provider.',
+  'email.reviewRequested.subject': 'How did the job go?',
+  'email.reviewRequested.body': 'The job is completed. Write a short review in the app: it helps others choose.',
   'email.messageReceived.subject': 'You have a new message',
   'email.messageReceived.body': 'You have a new message. Please read and answer it in the app.',
   'notification.messageReceived': 'You have a new message.',

@@ -5,8 +5,25 @@ import { notifyBookingEvent, type BookingKind } from './notify'
 import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
+import { addWorkingDays, ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, DISPUTE_DECISION_WORKING_DAYS, NO_ACTION_STAFF_DAYS } from './ending-rules'
+import { tryRelease } from './finish'
 
-export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number; customersWaiting: number }
+/** Automatic releases per run: each one is a settle with gateway calls (one booking at a time), so a run stays well inside the function timeout; the rest go in the next run. */
+export const RELEASES_PER_RUN = 20
+
+export type TimerReport = {
+  requestsExpired: number
+  quotesExpired: number
+  proposalsLapsed: number
+  unpaidExpired: number
+  remindersSent: number
+  ignoredNotices: number
+  customersWaiting: number
+  confirmReminders: number
+  autoReleased: number
+  askedDone: number
+  sentToStaff: number
+}
 
 /**
  * Every rule is ONE statement (UPDATE .. RETURNING feeding the notification INSERT), so a concurrent run cannot
@@ -56,7 +73,8 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
       FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING user_id, kind, payload)
     ${result('e')}`)
 
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, events }
+  // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -94,7 +112,55 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   for (const w of waiting) events.push({ userId: w.userId, kind: 'customers-waiting', payload: { count: String(w.count) } })
   const customersWaiting = waiting.length
 
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, events }
+  const endings = await endingRules(exec, now, count)
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, ...endings, events }
+}
+
+const noOpenDispute = sql`NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id AND d.decided_at IS NULL)`
+const endAt = sql`start_at + make_interval(mins => duration_min)`
+
+/** After "Finished" (Task 2 rules), and the provider who never taps it (spec 7a). Cron only. */
+async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<number>) {
+  const t = now.toISOString()
+  // Reminder number sent + 1 once its day mark has passed (dueConfirmReminder): one per booking and run, so a late run
+  // sends the oldest unsent one and the next run the next. Never once the release is due or a dispute is open.
+  const days = sql`(ARRAY[${sql.join(CONFIRM_REMINDER_DAYS.map((d) => sql`${d}::int`), sql`, `)}])[confirm_reminders_sent + 1]`
+  const confirmReminders = await count(sql`
+    WITH r AS (UPDATE bookings SET confirm_reminders_sent = confirm_reminders_sent + 1, updated_at = ${t}::timestamptz
+        WHERE status = 'finished' AND confirm_by > ${t}::timestamptz AND confirm_reminders_sent < ${CONFIRM_REMINDER_DAYS.length}
+        AND finished_at + make_interval(days => ${days}) <= ${t}::timestamptz AND ${noOpenDispute} RETURNING id, customer_id),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'confirm-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
+    ${result('r')}`)
+
+  // 7 days without an answer: the payment is made. One booking at a time (settle), capped per run; a failure is logged and
+  // flagged by tryRelease and never stops the loop; the booking stays due and the next run retries it.
+  // ponytail: oldest due first, so more than RELEASES_PER_RUN bookings that keep failing would hold back the rest (each is flagged to staff).
+  const due = (
+    await exec.execute<{ id: string; customer_id: string }>(sql`
+    SELECT id, customer_id FROM bookings WHERE status = 'finished' AND confirm_by <= ${t}::timestamptz AND ${noOpenDispute}
+    ORDER BY confirm_by, id LIMIT ${RELEASES_PER_RUN}`)
+  ).rows
+  let autoReleased = 0
+  for (const b of due) if (await tryRelease(exec, b.id, b.customer_id, now)) autoReleased++
+
+  // The provider never tapped "Finished": 24 hours after the end the customer is asked once (they may then confirm).
+  const askedDone = await count(sql`
+    WITH r AS (UPDATE bookings SET asked_done_at = ${t}::timestamptz, updated_at = ${t}::timestamptz
+        WHERE status = 'confirmed' AND asked_done_at IS NULL AND ${endAt} + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz RETURNING id, customer_id),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'was-job-done', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
+    ${result('r')}`)
+
+  // Nobody acted within 7 days after the end: the booking goes to staff as a system dispute (no-response), the money
+  // stays frozen (settle refuses while it is open) until staff decide. The status change makes it happen once.
+  const decideBy = addWorkingDays(now, DISPUTE_DECISION_WORKING_DAYS).toISOString()
+  const sentToStaff = await count(sql`
+    WITH s AS (UPDATE bookings SET status = 'disputed', updated_at = ${t}::timestamptz
+        WHERE status = 'confirmed' AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz RETURNING id),
+    d AS (INSERT INTO disputes (booking_id, reason, description, created_at, decide_by)
+      SELECT id, 'no-response', '', ${t}::timestamptz, ${decideBy}::timestamptz FROM s ON CONFLICT (booking_id) DO NOTHING RETURNING id)
+    SELECT (SELECT count(*) FROM s)::int AS n`)
+
+  return { confirmReminders, autoReleased, askedDone, sentToStaff }
 }
 
 /**

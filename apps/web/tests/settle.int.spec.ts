@@ -252,3 +252,18 @@ it('deleting an account with a confirmed booking is 409 OPEN_BOOKINGS', async ()
   expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE id = $1', [id])).rows[0].n).toBe(1)
   expect((await pool.query('SELECT count(*)::int n FROM users WHERE id = ANY($1)', [[U.cust, U.owner]])).rows[0].n).toBe(2)
 })
+
+it('a booking with an open chargeback flag or an open dispute cannot be settled: 409 DISPUTE_OPEN, nothing moves', async () => {
+  const charged = await paidBooking()
+  await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id, note) VALUES ('chargeback', $1, $2, 'test')", [charged, U.cust])
+  expect(await refusal(settle(db, charged, 100))).toEqual({ status: 409, body: { error: 'DISPUTE_OPEN' } })
+  const disputed = await paidBooking()
+  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now() + interval '20 days')", [disputed])
+  expect(await refusal(settle(db, disputed, 0))).toEqual({ status: 409, body: { error: 'DISPUTE_OPEN' } })
+  expect(g.calls).toEqual([])
+  expect(await rows(charged)).toEqual({})
+  expect(await releasedAt(disputed)).toBeNull()
+  // once staff resolved the chargeback flag, it settles
+  await pool.query("UPDATE staff_flags SET resolved_at = now() WHERE kind = 'chargeback' AND ref_id = $1", [charged])
+  expect(await settle(db, charged, 100)).toEqual({ refunded: 0, transferred: 88, commission: 12 })
+})

@@ -423,7 +423,7 @@ it('the timers never expire confirmed bookings', async () => {
   const b = await awaiting({ payBy: new Date(Date.now() + HOUR) })
   await handleGatewayEvent(paid(b.id))
   await pool.query("UPDATE bookings SET pay_by = now() - interval '1 day', answer_by = now() - interval '1 day' WHERE id = $1", [b.id])
-  await runDueTimers(db, new Date(Date.now() + 30 * DAY))
+  await runDueTimers(db, new Date(Date.now() + 2 * DAY)) // past pay_by and answer_by, before the start (from 7 days after the end a silent booking goes to staff: finish.int.spec.ts)
   expect((await row(b.id)).status).toBe('confirmed')
 })
 
