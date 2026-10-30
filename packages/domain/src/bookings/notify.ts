@@ -27,6 +27,7 @@ const appUrl = (p: Record<string, string>): string =>
 async function dateOf(kind: BookingKind, params: Record<string, string>): Promise<string | undefined> {
   if (kind === 'quote-expiring' && params.quoteId) return (await db.select({ d: quotes.expiresAt }).from(quotes).where(eq(quotes.id, params.quoteId)))[0]?.d.toISOString()
   if (kind === 'confirm-reminder' && params.bookingId) return (await db.select({ d: bookings.confirmBy }).from(bookings).where(eq(bookings.id, params.bookingId)))[0]?.d?.toISOString()
+  if (kind === 'request-reopened' && params.bookingId) return (await db.select({ d: quotes.expiresAt }).from(bookings).innerJoin(quotes, eq(quotes.id, bookings.quoteId)).where(eq(bookings.id, params.bookingId)))[0]?.d.toISOString()
   if (kind === 'payment-reminder' && params.bookingId) return (await db.select({ d: bookings.payBy }).from(bookings).where(eq(bookings.id, params.bookingId)))[0]?.d?.toISOString()
   return undefined
 }

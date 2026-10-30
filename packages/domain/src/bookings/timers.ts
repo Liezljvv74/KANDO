@@ -64,6 +64,16 @@ export type TimerReport = {
 /** Counts the rows of CTE `from` and returns the ids of the notification rows CTE `n` inserted, for the outbox drain. */
 const result = (from: string) => sql`SELECT (SELECT count(*) FROM ${sql.identifier(from)})::int AS n, (SELECT coalesce(jsonb_agg(id), '[]'::jsonb) FROM n) AS ids`
 
+/**
+ * The customer of an expired quote-born root booking hears that the job is open again (request-reopened) when its quote
+ * reopens: the same predicate as the trigger bookings_reopen_request (rls.ts), which runs at the end of the statement, so
+ * the quote's new status cannot be read here. Else, and always for the provider, booking-expired.
+ */
+const EXPIRED_COLS = sql`id, customer_id, provider_id, quote_id, request_id, parent_booking_id`
+const reopenedJoin = sql`LEFT JOIN quotes q ON q.id = e.quote_id AND q.status = 'accepted' AND e.parent_booking_id IS NULL`
+const customerNotice = (t: string) => sql`CASE WHEN q.expires_at > ${t}::timestamptz THEN 'request-reopened' ELSE 'booking-expired' END,
+      CASE WHEN q.expires_at > ${t}::timestamptz THEN jsonb_build_object('requestId', e.request_id, 'bookingId', e.id) ELSE jsonb_build_object('bookingId', e.id) END`
+
 async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false, timeUp: () => boolean = () => false): Promise<TimerReport & { ids: string[] }> {
   const ids: string[] = []
   const t = now.toISOString()
@@ -96,17 +106,17 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   const lapsed = sql`status = 'proposed' AND answer_by <= ${t}::timestamptz ${bookingScope}`
   const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope}`
   const proposalsLapsed = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(lapsed)} AND ${lapsed} RETURNING id, customer_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL FROM e RETURNING id)
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(lapsed)} AND ${lapsed} RETURNING ${EXPIRED_COLS}),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL FROM e ${reopenedJoin} RETURNING id)
     ${result('e')}`)
 
   // PAY_GRACE_MINUTES after pay_by: a payment made at the deadline may still be on its way (the webhook confirms it if the
   // time is still free). The slot itself stops being held at pay_by (slotIsHeld, busy_times) and no pay link is given after it.
   const unpaidExpired = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(unpaid)} AND ${unpaid} RETURNING id, customer_id, provider_id),
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(unpaid)} AND ${unpaid} RETURNING ${EXPIRED_COLS}),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
-      SELECT u, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL
-      FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING id)
+      SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL::timestamptz FROM e ${reopenedJoin}
+      UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.

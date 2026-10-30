@@ -1,5 +1,5 @@
 import { desc, eq, getTableColumns } from 'drizzle-orm'
-import { bookingAppInsert, bookings, db, providers, services, type Tx } from '@kando/db'
+import { bookingAppInsert, bookings, db, providers, quotes, services, type Tx } from '@kando/db'
 import type { Booking, BookingAnswer, DirectBookingInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
@@ -97,10 +97,13 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     const [row] = await tx.update(bookings).set({ ...patch, status: to, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
     return view(row!, userId)
   }
-  const tell = (kind: 'booking-declined' | 'booking-accepted', date?: Date) => role === 'provider' && afterCommit(() => notifyBookingEvent(kind, b.customerId, { bookingId: b.id, ...(date && { date: date.toISOString() }) })) // only the provider's answer is told to the customer
+  const tell = (kind: 'booking-declined' | 'booking-accepted' | 'request-reopened', extra: Record<string, string> = {}) => role === 'provider' && afterCommit(() => notifyBookingEvent(kind, b.customerId, { bookingId: b.id, ...extra })) // only the provider's answer is told to the customer
   if (answer.type === 'decline') {
     const done = await set('declined', { answerBy: null, counterBy: null })
-    tell('booking-declined')
+    // a quote-born booking's quote is open again (trigger bookings_reopen_request): the customer may propose another time
+    const reopened = b.quoteId && b.requestId && (await tx.select({ s: quotes.status }).from(quotes).where(eq(quotes.id, b.quoteId)))[0]?.s === 'sent'
+    if (reopened) tell('request-reopened', { requestId: b.requestId! })
+    else tell('booking-declined')
     return done
   }
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return fail(409, { error: 'provider-unavailable' })
@@ -123,7 +126,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
   await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)
   const pay = payBy(now, b.startAt)
   const done = await set('awaiting-payment', { payBy: pay, acceptedAt: now, answerBy: null, counterBy: null })
-  tell('booking-accepted', pay)
+  tell('booking-accepted', { date: pay.toISOString() })
   return done
 }
 

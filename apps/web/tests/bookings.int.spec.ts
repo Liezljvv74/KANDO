@@ -314,3 +314,39 @@ it('a lapsed payment window no longer holds the slot before any sweep runs', asy
   const second = await direct(sOwner, { startAt: base, durationMin: 60 }, U.cust2)
   expect((await answering(second.id, U.owner, { type: 'accept' })).status).toBe(200)
 })
+
+// A quote-born booking that ends unagreed reopens its request and quote (trigger bookings_reopen_request, rls.ts)
+const quoteBorn = async (as = U.cust) => {
+  await relaxLimits(as)
+  const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix' })).json())
+  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence' }, { id: r.id })).json())
+  const b = BookingSchema.parse(await (await call(accept.POST, as, 'POST', proposal(), { id: q.id })).json())
+  return { r, q, b }
+}
+const statusOf = async (table: 'requests' | 'quotes', id: string) => (await pool.query(`SELECT status FROM ${table} WHERE id = $1`, [id])).rows[0].status as string
+const noticesOf = async (bookingId: string, uid = U.cust) => (await pool.query("SELECT user_id, kind, payload FROM notifications WHERE payload->>'bookingId' = $1 AND user_id = $2 ORDER BY kind", [bookingId, uid])).rows
+
+it('provider declines a quote-born proposal: request quoted, quote sent, the customer can accept again and gets request-reopened', async () => {
+  const { r, q, b } = await quoteBorn()
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
+  expect((await answering(b.id, U.owner, { type: 'decline' })).status).toBe(200)
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['quoted', 'sent'])
+  expect(await noticesOf(b.id)).toEqual([{ user_id: U.cust, kind: 'request-reopened', payload: { requestId: r.id, bookingId: b.id } }])
+  const again = await call(accept.POST, U.cust, 'POST', proposal(), { id: q.id })
+  expect(again.status).toBe(200)
+  expect(BookingSchema.parse(await again.json())).toMatchObject({ status: 'proposed', quoteId: q.id, requestId: r.id })
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
+})
+
+it('the customer withdraws an awaiting-payment booking: the provider can send a revised quote', async () => {
+  const { r, q, b } = await quoteBorn()
+  expect((await answering(b.id, U.owner, { type: 'accept' })).status).toBe(200)
+  await pool.query('DELETE FROM notifications WHERE user_id = ANY($1)', [[U.cust, U.owner]])
+  expect((await withdrawing(b.id, U.cust)).status).toBe(200)
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['quoted', 'sent'])
+  expect([...(await noticesOf(b.id)), ...(await noticesOf(b.id, U.owner))]).toEqual([]) // the customer acted: nobody is told
+  const revised = await call(quotes.POST, U.owner, 'POST', { amount: 90, scope: 'Fence, smaller' }, { id: r.id })
+  expect(revised.status).toBe(201)
+  expect(QuoteSchema.parse(await revised.json())).toMatchObject({ version: 2, status: 'sent' })
+  expect(await statusOf('quotes', q.id)).toBe('superseded')
+})

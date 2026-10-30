@@ -261,6 +261,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   if (input.note) await assertNoContactDetails(userId, input.note)
   await lockRequest(tx, pre.req.id)
   const { quote, req } = (await find()) ?? notFound() // read again after the lock: a concurrent accept has committed by now
+  if (quote.status === 'expired') fail(409, { error: 'quote-expired' }) // e.g. reopened at its expiry (trigger bookings_reopen_request)
   if (quote.status !== 'sent' || req.status !== 'quoted') fail(409, { error: 'quote-not-open' })
   if (quote.expiresAt <= now) fail(409, { error: 'quote-expired' })
   const provider = (await tx.select().from(providers).where(eq(providers.id, req.providerId)))[0]

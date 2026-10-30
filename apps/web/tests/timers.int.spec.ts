@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, createRequest, drainOutbox, listBookings, listRequests, outboxForTests, runDueTimers, runExpiryAndReminders } from '@kando/domain'
+import { acceptQuote, clearOutbox, createRequest, drainOutbox, listBookings, listRequests, outboxForTests, runDueTimers, runExpiryAndReminders } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 'tm-cust', cust2: 'tm-cust2', owner: 'tm-owner', owner2: 'tm-owner2' }
@@ -224,4 +224,64 @@ it('the lazy path sends the emails of its own rows only', async () => {
   expect(outboxForTests().map((m) => m.to)).toEqual([EMAIL(U.cust)])
   expect(await unmailed()).toHaveLength(1)
   await clean()
+})
+
+// A quote-born booking that ends unagreed reopens its request and quote (trigger bookings_reopen_request, rls.ts)
+const quoteBorn = async (status: 'proposed' | 'awaiting-payment', quoteExpiresAt: string, parent: string | null = null) => {
+  const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by, parent_booking_id) VALUES ($1, $2, 'x', 'booked', $3, $4) RETURNING id", [U.cust, prov, at(-48), parent])).rows[0].id as string
+  const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 50, 's', $3, 'accepted') RETURNING id", [r, prov, quoteExpiresAt])).rows[0].id as string
+  const due = status === 'proposed' ? [at(-1), null, null] : [null, at(-1), at(-49)]
+  const b = (
+    await pool.query(
+      "INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at, parent_booking_id) VALUES ($1, $2, $3, 'quote', $4, $5, 60, $6, $7, $8, $9) RETURNING id",
+      [U.cust, prov, q, status, at(24 * 20), ...due, parent],
+    )
+  ).rows[0].id as string
+  return { r, q, b }
+}
+const kinds = async (b: string) => (await pool.query("SELECT user_id, kind, payload FROM notifications WHERE payload->>'bookingId' = $1 ORDER BY user_id", [b])).rows
+
+it('a lapsed proposal and an unpaid expiry reopen the request (timer) and send request-reopened through the outbox', async () => {
+  await clean()
+  const lapsed = await quoteBorn('proposed', at(24 * 3))
+  const unpaid = await quoteBorn('awaiting-payment', at(24 * 3))
+  clearOutbox()
+  await run(0)
+  for (const x of [lapsed, unpaid]) {
+    expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'sent'])
+  }
+  expect(await kinds(lapsed.b)).toEqual([{ user_id: U.cust, kind: 'request-reopened', payload: { requestId: lapsed.r, bookingId: lapsed.b } }])
+  expect(await kinds(unpaid.b)).toEqual([
+    { user_id: U.cust, kind: 'request-reopened', payload: { requestId: unpaid.r, bookingId: unpaid.b } },
+    { user_id: U.owner, kind: 'booking-expired', payload: { bookingId: unpaid.b } }, // the provider keeps booking-expired
+  ])
+  expect(await unmailed()).toHaveLength(0)
+  const reopened = mailsTo(U.cust)
+  expect(reopened).toHaveLength(2)
+  for (const m of reopened) expect(m.text).toMatch(/13[./]03[./]2027/) // the quote's expiry (NOW + 3 days)
+})
+
+it("reopen at the quote's expiry keeps the quote expired", async () => {
+  await clean()
+  const x = await quoteBorn('proposed', at(0)) // the quote expires in the very second the proposal lapses
+  await run(0)
+  expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'expired'])
+  expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['booking-expired']) // nothing to reopen: the customer hears the booking expired
+  const res = await asUser(U.cust, (tx) => acceptQuote(tx, U.cust, x.q, { startAt: at(24 * 30), durationMin: 60, onSite: true, address: { postcode: '10115' } }, new Date(NOW))).catch((e: Response) => e)
+  expect(res).toBeInstanceOf(Response)
+  expect([(res as Response).status, await (res as Response).json()]).toEqual([409, { error: 'quote-expired' }])
+})
+
+it('a direct booking and an additional task change no request', async () => {
+  await clean()
+  const d = await booking('proposed', { answerBy: at(-1) })
+  const parent = await booking('confirmed')
+  await pool.query('UPDATE bookings SET paid_at = $1 WHERE id = $2', [at(-24), parent])
+  const kid = await quoteBorn('awaiting-payment', at(24 * 3), parent)
+  const requestsBefore = (await pool.query('SELECT id, status, updated_at FROM requests WHERE customer_id = $1 ORDER BY id', [U.cust])).rows
+  await run(0)
+  expect([await status('bookings', d), await status('bookings', kid.b)]).toEqual(['expired', 'expired'])
+  expect([await status('requests', kid.r), await status('quotes', kid.q)]).toEqual(['booked', 'accepted']) // the customer starts a new one
+  expect((await pool.query('SELECT id, status, updated_at FROM requests WHERE customer_id = $1 ORDER BY id', [U.cust])).rows).toEqual(requestsBefore)
+  expect((await kinds(kid.b)).map((n) => [n.user_id, n.kind])).toEqual([[U.cust, 'booking-expired'], [U.owner, 'booking-expired']])
 })

@@ -483,6 +483,22 @@ const BOOKING_TRIGGERS = [
   `DROP TRIGGER IF EXISTS requests_close_quotes ON requests`,
   `CREATE TRIGGER requests_close_quotes AFTER UPDATE OF status ON requests FOR EACH ROW
     WHEN (NEW.status IN ('withdrawn', 'declined') AND OLD.status IS DISTINCT FROM NEW.status) EXECUTE FUNCTION close_request_quotes()`,
+  // A quote-born root booking that ends unagreed (declined, expired, withdrawn) gives the job back: its quote is open again
+  // while it is valid (else expired), its request quoted again (never expired: that would count toward requests-ignored).
+  // On every path (domain, timers, staff). NEW.updated_at is the injected now of the writing path. The timers' notice
+  // (timers.ts, request-reopened) uses the same predicate. An additional task is not reopened: the customer starts a new one.
+  // SECURITY DEFINER: the moves are the owner's, so app_status_guard (app role only) lets them pass and the app role
+  // never gets booked > quoted or accepted > sent itself.
+  `CREATE OR REPLACE FUNCTION reopen_quote_request() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      UPDATE quotes SET status = CASE WHEN expires_at > NEW.updated_at THEN 'sent' ELSE 'expired' END WHERE id = NEW.quote_id AND status = 'accepted';
+      UPDATE requests SET status = 'quoted', updated_at = NEW.updated_at WHERE id = NEW.request_id AND status = 'booked';
+      RETURN NULL;
+    END $$`,
+  `DROP TRIGGER IF EXISTS bookings_reopen_request ON bookings`,
+  `CREATE TRIGGER bookings_reopen_request AFTER UPDATE OF status ON bookings FOR EACH ROW
+    WHEN (OLD.status IN ('proposed', 'awaiting-payment') AND NEW.status IN ('declined', 'expired', 'withdrawn') AND NEW.quote_id IS NOT NULL AND NEW.parent_booking_id IS NULL)
+    EXECUTE FUNCTION reopen_quote_request()`,
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
   // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that
   // request's parent (and an ordinary request makes no additional task). Invoker rights: a parent the inserting customer
