@@ -451,7 +451,7 @@ it('charge-disputed creates one chargeback flag', async () => {
   expect((await deliver(dispute)).status).toBe(200)
   expect((await deliver({ ...dispute, id: `evt_${randomUUID()}` })).status).toBe(200) // a second dispute event: still one open flag
   expect(await flags('chargeback', b.id)).toEqual([{ ref_id: b.id, user_id: U.cust, note: expect.stringContaining(e.paymentRef) }])
-  expect((await row(b.id)).status).toBe('confirmed')
+  expect((await row(b.id)).status).toBe('disputed') // money not yet released: also a chargeback system dispute (disputes.int.spec.ts)
 })
 
 it('refund-failed creates a flag', async () => {

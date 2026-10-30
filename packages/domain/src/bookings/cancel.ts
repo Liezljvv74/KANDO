@@ -7,7 +7,7 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
-import { openDisputeCore } from './disputes'
+import { openDisputeCore, tellDisputeOpened } from './disputes'
 import { customerCancelShare, isLate, NO_SHOW_OBJECTION_HOURS } from './ending-rules'
 import { attemptMoney, lockRow, reload, sideOf } from './finish'
 import { notifyBookingEvent } from './notify'
@@ -138,20 +138,22 @@ export async function reportNoShow(tx: Tx, userId: string, bookingId: string, no
 /**
  * The reported side objects within NO_SHOW_OBJECTION_HOURS (after: 409 OBJECTION_CLOSED; the reporter: 403): a dispute
  * `no-show-objection` with their description (no contact details, 422), the booking `disputed`, no money moves; staff
- * decide (Task 8). A second tap returns the disputed booking.
+ * decide (Task 8). Both sides are told (dispute-opened). A second tap returns the disputed booking.
  */
 export async function objectNoShow(tx: Tx, userId: string, bookingId: string, input: NoShowObjection, now = new Date()): Promise<Booking> {
   const side = await sideOf(tx, userId, bookingId)
-  await db.transaction(async (o) => {
+  const opened = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (!b.noShow) fail(409, { error: 'not-open' })
     if (b.noShow !== side) fail(403, { error: 'not-your-turn' })
-    if (b.status === 'disputed' && (await o.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.bookingId, b.id), eq(disputes.reason, 'no-show-objection')))).length) return
+    if (b.status === 'disputed' && (await o.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.bookingId, b.id), eq(disputes.reason, 'no-show-objection')))).length) return null
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (now >= objectBy(b)) fail(409, { error: 'OBJECTION_CLOSED' })
     await assertNoContactDetails(userId, input.description)
     await openDisputeCore(o, { bookingId: b.id, openedBy: side, reason: 'no-show-objection', description: input.description, now })
+    return b
   })
+  if (opened) await tellDisputeOpened(opened)
   return reload(bookingId)
 }
 

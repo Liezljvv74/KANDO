@@ -11,6 +11,8 @@ export const PROPOSAL_ANSWER_HOURS = 24
 export const BUFFER_MINUTES = 30
 export const IGNORED_LIMIT = 3
 export const IGNORED_WINDOW_DAYS = 30
+/** Days after a requests-ignored notice until a provider still silent is flagged to staff (timers.ts). */
+export const IGNORED_FLAG_DAYS = 14
 export const PAY_WINDOW_HOURS = 48
 export const PAY_BEFORE_START_HOURS = 24
 export const SHORT_NOTICE_PAY_HOURS = 6

@@ -1,13 +1,15 @@
 import { sql, type SQL } from 'drizzle-orm'
-import type { db } from '@kando/db'
+import type { bookings, db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
 import { notifyBookingEvent, type BookingKind } from './notify'
 import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
-import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
-import { addWorkingDays, ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, DISPUTE_DECISION_WORKING_DAYS, NO_ACTION_STAFF_DAYS } from './ending-rules'
+import { IGNORED_FLAG_DAYS, IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
+import { ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, endOf, NO_ACTION_STAFF_DAYS, STOP_ANSWER_DAYS } from './ending-rules'
 import { RELEASE_FAILED, tryRelease } from './finish'
 import { resolveNoShows, trySettleCancelled } from './cancel'
+import { openSystemDispute } from './disputes'
+import { describeError } from '../log-error'
 
 /**
  * The automatic releases stop starting new ones after this time: about half of the cron route's maxDuration (60 s), as
@@ -33,6 +35,12 @@ export type TimerReport = {
   noShowsResolved: number
   /** Cancelled, paid bookings settled by the timer (a no-show that stood, or a cancellation whose settle failed before). */
   cancelsSettled: number
+  /** Stopped jobs sent to staff (a no-response dispute): the stated amount unanswered, or never stated, for STOP_ANSWER_DAYS. */
+  stopsToStaff: number
+  /** Undecided disputes past their decideBy that got their one `dispute-overdue` staff flag. */
+  overdueDisputes: number
+  /** Providers still silent IGNORED_FLAG_DAYS after a requests-ignored notice: one `ignored-requests` staff flag each. */
+  ignoredNoticeFlags: number
 }
 
 /**
@@ -84,7 +92,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -157,18 +165,71 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
     ${result('r')}`)
 
   // Nobody acted within 7 days after the end: the booking goes to staff as a system dispute (no-response), the money
-  // stays frozen (settle refuses while it is open) until staff decide. The status change makes it happen once. Only once
-  // the customer was asked at least 24 hours earlier, so a late run never asks and escalates at the same time.
-  const decideBy = addWorkingDays(now, DISPUTE_DECISION_WORKING_DAYS).toISOString()
-  const silent = sql`status = 'confirmed' AND no_show IS NULL AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz
-        AND asked_done_at IS NOT NULL AND asked_done_at + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`
-  const sentToStaff = await count(sql`
-    WITH s AS (UPDATE bookings SET status = 'disputed', updated_at = ${t}::timestamptz WHERE ${inIdOrder(silent)} AND ${silent} RETURNING id),
-    d AS (INSERT INTO disputes (booking_id, reason, description, created_at, decide_by)
-      SELECT id, 'no-response', '', ${t}::timestamptz, ${decideBy}::timestamptz FROM s ON CONFLICT (booking_id) DO NOTHING RETURNING id)
-    SELECT (SELECT count(*) FROM s)::int AS n`)
+  // stays frozen (settle refuses while it is open) until staff decide; both sides are told. Only once the customer was
+  // asked at least 24 hours earlier, so a late run never asks and escalates at the same time. openSystemDispute locks
+  // each row and re-checks the rule (a racing confirm, report or stop wins or loses whole), so it happens once.
+  const sentToStaff = await toStaff(
+    exec,
+    now,
+    sql`status = 'confirmed' AND no_show IS NULL AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz
+        AND asked_done_at IS NOT NULL AND asked_done_at + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`,
+    (b) =>
+      b.status === 'confirmed' && !b.noShow && b.askedDoneAt !== null && b.askedDoneAt.getTime() + ASK_DONE_HOURS * HOUR <= now.getTime() && endOf(b).getTime() + NO_ACTION_STAFF_DAYS * DAY <= now.getTime(),
+  )
 
-  return { confirmReminders, askedDone, sentToStaff }
+  // A stopped job whose stated amount the customer left unanswered (or whose provider never stated one) for
+  // STOP_ANSWER_DAYS goes to staff the same way. An agreed amount (confirm_by set) is paid by releaseDue instead.
+  const stopsToStaff = await toStaff(
+    exec,
+    now,
+    sql`status = 'stopped' AND confirm_by IS NULL AND coalesce(stop_stated_at, stopped_at) + make_interval(days => ${STOP_ANSWER_DAYS}) <= ${t}::timestamptz`,
+    (b) => b.status === 'stopped' && b.confirmBy === null && (b.stopStatedAt ?? b.stoppedAt ?? now).getTime() + STOP_ANSWER_DAYS * DAY <= now.getTime(),
+  )
+
+  // One flag per dispute that staff did not decide by its deadline (never again, even once resolved).
+  const overdueDisputes = await count(sql`
+    WITH i AS (INSERT INTO staff_flags (kind, ref_id, user_id, note, created_at)
+      SELECT 'dispute-overdue', d.booking_id::text, b.customer_id, 'reason: ' || d.reason, ${t}::timestamptz FROM disputes d JOIN bookings b ON b.id = d.booking_id
+      WHERE d.decided_at IS NULL AND d.decide_by <= ${t}::timestamptz
+        AND NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'dispute-overdue' AND f.ref_id = d.booking_id::text)
+      ON CONFLICT DO NOTHING RETURNING id)
+    SELECT count(*)::int AS n FROM i`)
+
+  // A provider still published IGNORED_FLAG_DAYS after their latest requests-ignored notice, with no quote sent and no
+  // booking answered (accepted, declined or a new time proposed) since: one flag per notice. Nothing is removed
+  // automatically; staff decide (the existing suspension tool).
+  const ignoredNoticeFlags = await count(sql`
+    WITH n AS (SELECT user_id, max(created_at) AS at FROM notifications WHERE kind = 'requests-ignored' GROUP BY user_id),
+    c AS (SELECT p.id, p.owner_id FROM providers p JOIN n ON n.user_id = p.owner_id
+      WHERE p.status = 'published' AND n.at + make_interval(days => ${IGNORED_FLAG_DAYS}) <= ${t}::timestamptz
+        AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.provider_id = p.id AND q.created_at > n.at)
+        AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.provider_id = p.id AND (b.accepted_at > n.at OR (b.updated_at > n.at AND (b.status = 'declined' OR b.counter_by = 'provider'))))
+        AND NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'ignored-requests' AND f.ref_id = p.id::text AND f.created_at >= n.at)),
+    i AS (INSERT INTO staff_flags (kind, ref_id, user_id, note, created_at)
+      SELECT 'ignored-requests', id::text, owner_id, ${`no answer ${IGNORED_FLAG_DAYS} days after the requests-ignored notice`}, ${t}::timestamptz FROM c
+      ON CONFLICT DO NOTHING RETURNING id)
+    SELECT count(*)::int AS n FROM i`)
+
+  return { confirmReminders, askedDone, sentToStaff, stopsToStaff, overdueDisputes, ignoredNoticeFlags }
+}
+
+const HOUR = 3_600_000
+const DAY = 24 * HOUR
+/**
+ * Sends the bookings of `pred` to staff as no-response disputes, one at a time in id order (openSystemDispute locks the
+ * row and re-checks `still`, the same rule in code); a failure is logged and the next run retries. The number opened.
+ */
+async function toStaff(exec: Exec, now: Date, pred: SQL, still: (b: typeof bookings.$inferSelect) => boolean): Promise<number> {
+  const due = (await exec.execute<{ id: string }>(sql`SELECT id FROM bookings WHERE ${pred} ORDER BY id`)).rows
+  let n = 0
+  for (const { id } of due) {
+    try {
+      if (await openSystemDispute(exec, id, 'no-response', now, { when: still })) n++
+    } catch (e) {
+      console.error(`[timers] booking ${id} not sent to staff: ${describeError(e)}`)
+    }
+  }
+  return n
 }
 
 export type ReleaseOptions = {
@@ -194,16 +255,17 @@ async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS,
     await exec.execute<{ id: string; customer_id: string; status: string }>(sql`
     SELECT id, customer_id, status FROM bookings
     WHERE ((status = 'finished' AND confirm_by <= ${t}::timestamptz AND no_show IS NULL)
+        OR (status = 'stopped' AND confirm_by <= ${t}::timestamptz AND stop_amount IS NOT NULL)
         OR (status = 'cancelled' AND paid_at IS NOT NULL AND released_at IS NULL AND NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id)))
       AND ${noOpenDispute} AND ${noChargeback}
     ORDER BY EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'payment-unprocessed' AND f.ref_id = bookings.id::text AND f.resolved_at IS NULL AND f.note LIKE ${`${RELEASE_FAILED}%`}),
-      CASE WHEN status = 'finished' THEN confirm_by ELSE cancelled_at END, id
+      CASE WHEN status = 'cancelled' THEN cancelled_at ELSE confirm_by END, id
     LIMIT ${RELEASES_HARD_CAP}`)
   ).rows
   const done = { autoReleased: 0, cancelsSettled: 0 }
   for (const b of due) {
     if (clock() - started >= budgetMs) break
-    if (b.status === 'finished') done.autoReleased += Number(await tryRelease(exec, b.id, b.customer_id, now))
+    if (b.status !== 'cancelled') done.autoReleased += Number(await tryRelease(exec, b.id, b.customer_id, now))
     else done.cancelsSettled += Number(await trySettleCancelled(b.id, b.customer_id, now))
   }
   return done

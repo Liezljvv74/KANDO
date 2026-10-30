@@ -8,8 +8,8 @@ const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
 /** One email per booking event kind (see bookings/notify.ts). */
-export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning'
-export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | CancelTemplate | BookingTemplate
+export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning' | 'dispute-opened' | 'job-stopped' | 'stop-amount-stated'
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | 'payment-released-stop' | 'payment-released-stop-provider' | CancelTemplate | BookingTemplate
 /** booking-cancelled variants (bookings/cancel.ts: who cancelled, what happens to the money). */
 export type CancelTemplate = 'booking-cancelled-late' | 'booking-cancelled-by-provider' | 'booking-cancelled-no-show-customer' | 'booking-cancelled-no-show-provider'
 type Params = Record<string, string | null | undefined>
@@ -65,6 +65,11 @@ const KEY: Record<Template, string> = {
   'booking-cancelled-no-show-provider': 'email.bookingCancelled.noShowProvider',
   'no-show-reported': 'email.noShowReported',
   'provider-warning': 'email.providerWarning',
+  'payment-released-stop': 'email.paymentReleased.stop',
+  'payment-released-stop-provider': 'email.paymentReleased.stop.provider',
+  'dispute-opened': 'email.disputeOpened',
+  'job-stopped': 'email.jobStopped',
+  'stop-amount-stated': 'email.stopAmountStated',
 }
 
 function compose(lang: Lang, template: Template, params: Params) {

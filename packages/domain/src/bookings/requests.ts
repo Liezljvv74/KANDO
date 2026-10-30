@@ -82,6 +82,11 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   noShow: b.noShow as Booking['noShow'],
   noShowReportedAt: b.noShowReportedAt ? iso(b.noShowReportedAt) : null,
   noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * 3_600_000)) : null,
+  stoppedAt: b.stoppedAt ? iso(b.stoppedAt) : null,
+  stoppedBy: b.stoppedBy as Booking['stoppedBy'],
+  stopAmount: b.stopAmount === null ? null : Number(b.stopAmount),
+  stopNote: b.stopNote,
+  stopStatedAt: b.stopStatedAt ? iso(b.stopStatedAt) : null,
   createdAt: iso(b.createdAt),
   updatedAt: iso(b.updatedAt),
 })

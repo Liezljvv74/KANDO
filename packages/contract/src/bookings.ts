@@ -131,6 +131,12 @@ export const BookingSchema = z.object({
   noShowReportedAt: z.string().nullable(),
   /** Until when the reported side may object (noShowReportedAt + 48 hours). */
   noShowObjectBy: z.string().nullable(),
+  /** A stopped job: when and by which side; the amount the provider stated as earned (with an optional note) and when. */
+  stoppedAt: z.string().nullable(),
+  stoppedBy: z.enum(['customer', 'provider']).nullable(),
+  stopAmount: AmountSchema.nullable(),
+  stopNote: z.string().nullable(),
+  stopStatedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

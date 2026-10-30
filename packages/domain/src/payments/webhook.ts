@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { bookings, db, ledgerEntries, providers, stripeEvents, type Tx } from '@kando/db'
 import { lockProviderSlots, slotIsHeld } from '../bookings/busy'
+import { openSystemDispute } from '../bookings/disputes'
 import { notifyBookingEvent } from '../bookings/notify'
 import { flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
@@ -46,6 +47,9 @@ export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Pro
     const customerId = bookingId ? (await tx.select({ c: bookings.customerId }).from(bookings).where(eq(bookings.id, bookingId)))[0]?.c : undefined
     const note = e.type === 'charge-disputed' ? `dispute on payment ${e.paymentRef}` : `refund ${e.refundId} of payment ${e.paymentRef} failed`
     await flagForStaff(tx, { kind: e.type === 'charge-disputed' ? 'chargeback' : 'refund-failed', refId: bookingId ?? e.paymentRef, ...(customerId && { userId: customerId }), note })
+    // a chargeback on money not yet released: also a system dispute, so the job is frozen and in the staff queue (once: a
+    // second event finds the dispute; released or ended bookings keep the flag only)
+    if (e.type === 'charge-disputed' && bookingId) await openSystemDispute(tx, bookingId, 'chargeback', now, { afterCommit: (fn) => after.push(fn) })
   })
   for (const fn of after) await fn().catch((err) => console.error(`[payments] message after ${e.type} failed ${describeError(err)}`))
 }
