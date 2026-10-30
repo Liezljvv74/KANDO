@@ -263,7 +263,7 @@ it('account deletion keeps the commission invoice and first issues every month s
   await settled(p.id, new Date('2039-01-10T10:00:00Z'))
   await issueCommissionInvoices(db, new Date('2039-02-02T10:00:00Z'))
   const [inv] = await of(p.id)
-  await deleteAccount(p.uid, EMAIL(p.uid), () => {})
+  await deleteAccount(p.uid, () => {})
   expect((await pool.query('SELECT id FROM providers WHERE id = $1', [p.id])).rows).toEqual([])
   expect(await of(p.id)).toEqual([inv])
   expect(pdfOf(inv)).toBeDefined()
@@ -271,10 +271,7 @@ it('account deletion keeps the commission invoice and first issues every month s
   const old = await settled(gone.id, new Date('2039-02-10T10:00:00Z'))
   const today = await settled(gone.id, new Date())
   const thisMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit' }).format(new Date())
-  // a refused deletion (wrong email) issues nothing early
-  await expect(deleteAccount(gone.uid, 'wrong@test.skilled.invalid', () => {})).rejects.toMatchObject({ status: 400 })
-  expect(await of(gone.id)).toEqual([])
-  await deleteAccount(gone.uid, EMAIL(gone.uid), () => {})
+  await deleteAccount(gone.uid, () => {})
   const issued = await of(gone.id)
   expect(issued.map((i) => [i.month, (i.draft as CommissionDraft).lines.map((l) => l.bookingId), (i.draft as CommissionDraft).recipient.name])).toEqual(
     [[thisMonth, [today], 'Hans Müller'], ['2039-02', [old], 'Hans Müller']].sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
@@ -289,7 +286,7 @@ it('an account deletion is refused while a month with commission cannot be invoi
   const b = await settled(p.id, new Date('2043-01-10T10:00:00Z'))
   // a second currency in one month: issuing throws (logged), so the month stays open
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, currency, gateway_ref, idempotency_key, created_at) VALUES ($1, $2, 'commission', 1, 'USD', 'x', $3, '2043-01-11T10:00:00Z')", [b, p.id, `commission-usd:${b}`])
-  const refused = (await deleteAccount(p.uid, EMAIL(p.uid), () => {}).catch((e: unknown) => e)) as Response
+  const refused = (await deleteAccount(p.uid, () => {}).catch((e: unknown) => e)) as Response
   expect([refused.status, (await refused.json()).error]).toEqual([409, 'OPEN_BOOKINGS'])
   expect((await pool.query('SELECT id FROM users WHERE id = $1', [p.uid])).rows).toHaveLength(1)
   expect(await of(p.id)).toEqual([])

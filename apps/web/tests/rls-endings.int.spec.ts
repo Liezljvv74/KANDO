@@ -240,7 +240,7 @@ it('deleting an account with a finished, disputed or stopped booking is 409; rev
   const refusal = (p: Promise<unknown>) => p.then(() => null, async (e: unknown) => (e instanceof Response ? { status: e.status, body: await e.json() } : e))
   for (const status of ['finished', 'disputed', 'stopped']) {
     const id = await booking({ customer: U.gone, status })
-    expect(await refusal(deleteAccount(U.gone, EMAIL(U.gone), () => {})), status).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
+    expect(await refusal(deleteAccount(U.gone, () => {})), status).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
     await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [id])
   }
   const done = await booking({ customer: U.gone, status: 'completed' })
@@ -251,7 +251,7 @@ it('deleting an account with a finished, disputed or stopped booking is 409; rev
   await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id) VALUES ($1, $2, $3, 'quote', 'completed', now() + interval '3 days', 60, $4)", [U.gone, providerId, childQuote, done])
   await pool.query("INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars) VALUES ($1, $2, $3, 'customer', 2), ($1, $3, $2, 'provider', 5)", [done, U.gone, U.owner])
   await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES ($1, $2, 'Noch ein Tor', now(), $3)", [U.gone, providerId, done]) // an additional task's request
-  await deleteAccount(U.gone, EMAIL(U.gone), () => {})
+  await deleteAccount(U.gone, () => {})
   expect((await pool.query('SELECT count(*)::int n FROM requests WHERE parent_booking_id = $1', [done])).rows[0].n).toBe(0)
   expect((await pool.query('SELECT count(*)::int n FROM disputes WHERE booking_id = $1', [done])).rows[0].n).toBe(0)
   expect((await pool.query('SELECT count(*)::int n FROM reviews WHERE booking_id = $1', [done])).rows[0].n).toBe(0)

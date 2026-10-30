@@ -171,6 +171,8 @@ export async function seedProvider(
 export const staff = { id: '' }
 export const mockAuth = async () => ({
   getAuth: () => ({ getSession: async () => ({ data: staff.id ? { user: { id: staff.id } } : null }) }),
+  /** The password check: 'right-password' is right, 'busy' stands for Neon Auth not answering, anything else is wrong. */
+  verifyPassword: async (_r: Request, _e: string, p: string) => (p === 'right-password' ? 'ok' : p === 'busy' ? 'busy' : 'wrong'),
 })
 
 type Route = (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>

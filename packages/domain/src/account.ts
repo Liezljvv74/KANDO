@@ -75,7 +75,7 @@ export async function flushPendingObjects(ids?: string[]): Promise<number> {
 
 /**
  * Deletes the person and everything of theirs for good (GDPR erasure), in one transaction on the owner connection (app_user
- * may not delete from several of these tables). 400 EMAIL_MISMATCH unless `confirmEmail` is their stored email; 409
+ * may not delete from several of these tables); the caller has checked the password. 409
  * LAST_ADMIN for the only Administrator; 409 OPEN_BOOKINGS while they are customer or provider on a booking holding money
  * (MONEY_OPEN_STATUSES), or with paid-out money on a booking group that has no invoice yet, or with commission of a month that has no commission invoice yet. The object keys are written to pending_object_deletes in the same transaction; after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
  * the files does not hang on one attempt. Then the confirmation email goes to the address as it was before.
@@ -88,16 +88,15 @@ async function moneyOpen(exec: Exec, userId: string): Promise<boolean> {
   return r.rows.length > 0
 }
 
-export async function deleteAccount(userId: string, confirmEmail: string, afterCommit: AfterCommit): Promise<void> {
+export async function deleteAccount(userId: string, afterCommit: AfterCommit): Promise<void> {
   const months = retentionMonths()
   // Invoices first, while the bookings still exist: a group whose provider money was paid out gets its invoice now, even
   // with an unpaid additional task or an open request (the deletion withdraws those). Outside the transaction (issuing locks
-  // the root bookings itself), and only when the deletion is not refused anyway (wrong email, money still open), so a
+  // the root bookings itself), and only when the deletion is not refused anyway (money still open), so a
   // refused deletion never invoices a group early. The transaction below refuses if one is still missing.
-  const [me] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
   // The provider's commission invoices likewise: every month with commission, the current partial one too (the provider's
   // details are needed as the recipient).
-  if (me && confirmEmail.trim().toLowerCase() === me.email.toLowerCase() && !(await moneyOpen(db, userId))) {
+  if (!(await moneyOpen(db, userId))) {
     await issueDueInvoices(db, new Date(), { userId, forDeletion: true })
     await issueCommissionInvoices(db, new Date(), { userId })
   }
@@ -106,7 +105,6 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     const admins = await lockAdmins(tx)
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).for('update')
     if (!user) return fail(404, { error: 'Not found' })
-    if (confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) fail(400, { error: 'EMAIL_MISMATCH' })
     if (user.staffRole === 'admin' && !activeAdmins(admins).some((a) => a.id !== userId)) fail(409, { error: 'LAST_ADMIN' })
     const own = tx.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, userId))
     // Paid money is still open (paid and not released, whatever the status, or a money-open status): refuse. The person's bookings (either side) are locked before the check, so

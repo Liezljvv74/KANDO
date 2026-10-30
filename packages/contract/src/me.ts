@@ -57,8 +57,8 @@ export const PushSettingsSchema = z.object({ chat: z.boolean(), reminders: z.boo
 export type PushSettings = z.infer<typeof PushSettingsSchema>
 export const PushSettingsPatchSchema = PushSettingsSchema.partial()
 
-/** DELETE /me: the person types their own email to confirm. */
-export const DeleteMeSchema = z.object({ confirmEmail: z.string().max(320) })
+/** DELETE /me: the person enters their password to confirm (403 WRONG_PASSWORD, 503 AUTH_BUSY). */
+export const DeleteMeSchema = z.object({ password: z.string().min(1).max(128) })
 
 /** PATCH /me: names, language of emails and private address; all optional (address null clears it). */
 export const MePatchSchema = z
