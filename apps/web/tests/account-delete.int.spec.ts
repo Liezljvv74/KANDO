@@ -165,6 +165,8 @@ it('a wrong password is 403 WRONG_PASSWORD, deletes nothing and sets no cookie',
   expect((await rowsOf('ad3', a.providerId)).users).toBe(1)
   expect(store.objects.size).toBe(4)
   expect(outboxForTests()).toHaveLength(0)
+  expect(await count('SELECT count(*) n FROM invoices WHERE customer_id = $1 OR provider_id = $2', ['ad3', a.providerId])).toBe(0)
+  expect(await count('SELECT count(*) n FROM commission_invoices WHERE provider_id = $1', [a.providerId])).toBe(0)
 })
 
 it('auth busy is 503 AUTH_BUSY and deletes nothing', async () => {

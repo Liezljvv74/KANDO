@@ -14,7 +14,8 @@ export function getAuth(): Auth {
 
 /**
  * Checks the person's password by signing in through the auth handler in-process, like a normal login (the caller's
- * headers without its Cookie, so Neon Auth's sign-in limits apply as they do to the login screen; Origin = this server).
+ * headers without its Cookie; Origin = this server). The Neon Auth proxy forwards no client IP, so its sign-in limits are shared by
+ * everyone, the same as for the login screen.
  * The session that sign-in creates is signed out at once with its own cookies; none of the answers reach the caller.
  * 'busy': any answer other than 200 or 401 (a rate limit, Neon Auth down) or a thrown error. The password is never logged.
  */
@@ -29,11 +30,15 @@ export async function verifyPassword(request: Request, email: string, password: 
     headers.set('origin', origin)
     const res = await post('sign-in/email', headers, JSON.stringify({ email, password }))
     if (res.status === 401) return 'wrong'
-    if (res.status !== 200) return 'busy'
+    if (res.status !== 200) {
+      console.error(`[verifyPassword] busy: auth status ${res.status}`)
+      return 'busy'
+    }
     const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ')
     await post('sign-out', new Headers({ cookie, origin }))
     return 'ok'
-  } catch {
+  } catch (e) {
+    console.error(`[verifyPassword] busy: ${e instanceof Error ? e.name : 'error'}`)
     return 'busy'
   }
 }

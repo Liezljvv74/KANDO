@@ -11,7 +11,7 @@ it('every route gets the security headers, and the server does not announce itse
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'X-Frame-Options': 'DENY',
-    // frame-ancestors only: no form-action or script-src, they could break the Neon Auth redirects
+    // Enforced: frame-ancestors, object-src, base-uri only (no form-action or script-src, they could break the Neon Auth redirects); script-src is only a report-only trial below
     'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
     'Content-Security-Policy-Report-Only': "script-src 'self' 'unsafe-inline'",
     'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',

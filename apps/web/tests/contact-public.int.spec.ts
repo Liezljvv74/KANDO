@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
+import sharp from 'sharp'
 import { pool } from '@kando/db'
-import { call, cleanupUsers, profile, relaxLimits, seedBase } from './helpers'
+import { setStorageForTests } from '@kando/domain'
+import { call, cleanupUsers, EMAIL, memoryStorage, profile, relaxLimits, seedBase, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -9,6 +11,7 @@ const referencesRoute = await import('../app/app-api/v1/references/route')
 const service = await import('../app/app-api/v1/services/[id]/route')
 const reference = await import('../app/app-api/v1/references/[id]/route')
 const me = await import('../app/app-api/v1/me/route')
+const photos = await import('../app/app-api/v1/photos/route')
 
 const PHONE = 'Call me on 0176 12345678'
 const attempts = async (uid: string) => (await pool.query('SELECT count(*)::int n FROM contact_attempts WHERE user_id = $1', [uid])).rows[0].n
@@ -23,7 +26,10 @@ beforeAll(async () => {
   categoryId = (await seedBase()).categoryId
   await pool.query(`INSERT INTO postcodes (country, code, place, state, location) VALUES ('DE', '10115', 'Berlin', 'Berlin', ST_SetSRID(ST_MakePoint(13.3, 52.5), 4326)) ON CONFLICT DO NOTHING`)
 })
-afterAll(cleanupUsers)
+afterAll(async () => {
+  setStorageForTests(undefined)
+  await cleanupUsers()
+})
 
 it('a phone number in the bio, a service description, a reference and a last name is 422 CONTACT_DETAILS and nothing is saved', async () => {
   const u = 'cp1'
@@ -81,4 +87,22 @@ it('updating a service, updating a reference and a first name are refused too', 
   await refused(await call(reference.PATCH, u, 'PATCH', { description: PHONE }, { id: r.id }))
   await refused(await call(me.PATCH, u, 'PATCH', { firstName: '0176 12345678' }))
   expect(await attempts(u)).toBe(0)
+})
+
+it('a photo description with a phone number is 422 CONTACT_DETAILS, saves no row and leaves no stored object', async () => {
+  const u = 'cp9'
+  const store = memoryStorage()
+  setStorageForTests(store)
+  await relaxLimits(u)
+  const form = new FormData()
+  form.append('file', new Blob([new Uint8Array(await sharp({ create: { width: 64, height: 48, channels: 3, background: '#c33' } }).png().toBuffer())]), 'p.png')
+  form.append('kind', 'profile')
+  form.append('alt', PHONE)
+  const res = await photos.POST(
+    await sized(new Request('http://localhost/app-api/v1/photos', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${u}:${EMAIL(u)}` }, body: form })),
+    { params: Promise.resolve({}) },
+  )
+  await refused(res)
+  expect(store.objects.size).toBe(0)
+  expect((await pool.query('SELECT count(*)::int n FROM photos WHERE owner_id = $1', [u])).rows[0].n).toBe(0)
 })

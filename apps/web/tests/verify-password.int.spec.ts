@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { verifyPassword } from '../lib/auth/server'
 
 type Call = { url: string; path: string[]; headers: Headers; body: string }
@@ -58,6 +58,21 @@ it('429, 500 and a thrown error are busy', async () => {
     throw new TypeError('fetch failed')
   })
   expect(await verifyPassword(incoming(), 'a@b.test', 'x', handler)).toBe('busy')
+})
+
+it('the busy paths log one line with the status or error name and never the password', async () => {
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await verifyPassword(incoming(), 'a@b.test', 'hunter2-secret', fakeHandler(() => new Response(null, { status: 429 })).handler)
+    await verifyPassword(incoming(), 'a@b.test', 'hunter2-secret', fakeHandler(() => { throw new TypeError('fetch failed hunter2-secret') }).handler)
+    expect(spy).toHaveBeenCalledTimes(2)
+    const lines = spy.mock.calls.map((c) => c.join(' '))
+    expect(lines[0]).toContain('429')
+    expect(lines[1]).toContain('TypeError')
+    for (const l of lines) expect(l).not.toMatch(/hunter2|a@b\.test/)
+  } finally {
+    spy.mockRestore()
+  }
 })
 
 it("the caller's cookie is never forwarded", async () => {

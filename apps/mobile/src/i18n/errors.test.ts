@@ -53,6 +53,15 @@ test('the chat rejections have their own text in both languages', () => {
   }
 })
 
+test('LENGTH_REQUIRED has a mapped text', () => {
+  expect(errorKeys.LENGTH_REQUIRED).toBeTruthy()
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(errorText('LENGTH_REQUIRED')).not.toMatch(/LENGTH|411/)
+    expect(errorText('LENGTH_REQUIRED').trim()).not.toBe('')
+  }
+})
+
 test('MESSAGE_LIMIT has its own text', () => {
   for (const lang of ['de', 'en'] as const) {
     setLang(lang)
