@@ -1,6 +1,6 @@
 import { asc, eq, getTableColumns, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import { bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quotes, requests, services, threads, users, type Tx } from '@kando/db'
+import { availabilityWatches, bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quotes, requests, reviews, services, threads, users, type Tx } from '@kando/db'
 import { listBlocks } from './chat/blocks'
 import { documentsBucket, photoUrl, storage } from './storage'
 
@@ -65,6 +65,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       role: roleOf(b.customerId),
       source: b.source,
       quoteId: b.quoteId,
+      parentBookingId: b.parentBookingId,
       status: b.status,
       startAt: b.startAt,
       durationMin: b.durationMin,
@@ -77,7 +78,18 @@ export async function exportMyData(tx: Tx, userId: string) {
     })),
     // only what the person sent themselves; a photo by its file name, not the file
     messages: sent.map(({ m, requestId, bookingId }) => ({ id: m.id, threadId: m.threadId, requestId, bookingId, kind: m.kind, body: m.body, photo: m.photoKey?.split('/').pop() ?? null, card: m.card, createdAt: m.createdAt })),
+    // reviews they wrote (those about them are the other person's words)
+    reviews: (await tx.select().from(reviews).where(eq(reviews.authorId, userId)).orderBy(asc(reviews.createdAt))).map((r) => ({ bookingId: r.bookingId, role: r.authorRole, stars: r.stars, text: r.text, hidden: r.hidden, createdAt: r.createdAt, updatedAt: r.updatedAt, visibleAt: r.visibleAt })),
     blocks: (await listBlocks(tx, userId)).map((b) => ({ name: b.name })),
+    // "notify me" on providers: by their public name only (a provider no longer public shows as null)
+    watches: (
+      await tx
+        .select({ provider: providers.publicName, slug: providers.slug, createdAt: availabilityWatches.createdAt, notifiedAt: availabilityWatches.notifiedAt })
+        .from(availabilityWatches)
+        .leftJoin(providers, eq(providers.id, availabilityWatches.providerId))
+        .where(eq(availabilityWatches.customerId, userId))
+        .orderBy(asc(availabilityWatches.createdAt))
+    ).map(({ notifiedAt, ...w }) => ({ ...w, notified: notifiedAt !== null })),
     notifications: await tx.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(asc(notifications.createdAt)),
     notes: [
       'Not included: your password (the sign-in service keeps only a one-way hash) and the sign-in sessions.',
@@ -106,7 +118,7 @@ export function exportRows(data: Export): string[][] {
   add('export', 1, { exportedAt: data.exportedAt })
   if (data.user) add('user', 1, data.user)
   if (data.provider) add('provider', 1, data.provider)
-  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'messages', 'blocks', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
+  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'reviews', 'messages', 'blocks', 'watches', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
     data[section].forEach((r, i) => add(section, i + 1, r))
   }
   data.notes.forEach((n, i) => rows.push(['notes', String(i + 1), 'text', n]))
@@ -115,12 +127,12 @@ export function exportRows(data: Export): string[][] {
 
 const PLAIN_NUMBER = /^-?\d+([.,]\d+)?$/
 /**
- * A spreadsheet program runs a cell that starts with = + @ (or a tab, a carriage return, or a minus that is not a plain
- * number) as a formula: such a cell gets a leading single quote. The quote is intentional and part of the CSV value; the JSON export is unchanged.
+ * A spreadsheet program runs a cell that starts with = + @ - (or a tab or carriage return), also after leading blanks or
+ * quote marks, as a formula: such a cell gets a leading single quote, unless it is a plain number (-5 stays -5). The quote is intentional and part of the CSV value; the JSON export is unchanged.
  */
-const noFormula = (s: string) => (/^[=+@\t\r]/.test(s) || (s.startsWith('-') && !PLAIN_NUMBER.test(s)) ? `'${s}` : s)
+export const noFormula = (s: string) => (/^[\s"']*[=+@\t\r-]/.test(s) && !PLAIN_NUMBER.test(s) ? `'${s}` : s)
 
-const quote = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s)
+export const quote = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s)
 
 /** RFC 4180 text (CRLF lines) with a UTF-8 byte order mark, so spreadsheet programs show umlauts correctly. */
 export const exportCsv = (data: Export): string =>

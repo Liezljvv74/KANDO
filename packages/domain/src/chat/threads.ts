@@ -2,21 +2,30 @@ import { desc, eq, inArray, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, threads, users, type Tx } from '@kando/db'
 import type { Thread } from '@kando/contract'
 import { isUuid } from '../admin/common'
+import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { publicNameFor } from '../providers/public-name'
 
 const notFound = () => fail(404, { error: 'Not found' })
 
-/** The thread of a request, created on first use. Two first uses at once give one thread (unique request_id, ON CONFLICT). 404 for a non-party. */
-export async function threadForRequest(tx: Tx, requestId: string): Promise<string> {
+/**
+ * The thread of a request, created on first use. Two first uses at once give one thread (unique request_id, ON CONFLICT).
+ * 404 for a non-party. An additional task's request talks in the thread of the booking it adds to.
+ */
+export async function threadForRequest(tx: Exec, requestId: string): Promise<string> {
   const r = isUuid(requestId) ? (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] : undefined
   if (!r) return notFound()
+  if (r.parentBookingId) return threadForBooking(tx, r.parentBookingId)
   await tx.insert(threads).values({ requestId: r.id, customerId: r.customerId, providerId: r.providerId }).onConflictDoNothing()
   return (await tx.select({ id: threads.id }).from(threads).where(eq(threads.requestId, r.id)))[0]!.id
 }
 
-/** The thread of a booking: a booking from a quote shares its request's thread, a direct booking has its own (created on first use). */
-export async function threadForBooking(tx: Tx, bookingId: string): Promise<string> {
+/**
+ * The thread of a booking: a booking from a quote shares its request's thread, a direct booking has its own (created on
+ * first use); an additional task shares its parent's (through its request). `tx` is the caller's request transaction
+ * (RLS: 404 for a non-party), or the owner connection after the domain checked the caller.
+ */
+export async function threadForBooking(tx: Exec, bookingId: string): Promise<string> {
   const b = isUuid(bookingId) ? (await tx.select().from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
   if (!b) return notFound()
   if (b.quoteId) {

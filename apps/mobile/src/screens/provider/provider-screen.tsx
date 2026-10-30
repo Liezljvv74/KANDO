@@ -13,6 +13,8 @@ import { useCategories } from '@/hooks/use-categories'
 import { getLang, t, useLang, type Key } from '@/i18n'
 import { formatPrice } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
+import { notifyOnly } from '@/lib/request-target'
+import { NotifyMe } from '@/screens/provider/notify-me'
 import { RequestButton, useCanRequest } from '@/screens/provider/request-actions'
 
 export default function ProviderScreen() {
@@ -28,6 +30,7 @@ export default function ProviderScreen() {
   // The app draws edge to edge: without this the end of the page sits behind the phone's navigation bar.
   const { bottom } = useSafeAreaInsets()
   const canRequest = useCanRequest(slug)
+  const waitlist = !!p && notifyOnly(p)
 
   const load = useCallback(() => {
     setError('')
@@ -77,9 +80,13 @@ export default function ProviderScreen() {
           <View style={styles.titleRow}>
             <Text style={styles.name}>{p.publicName}</Text>
             {p.isNew && <Text style={styles.badge}>{t('badge.new')}</Text>}
+            {!!p.verified && <Text style={styles.badge}>{t('provider.verified')}</Text>}
           </View>
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
+          {!!p.rating && <Text style={styles.small}>{t('provider.rating', { average: p.rating.average.toLocaleString(getLang()), count: p.rating.count })}</Text>}
+          {/* Late cancellations and no-shows in the last 12 months; nothing is shown while there are none. */}
+          {!!p.reliability && <Text style={styles.small}>{p.reliability === 1 ? t('provider.reliability.one') : t('provider.reliability.other', { n: p.reliability })}</Text>}
           {!!p.worksRemotely && <Text style={styles.small}>{t('provider.remote')}</Text>}
           {(p.checkedDocuments?.length ?? 0) > 0 && <Text style={styles.small}>{checkedLine}</Text>}
         </View>
@@ -143,7 +150,7 @@ export default function ProviderScreen() {
               <View style={styles.serviceText}>
                 <Text style={styles.serviceTitle}>{s.title}</Text>
                 {!!s.description && <Text style={styles.small}>{s.description}</Text>}
-                {canRequest && <RequestButton provider={p} service={s} />}
+                {canRequest && !waitlist && <RequestButton provider={p} service={s} />}
               </View>
               <Text style={styles.price}>{formatPrice(s)}</Text>
             </View>
@@ -157,6 +164,19 @@ export default function ProviderScreen() {
             <View key={r.id} style={styles.reference}>
               <Text style={styles.serviceTitle}>{r.year ? `${r.clientName} (${r.year})` : r.clientName}</Text>
               <Text style={styles.small}>{r.description}</Text>
+            </View>
+          ))}
+        </Section>
+      )}
+
+      {(p.reviews?.length ?? 0) > 0 && (
+        <Section title={t('provider.reviews')}>
+          {p.reviews!.map((r, i) => (
+            <View key={i} style={styles.reference}>
+              <Text style={styles.serviceTitle} accessibilityLabel={`${r.stars} / 5`}>
+                {`${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)} · ${new Date(r.date).toLocaleDateString(getLang())}`}
+              </Text>
+              {!!r.text && <Text style={styles.small}>{r.text}</Text>}
             </View>
           ))}
         </Section>
@@ -178,7 +198,7 @@ export default function ProviderScreen() {
         </Section>
       )}
 
-      {canRequest && <RequestButton provider={p} />}
+      {canRequest && (waitlist ? <NotifyMe slug={slug} /> : <RequestButton provider={p} />)}
     </ScrollView>
   )
 }

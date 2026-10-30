@@ -42,7 +42,13 @@
           "microphonePermission": false
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#0E8A6B"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

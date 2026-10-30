@@ -16,6 +16,9 @@ export const users = pgTable(
     addressCity: text('address_city'),
     addressCountry: text('address_country'),
     isProvider: boolean('is_provider').notNull().default(false),
+    // Push switches, the person's own: chat messages and reminders; every other booking and money event is always pushed.
+    pushChat: boolean('push_chat').notNull().default(true),
+    pushReminders: boolean('push_reminders').notNull().default(true),
     staffRole: text('staff_role'),
     suspendedUntil: timestamp('suspended_until', { withTimezone: true }),
     suspendedReason: text('suspended_reason'),

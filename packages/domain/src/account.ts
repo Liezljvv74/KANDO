@@ -1,14 +1,17 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { blocks, bookings, contactAttempts, db, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
+import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, pushTokens, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
+import { hasUninvoicedPayout, issueDueInvoices } from './invoices/issue'
+import { hasUninvoicedCommission, issueCommissionInvoices } from './invoices/commission'
+import type { Exec } from './providers/eligibility'
 import { fail } from './providers/http'
 import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'push_tokens', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -37,6 +40,9 @@ async function deleteAuthRecords(tx: Tx, id: string, email: string) {
 }
 
 const BATCH = 200
+
+/** Booking statuses that hold the customer's money: the account cannot be deleted until they are settled. */
+export const MONEY_OPEN_STATUSES = ['confirmed', 'finished', 'disputed', 'stopped'] as const
 
 /**
  * How many months the verification documents and basic trader details of a deleted provider are kept (a legal duty under
@@ -70,13 +76,31 @@ export async function flushPendingObjects(ids?: string[]): Promise<number> {
 /**
  * Deletes the person and everything of theirs for good (GDPR erasure), in one transaction on the owner connection (app_user
  * may not delete from several of these tables). 400 EMAIL_MISMATCH unless `confirmEmail` is their stored email; 409
- * LAST_ADMIN for the only Administrator. The object keys are written to pending_object_deletes in the same transaction;
- * after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
+ * LAST_ADMIN for the only Administrator; 409 OPEN_BOOKINGS while they are customer or provider on a booking holding money
+ * (MONEY_OPEN_STATUSES), or with paid-out money on a booking group that has no invoice yet, or with commission of a month that has no commission invoice yet. The object keys are written to pending_object_deletes in the same transaction; after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
  * the files does not hang on one attempt. Then the confirmation email goes to the address as it was before.
  * The shared translations cache and the rate-limit rows keyed by an ip hash are not the person's data and stay.
  */
+/** The person has money still open on a booking (either side): paid and not released, or a money-open status. */
+async function moneyOpen(exec: Exec, userId: string): Promise<boolean> {
+  const r = await exec.execute(sql`SELECT 1 FROM bookings b WHERE (b.customer_id = ${userId} OR b.provider_id IN (SELECT id FROM providers WHERE owner_id = ${userId}))
+    AND ((b.paid_at IS NOT NULL AND b.released_at IS NULL) OR b.status IN (${sql.join(MONEY_OPEN_STATUSES.map((x) => sql`${x}`), sql`, `)})) LIMIT 1`)
+  return r.rows.length > 0
+}
+
 export async function deleteAccount(userId: string, confirmEmail: string, afterCommit: AfterCommit): Promise<void> {
   const months = retentionMonths()
+  // Invoices first, while the bookings still exist: a group whose provider money was paid out gets its invoice now, even
+  // with an unpaid additional task or an open request (the deletion withdraws those). Outside the transaction (issuing locks
+  // the root bookings itself), and only when the deletion is not refused anyway (wrong email, money still open), so a
+  // refused deletion never invoices a group early. The transaction below refuses if one is still missing.
+  const [me] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
+  // The provider's commission invoices likewise: every month with commission, the current partial one too (the provider's
+  // details are needed as the recipient).
+  if (me && confirmEmail.trim().toLowerCase() === me.email.toLowerCase() && !(await moneyOpen(db, userId))) {
+    await issueDueInvoices(db, new Date(), { userId, forDeletion: true })
+    await issueCommissionInvoices(db, new Date(), { userId })
+  }
   const { email, language, tombstones, keepUntil } = await db.transaction(async (tx) => {
     // Lock order everywhere: the Administrator set (by id) first, then the person's own row.
     const admins = await lockAdmins(tx)
@@ -84,6 +108,21 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     if (!user) return fail(404, { error: 'Not found' })
     if (confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) fail(400, { error: 'EMAIL_MISMATCH' })
     if (user.staffRole === 'admin' && !activeAdmins(admins).some((a) => a.id !== userId)) fail(409, { error: 'LAST_ADMIN' })
+    const own = tx.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, userId))
+    // Paid money is still open (paid and not released, whatever the status, or a money-open status): refuse. The person's bookings (either side) are locked before the check, so
+    // the payment code cannot confirm one in between: its update waits for this transaction and then finds the row gone.
+    // Lock order: Administrator set, the person, their bookings (by id); settlement and payment lock only a booking row
+    // (payment after the provider's slot lock, which this never takes), so there is no cycle. Ledger rows are never touched.
+    const theirs = await tx
+      .select({ status: bookings.status, paidAt: bookings.paidAt, releasedAt: bookings.releasedAt })
+      .from(bookings)
+      .where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
+      .orderBy(asc(bookings.id))
+      .for('update')
+    if (theirs.some((b) => (b.paidAt && !b.releasedAt) || (MONEY_OPEN_STATUSES as readonly string[]).includes(b.status))) fail(409, { error: 'OPEN_BOOKINGS' })
+    // provider money paid out on a group without its invoice (issuing failed just now): the invoice must exist first
+    // the same for KANDO's commission invoices to the provider
+    if ((await hasUninvoicedPayout(tx, userId)) || (await hasUninvoicedCommission(tx, userId))) fail(409, { error: 'OPEN_BOOKINGS' })
     // Every object key first: after the rows are gone nothing says where the files are.
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))
@@ -117,10 +156,10 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     }
     await tx.update(documents).set({ reviewedBy: null }).where(eq(documents.reviewedBy, userId)) // a staff reviewer: their id is personal data on others' documents
     await tx.delete(notifications).where(eq(notifications.userId, userId))
+    await tx.delete(pushTokens).where(eq(pushTokens.userId, userId))
     await tx.delete(documents).where(eq(documents.ownerId, userId))
     await tx.delete(privateFiles).where(eq(privateFiles.ownerId, userId))
     await tx.delete(photos).where(eq(photos.ownerId, userId))
-    const own = tx.select({ id: providers.id }).from(providers).where(eq(providers.ownerId, userId))
     // Requests, quotes and bookings of either side (this person as customer, or as the provider), before services and providers.
     // Chat first: threads point at requests and bookings, and everything points at the person.
     const ownThreads = tx.select({ id: threads.id }).from(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
@@ -130,6 +169,12 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     await tx.delete(messages).where(sql`${messages.senderId} = ${userId} OR ${messages.threadId} IN ${ownThreads}`)
     await tx.delete(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
     await tx.delete(blocks).where(sql`${blocks.blockerId} = ${userId} OR ${blocks.blockedId} = ${userId}`)
+    await tx.delete(availabilityWatches).where(sql`${availabilityWatches.customerId} = ${userId} OR ${availabilityWatches.providerId} IN ${own}`)
+    // Disputes and reviews of their bookings go with them (the money record stays in the ledger, which has no foreign keys);
+    // so do reviews they wrote or received on anyone's booking.
+    const ownBookings = tx.select({ id: bookings.id }).from(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
+    await tx.delete(disputes).where(sql`${disputes.bookingId} IN ${ownBookings}`)
+    await tx.delete(reviews).where(sql`${reviews.bookingId} IN ${ownBookings} OR ${reviews.authorId} = ${userId} OR ${reviews.subjectId} = ${userId}`)
     await tx.delete(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
     await tx.delete(quotes).where(sql`${quotes.providerId} IN ${own}`)
     await tx.delete(requests).where(sql`${requests.customerId} = ${userId} OR ${requests.providerId} IN ${own}`)

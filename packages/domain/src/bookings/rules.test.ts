@@ -45,7 +45,7 @@ describe('overlaps', () => {
 })
 
 describe('canTransition', () => {
-  const all = ['proposed', 'awaiting-payment', 'expired', 'declined', 'withdrawn'] as const
+  const all = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
   const allowed = new Set([
     'proposed>proposed',
     'proposed>awaiting-payment',
@@ -54,6 +54,20 @@ describe('canTransition', () => {
     'proposed>withdrawn',
     'awaiting-payment>expired',
     'awaiting-payment>withdrawn',
+    'awaiting-payment>confirmed', // the payment webhook (owner connection)
+    // endings: owner connection only (trigger bookings_guard_status); the table documents them
+    ...['finished', 'cancelled', 'stopped', 'disputed', 'completed'].map((t) => `confirmed>${t}`),
+    'finished>completed',
+    'finished>disputed', // finished>stopped is deliberately absent
+    'stopped>completed',
+    'stopped>disputed',
+    // a staff refund of the whole amount (admin/bookings.ts staffRefund)
+    'confirmed>refunded',
+    'finished>refunded',
+    'stopped>refunded',
+    'disputed>completed',
+    'disputed>refunded',
+    'disputed>cancelled',
   ])
   it('allows exactly the table, nothing leaves a final state', () => {
     for (const from of all) for (const to of all) expect(canTransition(from, to), `${from}>${to}`).toBe(allowed.has(`${from}>${to}`))

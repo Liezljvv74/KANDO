@@ -1,5 +1,6 @@
 export * from './client'
 export * from './schema'
+export * from './app-tables'
 export * from './rls'
 export * from './migrate'
 export * from './as-user'

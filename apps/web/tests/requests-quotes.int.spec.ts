@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { call, cleanupUsers, EMAIL, expireQuotes, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -128,7 +128,7 @@ it('past times, absurd durations and an address-less on-site proposal are 400', 
 it('accepting an expired quote is 409', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
-  await pool.query("UPDATE quotes SET expires_at = now() - interval '1 minute' WHERE id = $1", [q.id])
+  await expireQuotes('id = $1', [q.id])
   expect((await accepting(q.id, U.cust)).status).toBe(409)
 })
 

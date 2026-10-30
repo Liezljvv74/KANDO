@@ -1,5 +1,5 @@
-import { desc, eq } from 'drizzle-orm'
-import { bookings, db, providers, services, type Tx } from '@kando/db'
+import { desc, eq, getTableColumns } from 'drizzle-orm'
+import { bookingAppInsert, bookings, db, providers, services, type Tx } from '@kando/db'
 import type { Booking, BookingAnswer, DirectBookingInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
@@ -13,6 +13,7 @@ import { assertSlotFree, lockProviderSlots } from './busy'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
 import { assertWithinLimits, toBooking } from './requests'
+import { canTransact } from '../payments/rules'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
 const HOUR = 3_600_000
@@ -32,13 +33,14 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
   const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
   if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
+  if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // payout set-up unfinished: the app offers "notify me"
   if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) return fail(400, { error: 'not-bookable' })
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
   if (input.note) await assertNoContactDetails(userId, input.note)
   const [row] = await tx
-    .insert(bookings)
+    .insert(bookingAppInsert) // the price comes from the service (trigger bookings_fill_amount), never from the client
     .values({
       customerId: userId,
       providerId: provider.id,
@@ -47,8 +49,6 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
       status: 'proposed',
       startAt,
       durationMin: input.durationMin,
-      amount: service.price, // from the stored service, never from the client
-      currency: service.currency,
       onSite: input.onSite,
       ...(input.onSite && input.address && { addressStreet: input.address.street ?? null, addressPostcode: input.address.postcode, addressCity: input.address.city ?? null }),
       note: input.note ?? null,
@@ -56,17 +56,21 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
+    .returning(getTableColumns(bookings))
   await threadForBooking(tx, row!.id) // a direct booking gets its own chat
   notifyProposal(afterCommit, provider, row!)
   return view(row!, userId)
 }
 
-/** The caller's bookings, newest first, as customer or as provider owner. */
+/** The caller's bookings, newest first, as customer or as provider owner; each booking's additional tasks follow right after it (oldest first). */
 export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<Booking[]> {
   await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  return (await tx.select().from(bookings).where(mine).orderBy(desc(bookings.createdAt), desc(bookings.id))).map((b) => view(b, userId))
+  const all = (await tx.select().from(bookings).where(mine).orderBy(desc(bookings.createdAt), desc(bookings.id))).map((b) => view(b, userId))
+  const ids = new Set(all.map((b) => b.id))
+  const kids = new Map<string, Booking[]>()
+  for (const b of [...all].reverse()) if (b.parentBookingId && ids.has(b.parentBookingId)) kids.set(b.parentBookingId, [...(kids.get(b.parentBookingId) ?? []), b])
+  return all.filter((b) => !b.parentBookingId || !ids.has(b.parentBookingId)).flatMap((b) => [b, ...(kids.get(b.id) ?? [])])
 }
 
 /** Which side the caller is on; 404 for anyone else. */
@@ -100,6 +104,9 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
     return done
   }
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return fail(409, { error: 'provider-unavailable' })
+  // Accepting or proposing a time leads to an obligation (a counter accepted by the other side becomes awaiting-payment):
+  // only with payout set-up done. Declining stays possible; bookings accepted earlier are not touched.
+  if (!canTransact(provider)) fail(409, { error: role === 'provider' ? 'PAYOUT_SETUP_FIRST' : 'PROVIDER_NOT_READY' })
   if (answer.type === 'counter') {
     const startAt = new Date(answer.startAt)
     assertFuture(startAt, now)
@@ -115,7 +122,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
   assertFuture(b.startAt, now)
   await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)
   const pay = payBy(now, b.startAt)
-  const done = await set('awaiting-payment', { payBy: pay, answerBy: null, counterBy: null })
+  const done = await set('awaiting-payment', { payBy: pay, acceptedAt: now, answerBy: null, counterBy: null })
   tell('booking-accepted', pay)
   return done
 }

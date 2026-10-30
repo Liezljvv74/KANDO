@@ -39,7 +39,7 @@ test('report and block calls use their routes, methods and bodies', async () => 
 })
 
 const thread = (id: string, extra: object) => ({ id, requestId: null, bookingId: null, otherName: 'A', lastMessageAt: null, blocked: false, ...extra })
-const booking = { id: 'b1', quoteId: null, customerId: 'c1', providerId: 'p1' }
+const booking = { id: 'b1', requestId: null }
 
 test('the chat of a request is found by its request id', async () => {
   ;(api as jest.Mock).mockResolvedValue({ docs: [thread('t1', { requestId: 'r1' }), thread('t2', { requestId: 'r2' })] })
@@ -47,15 +47,11 @@ test('the chat of a request is found by its request id', async () => {
   expect(await threadIdForRequest('r9')).toBeNull()
 })
 
-test('a direct booking has its own chat, a quote booking shares the chat of the request that holds its quote', async () => {
-  const threads = { docs: [thread('t1', { requestId: 'r1' }), thread('t2', { requestId: 'r2' }), thread('t3', { bookingId: 'b1' })] }
-  const requests = { docs: [{ id: 'r1', customerId: 'c1', providerId: 'p1' }, { id: 'r2', customerId: 'c1', providerId: 'p1' }, { id: 'r3', customerId: 'c9', providerId: 'p1' }] }
-  ;(api as jest.Mock).mockImplementation(async (path: string) => {
-    if (path.endsWith('/threads')) return threads
-    if (path.includes('/requests?')) return requests
-    return { docs: [{ id: path.includes('/r2/') ? 'q2' : 'q1' }] }
-  })
-  expect(await threadIdForBooking(booking, 'customer')).toBe('t3')
-  expect(await threadIdForBooking({ ...booking, id: 'b2', quoteId: 'q2' }, 'customer')).toBe('t2')
-  expect(await threadIdForBooking({ ...booking, id: 'b2', quoteId: 'q-unknown' }, 'customer')).toBeNull()
+test('a direct booking has its own chat, a quote booking shares the chat of its request (one call, no search)', async () => {
+  ;(api as jest.Mock).mockResolvedValue({ docs: [thread('t1', { requestId: 'r1' }), thread('t2', { requestId: 'r2' }), thread('t3', { bookingId: 'b1' })] })
+  expect(await threadIdForBooking(booking)).toBe('t3')
+  expect(await threadIdForBooking({ id: 'b2', requestId: 'r2' })).toBe('t2')
+  expect(await threadIdForBooking({ id: 'b2', requestId: 'r-unknown' })).toBeNull()
+  expect(await threadIdForBooking({ id: 'b2', requestId: null })).toBeNull()
+  expect((api as jest.Mock).mock.calls.every(([path]) => path === '/app-api/v1/threads')).toBe(true)
 })

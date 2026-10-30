@@ -14,12 +14,12 @@ export const AddressSchema = z.object({
 export type Address = z.infer<typeof AddressSchema>
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
-export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested', 'message-received'] as const
+export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested', 'message-received', 'booking-paid', 'payment-received', 'payment-late-refunded', 'payout-setup-complete', 'customers-waiting', 'provider-available', 'refund-issued', 'job-finished', 'confirm-reminder', 'payment-released', 'was-job-done', 'booking-cancelled', 'no-show-reported', 'dispute-opened', 'dispute-decided', 'job-stopped', 'stop-amount-stated', 'additional-task-requested', 'review-requested', 'review-visible', 'provider-warning', 'invoice-ready', 'commission-invoice-ready'] as const
 export const NotificationSchema = z.object({
   id: z.string(),
   kind: z.enum(NOTIFICATION_KINDS),
   /** profile-live carries the profile link; message-received a link and the thread id; the booking kinds carry ids only (none for requests-ignored). */
-  payload: z.union([z.object({ url: z.string().url(), threadId: z.string().optional() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional() })]),
+  payload: z.union([z.object({ url: z.string().url(), threadId: z.string().optional() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional(), /** customers-waiting: how many, never who */ count: z.number().int().nonnegative().optional() })]),
   createdAt: z.string(),
   seenAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),
@@ -43,6 +43,19 @@ export const MeSchema = z.object({
   notifications: z.array(z.unknown()).transform((items) => items.flatMap((i) => { const r = NotificationSchema.safeParse(i); return r.success ? [r.data] : [] })),
 })
 export type Me = z.infer<typeof MeSchema>
+
+/** POST /push-tokens (DELETE takes just the token): this device's Expo push token. Never part of any DTO. */
+export const PushTokenInputSchema = z.object({
+  token: z.string().max(200).regex(/^ExponentPushToken\[[^\]]+\]$/),
+  platform: z.enum(['ios', 'android']),
+})
+export type PushTokenInput = z.infer<typeof PushTokenInputSchema>
+export const PushTokenDeleteSchema = PushTokenInputSchema.pick({ token: true })
+
+/** GET /me/push; PATCH takes any part of it. Chat messages and reminders, both on by default. */
+export const PushSettingsSchema = z.object({ chat: z.boolean(), reminders: z.boolean() })
+export type PushSettings = z.infer<typeof PushSettingsSchema>
+export const PushSettingsPatchSchema = PushSettingsSchema.partial()
 
 /** DELETE /me: the person types their own email to confirm. */
 export const DeleteMeSchema = z.object({ confirmEmail: z.string().max(320) })

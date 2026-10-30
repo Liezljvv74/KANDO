@@ -7,14 +7,25 @@ import { fail } from '../providers/http'
 import { chatPhotoLink, TS } from './messages'
 
 /**
- * Staff read a thread only with a reason: one of its messages has a `message-reported` flag (open or resolved); the
- * answer is that flag's id (the earliest), or null. Plan 2d widens this to disputed bookings: this is the single place to do it.
+ * Staff read a thread only with a reason: one of its messages has a `message-reported` flag (open or resolved), or the
+ * thread's booking or one of its additional tasks has a dispute (open or decided: the evidence of a decision stays
+ * readable). The thread's bookings: the booking it belongs to, or for a request's thread the bookings made from that
+ * request (through its quotes). The answer is the earliest such flag's id, else the earliest dispute's id (logged as the
+ * reason in staff_access_log.flag_id), or null. This is the single place to widen it.
  */
 export async function threadReadReason(exec: Exec, threadId: string): Promise<string | null> {
   if (!isUuid(threadId)) return null
   const r = await exec.execute(sql`SELECT f.id FROM staff_flags f JOIN messages m ON m.id::text = f.ref_id
     WHERE f.kind = 'message-reported' AND m.thread_id = ${threadId}::uuid ORDER BY f.created_at, f.id LIMIT 1`)
-  return (r.rows[0]?.id as string | undefined) ?? null
+  const flag = r.rows[0]?.id as string | undefined
+  if (flag) return flag
+  const d = await exec.execute(sql`
+    WITH t AS (SELECT booking_id, request_id FROM threads WHERE id = ${threadId}::uuid),
+    b AS (SELECT x.id FROM bookings x, t WHERE x.id = t.booking_id OR x.request_id = t.request_id
+      OR x.quote_id IN (SELECT q.id FROM quotes q WHERE q.request_id = t.request_id))
+    SELECT d.id FROM disputes d JOIN bookings k ON k.id = d.booking_id
+    WHERE k.id IN (SELECT id FROM b) OR k.parent_booking_id IN (SELECT id FROM b) ORDER BY d.created_at, d.id LIMIT 1`)
+  return (d.rows[0]?.id as string | undefined) ?? null
 }
 
 export async function staffMayReadThread(exec: Exec, threadId: string): Promise<boolean> {

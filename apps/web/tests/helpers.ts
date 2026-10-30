@@ -43,9 +43,33 @@ export async function seedBase(): Promise<{ categoryId: string; docCategoryId: s
   return { categoryId: a.rows[0].id, docCategoryId: b.rows[0].id }
 }
 
+/** Runs fn in one transaction on one owner-connection client (for a SET LOCAL / set_config(..., true) that must cover the statements). */
+async function ownerTransaction(fn: (q: (text: string, values?: unknown[]) => Promise<unknown>) => Promise<void>): Promise<void> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await fn((text, values) => client.query(text, values))
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
+}
+
+/** Quotes are final once written (rls.ts IMMUTABLE_COLUMNS); a test ages them with the guard off inside its own transaction. */
+export const expireQuotes = (where: string, values: unknown[]) =>
+  ownerTransaction(async (q) => {
+    await q('ALTER TABLE quotes DISABLE TRIGGER keep_parties')
+    await q(`UPDATE quotes SET expires_at = now() - interval '1 minute' WHERE ${where}`, values)
+    await q('ALTER TABLE quotes ENABLE TRIGGER keep_parties')
+  })
+
 export async function cleanupUsers(): Promise<void> {
   const mine = "(SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')"
   await pool.query(`DELETE FROM notifications WHERE user_id IN ${mine}`)
+  await pool.query(`DELETE FROM push_tokens WHERE user_id IN ${mine}`)
   const myProviders = `(SELECT id FROM providers WHERE owner_id IN ${mine})`
   const myThreads = `(SELECT id FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
   await pool.query(`DELETE FROM contact_attempts WHERE user_id IN ${mine} OR thread_id IN ${myThreads}`)
@@ -54,6 +78,21 @@ export async function cleanupUsers(): Promise<void> {
   await pool.query(`DELETE FROM messages WHERE sender_id IN ${mine} OR thread_id IN ${myThreads}`)
   await pool.query(`DELETE FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM blocks WHERE blocker_id IN ${mine} OR blocked_id IN ${mine}`)
+  await pool.query(`DELETE FROM availability_watches WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  // Ledger rows are append-only (trigger ledger_append_only); the test clean-up alone switches that off, for its own transaction.
+  await ownerTransaction(async (q) => {
+    await q("SELECT set_config('kando.ledger_cleanup', 'on', true)")
+    await q(`DELETE FROM ledger_entries WHERE provider_id IN ${myProviders} OR booking_id IN (SELECT id FROM bookings WHERE customer_id IN ${mine})`)
+  })
+  // Invoices keep plain ids (they outlive account deletion): a test's invoices go by its people, its providers, or a
+  // booking of theirs (a deleted customer's invoice still has the provider), and their numbering series with them.
+  await pool.query(`DELETE FROM invoice_counters WHERE left(series, 36) IN (SELECT id::text FROM providers WHERE owner_id IN ${mine})`)
+  await pool.query(`DELETE FROM invoices WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  // the platform's commission series (commission:<year>) is shared and stays: numbers only ever go up
+  await pool.query(`DELETE FROM commission_invoices WHERE provider_id IN ${myProviders}`)
+  const myBookings = `(SELECT id FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
+  await pool.query(`DELETE FROM disputes WHERE booking_id IN ${myBookings}`)
+  await pool.query(`DELETE FROM reviews WHERE booking_id IN ${myBookings} OR author_id IN ${mine} OR subject_id IN ${mine}`)
   await pool.query(`DELETE FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM quotes WHERE provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM requests WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)

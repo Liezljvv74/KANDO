@@ -37,12 +37,13 @@ export const authProvider: AuthProvider = {
   },
 }
 
-// A Reviewer sees documents, users and providers (read only); an Administrator everything. The server enforces it anyway.
+// A Reviewer sees documents, users, providers, flags, bookings, disputes, refunds and reviews (read only); an Administrator
+// everything (deciding, settling and hiding too). The server enforces it anyway.
 export const accessControlProvider: AccessControlProvider = {
   async can({ resource, action }) {
     const me = (await authProvider.getIdentity!()) as Me | undefined
     if (!me) return { can: false }
     if (me.staffRole === 'admin') return { can: true }
-    return { can: ['documents', 'users', 'providers', 'flags'].includes(resource ?? '') && ['list', 'show'].includes(action) }
+    return { can: ['documents', 'users', 'providers', 'flags', 'bookings', 'disputes', 'refunds', 'reviews'].includes(resource ?? '') && ['list', 'show'].includes(action) }
   },
 }

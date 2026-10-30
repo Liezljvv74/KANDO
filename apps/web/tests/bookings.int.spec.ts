@@ -43,7 +43,7 @@ const direct = async (serviceId = sOwner, extra: object = {}, as = U.cust) => {
 }
 const answering = (id: string, as: string, body: object) => call(answer.POST, as, 'POST', body, { id })
 const withdrawing = (id: string, as: string) => call(withdraw.POST, as, 'POST', undefined, { id })
-const row = async (id: string) => (await pool.query('SELECT status, pay_by, answer_by, counter_by, start_at, on_site FROM bookings WHERE id = $1', [id])).rows[0]
+const row = async (id: string) => (await pool.query('SELECT status, pay_by, answer_by, counter_by, start_at, on_site, accepted_at FROM bookings WHERE id = $1', [id])).rows[0]
 const listAs = async (uid: string, role: string) =>
   (
     await (
@@ -55,7 +55,7 @@ it('direct booking: fixed service, amount from the service, proposed with a 24h 
   const res = await book(U.cust, sOwner, { amount: 1 }) // a client amount is ignored
   expect(res.status).toBe(201)
   const b = BookingSchema.parse(await res.json())
-  expect(b).toMatchObject({ status: 'proposed', source: 'direct', quoteId: null, serviceId: sOwner, customerId: U.cust, providerId: pOwner, amount: 10, currency: 'EUR', onSite: true, payBy: null, counterBy: null, address: { postcode: '10115' } })
+  expect(b).toMatchObject({ status: 'proposed', source: 'direct', quoteId: null, requestId: null, serviceId: sOwner, customerId: U.cust, providerId: pOwner, amount: 10, currency: 'EUR', onSite: true, payBy: null, counterBy: null, address: { postcode: '10115' } })
   expect(new Date(b.answerBy!).getTime() - new Date(b.createdAt).getTime()).toBe(24 * 3_600_000)
   expect((await listAs(U.cust, 'customer')).map((x) => x.id)).toContain(b.id)
   expect((await listAs(U.owner, 'provider')).map((x) => x.id)).toContain(b.id)
@@ -100,6 +100,7 @@ it('provider accept: awaiting-payment with payBy 48h out (24h before a nearer st
   const a = BookingSchema.parse(await res.json())
   expect(a).toMatchObject({ status: 'awaiting-payment', counterBy: null, answerBy: null })
   expect(new Date(a.payBy!).getTime() - new Date(a.updatedAt).getTime()).toBe(48 * 3_600_000)
+  expect((await row(b.id)).accepted_at).toEqual(new Date(a.updatedAt)) // the payment reminders count from here
   expect((await answering(b.id, U.owner, { type: 'accept' })).status).toBe(409) // already answered
 })
 
@@ -107,7 +108,8 @@ it('provider accepts a booking made from an accepted quote the same way as a dir
   const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix' })).json())
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence' }, { id: r.id })).json())
   const b = BookingSchema.parse(await (await call(accept.POST, U.cust, 'POST', proposal({ startAt: day(20) }), { id: q.id })).json())
-  expect(b).toMatchObject({ source: 'quote', status: 'proposed' })
+  expect(b).toMatchObject({ source: 'quote', status: 'proposed', requestId: r.id, amount: 100 })
+  expect((await row(b.id)).accepted_at).toBeNull()
   const res = await answering(b.id, U.owner, { type: 'accept' })
   expect(res.status).toBe(200)
   expect(BookingSchema.parse(await res.json())).toMatchObject({ status: 'awaiting-payment', amount: 100 })

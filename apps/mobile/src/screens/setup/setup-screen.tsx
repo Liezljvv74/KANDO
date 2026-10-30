@@ -17,6 +17,7 @@ import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
 import { AboutCard } from './about-card'
 import { DocumentsCard } from './documents-card'
+import { PayoutCard } from './payout-card'
 import { PublishBar } from './publish-bar'
 import { ReferencesCard } from './references-card'
 import { ServicesCard } from './services-card'
@@ -71,6 +72,8 @@ export default function SetupScreen() {
         </View>
         {profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date() ? <ErrorText text={errorText('Profile suspended')} /> : null}
       </Card>
+
+      <PayoutCard />
 
       <PublishBar profile={profile} services={services} onChanged={retry} />
 

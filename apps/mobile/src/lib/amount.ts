@@ -5,3 +5,6 @@ export function parseAmount(s: string): number | null {
   const n = Number(v.replace(',', '.'))
   return n > 0 ? n : null
 }
+
+/** Like parseAmount, but 0 is allowed ("0", "0,00"): a stated stop amount or a material part may be nothing. */
+export const parseAmountOrZero = (s: string): number | null => (/^0+([.,]0{1,2})?$/.test(s.trim()) ? 0 : parseAmount(s))
