@@ -83,6 +83,7 @@ export const de = {
   'common.edit': 'Bearbeiten',
   'common.add': 'Hinzufügen',
   'common.back': 'Zurück',
+  'list.showMore': 'Mehr anzeigen',
   'common.close': 'Schließen',
   'common.choose': 'Bitte auswählen',
   'form.required': 'Pflichtfeld.',

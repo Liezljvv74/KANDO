@@ -1,11 +1,12 @@
 import { and, desc, eq, getTableColumns, gt, or, sql } from 'drizzle-orm'
 import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
-import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
+import { LIST_PAGE, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
-import { threadForRequest } from '../chat/threads'
+import { threadForRequest, threadIdOf } from '../chat/threads'
+import { olderThan, pageOf, stampOf } from '../paging'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { runDueTimersFor } from './timers'
 import { isUuid } from '../admin/common'
@@ -148,12 +149,19 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
   return toRequest(row!)
 }
 
-/** The caller's requests, newest first: those they sent (customer) or those addressed to their provider profile. */
-export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<BookingRequest[]> {
+/** The caller's requests, a page newest first by (created_at, id): those they sent (customer) or those addressed to their provider profile. */
+export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string): Promise<Page<BookingRequest>> {
   await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const list = (await tx.select().from(requests).where(mine).orderBy(desc(requests.createdAt), desc(requests.id))).map(toRequest)
-  return role === 'provider' ? withCustomerRatings(tx, list) : list
+  const found = await tx
+    .select({ r: requests, ts: stampOf(requests.createdAt), id: requests.id })
+    .from(requests)
+    .where(and(mine, olderThan(requests.createdAt, requests.id, cursor)))
+    .orderBy(desc(requests.createdAt), desc(requests.id))
+    .limit(LIST_PAGE + 1)
+  const { rows, next } = pageOf(found)
+  const list = rows.map(({ r }) => toRequest(r))
+  return { docs: role === 'provider' ? await withCustomerRatings(tx, list) : list, next }
 }
 
 /** The provider's view adds what providers' shown reviews say about each customer. */
@@ -162,18 +170,27 @@ async function withCustomerRatings(tx: Tx, list: BookingRequest[]): Promise<Book
   return list.map((r) => ({ ...r, customerRating: ratings.get(r.customerId) ?? null }))
 }
 
-/** One request; 404 unless the caller is its customer or the provider owner. */
-export async function getRequest(tx: Tx, userId: string, id: string): Promise<BookingRequest> {
+/** The request row for one of its parties; 404 for anyone else. */
+async function ownRequest(tx: Tx, userId: string, id: string) {
   const row = isUuid(id) ? (await tx.select().from(requests).where(eq(requests.id, id)))[0] : undefined
   if (!row) return notFound()
-  if (row.customerId === userId) return toRequest(row)
-  if ((await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
-  return (await withCustomerRatings(tx, [toRequest(row)]))[0]!
+  if (row.customerId !== userId && (await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
+  return row
+}
+
+/** One request with its chat, for one of its parties. Reads only: no thread is created. */
+export async function getRequest(tx: Tx, userId: string, id: string): Promise<BookingRequest> {
+  const row = await ownRequest(tx, userId, id)
+  // an additional task talks in its booking's thread
+  const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
+  const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
+  const dto = { ...toRequest(row), threadId }
+  return row.customerId === userId ? dto : (await withCustomerRatings(tx, [dto]))[0]!
 }
 
 /** Quotes of a request, newest version first, for either party. */
 export async function listQuotes(tx: Tx, userId: string, requestId: string): Promise<Quote[]> {
-  await getRequest(tx, userId, requestId)
+  await ownRequest(tx, userId, requestId)
   return (await tx.select().from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version))).map(toQuote)
 }
 

@@ -8,6 +8,7 @@ import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relax
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
+const threadOne = await import('../app/app-api/v1/threads/[id]/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 const requests = await import('../app/app-api/v1/requests/route')
@@ -260,4 +261,14 @@ it('a message from a slow transaction is stamped when inserted, so the other sid
   go()
   await a
   expect((await list(t.id, U.cust, cursor)).docs.map((m) => m.body)).toEqual(['from A'])
+})
+
+it('GET /threads/{id} answers a party, a stranger 404', async () => {
+  const r = await newRequest('Read one thread')
+  const listed = await threadOf(U.cust, r.id)
+  const one = (as: string, id = listed.id) => call(threadOne.GET, as, 'GET', undefined, { id })
+  expect(ThreadSchema.parse(await (await one(U.cust)).json())).toEqual(listed)
+  expect(ThreadSchema.parse(await (await one(U.owner)).json())).toMatchObject({ id: listed.id, requestId: r.id, blocked: false })
+  expect((await one(U.third)).status).toBe(404)
+  expect((await one(U.cust, 'not-a-uuid')).status).toBe(404)
 })

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Alert } from 'react-native'
 
-import { createRequest } from '@/api/bookings'
-import { threadIdForRequest, sendPhoto } from '@/api/chat'
+import { createRequest, getRequest } from '@/api/bookings'
+import { sendPhoto } from '@/api/chat'
 import { ApiError, type PickedFile } from '@/api/client'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { errorText, t } from '@/i18n'
@@ -36,7 +36,7 @@ export function RequestForm({ providerId, serviceId }: { providerId: string; ser
   async function attachPhotos(requestId: string) {
     let failed = false
     try {
-      const thread = await threadIdForRequest(requestId)
+      const thread = (await getRequest(requestId)).threadId
       if (!thread) failed = true
       else for (const file of photos) await sendPhoto(thread, file).catch(() => (failed = true))
     } catch {

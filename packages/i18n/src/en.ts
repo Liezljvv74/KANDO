@@ -84,6 +84,7 @@ export const en: Record<Key, string> = {
   'common.edit': 'Edit',
   'common.add': 'Add',
   'common.back': 'Back',
+  'list.showMore': 'Show more',
   'common.close': 'Close',
   'common.choose': 'Please choose',
   'form.required': 'Required.',

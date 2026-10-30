@@ -292,3 +292,14 @@ it('a declined request stops the requests-ignored flag', async () => {
   const flagged = async (p: string) => (await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'ignored-requests' AND ref_id = $1", [p])).rows[0].n
   expect([await flagged(pQuiet), await flagged(pSilent)]).toEqual([0, 1])
 })
+
+it('GET /requests/{id} carries the thread id', async () => {
+  const r = await newRequest()
+  expect(r.threadId ?? null).toBeNull() // set by the read-one route only
+  const threadId = (await pool.query('SELECT id FROM threads WHERE request_id = $1', [r.id])).rows[0].id
+  for (const as of [U.cust, U.owner]) {
+    const res = await call(requestOne.GET, as, 'GET', undefined, { id: r.id })
+    expect(RequestSchema.parse(await res.json()).threadId).toBe(threadId)
+  }
+  expect((await call(requestOne.GET, U.third, 'GET', undefined, { id: r.id })).status).toBe(404)
+})

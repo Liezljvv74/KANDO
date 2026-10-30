@@ -15,6 +15,7 @@ import {
   answerBooking,
   createDirectBooking,
   createRequest,
+  getBooking,
   getBusyTimes,
   getRequest,
   listBookings,
@@ -37,6 +38,8 @@ test('requests and quotes use their routes, methods and bodies', async () => {
   expect(last()).toEqual(['/app-api/v1/requests', { method: 'POST', body: request }])
   await listRequests('provider')
   expect(last()).toEqual(['/app-api/v1/requests?role=provider'])
+  await listRequests('provider', '2027-01-05T09:00:00.000000Z|0b0f6c1e-0000-4000-8000-000000000001')
+  expect(last()).toEqual(['/app-api/v1/requests?role=provider&cursor=2027-01-05T09%3A00%3A00.000000Z%7C0b0f6c1e-0000-4000-8000-000000000001'])
   await getRequest('r1')
   expect(last()).toEqual(['/app-api/v1/requests/r1'])
   await listQuotes('r1')
@@ -52,6 +55,10 @@ test('bookings use their routes, methods and bodies', async () => {
   expect(last()).toEqual(['/app-api/v1/bookings', { method: 'POST', body: { ...time, serviceId: 's1' } }])
   await listBookings('customer')
   expect(last()).toEqual(['/app-api/v1/bookings?role=customer'])
+  await listBookings('provider', 'c|1')
+  expect(last()).toEqual(['/app-api/v1/bookings?role=provider&cursor=c%7C1'])
+  await getBooking('b 1')
+  expect(last()).toEqual(['/app-api/v1/bookings/b%201'])
   await answerBooking('b1', { type: 'counter', startAt: time.startAt, durationMin: 90, onSite: true })
   expect(last()).toEqual(['/app-api/v1/bookings/b1/answer', { method: 'POST', body: { type: 'counter', startAt: time.startAt, durationMin: 90, onSite: true } }])
   await answerBooking('b1', { type: 'accept' })
@@ -89,4 +96,11 @@ test('the endings use their routes, methods and bodies', async () => {
   }
   await getDispute('b 1')
   expect(last()).toEqual(['/app-api/v1/bookings/b%201/dispute'])
+})
+
+test('lists return the page with its next cursor', async () => {
+  const page = { docs: [{ id: 'b1' }], next: 'c|1' }
+  ;(api as jest.Mock).mockResolvedValue(page)
+  expect(await listBookings('customer')).toEqual(page)
+  expect(await listRequests('customer')).toEqual(page)
 })

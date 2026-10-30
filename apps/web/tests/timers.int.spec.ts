@@ -164,12 +164,12 @@ it('listRequests and listBookings show a just-due row as expired and leave other
   const mine = await request(prov, past())
   const theirs = await request(prov, past(), 'open', U.cust2)
   const b = await booking('proposed', { answerBy: past() })
-  const reqs = await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))
+  const reqs = (await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))).docs
   expect(reqs.find((r) => r.id === mine)?.status).toBe('expired')
   expect(await status('requests', theirs)).toBe('open') // another customer's due row is untouched
-  expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).find((x) => x.id === b)?.status).toBe('expired')
+  expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).docs.find((x) => x.id === b)?.status).toBe('expired')
   const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // the provider side is lazy too (after PAY_GRACE_MINUTES)
-  expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).find((x) => x.id === b2)?.status).toBe('expired')
+  expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).docs.find((x) => x.id === b2)?.status).toBe('expired')
 })
 
 it('the lazy path sends no reminders and no ignored notice, but does write expiry notices', async () => {
