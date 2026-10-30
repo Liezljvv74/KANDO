@@ -3,7 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { asUser, db, pool } from '@kando/db'
 import {
   answerStop,
+  cancelBooking,
   clearOutbox,
+  confirmJob,
+  finishJob,
   handleGatewayEvent,
   objectNoShow,
   openDispute,
@@ -122,8 +125,14 @@ it('the customer disputes within 7 days of Finished; the timer then releases not
   expect(r).toMatchObject({ autoReleased: 0 })
   expect(await ledger(id)).toEqual([])
   expect(g.calls).toEqual([])
-  expect(await refusal(stop(U.owner, id, new Date(T.getTime() + 8 * DAY)))).toEqual({ status: 409, body: { error: 'not-open' } })
+  const later = new Date(T.getTime() + 8 * DAY)
+  const notOpen = { status: 409, body: { error: 'not-open' } }
+  expect(await refusal(stop(U.owner, id, later))).toEqual(notOpen)
+  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, {}, later)))).toEqual(notOpen)
+  expect(await refusal(asUser(U.cust, (tx) => confirmJob(tx, U.cust, id, later)))).toEqual(notOpen)
+  expect(await refusal(asUser(U.cust, (tx) => cancelBooking(tx, U.cust, id, later)))).toEqual(notOpen)
   expect((await row(id)).status).toBe('disputed')
+  expect(await ledger(id)).toEqual([])
 })
 
 it('a dispute after the 7 days is 409', async () => {
@@ -184,7 +193,7 @@ it('either side can stop; the provider states 40 of 100; the customer agrees: re
   expect((await stop(U.owner, p.id, new Date(T.getTime() + HOUR))).stoppedBy).toBe('provider')
   expect(await notes(p.id, 'job-stopped')).toEqual([U.cust])
 
-  const { id } = await paidBooking({ startAt: new Date(T.getTime() + DAY) })
+  const { id } = await paidBooking() // started a few hours ago: the route uses the real clock
   expect((await call(stopRoute.POST, U.third, 'POST', undefined, { id })).status).toBe(404)
   const stopped = await call(stopRoute.POST, U.cust, 'POST', undefined, { id })
   expect(stopped.status).toBe(200)
@@ -231,9 +240,18 @@ it('a stated amount above the price is 400', async () => {
   expect(await refusal(state(U.owner, id, 100.01, startAt))).toEqual({ status: 400, body: { error: 'INVALID_STOP_AMOUNT' } })
   expect((await call(amountRoute.POST, U.owner, 'POST', { amount: -1 }, { id })).status).toBe(400)
   expect((await call(amountRoute.POST, U.owner, 'POST', { amount: 10.001 }, { id })).status).toBe(400)
+  expect(await refusal(state(U.owner, id, 10.001, startAt))).toEqual({ status: 400, body: { error: 'INVALID_STOP_AMOUNT' } }) // the domain too, never rounded
   expect((await call(amountRoute.POST, U.owner, 'POST', { amount: 10, note: 'Ruf an: 0170 1234567' }, { id })).status).toBe(422)
   expect((await row(id)).stop_amount).toBeNull()
   expect((await state(U.owner, id, 100, startAt)).stopAmount).toBe(100) // the whole price is allowed
+})
+
+it('stopping before the start is 409 NOT_STARTED (the cancellation rules apply)', async () => {
+  const { id, startAt } = await paidBooking({ startAt: new Date('2027-09-14T08:00:00Z') })
+  expect(await refusal(stop(U.owner, id, new Date(startAt.getTime() - MIN)))).toEqual({ status: 409, body: { error: 'NOT_STARTED' } })
+  expect(await refusal(stop(U.cust, id, new Date(startAt.getTime() - 3 * HOUR)))).toEqual({ status: 409, body: { error: 'NOT_STARTED' } })
+  expect((await row(id)).status).toBe('confirmed')
+  expect((await stop(U.owner, id, startAt)).status).toBe('stopped') // from the start on
 })
 
 it('the customer disagrees: a stop-disagreed dispute', async () => {
@@ -415,6 +433,20 @@ it('a chargeback on money not yet released opens a system dispute, once on repla
   expect(await disputesOf(done.id)).toEqual([])
   expect((await row(done.id)).status).toBe('completed')
   expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'chargeback' AND ref_id = $1", [done.id])).rows[0].n).toBe(1)
+})
+
+it('a chargeback on a cancelled, unsettled booking only flags it; settle stays frozen', async () => {
+  const ref = `pi_dp_cb_${randomUUID()}`
+  const { id } = await paidBooking({ startAt: new Date('2028-02-14T08:00:00Z'), paymentRef: ref })
+  await pool.query("UPDATE bookings SET status = 'cancelled', cancelled_at = '2028-02-10T08:00:00Z', cancelled_by = 'provider' WHERE id = $1", [id])
+  await handleGatewayEvent({ id: `evt_${randomUUID()}`, type: 'charge-disputed', paymentRef: ref })
+  expect((await row(id)).status).toBe('cancelled')
+  expect(await disputesOf(id)).toEqual([])
+  expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'chargeback' AND ref_id = $1 AND resolved_at IS NULL", [id])).rows[0].n).toBe(1)
+  await runDueTimers(db, new Date('2028-02-15T08:00:00Z'))
+  expect((await row(id)).released_at).toBeNull()
+  expect(await ledger(id)).toEqual([])
+  expect(g.calls).toEqual([])
 })
 
 it('a suspended customer can still open a dispute', async () => {

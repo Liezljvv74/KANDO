@@ -13,8 +13,8 @@ const DAY = 86_400_000
 const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
 
 /**
- * Either side stops a `confirmed` job at any time (else 409 not-open; a reported no-show ends its own way: 409
- * NO_SHOW_REPORTED). Status `stopped`, `stoppedAt`, `stoppedBy`. No money moves: what is not yet earned stays held until
+ * Either side stops a `confirmed` job once its start has come ("stop job halfway"; before it 409 NOT_STARTED: the
+ * cancellation rules apply, cancel.ts), else 409 not-open; a reported no-show ends its own way: 409 NO_SHOW_REPORTED. Status `stopped`, `stoppedAt`, `stoppedBy`. No money moves: what is not yet earned stays held until
  * the provider states the amount earned and the customer agrees, or staff decide. The other side is told. A second tap
  * returns the stopped booking unchanged. Owner connection (stopped is an owner-only status), the row locked and re-checked.
  * Its additional tasks keep their own clock (each is stopped on its own).
@@ -26,6 +26,7 @@ export async function stopJob(tx: Tx, userId: string, bookingId: string, now = n
     if (b.status === 'stopped') return null
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' })
+    if (now < b.startAt) fail(409, { error: 'NOT_STARTED' }) // before the start the cancellation rules apply (cancel.ts)
     return (await o.update(bookings).set({ status: 'stopped', stoppedAt: now, stoppedBy: side, updatedAt: now }).where(eq(bookings.id, b.id)).returning())[0]!
   })
   if (row) {
@@ -50,6 +51,7 @@ export async function stateStopAmount(tx: Tx, userId: string, bookingId: string,
     const b = await lockRow(o, bookingId)
     if (b.status !== 'stopped') fail(409, { error: 'not-open' })
     const cents = toCents(input.amount)
+    if (cents / 100 !== input.amount) fail(400, { error: 'INVALID_STOP_AMOUNT' }) // whole cents only, never rounded
     if (b.stopStatedAt) {
       if (toCents(Number(b.stopAmount)) === cents && b.stopNote === note) return null
       fail(409, { error: 'ALREADY_STATED' })
