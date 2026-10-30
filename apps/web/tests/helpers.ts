@@ -22,7 +22,7 @@ export function call(
   return handler(
     new Request('http://localhost/app-api/v1/x', {
       method,
-      headers: { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' },
+      headers: { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json', origin: 'http://localhost' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
     { params: Promise.resolve(params) },

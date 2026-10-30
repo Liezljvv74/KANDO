@@ -76,7 +76,7 @@ it('an unconfirmed email gets 403 EMAIL_NOT_VERIFIED from PUT provider-profile a
   const unverified = (method: string, body?: unknown) =>
     new Request('http://localhost/app-api/v1/x', {
       method,
-      headers: { cookie: `uid=pp-unv:${EMAIL('pp-unv')}; verified=0`, 'content-type': 'application/json' },
+      headers: { origin: 'http://localhost', cookie: `uid=pp-unv:${EMAIL('pp-unv')}; verified=0`, 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   const ctx = { params: Promise.resolve({}) }

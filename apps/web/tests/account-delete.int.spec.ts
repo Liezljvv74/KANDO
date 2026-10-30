@@ -50,7 +50,7 @@ const del = (uid: string, password = 'right-password', headers?: Record<string, 
   me.DELETE(
     new Request('http://localhost/app-api/v1/me', {
       method: 'DELETE',
-      headers: headers ?? { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' },
+      headers: headers ?? { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' },
       body: JSON.stringify({ password }),
     }),
     { params: Promise.resolve({}) },
@@ -199,7 +199,7 @@ it('the only Administrator cannot delete the account (409 LAST_ADMIN); with a se
 it('signed out is 401, an unconfirmed email is 403', async () => {
   await person('ad7')
   expect((await del('ad7', 'right-password', { 'content-type': 'application/json' })).status).toBe(401)
-  const unverified = await del('ad7', 'right-password', { cookie: `uid=ad7:${EMAIL('ad7')}; verified=0`, 'content-type': 'application/json' })
+  const unverified = await del('ad7', 'right-password', { origin: 'http://localhost', cookie: `uid=ad7:${EMAIL('ad7')}; verified=0`, 'content-type': 'application/json' })
   expect(unverified.status).toBe(403)
   expect(await count("SELECT count(*) n FROM users WHERE id = 'ad7'")).toBe(1)
 })

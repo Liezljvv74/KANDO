@@ -40,7 +40,7 @@ function upload(handler: Route, uid: string, bytes: Buffer, fields: Record<strin
   form.append('file', new Blob([new Uint8Array(bytes)]), 'upload.bin')
   for (const [k, v] of Object.entries(fields)) form.append(k, v)
   return handler(
-    new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form }),
+    new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form }),
     { params: Promise.resolve({}) },
   )
 }
@@ -50,7 +50,7 @@ const submit = (uid: string, requirement: string, document: string) => call(veri
 const newFile = async (uid: string) => (await (await upload(files.POST, uid, PDF)).json()).id as string
 const photoRows = async (uid: string) => (await pool.query('SELECT id, key FROM photos WHERE owner_id = $1', [uid])).rows
 const withCookie = (uid: string, method = 'DELETE') =>
-  new Request('http://localhost/x', { method, headers: { cookie: `uid=${uid}:${EMAIL(uid)}` } })
+  new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` } })
 const none = { params: Promise.resolve({}) }
 
 async function publishedUser(uid: string) {

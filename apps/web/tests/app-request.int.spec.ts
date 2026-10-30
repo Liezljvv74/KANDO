@@ -105,7 +105,7 @@ it('a body over maxBodyBytes is 413 before the handler runs', async () => {
     new Request('http://localhost/x', {
       method: 'POST',
       body: 'x'.repeat(50),
-      headers: { cookie: 'uid=u1:u1@test.skilled.invalid' },
+      headers: { origin: 'http://localhost', cookie: 'uid=u1:u1@test.skilled.invalid' },
     }),
     ctx,
   )
@@ -155,6 +155,15 @@ it('a second id with the same email gets 409 and no row is written', async () =>
   expect(await count()).toBe(before)
 })
 
+it('an answer is private, no-store unless the handler set Cache-Control', async () => {
+  const plain = appRequest({ auth: 'optional' }, async () => Response.json({ ok: true }))
+  expect((await plain(new Request('http://localhost/x'), ctx)).headers.get('cache-control')).toBe('private, no-store')
+  const own = appRequest({ auth: 'optional' }, async () => Response.json({ ok: true }, { headers: { 'Cache-Control': 'public, max-age=60' } }))
+  expect((await own(new Request('http://localhost/x'), ctx)).headers.get('cache-control')).toBe('public, max-age=60')
+  const later = appRequest({ auth: 'optional' }, async () => async () => Response.json({ ok: true }))
+  expect((await later(new Request('http://localhost/x'), ctx)).headers.get('cache-control')).toBe('private, no-store')
+})
+
 it('a thrown 400 Response is returned unchanged', async () => {
   const h = appRequest({ auth: 'required' }, async ({ request }) => {
     await parseBody(ServiceInputSchema, request)
@@ -164,7 +173,7 @@ it('a thrown 400 Response is returned unchanged', async () => {
     new Request('http://localhost/x', {
       method: 'POST',
       body: '{"title":""}',
-      headers: { cookie: 'uid=u9:u9@test.skilled.invalid' },
+      headers: { origin: 'http://localhost', cookie: 'uid=u9:u9@test.skilled.invalid' },
     }),
     ctx,
   )
@@ -176,7 +185,7 @@ it('a thrown 400 Response is returned unchanged', async () => {
 
 it('a suspended person: writes are 403 SUSPENDED, reads work, an expired date is not suspended', async () => {
   const write = appRequest({ auth: 'required' }, async () => Response.json({ ran: true }))
-  const req = (id: string, method: string) => new Request('http://localhost/x', { method, headers: { cookie: `uid=${id}:${id}@test.skilled.invalid` } })
+  const req = (id: string, method: string) => new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: `uid=${id}:${id}@test.skilled.invalid` } })
   await me(as('usus'), ctx)
   await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usus'")
   const blocked = await write(req('usus', 'POST'), ctx)
@@ -191,7 +200,7 @@ it('a suspended person can still erase their own data (DELETE) and use a route m
   const run = async () => Response.json({ ran: true })
   const plain = appRequest({ auth: 'required' }, run)
   const open = appRequest({ auth: 'required', allowWhenSuspended: true }, run)
-  const req = (method: string) => new Request('http://localhost/x', { method, headers: { cookie: 'uid=usdel:usdel@test.skilled.invalid' } })
+  const req = (method: string) => new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: 'uid=usdel:usdel@test.skilled.invalid' } })
   await me(as('usdel'), ctx)
   await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usdel'")
   expect((await plain(req('DELETE'), ctx)).status).toBe(200)

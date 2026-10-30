@@ -36,7 +36,7 @@ const sendOk = async (thread: string, as: string, body: string) => MessageSchema
 const report = (id: string, as: string, reason = 'rude') => call(reportRoute.POST, as, 'POST', { reason }, { id })
 const block = (as: string, threadId: string) => call(blocksRoute.POST, as, 'POST', { threadId })
 const unblock = (as: string, threadId: string) =>
-  blocksRoute.DELETE(new Request(`http://localhost/app-api/v1/blocks?threadId=${threadId}`, { method: 'DELETE', headers: { cookie: `uid=${as}:${EMAIL(as)}` } }), { params: Promise.resolve({}) })
+  blocksRoute.DELETE(new Request(`http://localhost/app-api/v1/blocks?threadId=${threadId}`, { method: 'DELETE', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` } }), { params: Promise.resolve({}) })
 
 it('reporting a message creates one staff flag; reporting it twice does not add another', async () => {
   const t = await threadOf(U.cust, (await newRequest()).id)

@@ -40,7 +40,7 @@ function upload(handler: (r: Request, c: { params: Promise<Record<string, string
   form.append('file', new Blob([new Uint8Array(bytes)]), 'upload.bin')
   for (const [k, v] of Object.entries(fields)) form.append(k, v)
   return handler(
-    new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form }),
+    new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form }),
     { params: Promise.resolve({}) },
   )
 }
@@ -208,7 +208,7 @@ it('a document stored before the transaction is removed when the request then fa
   })
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(PDF)]), 'a.pdf')
-  const res = await route(new Request('http://localhost/x', { method: 'POST', headers: { cookie: `uid=fl1:${EMAIL('fl1')}` }, body: form }), { params: Promise.resolve({}) })
+  const res = await route(new Request('http://localhost/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=fl1:${EMAIL('fl1')}` }, body: form }), { params: Promise.resolve({}) })
   expect(res.status).toBe(500)
   expect(keys('documents')).toHaveLength(0)
 })

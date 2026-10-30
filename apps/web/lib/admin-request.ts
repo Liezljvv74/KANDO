@@ -33,6 +33,7 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
         for (const fn of queue) await Promise.resolve().then(fn).catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed ${describeError(e)}`))
         await runSends()
       })
+      if (!response.headers.has('cache-control')) response.headers.set('Cache-Control', 'private, no-store')
       return response
     } catch (error) {
       if (sends.length) await afterResponse(runSends) // as before this change, a send made before the failure still goes

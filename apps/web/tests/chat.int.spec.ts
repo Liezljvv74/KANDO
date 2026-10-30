@@ -52,7 +52,7 @@ const png = () => sharp({ create: { width: 20, height: 20, channels: 3, backgrou
 const photoRequest = async (thread: string, as: string) => {
   const form = new FormData()
   form.set('file', new File([new Uint8Array(await png())], 'a.png', { type: 'image/png' }))
-  return photosRoute.POST(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { cookie: `uid=${as}:${EMAIL(as)}` }, body: form }), { params: Promise.resolve({ id: thread }) })
+  return photosRoute.POST(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form }), { params: Promise.resolve({ id: thread }) })
 }
 
 it('creating a request opens a thread; both parties list it', async () => {

@@ -72,7 +72,7 @@ it('first contact does not copy the session name: the person sets their own name
   const as = (name: string) =>
     new Request('http://localhost/app-api/v1/x', {
       method: 'PUT',
-      headers: { cookie: `uid=pn4:${EMAIL('pn4')}; name=${encodeURIComponent(name)}`, 'content-type': 'application/json' },
+      headers: { origin: 'http://localhost', cookie: `uid=pn4:${EMAIL('pn4')}; name=${encodeURIComponent(name)}`, 'content-type': 'application/json' },
       body: JSON.stringify(profile),
     })
   const created = await profileRoute.PUT(as('Anna Schmidt'), { params: Promise.resolve({}) })

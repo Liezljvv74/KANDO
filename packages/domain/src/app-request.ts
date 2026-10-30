@@ -90,6 +90,7 @@ export function createAppRequest(getSession: SessionResolver, opts: { schedule?:
           for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed ${describeError(e)}`))
           await runSends()
         })
+        if (!response.headers.has('cache-control')) response.headers.set('Cache-Control', 'private, no-store') // signed links, personal data
         return response
       } catch (error) {
         for (const fn of failQueue) await fn().catch((e) => console.error(`[app-request ${requestId}] cleanup failed ${describeError(e)}`))

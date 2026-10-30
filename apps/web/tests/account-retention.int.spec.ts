@@ -36,7 +36,7 @@ afterAll(async () => {
 
 const del = (uid: string) =>
   me.DELETE(
-    new Request('http://localhost/app-api/v1/me', { method: 'DELETE', headers: { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' }, body: JSON.stringify({ password: 'right-password' }) }),
+    new Request('http://localhost/app-api/v1/me', { method: 'DELETE', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' }, body: JSON.stringify({ password: 'right-password' }) }),
     { params: Promise.resolve({}) },
   )
 const runCron = () => cron.GET(new Request('http://localhost/api/cron/suspensions', { headers: { authorization: 'Bearer s3cret' } }))
