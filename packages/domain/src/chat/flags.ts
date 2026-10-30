@@ -27,15 +27,15 @@ async function recordAttempt(userId: string, text: string, hit: string, threadId
 }
 
 /** 422 CONTACT_DETAILS when the text holds a phone number, email or link. The text is kept for staff only, never shown to the other party. */
-export async function assertNoContactDetails(userId: string, text: string, threadId?: string): Promise<void> {
+export async function assertNoContactDetails(userId: string, text: string, threadId?: string, record = true): Promise<void> {
   const hit = await checkContactDetails(text)
   if (!hit) return
-  await recordAttempt(userId, text, hit, threadId)
+  if (record) await recordAttempt(userId, text, hit, threadId)
   fail(422, { error: 'CONTACT_DETAILS' })
 }
 
-/** The same check for public profile texts: the non-empty texts of one save are joined, so one save is one recorded attempt. */
+/** The same check for public profile texts: refused with 422 but never recorded and never flagged (the digit rule can refuse harmless texts such as opening hours; the flag is for chat circumvention). */
 export async function assertNoContactDetailsIn(userId: string, texts: (string | null | undefined)[]): Promise<void> {
   const joined = texts.filter((t): t is string => !!t?.trim()).join('\n') // the digit rule never crosses a line break
-  if (joined) await assertNoContactDetails(userId, joined)
+  if (joined) await assertNoContactDetails(userId, joined, undefined, false)
 }

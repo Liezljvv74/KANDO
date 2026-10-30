@@ -6,6 +6,8 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
 const servicesRoute = await import('../app/app-api/v1/services/route')
 const referencesRoute = await import('../app/app-api/v1/references/route')
+const service = await import('../app/app-api/v1/services/[id]/route')
+const reference = await import('../app/app-api/v1/references/[id]/route')
 const me = await import('../app/app-api/v1/me/route')
 
 const PHONE = 'Call me on 0176 12345678'
@@ -59,10 +61,24 @@ it('a save that does not send the bio passes although the stored bio holds a pho
   expect((await call(profileRoute.PUT, u, 'PUT', { strengths: 'Fleißig' })).status).toBe(200)
 })
 
-it('one refused save records one attempt', async () => {
+it('a refused public-text save records no attempt and sets no staff flag, even after many refusals', async () => {
+  // Public texts are not chat: the digit rule can refuse harmless texts, so retries must not flag the person to staff.
   const u = 'cp5'
   await relaxLimits(u)
   await call(profileRoute.PUT, u, 'PUT', profile)
-  await refused(await call(profileRoute.PUT, u, 'PUT', { bio: PHONE, strengths: 'mail me anna@example.com', experience: 'or www.example.com' }))
-  expect(await attempts(u)).toBe(1)
+  for (let i = 0; i < 4; i++) await refused(await call(profileRoute.PUT, u, 'PUT', { bio: PHONE, strengths: 'mail me anna@example.com' }))
+  expect(await attempts(u)).toBe(0)
+  expect((await pool.query(`SELECT count(*)::int n FROM staff_flags WHERE user_id = $1 AND kind = 'contact-attempts'`, [u])).rows[0].n).toBe(0)
+})
+
+it('updating a service, updating a reference and a first name are refused too', async () => {
+  const u = 'cp6'
+  await relaxLimits(u)
+  await call(profileRoute.PUT, u, 'PUT', profile)
+  const s = await (await call(servicesRoute.POST, u, 'POST', { categoryId, title: 'Mowing', description: 'Lawns' })).json()
+  const r = await (await call(referencesRoute.POST, u, 'POST', { clientName: 'Meier', description: 'Nice' })).json()
+  await refused(await call(service.PATCH, u, 'PATCH', { description: PHONE }, { id: s.id }))
+  await refused(await call(reference.PATCH, u, 'PATCH', { description: PHONE }, { id: r.id }))
+  await refused(await call(me.PATCH, u, 'PATCH', { firstName: '0176 12345678' }))
+  expect(await attempts(u)).toBe(0)
 })
