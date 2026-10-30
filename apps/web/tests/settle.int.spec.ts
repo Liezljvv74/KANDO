@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { deleteAccount, setGatewayForTests, settle } from '@kando/domain'
-import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 const U = { cust: 'st-cust', owner: 'st-owner', bare: 'st-bare', cust2: 'st-cust2' }

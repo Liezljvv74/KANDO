@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { CommissionInvoiceListSchema } from '@kando/contract'
 import { cancelBooking, clearOutbox, clearPushOutbox, pushOutboxForTests, deleteAccount, issueCommissionInvoices, runDueTimers, setGatewayForTests, setStorageForTests, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

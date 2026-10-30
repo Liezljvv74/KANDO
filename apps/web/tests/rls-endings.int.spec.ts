@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { asUser, COLUMN_STAFF_ONLY, db, OWNER_ONLY_BOOKING_STATUSES, pool } from '@kando/db'
 import { deleteAccount, MONEY_OPEN_STATUSES, slotIsHeld } from '@kando/domain'
-import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 're-cust', other: 're-other', owner: 're-owner', owner2: 're-owner2', gone: 're-gone' }
 let providerId: string
