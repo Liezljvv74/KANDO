@@ -1,17 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { pool } from '@kando/db'
 import { t } from '@kando/i18n'
 
-// The layout reads the language the proxy put on the request.
-let headerLang: string | undefined
-vi.mock('next/headers', () => ({
-  headers: async () => new Headers(headerLang ? { 'x-lang': headerLang } : {}),
-}))
-
 process.env.NEXT_PUBLIC_SERVER_URL = 'https://kando.example'
-const { default: HomePage, generateMetadata } = await import('../app/(site)/page')
-const { default: Layout, metadata } = await import('../app/(site)/layout')
+const { default: HomePage, generateMetadata } = await import('../app/(site)/[lang]/page')
+const { default: Layout, metadata } = await import('../app/(site)/[lang]/layout')
 
 const stamp = Date.now()
 let categoryId: string
@@ -29,8 +23,9 @@ afterAll(async () => {
   await pool.query('DELETE FROM categories WHERE id = $1', [categoryId])
 })
 
-const render = async (lang?: string) =>
-  renderToStaticMarkup(await HomePage({ searchParams: Promise.resolve({ lang }) }))
+// The proxy puts the language in the path (/de, /en); the page takes it from params.
+const params = (lang = 'de') => ({ params: Promise.resolve({ lang }) })
+const render = async (lang?: string) => renderToStaticMarkup(await HomePage(params(lang)))
 
 describe('home page', () => {
   it('is German by default: headline, categories, store badges without links, no forbidden words', async () => {
@@ -45,18 +40,18 @@ describe('home page', () => {
       expect(html.toLowerCase(), word).not.toContain(word)
   })
 
-  it('switches to English with ?lang=en and falls back to German for unknown values', async () => {
+  it('switches to English with /en; an unknown language is 404', async () => {
     const en = await render('en')
     expect(en).toContain(t('en', 'home.headline'))
     expect(en).toContain(`Dog walking ${stamp}`)
     expect(en).toContain(t('en', 'home.soon'))
     expect(en).not.toContain('Endlich jemand')
-    expect(await render('fr')).toContain('Endlich jemand, der’s kann')
+    await expect(render('fr')).rejects.toThrow()
   })
 
   it('has per-language metadata with canonical and hreflang for every language', async () => {
-    const de = await generateMetadata({ searchParams: Promise.resolve({}) })
-    const en = await generateMetadata({ searchParams: Promise.resolve({ lang: 'en' }) })
+    const de = await generateMetadata(params())
+    const en = await generateMetadata(params('en'))
     expect(de.title).toBe(t('de', 'home.metaTitle'))
     expect(en.title).toBe(t('en', 'home.metaTitle'))
     expect(de.alternates?.canonical).toBe('/')
@@ -68,7 +63,7 @@ describe('home page', () => {
 describe('site layout', () => {
   it('metadataBase makes canonical and hreflang absolute on the site url', async () => {
     expect(String(metadata.metadataBase)).toBe('https://kando.example/')
-    const en = await generateMetadata({ searchParams: Promise.resolve({ lang: 'en' }) })
+    const en = await generateMetadata(params('en'))
     const urls = [
       en.alternates!.canonical as string,
       ...Object.values(en.alternates!.languages as Record<string, string>),
@@ -77,15 +72,13 @@ describe('site layout', () => {
       expect(new URL(u, metadata.metadataBase!).href).toMatch(/^https:\/\/kando\.example\//)
   })
 
-  const layout = async (lang?: string) => {
-    headerLang = lang
-    return renderToStaticMarkup(await Layout({ children: 'BODY' }))
-  }
+  const layout = async (lang?: string) =>
+    renderToStaticMarkup(await Layout({ children: 'BODY', ...params(lang) }))
 
-  it('html lang follows the request language; unknown falls back to de', async () => {
+  it('html lang follows the path language; unknown is 404', async () => {
     expect(await layout()).toContain('<html lang="de"')
     expect(await layout('en')).toContain('<html lang="en"')
-    expect(await layout('fr')).toContain('<html lang="de"')
+    await expect(layout('fr')).rejects.toThrow()
   })
 
   it('footer links the four legal pages with catalogue labels in both languages', async () => {

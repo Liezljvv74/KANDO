@@ -1,11 +1,20 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { DEFAULT_LANG, isLang, LANGS, type Lang } from '@kando/i18n'
 
 /** The website language from `?lang=`; anything unknown (or repeated) is German. */
 export const siteLang = (v: string | string[] | null | undefined): Lang =>
   isLang(v) ? v : DEFAULT_LANG
 
-export const langPath = (path: string, lang: Lang): string =>
+/** The language segment the proxy put in the path (/de, /en); anything else is 404. */
+export async function pageLang(params: Promise<{ lang: string }>): Promise<Lang> {
+  const { lang } = await params
+  const valid = siteLang(lang)
+  if (valid !== lang) notFound()
+  return valid
+}
+
+export const langPath =(path: string, lang: Lang): string =>
   lang === DEFAULT_LANG ? path : `${path}?lang=${lang}`
 
 /** Canonical (own language, never `translate`) and hreflang alternates for every language. */
