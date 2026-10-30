@@ -9,9 +9,9 @@ import { useMe } from '@/hooks/use-me'
 import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
 
 /** Replaces Book and Request a quote on a provider that cannot be booked yet: a toggle for the "available" notice. */
-export function NotifyMe({ slug }: { slug: string }) {
+export function NotifyMe({ slug, watching }: { slug: string; watching: boolean }) {
   const me = useMe()
-  const [on, setOn] = useState(false)
+  const [on, setOn] = useState(watching)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   async function toggle() {
