@@ -453,7 +453,7 @@ it('the other rules and their emails happen even when the release loop fails (th
   expect((await runDueTimers(db, new Date(T.getTime() + 7 * DAY))).autoReleased).toBe(1)
 })
 
-it('the time budget counts from the start of the run: steps before the releases use it up too', async () => {
+it("a step's time budget counts from that step's start: a no-show settled first can use it up before the releases", async () => {
   const T = new Date('2028-05-02T10:00:00Z')
   const reported = await paidBooking({ startAt: new Date(T.getTime() - 3 * DAY) })
   await pool.query("UPDATE bookings SET no_show = 'customer', no_show_reported_at = $2 WHERE id = $1", [reported.id, new Date(T.getTime() - 3 * DAY + HOUR)])

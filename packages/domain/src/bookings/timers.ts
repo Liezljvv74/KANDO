@@ -331,14 +331,14 @@ function budget({ budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptio
 }
 
 /**
- * The three cron steps below run as three routes (vercel.json), each in its own time budget and its own push batch
- * (withPushBatch: every push of the step goes out at its very end in requests of 100, so a slow push service never eats
- * the budget). Each takes the pool only, never an open transaction (each statement and step commits on its own), so no
- * email or push goes out for a write that is later rolled back. Each ends with the outbox drain (outbox.ts) in what is
- * left of its budget: the rows a step could not send wait for the next step's drain.
+ * Step 1 (the bookings route): the SQL rules (each one statement) and the ending rules, then the drain.
+ *
+ * The three cron steps (this and the two below) run as three routes (vercel.json), each in its own time budget and its
+ * own push batch (withPushBatch: every push of the step goes out at its very end in requests of 100, so a slow push
+ * service never eats the budget). Each takes the pool only, never an open transaction (each statement and step commits
+ * on its own), so no email or push goes out for a write that is later rolled back. Each ends with the outbox drain
+ * (outbox.ts) in what is left of its budget: the rows a step could not send wait for the next step's drain.
  */
-
-/** Step 1 (the bookings route): the SQL rules (each one statement) and the ending rules, then the drain. */
 export function runExpiryAndReminders(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<TimerReport> {
   const timeUp = budget(opts)
   return withPushBatch(async () => {
