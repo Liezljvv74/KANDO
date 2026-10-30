@@ -16,6 +16,8 @@ it('the owner-connection check catches a bypass (negative fixture)', () => {
   expect(importsOwnerConnection("import type { Tx } from '@kando/db'")).toBe(false)
 })
 
+// Stripe routes hand the owner connection to an after-transaction answer, which runs with no request transaction open (the domain functions check ownership themselves).
+const OWNER_AFTER_TRANSACTION = ['bookings/[id]/pay', 'payouts/setup', 'payouts/status'].map((r) => `app-api/v1/${r}/route.ts`)
 const root = join(__dirname, '../app/app-api')
 const routes = (dir: string): string[] =>
   readdirSync(dir).flatMap((n) => {
@@ -36,7 +38,7 @@ it('every route file under app/app-api exports handlers built with appRequest', 
     for (const m of methods) {
       expect(src, `${file}: ${m}`).toMatch(new RegExp(`export\\s+const\\s+${m}\\s*=\\s*appRequest\\(`))
     }
-    expect(importsOwnerConnection(src), `${file} imports db or pool`).toBe(false)
+    expect(importsOwnerConnection(src), `${file} imports db or pool`).toBe(OWNER_AFTER_TRANSACTION.some((r) => file.replaceAll('\\', '/').endsWith(r)))
     expect(/export\s*\{|export\s+default/.test(src), `${file} re-exports`).toBe(false)
   }
 })

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
-import { db, pool } from '@kando/db'
+import { appPool, db, pool } from '@kando/db'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, notifyBookingEvent, outboxForTests, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
@@ -106,6 +106,18 @@ it('set-up creates one account and returns a link; a second call reuses the acco
   expect(again.status).toBe(200)
   expect(g.attempts.createAccount).toBe(1) // the stored account is reused: no second create
   expect(g.calls.filter((c) => c.method === 'onboardingLink')).toHaveLength(2) // a fresh link every time
+})
+
+it('onboardingLink and accountReady run with no request transaction open', async () => {
+  const p = await provider()
+  const open: Record<string, number> = {}
+  const link = g.onboardingLink
+  const readyFn = g.accountReady
+  g.onboardingLink = async (a) => ((open.onboardingLink = appPool.totalCount - appPool.idleCount), link(a))
+  g.accountReady = async (a) => ((open.accountReady = appPool.totalCount - appPool.idleCount), readyFn(a))
+  expect((await startSetup(p.uid)).status).toBe(200)
+  expect((await getStatus(p.uid)).status).toBe(200)
+  expect(open).toEqual({ onboardingLink: 0, accountReady: 0 })
 })
 
 it('two parallel set-ups create one account', async () => {

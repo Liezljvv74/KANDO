@@ -12,10 +12,12 @@ type Opts<P> = {
   auth: 'required' | 'optional'
   maxBodyBytes?: number
   /** Reads and checks the body (an upload) after the session and size checks, before the transaction opens. */
-  prepare?: (request: Request) => Promise<P>
+  prepare?: (request: Request, onFailure: AfterCommit) => Promise<P>
   /** A suspended person may still call this route (taking their own profile offline). DELETE is always allowed. */
   allowWhenSuspended?: boolean
 }
+/** An answer built after the transaction committed (a Stripe call): runs with no request transaction open; may throw a Response. */
+export type AfterTransaction = () => Promise<Response>
 type Handler<P> = (ctx: {
   tx: Tx
   user: SessionUser | null
@@ -26,7 +28,7 @@ type Handler<P> = (ctx: {
   afterCommit: AfterCommit
   /** Queues cleanup (a storage object put before the commit) that runs when the request fails or the commit does not happen. */
   onFailure: AfterCommit
-}) => Promise<Response>
+}) => Promise<Response | AfterTransaction>
 
 /**
  * Builds the app request wrapper around a session source (the web app passes the Neon Auth one):
@@ -56,7 +58,8 @@ export function createAppRequest(getSession: SessionResolver) {
             return Response.json({ error: 'Payload too large' }, { status: 413 })
           }
         }
-        const prepared = (opts.prepare ? await opts.prepare(request) : undefined) as P
+        const onFailure: AfterCommit = (fn) => void failQueue.push(fn)
+        const prepared = (opts.prepare ? await opts.prepare(request, onFailure) : undefined) as P
         const user = session ? await ensureUser(session, request) : null
         // A suspended person can still read (GET) and erase their own data (DELETE), never create or edit; an expired date counts as not suspended.
         if (user?.suspendedUntil && user.suspendedUntil > new Date() && !['GET', 'DELETE'].includes(request.method) && !opts.allowWhenSuspended) {
@@ -65,9 +68,9 @@ export function createAppRequest(getSession: SessionResolver) {
         const params = await ctx.params
         const queue: (() => Promise<void>)[] = []
         const afterCommit: AfterCommit = (fn) => void queue.push(fn)
-        const onFailure: AfterCommit = (fn) => void failQueue.push(fn)
-        const response = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit, onFailure }))
+        const answer = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit, onFailure }))
         failQueue.length = 0 // committed: nothing to undo
+        const response = typeof answer === 'function' ? await answer() : answer // outside any transaction
         // The transaction has committed: only now touch storage. A failing task is logged, never turns the answer into a 500.
         for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed ${describeError(e)}`))
         return response
