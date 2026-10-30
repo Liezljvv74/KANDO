@@ -29,3 +29,19 @@ export type Invoice = z.infer<typeof InvoiceSchema>
 export const InvoiceListSchema = z.object({ docs: z.array(InvoiceSchema) })
 /** GET /invoices/:id/pdf: a signed download link (600 seconds). */
 export const InvoicePdfSchema = PayLinkSchema
+
+/** GET /commission-invoices: KANDO's monthly invoice to the caller's provider for the commission it kept (no money references). */
+export const CommissionInvoiceSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  /** YYYY-MM */
+  month: z.string(),
+  issuedAt: z.string(),
+  total: z.number(),
+  currency: z.string(),
+  pdfReady: z.boolean(),
+})
+export type CommissionInvoice = z.infer<typeof CommissionInvoiceSchema>
+export const CommissionInvoiceListSchema = z.object({ docs: z.array(CommissionInvoiceSchema) })
+/** GET /commission-invoices/:id/pdf: a signed download link (600 seconds). */
+export const CommissionInvoicePdfSchema = PayLinkSchema

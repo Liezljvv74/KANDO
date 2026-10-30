@@ -63,6 +63,13 @@ export type InvoiceInput = {
 }
 
 const eur = (cents: number) => cents / 100
+
+/** The provider as printed on invoices (issuer of their own, recipient of the commission invoice), by legal status (null = private). */
+export function providerParty(p: InvoiceInput['provider']): Party {
+  return p.legalStatus === 'kleinunternehmer' || p.legalStatus === 'business'
+    ? { name: p.businessName ?? p.fullName, address: p.impressum, taxId: p.vatId ?? p.taxNumber }
+    : { name: p.fullName, address: [p.basePostcode, p.basePlace].filter(Boolean).join(' ') || null, taxId: null }
+}
 const day = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /**
@@ -115,10 +122,7 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
   const sum = (k: 'net' | 'vat' | 'gross' | 'labour' | 'material') => eur(lines.reduce((s, l) => s + toCents(l[k]), 0))
   const totals = { net: sum('net'), vat: sum('vat'), gross: sum('gross'), labour: sum('labour'), material: sum('material') }
 
-  const issuer: Party =
-    legalStatus === 'private'
-      ? { name: p.fullName, address: [p.basePostcode, p.basePlace].filter(Boolean).join(' ') || null, taxId: null }
-      : { name: p.businessName ?? p.fullName, address: p.impressum, taxId: p.vatId ?? p.taxNumber }
+  const issuer = providerParty(p)
 
   // The labour and material totals (section 35a EStG) are printed by invoiceLines in the document language, not stored as a note.
   const notes = [

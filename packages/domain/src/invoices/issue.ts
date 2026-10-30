@@ -9,7 +9,7 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
-import { buildInvoice, type InvoiceDraft } from './build'
+import { buildInvoice, type InvoiceDraft, type InvoiceInput } from './build'
 import { formatNumber, nextNumber, providerSeries, yearOf } from './numbering'
 import { renderPdf } from './pdf'
 
@@ -85,6 +85,22 @@ type GroupRow = {
 
 const nameOf = (first: string | null, last: string | null) => [first, last].filter((x) => x?.trim()).join(' ') || '-'
 
+/** A provider as invoices print it (owner's name, business details, base place) and its country; undefined once deleted. */
+export async function invoiceProvider(exec: Exec, providerId: string): Promise<{ provider: InvoiceInput['provider']; country: string; ownerId: string } | undefined> {
+  const [p] = (
+    await exec.execute<{ owner_id: string; legal_status: string | null; business_name: string | null; impressum: string | null; vat_id: string | null; tax_number: string | null; base_postcode: string | null; country: string; first_name: string | null; last_name: string | null; place: string | null }>(sql`
+    SELECT p.owner_id, p.legal_status, p.business_name, p.impressum, p.vat_id, p.tax_number, p.base_postcode, p.country, u.first_name, u.last_name, pc.place
+    FROM providers p JOIN users u ON u.id = p.owner_id LEFT JOIN postcodes pc ON pc.country = p.country AND pc.code = p.base_postcode
+    WHERE p.id = ${providerId}`)
+  ).rows
+  if (!p) return undefined
+  return {
+    provider: { legalStatus: p.legal_status, fullName: nameOf(p.first_name, p.last_name), businessName: p.business_name, impressum: p.impressum, vatId: p.vat_id, taxNumber: p.tax_number, basePostcode: p.base_postcode, basePlace: p.place },
+    country: p.country,
+    ownerId: p.owner_id,
+  }
+}
+
 /**
  * Issues the invoice of one due group, or null (not due, or issued by someone else meanwhile). One owner transaction: the
  * root row is locked (a second sweep waits here and then finds the invoice; an additional task's accept locks the same row,
@@ -107,16 +123,11 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
       FROM bookings b LEFT JOIN quotes q ON q.id = b.quote_id LEFT JOIN services s ON s.id = b.service_id LEFT JOIN requests rq ON rq.id = b.request_id
       WHERE ${inGroup('b', sql`${rootId}::uuid`)}`)
     ).rows
-    const [p] = (
-      await o.execute<{ legal_status: string | null; business_name: string | null; impressum: string | null; vat_id: string | null; tax_number: string | null; base_postcode: string | null; country: string; first_name: string | null; last_name: string | null; place: string | null }>(sql`
-      SELECT p.legal_status, p.business_name, p.impressum, p.vat_id, p.tax_number, p.base_postcode, p.country, u.first_name, u.last_name, pc.place
-      FROM providers p JOIN users u ON u.id = p.owner_id LEFT JOIN postcodes pc ON pc.country = p.country AND pc.code = p.base_postcode
-      WHERE p.id = ${root.providerId}`)
-    ).rows
+    const p = await invoiceProvider(o, root.providerId)
     const [c] = (await o.execute<{ first_name: string | null; last_name: string | null }>(sql`SELECT first_name, last_name FROM users WHERE id = ${root.customerId}`)).rows
     if (!p || !c) return null
     const draft = buildInvoice({
-      provider: { legalStatus: p.legal_status, fullName: nameOf(p.first_name, p.last_name), businessName: p.business_name, impressum: p.impressum, vatId: p.vat_id, taxNumber: p.tax_number, basePostcode: p.base_postcode, basePlace: p.place },
+      provider: p.provider,
       customer: {
         fullName: nameOf(c.first_name, c.last_name),
         jobAddress: root.onSite ? [root.addressStreet, [root.addressPostcode, root.addressCity].filter(Boolean).join(' ')].filter(Boolean).join(', ') || null : null,

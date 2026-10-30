@@ -136,6 +136,8 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
   reviews: '(NOT hidden AND visible_at IS NOT NULL AND visible_at <= now()) OR author_id = app_current_user_id()',
   // The customer and the provider's owner of an issued invoice (plain ids, no foreign keys: it outlives the accounts).
   invoices: PARTY,
+  // KANDO's commission invoice: the provider's owner only (no foreign key: it outlives the account).
+  commission_invoices: OWN_SERVICE,
 }
 
 // Readable by app_user, written only by staff (owner connection).

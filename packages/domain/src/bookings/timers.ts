@@ -12,6 +12,7 @@ import { openSystemDispute } from './disputes'
 import { tryApplyDecision } from '../admin/bookings'
 import { describeError } from '../log-error'
 import { issueDueInvoices } from '../invoices/issue'
+import { issueCommissionInvoices } from '../invoices/commission'
 
 /**
  * The automatic releases stop starting new ones after this time: about half of the cron route's maxDuration (60 s), as
@@ -49,6 +50,8 @@ export type TimerReport = {
   decisionsApplied: number
   /** Invoices and receipts issued for booking groups now final (the ending paths issue at once; this is the retry). */
   invoicesIssued: number
+  /** KANDO's monthly commission invoices issued for the previous month (idempotent: one per provider and month). */
+  commissionInvoices: number
 }
 
 /**
@@ -106,7 +109,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -156,7 +159,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   const customersWaiting = waiting.length
 
   const endings = await endingRules(exec, now, count, timeUp)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, events }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, events }
 }
 
 // The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
@@ -336,7 +339,8 @@ export async function runDueTimers(exec: typeof db, now: Date, release: ReleaseO
   const released = await releaseDue(exec, now, timeUp)
   // last, inside the same budget: the groups the releases above made final were invoiced by them already (attemptMoney);
   // this catches the rest (a group ended by an expiry, a PDF a storage failure left out, an earlier failure)
-  return { ...report, noShowsResolved, ...released, invoicesIssued: await issueDueInvoices(exec, now, { timeUp }) }
+  const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
+  return { ...report, noShowsResolved, ...released, invoicesIssued, commissionInvoices: await issueCommissionInvoices(exec, now, { timeUp }) }
 }
 
 /** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */

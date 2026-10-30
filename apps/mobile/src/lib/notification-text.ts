@@ -40,6 +40,7 @@ const KEY: Record<Notification['kind'], Key> = {
   'review-visible': 'notification.reviewVisible',
   'provider-warning': 'notification.providerWarning',
   'invoice-ready': 'notification.invoiceReady',
+  'commission-invoice-ready': 'notification.commissionInvoiceReady',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */

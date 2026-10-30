@@ -88,6 +88,8 @@ export async function cleanupUsers(): Promise<void> {
   // booking of theirs (a deleted customer's invoice still has the provider), and their numbering series with them.
   await pool.query(`DELETE FROM invoice_counters WHERE left(series, 36) IN (SELECT id::text FROM providers WHERE owner_id IN ${mine})`)
   await pool.query(`DELETE FROM invoices WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  // the platform's commission series (commission:<year>) is shared and stays: numbers only ever go up
+  await pool.query(`DELETE FROM commission_invoices WHERE provider_id IN ${myProviders}`)
   const myBookings = `(SELECT id FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
   await pool.query(`DELETE FROM disputes WHERE booking_id IN ${myBookings}`)
   await pool.query(`DELETE FROM reviews WHERE booking_id IN ${myBookings} OR author_id IN ${mine} OR subject_id IN ${mine}`)

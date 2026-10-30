@@ -69,7 +69,10 @@ const dateDe = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: TIME_ZONE,
  * number and the date of issue, as many pages as the lines need. `test` (payments not live) puts "TESTDOKUMENT / TEST
  * DOCUMENT" on every page. The dates in the file are the issue date, so a re-render of the same invoice is the same document.
  */
-export async function renderPdf(draft: InvoiceDraft, number: string, issuedAt: Date, test: boolean): Promise<Uint8Array> {
+export const renderPdf = (draft: InvoiceDraft, number: string, issuedAt: Date, test: boolean): Promise<Uint8Array> => renderLinesPdf(invoiceLines(draft, 'de'), number, issuedAt, test)
+
+/** The PDF of any invoice's text lines (the first is the title), laid out as renderPdf describes. */
+export async function renderLinesPdf(lines: string[], number: string, issuedAt: Date, test: boolean): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
@@ -77,7 +80,7 @@ export async function renderPdf(draft: InvoiceDraft, number: string, issuedAt: D
   doc.setCreationDate(issuedAt)
   doc.setModificationDate(issuedAt)
 
-  const [title, ...body] = invoiceLines(draft, 'de')
+  const [title, ...body] = lines
   const rows: { text: string; font: PDFFont; size: number }[] = [
     { text: title!, font: bold, size: 16 },
     { text: `Nummer (Number): ${number}`, font: bold, size: SIZE },
