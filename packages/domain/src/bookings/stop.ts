@@ -72,6 +72,15 @@ export async function stateStopAmount(tx: Tx, userId: string, bookingId: string,
  * returns the booking unchanged. Owner connection, the row locked and re-checked against the 7-day timer (one outcome).
  */
 export async function answerStop(tx: Tx, userId: string, bookingId: string, answer: StopAnswer, now = new Date()): Promise<Booking> {
+  return (await beginAnswerStop(tx, userId, bookingId, answer, now))()
+}
+
+/**
+ * answerStop for a route: checks and records step 1 now and returns step 2 (the payment or the dispute notices, then the
+ * booking), which the route runs after its request transaction (an AfterTransaction), so no Stripe call holds a request
+ * connection. Step 2 never throws for the money (tryRelease: logged, flagged, retried by the timer).
+ */
+export async function beginAnswerStop(tx: Tx, userId: string, bookingId: string, answer: StopAnswer, now = new Date()): Promise<() => Promise<Booking>> {
   if ((await sideOf(tx, userId, bookingId)) !== 'customer') fail(403, { error: 'not-your-turn' })
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
@@ -82,7 +91,9 @@ export async function answerStop(tx: Tx, userId: string, bookingId: string, answ
     await openDisputeCore(o, { bookingId: b.id, openedBy: 'customer', reason: 'stop-disagreed', description: '', now })
     return { b, agree: false }
   })
-  if (r?.agree) await tryRelease(db, r.b.id, r.b.customerId, now)
-  else if (r) await tellDisputeOpened(r.b)
-  return reload(bookingId)
+  return async () => {
+    if (r?.agree) await tryRelease(db, r.b.id, r.b.customerId, now)
+    else if (r) await tellDisputeOpened(r.b)
+    return reload(bookingId)
+  }
 }

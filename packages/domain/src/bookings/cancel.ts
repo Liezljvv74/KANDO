@@ -89,6 +89,15 @@ async function tellCancelled(b: Row): Promise<void> {
  *   after settle, before the messages     | settled, messages lost (logged)               | nothing
  */
 export async function cancelBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
+  return (await beginCancelBooking(tx, userId, bookingId, now))()
+}
+
+/**
+ * cancelBooking for a route: checks and records step 1 now and returns step 2 (settle each, tell the other side, then the
+ * booking), which the route runs after its request transaction (an AfterTransaction), so no Stripe call holds a request
+ * connection. Step 2 never throws for the money (trySettleCancelled: logged, flagged, retried by the timer).
+ */
+export async function beginCancelBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<() => Promise<Booking>> {
   const side = await sideOf(tx, userId, bookingId)
   const done = await db.transaction(async (o) => {
     // the booking and its additional tasks, in id order (as account deletion locks), so the two never deadlock
@@ -105,9 +114,11 @@ export async function cancelBooking(tx: Tx, userId: string, bookingId: string, n
     for (const k of kids) if (k.status === 'confirmed') out.push(await cancel(k))
     return out
   })
-  for (const b of done) await trySettleCancelled(b.id, b.customerId, now)
-  for (const b of done) await tellCancelled(b)
-  return reload(bookingId)
+  return async () => {
+    for (const b of done) await trySettleCancelled(b.id, b.customerId, now)
+    for (const b of done) await tellCancelled(b)
+    return reload(bookingId)
+  }
 }
 
 /**

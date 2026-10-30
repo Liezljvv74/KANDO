@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runDueTimersFor, runExpiryAndReminders, runMoneySteps, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
-import { fakeGateway, type FakeGateway } from './fake-gateway'
+import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const finishRoute = await import('../app/app-api/v1/bookings/[id]/finish/route')
@@ -184,6 +184,16 @@ it('a suspended customer can still confirm', async () => {
   } finally {
     await pool.query('UPDATE users SET suspended_until = NULL WHERE id = $1', [U.cust])
   }
+})
+
+it('the confirm route pays out with no request transaction open', async () => {
+  const { id } = await paidBooking()
+  expect((await call(finishRoute.POST, U.owner, 'POST', {}, { id })).status).toBe(200)
+  const open = appConnectionsAtMoneyCalls(g)
+  const res = await call(confirmRoute.POST, U.cust, 'POST', undefined, { id })
+  expect(res.status).toBe(200)
+  expect(await res.json()).toMatchObject({ id, status: 'completed' })
+  expect(open).toEqual([0])
 })
 
 it('7 days of silence release automatically', async () => {

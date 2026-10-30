@@ -19,7 +19,7 @@ import {
   stopJob,
 } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
-import { fakeGateway, type FakeGateway } from './fake-gateway'
+import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const disputeRoute = await import('../app/app-api/v1/bookings/[id]/dispute/route')
@@ -280,9 +280,11 @@ it('either side can stop; the provider states 40 of 100; the customer agrees: re
   expect((await call(answerRoute.POST, U.owner, 'POST', { agree: true }, { id })).status).toBe(403)
   expect((await call(answerRoute.POST, U.third, 'POST', { agree: true }, { id })).status).toBe(404)
 
+  const open = appConnectionsAtMoneyCalls(g)
   const agreed = await call(answerRoute.POST, U.cust, 'POST', { agree: true }, { id })
   expect(agreed.status).toBe(200)
   expect((await agreed.json()).status).toBe('completed')
+  expect(open).toEqual([0, 0]) // refund and transfer, with no request transaction open
   expect(await ledger(id)).toEqual([
     { kind: 'commission', amount: '4.80' },
     { kind: 'refund', amount: '60.00' },

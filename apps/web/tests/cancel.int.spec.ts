@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { cancelBooking, clearOutbox, confirmJob, finishJob, getPublicProfile, objectNoShow, outboxForTests, reportNoShow, runDueTimers, setGatewayForTests, slotIsHeld } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
-import { fakeGateway, type FakeGateway } from './fake-gateway'
+import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const cancelRoute = await import('../app/app-api/v1/bookings/[id]/cancel/route')
@@ -121,9 +121,11 @@ it('customer cancels 25 hours before: full refund, no commission', async () => {
 it('customer cancels 23 hours before: provider share 50%, commission on that 50% only', async () => {
   const now = new Date()
   const { id } = await paidBooking({ startAt: new Date(now.getTime() + 23 * HOUR) })
+  const open = appConnectionsAtMoneyCalls(g)
   const res = await call(cancelRoute.POST, U.cust, 'POST', undefined, { id })
   expect(res.status).toBe(200)
   expect(await res.json()).toMatchObject({ status: 'cancelled', cancelledBy: 'customer', lateCancel: true })
+  expect(open).toEqual([0, 0]) // refund and transfer, with no request transaction open
   expect(await ledger(id)).toEqual([
     { kind: 'commission', amount: '6.00' },
     { kind: 'refund', amount: '50.00' },
