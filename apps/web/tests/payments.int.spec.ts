@@ -12,6 +12,7 @@ const pay = await import('../app/app-api/v1/bookings/[id]/pay/route')
 const webhook = await import('../app/api/stripe/webhook/route')
 const me = await import('../app/app-api/v1/me/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
+const bookingRoute = await import('../app/app-api/v1/bookings/[id]/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const busyRoute = await import('../app/app-api/v1/providers/[slug]/busy/route')
 const withdrawRoute = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
@@ -95,6 +96,29 @@ it('the customer gets a pay link; the provider and a third user get 404', async 
   expect(args!.successUrl).toMatch(/\/payment-done$/)
   expect(String(args!.successUrl)).not.toContain(b.id) // nothing of the booking in the return address
   expect((await row(b.id)).checkout_ref).toContain('cs_fake_1') // stored on the owner connection (staff-only column)
+})
+
+it('pay link, paid event, then the booking reads confirmed', async () => {
+  const b = await awaiting()
+  const res = await payLink(b.id)
+  expect(res.status).toBe(200)
+  expect(PayLinkSchema.parse(await res.json()).url).toMatch(/^https:\/\//)
+  const [args] = callsOf('createCheckout')
+  const e = paid(b.id, { sessionId: 'cs_fake_1', amountCents: args!.amountCents as number, currency: args!.currency as string })
+  expect((await deliver(e)).status).toBe(200)
+  const read = async () => {
+    const r = await call(bookingRoute.GET, U.cust, 'GET', undefined, { id: b.id })
+    expect(r.status).toBe(200)
+    return (await r.json()).booking
+  }
+  const first = await read()
+  expect(first.status).toBe('confirmed')
+  expect(first.payBy).not.toBeNull()
+  // the same event again (Stripe redelivers): nothing changes, one payment-received notice
+  expect((await deliver(e)).status).toBe(200)
+  expect(await read()).toEqual(first)
+  expect(await ledger(b.id)).toHaveLength(1)
+  expect((await notes(b.id)).filter((n) => n.kind === 'payment-received')).toEqual([{ user_id: U.cust, kind: 'payment-received' }])
 })
 
 it('the checkout session is created with no request transaction open', async () => {

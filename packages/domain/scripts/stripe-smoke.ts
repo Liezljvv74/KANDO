@@ -61,5 +61,22 @@ try {
 } catch (e) {
   report('d bad signature', e instanceof BadSignatureError ? 'PASS' : 'FAIL', e instanceof BadSignatureError ? 'BadSignatureError' : msg(e))
 }
-console.log('Not covered: transfer and refund (need a paid charge), webhooks end to end.')
+const server = process.env.NEXT_PUBLIC_SERVER_URL
+if (!server) report('e webhook reachable', 'SKIPPED', 'NEXT_PUBLIC_SERVER_URL not set')
+else {
+  // a bad-signature POST: the deployment's webhook must answer 400 JSON (reached, payments on, signature checked); it changes nothing
+  const step = 'e webhook reachable'
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET // optional: the Preview's Protection Bypass for Automation secret, as Stripe sends it in the URL
+  try {
+    const r = await fetch(`${server.replace(/\/$/, '')}/api/stripe/webhook`, { method: 'POST', body: '{}', headers: { 'stripe-signature': 't=0,v1=bad', ...(bypass && { 'x-vercel-protection-bypass': bypass }) }, redirect: 'manual' })
+    const json = (r.headers.get('content-type') ?? '').includes('application/json')
+    if (r.status === 400 && json) report(step, 'PASS', '400 bad signature')
+    else if (r.status === 404) report(step, 'FAIL', '404: payments are off on that deployment')
+    else if (r.status === 401 || r.status === 403 || !json) report(step, 'FAIL', `${r.status}: Deployment Protection blocks Stripe: add the bypass to the webhook URL`)
+    else report(step, 'FAIL', `unexpected ${r.status}`)
+  } catch (e) {
+    report(step, 'FAIL', `network error: ${msg(e)}`)
+  }
+}
+console.log('Not covered: transfer and refund (need a paid charge), a paid checkout end to end (README "Stripe test-mode set-up (owner)").')
 process.exit(results.includes('FAIL') ? 1 : 0)
