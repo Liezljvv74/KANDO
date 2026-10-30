@@ -21,6 +21,8 @@ export const PRIVATE_TABLES: Record<string, string> = {
   blocks: 'blocker_id = app_current_user_id()',
   // Only the customer sees a watch; the provider is told the count by the domain, never the names.
   availability_watches: 'customer_id = app_current_user_id()',
+  // A device's push token: the person's own. Moving a token another person held runs on the owner connection.
+  push_tokens: 'user_id = app_current_user_id()',
 }
 
 // Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.

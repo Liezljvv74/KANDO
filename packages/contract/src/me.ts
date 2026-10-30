@@ -44,6 +44,19 @@ export const MeSchema = z.object({
 })
 export type Me = z.infer<typeof MeSchema>
 
+/** POST /push-tokens (DELETE takes just the token): this device's Expo push token. Never part of any DTO. */
+export const PushTokenInputSchema = z.object({
+  token: z.string().max(200).regex(/^ExponentPushToken\[[^\]]+\]$/),
+  platform: z.enum(['ios', 'android']),
+})
+export type PushTokenInput = z.infer<typeof PushTokenInputSchema>
+export const PushTokenDeleteSchema = PushTokenInputSchema.pick({ token: true })
+
+/** GET /me/push; PATCH takes any part of it. Chat messages and reminders, both on by default. */
+export const PushSettingsSchema = z.object({ chat: z.boolean(), reminders: z.boolean() })
+export type PushSettings = z.infer<typeof PushSettingsSchema>
+export const PushSettingsPatchSchema = PushSettingsSchema.partial()
+
 /** DELETE /me: the person types their own email to confirm. */
 export const DeleteMeSchema = z.object({ confirmEmail: z.string().max(320) })
 

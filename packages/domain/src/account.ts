@@ -1,5 +1,5 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
+import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, pushTokens, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
@@ -8,7 +8,7 @@ import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'push_tokens', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -132,6 +132,7 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     }
     await tx.update(documents).set({ reviewedBy: null }).where(eq(documents.reviewedBy, userId)) // a staff reviewer: their id is personal data on others' documents
     await tx.delete(notifications).where(eq(notifications.userId, userId))
+    await tx.delete(pushTokens).where(eq(pushTokens.userId, userId))
     await tx.delete(documents).where(eq(documents.ownerId, userId))
     await tx.delete(privateFiles).where(eq(privateFiles.ownerId, userId))
     await tx.delete(photos).where(eq(photos.ownerId, userId))

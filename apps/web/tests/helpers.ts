@@ -69,6 +69,7 @@ export const expireQuotes = (where: string, values: unknown[]) =>
 export async function cleanupUsers(): Promise<void> {
   const mine = "(SELECT id FROM users WHERE email LIKE '%@test.skilled.invalid')"
   await pool.query(`DELETE FROM notifications WHERE user_id IN ${mine}`)
+  await pool.query(`DELETE FROM push_tokens WHERE user_id IN ${mine}`)
   const myProviders = `(SELECT id FROM providers WHERE owner_id IN ${mine})`
   const myThreads = `(SELECT id FROM threads WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
   await pool.query(`DELETE FROM contact_attempts WHERE user_id IN ${mine} OR thread_id IN ${myThreads}`)
