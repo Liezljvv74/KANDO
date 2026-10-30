@@ -65,7 +65,8 @@ export const errorKeys: Record<string, Key> = {
   network: 'error.network',
   'Server error': 'error.server',
   BAD_FORMAT: 'error.badFormat',
-  EMAIL_MISMATCH: 'account.emailMismatch',
+  WRONG_PASSWORD: 'account.wrongPassword',
+  AUTH_BUSY: 'error.authBusy',
   LAST_ADMIN: 'account.lastAdmin',
   REPLACEMENT_FIRST: 'error.replacementFirst',
   // Booking rules (`error`)

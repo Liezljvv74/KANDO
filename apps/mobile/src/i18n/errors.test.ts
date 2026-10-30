@@ -21,7 +21,7 @@ test('unmapped codes and server statuses never show raw text or numbers', () => 
 test('the delete and export texts say what happened and have no status numbers', () => {
   for (const lang of ['en', 'de'] as const) {
     setLang(lang)
-    for (const text of [accountError('delete', 'EMAIL_MISMATCH'), accountError('delete', 'LAST_ADMIN'), accountError('delete', 'network'), accountError('delete', 'HTTP 500'), accountError('export', 'network'), accountError('export', 'EMAIL_MISMATCH')]) {
+    for (const text of [accountError('delete', 'WRONG_PASSWORD'), accountError('delete', 'AUTH_BUSY'), accountError('delete', 'LAST_ADMIN'), accountError('delete', 'network'), accountError('delete', 'HTTP 500'), accountError('export', 'network'), accountError('export', 'WRONG_PASSWORD')]) {
       expect(text).not.toMatch(/\b\d{3}\b|HTTP/)
       expect(text.length).toBeGreaterThan(40)
     }
@@ -30,7 +30,7 @@ test('the delete and export texts say what happened and have no status numbers',
   expect(accountError('delete', 'LAST_ADMIN')).toContain('another person Administrator')
   expect(accountError('delete', 'network')).toContain('not deleted')
   expect(accountError('delete', 'network')).toContain('info@skillweb.space') // the {contact} placeholder is filled
-  expect(accountError('export', 'EMAIL_MISMATCH')).toContain('could not be exported') // a delete code never shows on export
+  expect(accountError('export', 'WRONG_PASSWORD')).toContain('could not be exported') // a delete code never shows on export
 })
 
 test('every booking rule code from the server has its own text in both languages', () => {
