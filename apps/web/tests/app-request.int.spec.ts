@@ -195,3 +195,20 @@ it('a suspended person can still erase their own data (DELETE) and use a route m
   for (const m of ['POST', 'PUT', 'PATCH']) expect((await plain(req(m), ctx)).status).toBe(403)
   expect((await open(req('POST'), ctx)).status).toBe(200)
 })
+
+const xmin = async (id: string) => (await pool.query('SELECT xmin::text AS x FROM users WHERE id = $1', [id])).rows[0].x
+const asEmail = (id: string, email: string) => new Request('http://localhost/x', { headers: { cookie: `uid=${id}:${email}` } })
+
+it('a known user with an unchanged email is not rewritten', async () => {
+  await me(as('ux1'), ctx)
+  const before = await xmin('ux1')
+  expect((await me(as('ux1'), ctx)).status).toBe(200)
+  expect(await xmin('ux1')).toBe(before)
+})
+
+it('an email changed in Neon Auth is synced', async () => {
+  await me(as('ux2'), ctx)
+  const res = await me(asEmail('ux2', 'ux2-new@test.skilled.invalid'), ctx)
+  expect((await res.json()).user.email).toBe('ux2-new@test.skilled.invalid')
+  expect((await pool.query("SELECT email FROM users WHERE id='ux2'")).rows[0].email).toBe('ux2-new@test.skilled.invalid')
+})
