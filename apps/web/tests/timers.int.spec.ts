@@ -57,7 +57,7 @@ it('running the timers twice changes and notifies nothing the second time', asyn
   await run(0)
   const count = async () => Number((await pool.query('SELECT count(*) FROM notifications WHERE user_id LIKE $1', ['tm-%'])).rows[0].count)
   const after = await count()
-  expect(await run(0)).toEqual({ requestsExpired: 0, quotesExpired: 0, proposalsLapsed: 0, unpaidExpired: 0, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0 }) // the first run took everything due
+  expect(await run(0)).toEqual({ requestsExpired: 0, quotesExpired: 0, proposalsLapsed: 0, unpaidExpired: 0, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0 }) // the first run took everything due
   expect(await count()).toBe(after)
   expect(after).toBe(4) // request, proposal, unpaid (customer and provider)
 })

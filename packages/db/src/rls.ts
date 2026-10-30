@@ -334,12 +334,13 @@ const BUSY_FUNCTIONS = [
   `REVOKE ALL ON FUNCTION busy_times(uuid, timestamptz, timestamptz) FROM PUBLIC`,
   `GRANT EXECUTE ON FUNCTION busy_times(uuid, timestamptz, timestamptz) TO ${APP_ROLE}`,
   // The public reliability line: the provider's late cancellations plus no-shows that stood (the booking ended cancelled or
-  // refunded, not while objected) in the last 12 months. A count only, for a published, non-suspended provider or the
-  // caller's own; 0 for anything else.
+  // refunded, not while objected) in the last 12 months. Root bookings only: cancelling a booking also cancels its paid
+  // additional tasks by the same rule, and that is one late cancellation, not several. A count only, for a published,
+  // non-suspended provider or the caller's own; 0 for anything else.
   `CREATE OR REPLACE FUNCTION provider_reliability(p_provider uuid) RETURNS int
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
       SELECT count(*)::int FROM bookings b JOIN providers p ON p.id = b.provider_id
-      WHERE b.provider_id = p_provider
+      WHERE b.provider_id = p_provider AND b.parent_booking_id IS NULL
         AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
         AND ((b.cancelled_by = 'provider' AND b.late_cancel AND b.status = 'cancelled' AND b.cancelled_at > now() - interval '12 months')
           OR (b.no_show = 'provider' AND b.status IN ('cancelled', 'refunded') AND b.no_show_reported_at > now() - interval '12 months')) $$`,

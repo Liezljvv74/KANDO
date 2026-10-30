@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang } from '@kando/i18n'
 import type { AfterCommit } from '../app-request'
-import { sendEmail, type BookingTemplate } from '../email'
+import { sendEmail, type BookingTemplate, type Template } from '../email'
 import { describeError } from '../log-error'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime, providerUrl } from '../notifications'
@@ -27,7 +27,8 @@ async function dateOf(kind: BookingKind, params: Record<string, string>): Promis
 /**
  * One booking event for one user: the email in their language and, unless the timers wrote it, the in-app row (ids only,
  * no personal data; `params.date` is for the email text only). `params.slug` makes the link to that provider's page in the
- * user's language. `params.role = 'provider'` gives `payment-released` the provider's text (the payout is on its way). Runs after commit, on the owner connection; never throws.
+ * user's language. `params.role = 'provider'` gives `payment-released` the provider's text (the payout is on its way);
+ * `params.variant` picks the `booking-cancelled` text (cancel.ts). Runs after commit, on the owner connection; never throws.
  */
 export async function notifyBookingEvent(kind: BookingKind, userId: string, params: Record<string, string>): Promise<void> {
   try {
@@ -45,7 +46,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
       }
     }
     const iso = params.date ?? (await dateOf(kind, params))
-    const template = kind === 'payment-released' && params.role === 'provider' ? 'payment-released-provider' : kind
+    const template: Template = kind === 'payment-released' && params.role === 'provider' ? 'payment-released-provider' : kind === 'booking-cancelled' && params.variant ? (`booking-cancelled-${params.variant}` as Template) : kind
     await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count } })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))

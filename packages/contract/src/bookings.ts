@@ -122,6 +122,15 @@ export const BookingSchema = z.object({
   confirmBy: z.string().nullable(),
   /** When the customer was asked "Was the job done?" (the provider never tapped "Finished"); from then on they can confirm. */
   askedDoneAt: z.string().nullable(),
+  /** A cancellation: when, by which side, and whether it came less than 24 hours before the start. */
+  cancelledAt: z.string().nullable(),
+  cancelledBy: z.enum(['customer', 'provider']).nullable(),
+  lateCancel: z.boolean(),
+  /** The side reported as not turning up (the booking stays confirmed until the objection window ends or staff decide). */
+  noShow: z.enum(['customer', 'provider']).nullable(),
+  noShowReportedAt: z.string().nullable(),
+  /** Until when the reported side may object (noShowReportedAt + 48 hours). */
+  noShowObjectBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

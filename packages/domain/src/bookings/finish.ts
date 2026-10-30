@@ -20,14 +20,14 @@ export const RELEASE_FAILED = 'release failed: '
 const notFound = () => fail(404, { error: 'Not found' })
 
 /** Which side the caller is on, read on the request transaction (RLS proves they are a party); 404 for anyone else. */
-async function sideOf(tx: Tx, userId: string, bookingId: string): Promise<'customer' | 'provider'> {
+export async function sideOf(tx: Tx, userId: string, bookingId: string): Promise<'customer' | 'provider'> {
   const b = isUuid(bookingId) ? (await tx.select({ customerId: bookings.customerId, providerId: bookings.providerId }).from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
   if (!b) return notFound()
   if (b.customerId === userId) return 'customer'
   return (await ownProvider(tx, userId))?.id === b.providerId ? 'provider' : notFound()
 }
-const lockRow = async (o: Exec, id: string) => (await o.select().from(bookings).where(eq(bookings.id, id)).for('update'))[0] ?? notFound()
-const reload = async (id: string) => toBooking((await db.select().from(bookings).where(eq(bookings.id, id)))[0]!)
+export const lockRow = async (o: Exec, id: string) => (await o.select().from(bookings).where(eq(bookings.id, id)).for('update'))[0] ?? notFound()
+export const reload = async (id: string) => toBooking((await db.select().from(bookings).where(eq(bookings.id, id)))[0]!)
 
 /**
  * The provider's "Finished": from `confirmed`, once the agreed start has come (else 409 TOO_EARLY), once (else 409 not-open).
@@ -39,6 +39,7 @@ export async function finishJob(tx: Tx, userId: string, bookingId: string, input
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
+    if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' }) // a reported no-show ends by objection or its 48 hours (cancel.ts)
     if (now < b.startAt) fail(409, { error: 'TOO_EARLY' })
     const materialC = toCents(input.materialAmount ?? 0)
     if (materialC > toCents(Number(b.amount))) fail(400, { error: 'INVALID_MATERIAL_AMOUNT' })
@@ -64,6 +65,7 @@ export async function confirmJob(tx: Tx, userId: string, bookingId: string, now 
     if (b.status === 'completed') return b
     const asked = b.status === 'confirmed' && b.askedDoneAt !== null
     if (b.status !== 'finished' && !asked) fail(409, { error: 'not-open' })
+    if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' })
     if (b.status === 'finished' && b.confirmBy && b.confirmBy <= now) return b // already due
     const [r] = await o.update(bookings).set({ ...(asked && { status: 'finished', finishedAt: now }), confirmBy: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
     return r!
@@ -105,24 +107,33 @@ export async function releaseBooking(exec: Exec, bookingId: string, now: Date): 
  * one open flag per booking, note `release failed: <code or message>`); the booking stays `finished` and the next timer
  * run retries. A later successful release resolves that flag.
  */
-export async function tryRelease(exec: Exec, bookingId: string, customerId: string, now: Date): Promise<boolean> {
+export const tryRelease = (exec: Exec, bookingId: string, customerId: string, now: Date): Promise<boolean> =>
+  attemptMoney('release', bookingId, customerId, now, () => releaseBooking(exec, bookingId, now))
+
+/**
+ * Runs one money step (a release or a cancellation's settle) and never throws: true when it went through. DISPUTE_OPEN and
+ * not-open are only logged (frozen, or moved on);
+ * anything else is logged and flagged to staff once (`payment-unprocessed`, note `release failed: <code or message>`, which
+ * the timers order last), and a later success resolves that flag.
+ */
+export async function attemptMoney(what: string, bookingId: string, customerId: string, now: Date, run: () => Promise<unknown>): Promise<boolean> {
   try {
-    await releaseBooking(exec, bookingId, now)
+    await run()
   } catch (e) {
     const code = e instanceof Response ? ((await e.json().catch(() => ({}))) as { error?: string }).error : undefined
     const why = code ?? describeError(e) // an error code or a cleaned error message, never request data or keys
-    console.error(`[release] booking ${bookingId} not released: ${why}`)
+    console.error(`[${what}] booking ${bookingId} not released: ${why}`)
     if (code === 'DISPUTE_OPEN' || code === 'not-open') return false
     await flagForStaff(db, { kind: 'payment-unprocessed', refId: bookingId, userId: customerId, note: `${RELEASE_FAILED}${why}`.slice(0, 500) }).catch((err) =>
-      console.error(`[release] staff flag failed ${describeError(err)}`),
+      console.error(`[${what}] staff flag failed ${describeError(err)}`),
     )
     return false
   }
-  // released: an open flag from an earlier failed attempt is settled too (staff see it closed by the system)
+  // done: an open flag from an earlier failed attempt is settled too (staff see it closed by the system)
   await db
     .update(staffFlags)
     .set({ resolvedAt: now, resolvedBy: 'system' })
     .where(and(eq(staffFlags.kind, 'payment-unprocessed'), eq(staffFlags.refId, bookingId), isNull(staffFlags.resolvedAt), like(staffFlags.note, `${RELEASE_FAILED}%`)))
-    .catch((err) => console.error(`[release] staff flag not resolved ${describeError(err)}`))
+    .catch((err) => console.error(`[${what}] staff flag not resolved ${describeError(err)}`))
   return true
 }

@@ -14,6 +14,7 @@ import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { canTransact } from '../payments/rules'
 import { assertFuture, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
+import { NO_SHOW_OBJECTION_HOURS } from './ending-rules'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -75,6 +76,12 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   finishedAt: b.finishedAt ? iso(b.finishedAt) : null,
   confirmBy: b.confirmBy ? iso(b.confirmBy) : null,
   askedDoneAt: b.askedDoneAt ? iso(b.askedDoneAt) : null,
+  cancelledAt: b.cancelledAt ? iso(b.cancelledAt) : null,
+  cancelledBy: b.cancelledBy as Booking['cancelledBy'],
+  lateCancel: b.lateCancel,
+  noShow: b.noShow as Booking['noShow'],
+  noShowReportedAt: b.noShowReportedAt ? iso(b.noShowReportedAt) : null,
+  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * 3_600_000)) : null,
   createdAt: iso(b.createdAt),
   updatedAt: iso(b.updatedAt),
 })

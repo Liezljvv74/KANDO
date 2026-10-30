@@ -7,6 +7,7 @@ import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
 import { addWorkingDays, ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, DISPUTE_DECISION_WORKING_DAYS, NO_ACTION_STAFF_DAYS } from './ending-rules'
 import { RELEASE_FAILED, tryRelease } from './finish'
+import { resolveNoShows, trySettleCancelled } from './cancel'
 
 /**
  * The automatic releases stop starting new ones after this time: about half of the cron route's maxDuration (60 s), as
@@ -28,6 +29,10 @@ export type TimerReport = {
   autoReleased: number
   askedDone: number
   sentToStaff: number
+  /** No-show reports that stood after 48 hours without objection (the booking is cancelled; the money follows). */
+  noShowsResolved: number
+  /** Cancelled, paid bookings settled by the timer (a no-show that stood, or a cancellation whose settle failed before). */
+  cancelsSettled: number
 }
 
 /**
@@ -79,7 +84,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -118,7 +123,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   const customersWaiting = waiting.length
 
   const endings = await endingRules(exec, now, count)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, ...endings, autoReleased: 0, events }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, events }
 }
 
 const noOpenDispute = sql`NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id AND d.decided_at IS NULL)`
@@ -144,7 +149,8 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
     ${result('r')}`)
 
   // The provider never tapped "Finished": 24 hours after the end the customer is asked once (they may then confirm).
-  const ask = sql`status = 'confirmed' AND asked_done_at IS NULL AND ${endAt} + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`
+  // A reported no-show is left alone here: it ends by objection or after 48 hours (cancel.ts).
+  const ask = sql`status = 'confirmed' AND no_show IS NULL AND asked_done_at IS NULL AND ${endAt} + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`
   const askedDone = await count(sql`
     WITH r AS (UPDATE bookings SET asked_done_at = ${t}::timestamptz, updated_at = ${t}::timestamptz WHERE ${inIdOrder(ask)} AND ${ask} RETURNING id, customer_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'was-job-done', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
@@ -154,7 +160,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
   // stays frozen (settle refuses while it is open) until staff decide. The status change makes it happen once. Only once
   // the customer was asked at least 24 hours earlier, so a late run never asks and escalates at the same time.
   const decideBy = addWorkingDays(now, DISPUTE_DECISION_WORKING_DAYS).toISOString()
-  const silent = sql`status = 'confirmed' AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz
+  const silent = sql`status = 'confirmed' AND no_show IS NULL AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz
         AND asked_done_at IS NOT NULL AND asked_done_at + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`
   const sentToStaff = await count(sql`
     WITH s AS (UPDATE bookings SET status = 'disputed', updated_at = ${t}::timestamptz WHERE ${inIdOrder(silent)} AND ${silent} RETURNING id),
@@ -173,26 +179,34 @@ export type ReleaseOptions = {
 }
 
 /**
- * 7 days without an answer (or a confirmation whose release failed): the payment is made. One booking at a time (settle),
- * inside a time budget and a hard cap; a failure is logged and flagged by tryRelease and never stops the loop; the booking
- * stays due and a later run retries it. Frozen bookings (undecided dispute, open chargeback flag) are not picked; bookings
- * whose earlier release failed (open flag) come last, so they never hold back the others.
+ * The money steps due: 7 days without an answer (or a confirmation whose release failed): the payment is made; and a
+ * cancelled, paid booking not yet settled (a no-show that stood, or a cancellation whose settle failed): settled with its
+ * share (cancel.ts). One booking at a time (settle), inside a time budget and a hard cap; a failure is logged and flagged
+ * (attemptMoney) and never stops the loop; the booking stays due and a later run retries it. Frozen bookings (undecided
+ * dispute, open chargeback flag) are not picked, and neither is a cancelled booking that had a dispute (staff settle
+ * those with their decision); a finished one with a reported no-show is left alone. Bookings whose earlier attempt failed
+ * (open flag) come last, so they never hold back the others.
  */
-async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptions): Promise<number> {
+async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptions): Promise<{ autoReleased: number; cancelsSettled: number }> {
   const t = now.toISOString()
   const started = clock()
   const due = (
-    await exec.execute<{ id: string; customer_id: string }>(sql`
-    SELECT id, customer_id FROM bookings WHERE status = 'finished' AND confirm_by <= ${t}::timestamptz AND ${noOpenDispute} AND ${noChargeback}
-    ORDER BY EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'payment-unprocessed' AND f.ref_id = bookings.id::text AND f.resolved_at IS NULL AND f.note LIKE ${`${RELEASE_FAILED}%`}), confirm_by, id
+    await exec.execute<{ id: string; customer_id: string; status: string }>(sql`
+    SELECT id, customer_id, status FROM bookings
+    WHERE ((status = 'finished' AND confirm_by <= ${t}::timestamptz AND no_show IS NULL)
+        OR (status = 'cancelled' AND paid_at IS NOT NULL AND released_at IS NULL AND NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id)))
+      AND ${noOpenDispute} AND ${noChargeback}
+    ORDER BY EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'payment-unprocessed' AND f.ref_id = bookings.id::text AND f.resolved_at IS NULL AND f.note LIKE ${`${RELEASE_FAILED}%`}),
+      CASE WHEN status = 'finished' THEN confirm_by ELSE cancelled_at END, id
     LIMIT ${RELEASES_HARD_CAP}`)
   ).rows
-  let released = 0
+  const done = { autoReleased: 0, cancelsSettled: 0 }
   for (const b of due) {
     if (clock() - started >= budgetMs) break
-    if (await tryRelease(exec, b.id, b.customer_id, now)) released++
+    if (b.status === 'finished') done.autoReleased += Number(await tryRelease(exec, b.id, b.customer_id, now))
+    else done.cancelsSettled += Number(await trySettleCancelled(b.id, b.customer_id, now))
   }
-  return released
+  return done
 }
 
 /**
@@ -211,7 +225,8 @@ async function sendEmails({ events, ...report }: TimerReport & { events: TimerEv
  */
 export async function runDueTimers(exec: Exec, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
   const report = await sendEmails(await sweep(exec, now))
-  return { ...report, autoReleased: await releaseDue(exec, now, release) }
+  const noShowsResolved = await resolveNoShows(exec, now)
+  return { ...report, noShowsResolved, ...(await releaseDue(exec, now, release)) }
 }
 
 /** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */

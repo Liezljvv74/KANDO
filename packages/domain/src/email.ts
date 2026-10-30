@@ -7,8 +7,10 @@ const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
 /** One email per booking event kind (see bookings/notify.ts). */
-export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested'
-export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | BookingTemplate
+export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning'
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | CancelTemplate | BookingTemplate
+/** booking-cancelled variants (bookings/cancel.ts: who cancelled, what happens to the money). */
+export type CancelTemplate = 'booking-cancelled-late' | 'booking-cancelled-by-provider' | 'booking-cancelled-no-show-customer' | 'booking-cancelled-no-show-provider'
 type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
 
@@ -55,6 +57,13 @@ const KEY: Record<Template, string> = {
   'payment-released-provider': 'email.paymentReleased.provider',
   'was-job-done': 'email.wasJobDone',
   'review-requested': 'email.reviewRequested',
+  'booking-cancelled': 'email.bookingCancelled',
+  'booking-cancelled-late': 'email.bookingCancelled.late',
+  'booking-cancelled-by-provider': 'email.bookingCancelled.byProvider',
+  'booking-cancelled-no-show-customer': 'email.bookingCancelled.noShowCustomer',
+  'booking-cancelled-no-show-provider': 'email.bookingCancelled.noShowProvider',
+  'no-show-reported': 'email.noShowReported',
+  'provider-warning': 'email.providerWarning',
 }
 
 function compose(lang: Lang, template: Template, params: Params) {
