@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
-import { clearOutbox, inBatches, outboxForTests } from '@kando/domain'
+import { db, pool } from '@kando/db'
+import { clearOutbox, inBatches, outboxForTests, pruneOldRows } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
 
 const cron = await import('../app/api/cron/suspensions/route')
@@ -33,12 +33,12 @@ it('ends a past suspension once: both columns cleared, one email; a future one i
   await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'cr-future'")
   const res = await get('Bearer s3cret')
   expect(res.status).toBe(200)
-  expect(await res.json()).toEqual({ ended: expect.arrayContaining(['cr-past', 'cr-cust']), pendingObjects: 0, purged: 0 })
+  expect(await res.json()).toEqual({ ended: expect.arrayContaining(['cr-past', 'cr-cust']), pendingObjects: 0, purged: 0, pruned: { notifications: expect.any(Number), stripeEvents: expect.any(Number), pushTokens: expect.any(Number) } })
   expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('cr-past'), 'Dein Profil ist wieder veröffentlicht']])
   expect((await pool.query("SELECT suspended_until, suspended_reason FROM users WHERE id = 'cr-past'")).rows[0]).toEqual({ suspended_until: null, suspended_reason: null })
   expect((await pool.query("SELECT suspended_until FROM providers WHERE owner_id = 'cr-past'")).rows[0].suspended_until).toBeNull()
   expect((await pool.query("SELECT suspended_until FROM providers WHERE owner_id = 'cr-future'")).rows[0].suspended_until).not.toBeNull()
-  expect(await (await get('Bearer s3cret')).json()).toEqual({ ended: [], pendingObjects: 0, purged: 0 })
+  expect(await (await get('Bearer s3cret')).json()).toMatchObject({ ended: [], pendingObjects: 0, purged: 0 })
   expect(outboxForTests()).toHaveLength(1)
 })
 
@@ -94,4 +94,26 @@ it('the daily check emails every ended profile (more than one batch)', async () 
   clearOutbox()
   expect(((await (await get('Bearer s3cret')).json()) as { ended: string[] }).ended.sort()).toEqual(ids)
   expect(outboxForTests().map((m) => m.to).sort()).toEqual(ids.map(EMAIL).sort())
+})
+
+it('pruneOldRows keeps unseen notices and requests-ignored, removes old seen ones, old stripe events and stale push tokens', async () => {
+  await pool.query("INSERT INTO users (id, email) VALUES ('cr-prune', $1) ON CONFLICT DO NOTHING", [EMAIL('cr-prune')])
+  const note = async (kind: string, seen: string | null, dismissed: string | null = null) =>
+    (await pool.query(`INSERT INTO notifications (user_id, kind, created_at, seen_at, dismissed_at) VALUES ('cr-prune', $1, now() - interval '400 days', now() - $2::interval, now() - $3::interval) RETURNING id`, [kind, seen, dismissed])).rows[0].id as string
+  const unseen = await note('booking-paid', null)
+  await note('booking-paid', '181 days')
+  await note('booking-paid', null, '181 days')
+  const seenRecent = await note('booking-paid', '179 days')
+  const ignored = await note('requests-ignored', '300 days')
+  const waiting = await note('customers-waiting', '300 days')
+  await pool.query("INSERT INTO stripe_events (id, type, received_at) VALUES ('evt_cr_old', 't', now() - interval '91 days'), ('evt_cr_new', 't', now() - interval '89 days') ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO push_tokens (user_id, token, platform, last_seen_at) VALUES ('cr-prune', 'ExponentPushToken[cr-old]', 'ios', now() - interval '271 days'), ('cr-prune', 'ExponentPushToken[cr-new]', 'ios', now() - interval '269 days')")
+  const pruned = await pruneOldRows(db, new Date())
+  expect(pruned.notifications).toBeGreaterThanOrEqual(2)
+  expect(pruned.stripeEvents).toBeGreaterThanOrEqual(1)
+  expect(pruned.pushTokens).toBeGreaterThanOrEqual(1)
+  expect((await pool.query("SELECT id FROM notifications WHERE user_id = 'cr-prune'")).rows.map((r) => r.id).sort()).toEqual([unseen, seenRecent, ignored, waiting].sort())
+  expect((await pool.query("SELECT id FROM stripe_events WHERE id LIKE 'evt_cr_%'")).rows).toEqual([{ id: 'evt_cr_new' }])
+  expect((await pool.query("SELECT token FROM push_tokens WHERE user_id = 'cr-prune'")).rows).toEqual([{ token: 'ExponentPushToken[cr-new]' }])
+  await pool.query("DELETE FROM stripe_events WHERE id LIKE 'evt_cr_%'")
 })

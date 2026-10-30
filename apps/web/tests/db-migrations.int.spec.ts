@@ -41,7 +41,7 @@ it('0008: person fields on users, suspensions by date, drafts allowed, notificat
   expect([services.price_type, services.price]).toEqual([true, true])
   expect((await columns('photos')).provider_id).toBe(true)
   expect(Object.keys(await columns('notifications')).sort()).toEqual(
-    ['created_at', 'dismissed_at', 'id', 'kind', 'payload', 'seen_at', 'user_id'].sort(),
+    ['created_at', 'dismissed_at', 'id', 'kind', 'mailed_at', 'payload', 'seen_at', 'user_id'].sort(),
   )
   await expect(applyRls()).resolves.toBeUndefined() // a function still reading a dropped column fails here
 })
@@ -178,3 +178,26 @@ it('0022 creates every listed index', async () => {
   expect(def).toContain('gist')
   expect(def).toContain('geography')
 })
+
+it('0023: requests accept declined, notifications have mailed_at, services have offerable, every country has a currency', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const upTo22 = mkdtempSync(join(tmpdir(), 'mig22-'))
+  cpSync(join(process.cwd(), '../../packages/db/migrations'), upTo22, { recursive: true })
+  const journalPath = join(upTo22, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0023')
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo22 })
+  await pool.query("INSERT INTO users (id, email) VALUES ('m23-c', 'm23-c@test.skilled.invalid'), ('m23-p', 'm23-p@test.skilled.invalid')")
+  const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m23-p', 'published') RETURNING id")).rows[0].id
+  await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m23-c', 'booking-accepted')")
+  await migrate()
+  await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m23-c', $1, 'x', now(), 'declined')", [p])
+  expect((await pool.query("SELECT currency FROM countries WHERE code = 'DE'")).rows[0].currency).toBe('EUR')
+  expect((await pool.query("SELECT 1 FROM countries WHERE currency IS NULL")).rows).toHaveLength(0)
+  expect((await pool.query("SELECT mailed_at FROM notifications WHERE user_id = 'm23-c'")).rows[0].mailed_at).not.toBeNull()
+  expect((await columns('services')).offerable).toBe(false) // NOT NULL
+  await pool.query('DELETE FROM notifications; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
+}, 60_000)

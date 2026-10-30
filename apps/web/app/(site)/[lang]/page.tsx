@@ -2,13 +2,16 @@ import type { Metadata } from 'next'
 import { asUser } from '@kando/db'
 import { listCategories } from '@kando/domain'
 import { t, type Key, type Lang } from '@kando/i18n'
-import { LangSwitch } from '../../components/lang-switch'
-import { alternates, siteLang } from '../../lib/site'
+import { LangSwitch } from '../../../components/lang-switch'
+import { alternates, pageLang } from '../../../lib/site'
 
-type Args = { searchParams: Promise<{ lang?: string }> }
+type Args = { params: Promise<{ lang: string }> }
 
-export async function generateMetadata({ searchParams }: Args): Promise<Metadata> {
-  const lang = siteLang((await searchParams).lang)
+// Cached; a category change refreshes it at once (public-cache.ts).
+export const revalidate = 3600
+
+export async function generateMetadata({ params }: Args): Promise<Metadata> {
+  const lang = await pageLang(params)
   return {
     title: t(lang, 'home.metaTitle'),
     description: t(lang, 'home.metaDescription'),
@@ -50,8 +53,8 @@ const STEPS: Record<'customer' | 'provider', [Key, Key, Key, Key]> = {
   provider: ['home.providerTitle', 'home.provider1', 'home.provider2', 'home.provider3'],
 }
 
-export default async function HomePage({ searchParams }: Args) {
-  const lang = siteLang((await searchParams).lang)
+export default async function HomePage({ params }: Args) {
+  const lang = await pageLang(params)
   const categories = await asUser(null, (tx) => listCategories(tx, lang))
   const tt = (key: Key) => t(lang, key)
 

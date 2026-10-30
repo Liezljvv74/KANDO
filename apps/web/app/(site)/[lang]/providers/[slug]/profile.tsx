@@ -13,14 +13,12 @@ import {
 } from '@kando/domain'
 import { formatPrice, t, type Key, type Lang } from '@kando/i18n'
 import { TranslateLink } from './translate-link'
-import { LangSwitch } from '../../../../components/lang-switch'
-import { alternates, langPath, siteLang } from '../../../../lib/site'
+import { LangSwitch } from '../../../../../components/lang-switch'
+import { alternates, langPath, pageLang } from '../../../../../lib/site'
 
-// Read per request under the anonymous RLS context: what an anonymous app user sees, nothing more.
-type Args = {
-  params: Promise<{ slug: string }>
-  searchParams: Promise<{ lang?: string; translate?: string }>
-}
+// The provider page and its translated version (?translate=1, which the proxy sends to ./translated).
+// Read under the anonymous RLS context: what an anonymous app user sees, nothing more.
+export type Args = { params: Promise<{ lang: string; slug: string }> }
 type Loaded = { profile: ProviderDetail; categoryNames: string[] }
 
 async function read(tx: Tx, slug: string, lang: Lang): Promise<Loaded | null> {
@@ -32,17 +30,16 @@ async function read(tx: Tx, slug: string, lang: Lang): Promise<Loaded | null> {
 // One transaction per render; the page and generateMetadata share it.
 const load = cache((slug: string, lang: Lang) => asUser(null, (tx) => read(tx, slug, lang)))
 
-export async function generateMetadata({ params, searchParams }: Args): Promise<Metadata> {
+export async function profileMetadata({ params }: Args, translate: boolean): Promise<Metadata> {
   const { slug } = await params
-  const query = await searchParams
-  const lang = siteLang(query.lang)
+  const lang = await pageLang(params)
   const data = await load(slug, lang)
   if (!data) return {}
   const { profile } = data
   return {
     title: `${profile.publicName} | ${t(lang, 'brand.name')}`,
     // The AI version is not indexed; the canonical stays the original.
-    robots: query.translate === '1' ? { index: false } : undefined,
+    robots: translate ? { index: false } : undefined,
     description: profile.bio
       ? Array.from(profile.bio.replace(/\s+/g, ' ').trim()).slice(0, 155).join('')
       : undefined,
@@ -70,14 +67,13 @@ function withTexts(
   }
 }
 
-export default async function ProviderPage({ params, searchParams }: Args) {
+export async function renderProfile({ params }: Args, translate: boolean) {
   const { slug } = await params
-  const query = await searchParams
-  const lang = siteLang(query.lang)
+  const lang = await pageLang(params)
   let data: Loaded | null
   let translated = false
   let unavailable = false
-  if (query.translate === '1') {
+  if (translate) {
     // Stored translations only: the model is called by the button (TranslateLink), never by a page view.
     data = await asUser(null, async (tx) => {
       const d = await read(tx, slug, lang)

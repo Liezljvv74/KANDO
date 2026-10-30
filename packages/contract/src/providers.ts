@@ -14,6 +14,8 @@ export const SearchItemSchema = z.object({
   currency: CurrencySchema,
   distanceKm: z.number().nullable(),
   worksRemotely: z.boolean(),
+  /** Customers' visible reviews: average stars and count; null when there are none (then isNew). */
+  rating: RatingSchema.nullable(),
   isNew: z.boolean(),
 })
 export type SearchItem = z.infer<typeof SearchItemSchema>
@@ -31,7 +33,7 @@ export const SearchQuerySchema = z.object({
   q: z.string().max(100).optional(),
   page: z.coerce.number().int().min(1).max(1000).default(1),
   lang: LangSchema.default(DEFAULT_LANG),
-  country: z.string().default('DE'),
+  country: z.string().optional(),
 })
 
 export const LangQuerySchema = z.object({ lang: LangSchema.default(DEFAULT_LANG) })

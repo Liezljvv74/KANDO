@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { AmountSchema, CurrencySchema, requiredText } from './common'
+import { AmountSchema, CurrencySchema, CursorSchema, requiredText } from './common'
 
 /** Messages per page of GET /threads/:id/messages (a full page means there may be more). */
 export const MESSAGES_PAGE = 100
@@ -46,11 +46,7 @@ export type Thread = z.infer<typeof ThreadSchema>
 
 /** `after` is an opaque cursor: `<createdAt ISO>|<message id>`. */
 export const MessagesQuerySchema = z.object({
-  after: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z\|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .refine((c) => !Number.isNaN(Date.parse(c.split('|')[0]!)), 'Invalid time')
-    .optional(),
+  after: CursorSchema.optional(),
 })
 export type MessagesQuery = z.infer<typeof MessagesQuerySchema>
 

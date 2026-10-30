@@ -19,7 +19,7 @@ import {
   stopJob,
 } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
-import { fakeGateway, type FakeGateway } from './fake-gateway'
+import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const disputeRoute = await import('../app/app-api/v1/bookings/[id]/dispute/route')
@@ -98,9 +98,8 @@ const answer = (userId: string, id: string, agree: boolean, now: Date) => asUser
 it('the customer disputes within 7 days of Finished; the timer then releases nothing', async () => {
   const T = new Date('2027-06-07T08:00:00Z') // a Monday
   const { id } = await paidBooking({ startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T })
-  // only the customer; a third person sees nothing; contact details and an empty text are refused
+  // a third person sees nothing; contact details and an empty text are refused
   expect((await call(disputeRoute.POST, U.third, 'POST', { description: 'x' }, { id })).status).toBe(404)
-  expect((await call(disputeRoute.POST, U.owner, 'POST', { description: 'x' }, { id })).status).toBe(403)
   expect((await call(disputeRoute.POST, U.cust, 'POST', { description: 'Schreib mir: kunde@example.com' }, { id })).status).toBe(422)
   expect((await call(disputeRoute.POST, U.cust, 'POST', { description: '' }, { id })).status).toBe(400)
   expect((await row(id)).status).toBe('finished')
@@ -150,7 +149,8 @@ it('a dispute after the 7 days is 409', async () => {
 })
 
 it('dispute and auto-release race: exactly one outcome', async () => {
-  for (const round of [0, 1, 2]) {
+  for (const round of [0, 1, 2, 3]) {
+    const opener = round < 2 ? U.cust : U.owner // either side may be the one racing the release
     const T = new Date(Date.now() - 8 * DAY - round * HOUR)
     const { id } = await paidBooking({ startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T })
     await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = $1', [id])
@@ -161,8 +161,8 @@ it('dispute and auto-release race: exactly one outcome', async () => {
       await holder.query('BEGIN')
       await holder.query('SELECT 1 FROM bookings WHERE id = $1 FOR UPDATE', [id])
       // the dispute comes a minute before the 7 days end; the timer runs once they have
-      const d = refusal(dispute(U.cust, id, new Date(confirmBy.getTime() - MIN)))
-      both = Promise.all([round === 1 ? new Promise<void>((ok) => setTimeout(ok, 100)).then(() => d) : d, runDueTimers(db, new Date(confirmBy.getTime() + MIN))])
+      const d = refusal(dispute(opener, id, new Date(confirmBy.getTime() - MIN)))
+      both = Promise.all([round % 2 ? new Promise<void>((ok) => setTimeout(ok, 100)).then(() => d) : d, runDueTimers(db, new Date(confirmBy.getTime() + MIN))])
       await new Promise((ok) => setTimeout(ok, 400))
       await holder.query('COMMIT')
     } finally {
@@ -173,7 +173,7 @@ it('dispute and auto-release race: exactly one outcome', async () => {
     if (status === 'disputed') {
       expect(opened.status).toBe(0)
       expect(await ledger(id)).toEqual([])
-      expect(await disputesOf(id)).toHaveLength(1)
+      expect(await disputesOf(id)).toMatchObject([{ opened_by: opener === U.cust ? 'customer' : 'provider', reason: 'problem' }])
       expect(report.autoReleased).toBe(0)
     } else {
       expect(status).toBe('completed')
@@ -185,6 +185,69 @@ it('dispute and auto-release race: exactly one outcome', async () => {
       ])
     }
   }
+})
+
+it('the provider disputes a finished booking: disputed, the release stops, both told', async () => {
+  const T = new Date('2027-11-01T08:00:00Z')
+  const { id } = await paidBooking({ startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T })
+  const res = await call(disputeRoute.POST, U.owner, 'POST', { description: 'Der Kunde hat das Material selbst entfernt.' }, { id })
+  expect(res.status).toBe(200)
+  expect(await res.json()).toMatchObject({ bookingId: id, openedBy: 'provider', reason: 'problem', decision: null })
+  expect((await row(id)).status).toBe('disputed')
+  expect(await notes(id, 'dispute-opened')).toEqual([U.cust, U.owner].sort())
+  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY))).autoReleased).toBe(0)
+  expect(await ledger(id)).toEqual([])
+  expect(g.calls).toEqual([])
+  // the provider's own dispute again on a second tap; after the 7 days the provider is refused like the customer
+  expect((await dispute(U.owner, id, new Date(T.getTime() + HOUR))).openedBy).toBe('provider')
+  const late = await paidBooking({ startAt: new Date(T.getTime() - 5 * HOUR), finishedAt: new Date(T.getTime() - 3 * HOUR) })
+  expect(await refusal(dispute(U.owner, late.id, new Date(T.getTime() + 7 * DAY)))).toEqual({ status: 409, body: { error: 'DISPUTE_CLOSED' } })
+  // a confirmed job (even once the customer was asked) is not the provider's to dispute
+  const c = await paidBooking({ startAt: new Date(T.getTime() - 3 * DAY) })
+  await pool.query('UPDATE bookings SET asked_done_at = $2 WHERE id = $1', [c.id, T])
+  expect(await refusal(dispute(U.owner, c.id, T))).toEqual({ status: 409, body: { error: 'not-open' } })
+})
+
+it('either side disputes a stopped booking before an amount is agreed; after agreement 409 not-open', async () => {
+  const S = new Date('2027-11-08T08:00:00Z')
+  // the customer stopped, nothing stated: the provider disputes
+  const a = await paidBooking({ startAt: S })
+  await stop(U.cust, a.id, new Date(S.getTime() + HOUR))
+  expect((await dispute(U.owner, a.id, new Date(S.getTime() + 2 * HOUR))).openedBy).toBe('provider')
+  expect((await row(a.id)).status).toBe('disputed')
+  expect(await notes(a.id, 'dispute-opened')).toEqual([U.cust, U.owner].sort())
+  // the provider stopped and stated 40: the customer disputes instead of answering
+  const b = await paidBooking({ startAt: new Date(S.getTime() + 3 * HOUR) })
+  await stop(U.owner, b.id, new Date(S.getTime() + 4 * HOUR))
+  await state(U.owner, b.id, 40, new Date(S.getTime() + 4 * HOUR))
+  expect(await dispute(U.cust, b.id, new Date(S.getTime() + 5 * HOUR))).toMatchObject({ openedBy: 'customer', reason: 'problem' })
+  expect((await row(b.id)).status).toBe('disputed')
+  expect(await ledger(b.id)).toEqual([])
+  // agreed (the payout failed, so it is still stopped with the payment due): neither side may dispute
+  const c = await paidBooking({ provider: bareProviderId, startAt: new Date(S.getTime() + 6 * HOUR) })
+  await stop(U.bare, c.id, new Date(S.getTime() + 7 * HOUR))
+  await state(U.bare, c.id, 40, new Date(S.getTime() + 7 * HOUR))
+  await answer(U.cust, c.id, true, new Date(S.getTime() + 8 * HOUR))
+  expect((await row(c.id)).status).toBe('stopped')
+  const notOpen = { status: 409, body: { error: 'not-open' } }
+  expect(await refusal(dispute(U.cust, c.id, new Date(S.getTime() + 9 * HOUR)))).toEqual(notOpen)
+  expect(await refusal(dispute(U.bare, c.id, new Date(S.getTime() + 9 * HOUR)))).toEqual(notOpen)
+  expect(await disputesOf(c.id)).toEqual([])
+})
+
+it('the second opener gets 409 DISPUTE_EXISTS, the first its own dispute again', async () => {
+  const T = new Date('2027-11-15T08:00:00Z')
+  const { id } = await paidBooking({ startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T })
+  const first = await dispute(U.cust, id, new Date(T.getTime() + HOUR))
+  expect(await refusal(dispute(U.owner, id, new Date(T.getTime() + 2 * HOUR)))).toEqual({ status: 409, body: { error: 'DISPUTE_EXISTS' } })
+  expect((await dispute(U.cust, id, new Date(T.getTime() + 3 * HOUR))).id).toBe(first.id)
+  expect(await disputesOf(id)).toHaveLength(1)
+  // a dispute of another kind (the customer's stop disagreement) is not a problem report: 409 DISPUTE_EXISTS for both
+  const s = await paidBooking({ startAt: new Date(T.getTime() + 4 * HOUR) })
+  await stop(U.owner, s.id, new Date(T.getTime() + 5 * HOUR))
+  await state(U.owner, s.id, 40, new Date(T.getTime() + 5 * HOUR))
+  await answer(U.cust, s.id, false, new Date(T.getTime() + 6 * HOUR))
+  for (const u of [U.cust, U.owner]) expect(await refusal(dispute(u, s.id, new Date(T.getTime() + 7 * HOUR)))).toEqual({ status: 409, body: { error: 'DISPUTE_EXISTS' } })
 })
 
 it('either side can stop; the provider states 40 of 100; the customer agrees: refund 60, provider share 40, commission on 40', async () => {
@@ -217,9 +280,11 @@ it('either side can stop; the provider states 40 of 100; the customer agrees: re
   expect((await call(answerRoute.POST, U.owner, 'POST', { agree: true }, { id })).status).toBe(403)
   expect((await call(answerRoute.POST, U.third, 'POST', { agree: true }, { id })).status).toBe(404)
 
+  const open = appConnectionsAtMoneyCalls(g)
   const agreed = await call(answerRoute.POST, U.cust, 'POST', { agree: true }, { id })
   expect(agreed.status).toBe(200)
   expect((await agreed.json()).status).toBe('completed')
+  expect(open).toEqual([0, 0]) // refund and transfer, with no request transaction open
   expect(await ledger(id)).toEqual([
     { kind: 'commission', amount: '4.80' },
     { kind: 'refund', amount: '60.00' },

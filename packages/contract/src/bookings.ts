@@ -4,7 +4,7 @@ import { AmountSchema, CurrencySchema, requiredText, text } from './common'
 import { RatingSchema } from './endings'
 
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
-export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn'] as const
+export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn', 'declined'] as const
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
 export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
@@ -41,6 +41,8 @@ export const RequestSchema = z.object({
   updatedAt: z.string(),
   /** On the provider's view only: what providers' visible reviews say about this customer (null: none yet). */
   customerRating: RatingSchema.nullish(),
+  /** On GET /requests/:id only: the request's chat (an additional task's is its booking's). */
+  threadId: z.string().nullish(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
@@ -149,6 +151,10 @@ export const BookingSchema = z.object({
   updatedAt: z.string(),
 })
 export type Booking = z.infer<typeof BookingSchema>
+
+/** GET /bookings/:id: the booking, which side the caller is on, and its chat (null when none exists yet). */
+export const BookingViewSchema = z.object({ booking: BookingSchema, viewer: z.enum(['customer', 'provider']), threadId: z.string().nullable() })
+export type BookingView = z.infer<typeof BookingViewSchema>
 
 /** What others may see of a calendar: the time only. */
 export const BusyTimeSchema = z.object({

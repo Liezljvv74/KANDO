@@ -59,7 +59,7 @@ export async function writeReview(tx: Tx, userId: string, bookingId: string, inp
     }
     return { r, told: other ? [b.customerId, owner] : [] }
   })
-  for (const u of row.told) await notifyBookingEvent('review-visible', u, { bookingId }) // the row is written above: email and push, after commit
+  for (const u of row.told) await notifyBookingEvent('review-visible', u, { bookingId }, { written: true }) // the row is written above: email and push, after commit
   return toReview(row.r, userId)
 }
 

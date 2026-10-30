@@ -1,10 +1,11 @@
-import type { BlockedUser, Booking, Message, Thread } from '@kando/contract'
+import type { BlockedUser, Message, Page, Thread } from '@kando/contract'
 
 import { api, upload, type PickedFile } from '@/api/client'
 
 const BASE = '/app-api/v1'
 
-export const listThreads = async () => (await api<{ docs: Thread[] }>(`${BASE}/threads`)).docs
+export const listThreads = (cursor?: string) => api<Page<Thread>>(`${BASE}/threads${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
+export const getThread = (id: string) => api<Thread>(`${BASE}/threads/${encodeURIComponent(id)}`)
 /** `after`: the opaque cursor of the last message already shown. */
 export const listMessages = async (threadId: string, after?: string) =>
   (await api<{ docs: Message[] }>(`${BASE}/threads/${threadId}/messages${after ? `?after=${encodeURIComponent(after)}` : ''}`)).docs
@@ -15,11 +16,3 @@ export const listBlocks = async () => (await api<{ docs: BlockedUser[] }>(`${BAS
 export const blockUser = (threadId: string) => api<null>(`${BASE}/blocks`, { method: 'POST', body: { threadId } })
 export const unblockUser = (threadId: string) => api<null>(`${BASE}/blocks?threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' })
 
-/** The chat of a request (opened with the request), or null. */
-export const threadIdForRequest = async (requestId: string) => (await listThreads()).find((t) => t.requestId === requestId)?.id ?? null
-
-/** The chat of a booking: a direct booking has its own, a booking from a quote shares its request's. */
-export async function threadIdForBooking(b: Pick<Booking, 'id' | 'requestId'>): Promise<string | null> {
-  const threads = await listThreads()
-  return (threads.find((t) => t.bookingId === b.id) ?? (b.requestId ? threads.find((t) => t.requestId === b.requestId) : undefined))?.id ?? null
-}

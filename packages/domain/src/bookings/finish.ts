@@ -60,6 +60,15 @@ export async function finishJob(tx: Tx, userId: string, bookingId: string, input
  * completed booking returns it unchanged (200).
  */
 export async function confirmJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
+  return (await beginConfirmJob(tx, userId, bookingId, now))()
+}
+
+/**
+ * confirmJob for a route: checks and records step 1 now and returns step 2 (the release, then the booking), which the route
+ * runs after its request transaction (an AfterTransaction), so no Stripe call holds a request connection. Step 2 never throws
+ * for the money (tryRelease: logged, flagged, retried by the timer).
+ */
+export async function beginConfirmJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<() => Promise<Booking>> {
   if ((await sideOf(tx, userId, bookingId)) !== 'customer') fail(403, { error: 'not-your-turn' })
   const b = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
@@ -71,8 +80,10 @@ export async function confirmJob(tx: Tx, userId: string, bookingId: string, now 
     const [r] = await o.update(bookings).set({ ...(asked && { status: 'finished', finishedAt: now }), confirmBy: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
     return r!
   })
-  if (b.status !== 'completed') await tryRelease(db, b.id, b.customerId, now)
-  return reload(b.id)
+  return async () => {
+    if (b.status !== 'completed') await tryRelease(db, b.id, b.customerId, now)
+    return reload(b.id)
+  }
 }
 
 /**

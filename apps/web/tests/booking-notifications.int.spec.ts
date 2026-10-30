@@ -96,7 +96,7 @@ it('timer events: the SQL writes the one row, notifyBookingEvent adds only the e
 
 it('requests-ignored email explains the damage in English, with no row from notify itself', async () => {
   await pool.query("UPDATE users SET language = 'en' WHERE id = $1", [U.owner])
-  await notifyBookingEvent('requests-ignored', U.owner, {})
+  await notifyBookingEvent('requests-ignored', U.owner, {}, { written: true })
   expect(await rows(U.owner)).toEqual([])
   const m = subjects(U.owner)[0]!
   expect(m.text).toMatch(/customers leave/)
@@ -105,7 +105,7 @@ it('requests-ignored email explains the damage in English, with no row from noti
 
 it('never throws: unknown user, broken ids', async () => {
   await expect(notifyBookingEvent('quote-received', 'nobody', { quoteId: 'not-a-uuid' })).resolves.toBeUndefined()
-  await expect(notifyBookingEvent('payment-reminder', U.cust, { bookingId: 'not-a-uuid' })).resolves.toBeUndefined()
+  await expect(notifyBookingEvent('payment-reminder', U.cust, { bookingId: 'not-a-uuid' }, { written: true })).resolves.toBeUndefined()
 })
 
 it('a counter notifies the other side, in both directions, with one row and one email each', async () => {

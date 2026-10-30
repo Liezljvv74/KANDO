@@ -43,7 +43,14 @@ export const INSERT_RULES: Record<string, string> = {
  * 'customer' = the customer proposed last, so the provider answers; 'provider' = the customer answers).
  */
 export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'answerer'>> = {
-  requests: { 'open>quoted': 'provider', 'quoted>booked': 'customer' },
+  requests: {
+    'open>quoted': 'provider',
+    'quoted>booked': 'customer',
+    'open>withdrawn': 'customer',
+    'quoted>withdrawn': 'customer',
+    'open>declined': 'provider',
+    'quoted>declined': 'provider',
+  },
   quotes: { 'sent>superseded': 'provider', 'sent>accepted': 'customer' },
   bookings: {
     'proposed>awaiting-payment': 'answerer',
@@ -98,6 +105,8 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
     'cancelled_by', 'late_cancel', 'no_show', 'no_show_reported_at', 'stopped_at', 'stopped_by', 'stop_amount', 'stop_note',
     'stop_stated_at', 'material_amount',
   ],
+  // The cached eligibility: only the offerable triggers below write it.
+  services: ['offerable'],
 }
 
 /**
@@ -285,6 +294,67 @@ const PROVIDER_FUNCTIONS = [
   `GRANT EXECUTE ON FUNCTION set_provider_identity(text, float8, float8), set_provider_published(boolean, text) TO ${APP_ROLE}`,
 ]
 
+// The offerable rule for the service row `s` (an alias, or NEW in a trigger): priced, and every required document of its
+// category approved for the provider's owner. Publish and suspension are checked at read time (offerable_service_ids, search).
+const OFFERABLE_RULE = (s: string) => `coalesce(${s}.price_type IS NOT NULL AND (${s}.price_type = 'on-request' OR ${s}.price IS NOT NULL)
+        AND NOT EXISTS (
+          SELECT 1 FROM categories c JOIN providers p ON p.id = ${s}.provider_id, unnest(c.required_documents) AS r(requirement)
+          WHERE c.id = ${s}.category_id
+            AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved')
+        ), false)`
+
+// services.offerable caches OFFERABLE_RULE; these triggers keep it true on every path (domain, staff, account deletion).
+// SECURITY DEFINER: documents are private. VOLATILE (the default), so a recompute that waited for a concurrent writer's
+// lock reads that writer's committed change (READ COMMITTED takes a fresh snapshot per statement).
+// Concurrency: an existing service row is serialised by its row lock (the document and category triggers UPDATE it). A
+// new service row (or one moved to another provider or category) is invisible to those UPDATEs, so it takes the
+// owner's advisory lock 'offerable:<owner>' (the document trigger takes it too) and a share lock on its category (the
+// category UPDATE holds the row lock). Lock order: document row -> owner lock -> service rows; service row -> owner lock
+// only for a row the document trigger cannot see, so no cycle.
+const OFFERABLE_TRIGGERS = [
+  `CREATE OR REPLACE FUNCTION service_offerable(p_service uuid) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT coalesce((SELECT ${OFFERABLE_RULE('s')} FROM services s WHERE s.id = p_service), false) $$`,
+  `REVOKE ALL ON FUNCTION service_offerable(uuid) FROM PUBLIC`,
+  `CREATE OR REPLACE FUNCTION services_set_offerable() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' OR NEW.provider_id IS DISTINCT FROM OLD.provider_id THEN
+        PERFORM pg_advisory_xact_lock(hashtext('offerable:' || owner_id)) FROM providers WHERE id = NEW.provider_id;
+      END IF;
+      IF TG_OP = 'INSERT' OR NEW.category_id IS DISTINCT FROM OLD.category_id THEN
+        PERFORM 1 FROM categories WHERE id = NEW.category_id FOR SHARE;
+      END IF;
+      NEW.offerable := ${OFFERABLE_RULE('NEW')}; -- a fresh snapshot, after any wait above
+      RETURN NEW;
+    END $$`,
+  `DROP TRIGGER IF EXISTS services_set_offerable ON services`,
+  `CREATE TRIGGER services_set_offerable BEFORE INSERT OR UPDATE OF category_id, price_type, price, provider_id ON services
+    FOR EACH ROW EXECUTE FUNCTION services_set_offerable()`,
+  // A document approved, rejected, re-typed or deleted: the services of that owner's providers.
+  `CREATE OR REPLACE FUNCTION documents_refresh_offerable() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      -- ponytail: one owner's lock; a document moved between owners (no code path does) would need both, in id order
+      PERFORM pg_advisory_xact_lock(hashtext('offerable:' || coalesce(NEW.owner_id, OLD.owner_id)));
+      UPDATE services s SET offerable = service_offerable(s.id) FROM providers p
+        WHERE p.id = s.provider_id AND p.owner_id IN (OLD.owner_id, NEW.owner_id);
+      RETURN NULL;
+    END $$`,
+  `DROP TRIGGER IF EXISTS documents_refresh_offerable ON documents`,
+  `CREATE TRIGGER documents_refresh_offerable AFTER INSERT OR UPDATE OF status, requirement, owner_id OR DELETE ON documents
+    FOR EACH ROW EXECUTE FUNCTION documents_refresh_offerable()`,
+  // A category's required documents changed: its services.
+  `CREATE OR REPLACE FUNCTION categories_refresh_offerable() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      UPDATE services SET offerable = service_offerable(id) WHERE category_id = NEW.id;
+      RETURN NULL;
+    END $$`,
+  `DROP TRIGGER IF EXISTS categories_refresh_offerable ON categories`,
+  `CREATE TRIGGER categories_refresh_offerable AFTER UPDATE OF required_documents ON categories
+    FOR EACH ROW WHEN (OLD.required_documents IS DISTINCT FROM NEW.required_documents) EXECUTE FUNCTION categories_refresh_offerable()`,
+  // Re-sync on every apply: a changed OFFERABLE_RULE, or rows written before the triggers existed, are corrected here.
+  `UPDATE services SET offerable = service_offerable(id) WHERE offerable IS DISTINCT FROM service_offerable(id)`,
+]
+
 // Eligibility: documents are private (RLS), so the check runs as the table owner, for the provider's owner only.
 // Callable by app_user so search and public pages can use their own request transaction. Answers only for a provider
 // the caller may see (published and not suspended, or the caller's own); anything else gets an empty answer.
@@ -292,17 +362,9 @@ const ELIGIBILITY_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION offerable_service_ids(p_provider_id uuid) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
       SELECT s.id FROM services s
-      JOIN categories c ON c.id = s.category_id
       JOIN providers p ON p.id = s.provider_id
-      WHERE s.provider_id = p_provider_id
-        AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL)
+      WHERE s.provider_id = p_provider_id AND s.offerable -- OFFERABLE_TRIGGERS keep it
         AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
-        AND NOT EXISTS (
-          SELECT 1 FROM unnest(c.required_documents) AS r(requirement)
-          WHERE NOT EXISTS (
-            SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'
-          )
-        )
       ORDER BY s.created_at, s.id $$`,
   `CREATE OR REPLACE FUNCTION missing_requirements(p_provider_id uuid, p_service_id uuid) RETURNS text[]
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -466,6 +528,32 @@ const BOOKING_TRIGGERS = [
     `DROP TRIGGER IF EXISTS ${t}_app_status_guard ON ${t}`,
     `CREATE TRIGGER ${t}_app_status_guard BEFORE UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION app_status_guard()`,
   ]),
+  // A request its customer withdrew or its provider declined takes no accept and no reminder: its sent quote is declined,
+  // on every path (domain, timers, staff). SECURITY DEFINER: the customer's app role may not move a quote itself.
+  `CREATE OR REPLACE FUNCTION close_request_quotes() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      UPDATE quotes SET status = 'declined' WHERE request_id = NEW.id AND status = 'sent';
+      RETURN NULL;
+    END $$`,
+  `DROP TRIGGER IF EXISTS requests_close_quotes ON requests`,
+  `CREATE TRIGGER requests_close_quotes AFTER UPDATE OF status ON requests FOR EACH ROW
+    WHEN (NEW.status IN ('withdrawn', 'declined') AND OLD.status IS DISTINCT FROM NEW.status) EXECUTE FUNCTION close_request_quotes()`,
+  // A quote-born root booking that ends unagreed (declined, expired, withdrawn) gives the job back: its quote is open again
+  // while it is valid (else expired), its request quoted again (never expired: that would count toward requests-ignored).
+  // On every path (domain, timers, staff). NEW.updated_at is the injected now of the writing path. The timers' notice
+  // (timers.ts, request-reopened) uses the same predicate. An additional task is not reopened: the customer starts a new one.
+  // SECURITY DEFINER: the moves are the owner's, so app_status_guard (app role only) lets them pass and the app role
+  // never gets booked > quoted or accepted > sent itself.
+  `CREATE OR REPLACE FUNCTION reopen_quote_request() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    BEGIN
+      UPDATE quotes SET status = CASE WHEN expires_at > NEW.updated_at THEN 'sent' ELSE 'expired' END WHERE id = NEW.quote_id AND status = 'accepted';
+      UPDATE requests SET status = 'quoted', updated_at = NEW.updated_at WHERE id = NEW.request_id AND status = 'booked';
+      RETURN NULL;
+    END $$`,
+  `DROP TRIGGER IF EXISTS bookings_reopen_request ON bookings`,
+  `CREATE TRIGGER bookings_reopen_request AFTER UPDATE OF status ON bookings FOR EACH ROW
+    WHEN (OLD.status IN ('proposed', 'awaiting-payment') AND NEW.status IN ('declined', 'expired', 'withdrawn') AND NEW.quote_id IS NOT NULL AND NEW.parent_booking_id IS NULL)
+    EXECUTE FUNCTION reopen_quote_request()`,
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
   // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that
   // request's parent (and an ordinary request makes no additional task). Invoker rights: a parent the inserting customer
@@ -559,6 +647,7 @@ export function rlsStatements(
     ...BLOCK_FUNCTIONS, // before the policies that call it
     ...policies,
     ...PROVIDER_FUNCTIONS,
+    ...OFFERABLE_TRIGGERS,
     ...ELIGIBILITY_FUNCTIONS,
     ...BUSY_FUNCTIONS,
     ...TRANSLATION_FUNCTIONS,

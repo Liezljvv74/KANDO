@@ -38,12 +38,11 @@ async function createAccountOnce(providerId: string, country: string, email: str
 }
 
 /** Asks the gateway whether the caller's payouts are ready and records it, so the app is right before the webhook arrives. */
-export async function payoutStatus(exec: Exec, userId: string): Promise<{ ready: boolean }> {
+export async function payoutStatus(exec: Exec, userId: string): Promise<{ ready: boolean; changed: boolean }> {
   const own = (await ownProvider(exec, userId)) ?? noProfile()
-  if (!own.stripeAccountId) return { ready: false }
+  if (!own.stripeAccountId) return { ready: false, changed: false }
   const ready = await gateway().accountReady(own.stripeAccountId)
-  await recordReady(db, own.stripeAccountId, ready)
-  return { ready }
+  return { ready, changed: await recordReady(db, own.stripeAccountId, ready) }
 }
 
 /** The `account-updated` event: re-reads the account's state from the gateway. An account no provider holds is ignored. */
@@ -57,17 +56,15 @@ export async function refreshAccount(exec: Exec, accountId: string): Promise<voi
  * Sets or clears payouts_ready_at (owner connection). Only the change to ready tells anyone: the provider
  * (payout-setup-complete), then every watcher not told yet (provider-available). Both UPDATEs are conditional, so with
  * concurrent calls (status, webhook) exactly one sees the change and each watcher is told once. Messages after the commit.
+ * Whether this call changed payouts_ready_at (set or cleared).
  */
-async function recordReady(exec: Exec, accountId: string, ready: boolean, now = new Date()): Promise<void> {
+async function recordReady(exec: Exec, accountId: string, ready: boolean, now = new Date()): Promise<boolean> {
   const after: (() => Promise<void>)[] = []
-  await (exec as typeof db).transaction(async (o) => {
+  const changed = await (exec as typeof db).transaction(async (o) => {
     const byAccount = eq(providers.stripeAccountId, accountId)
-    if (!ready) {
-      await o.update(providers).set({ payoutsReadyAt: null }).where(and(byAccount, isNotNull(providers.payoutsReadyAt)))
-      return
-    }
+    if (!ready) return (await o.update(providers).set({ payoutsReadyAt: null }).where(and(byAccount, isNotNull(providers.payoutsReadyAt))).returning({ id: providers.id })).length > 0
     const [p] = await o.update(providers).set({ payoutsReadyAt: now }).where(and(byAccount, isNull(providers.payoutsReadyAt))).returning({ id: providers.id, ownerId: providers.ownerId, slug: providers.slug })
-    if (!p) return
+    if (!p) return false
     const watchers = await o
       .update(availabilityWatches)
       .set({ notifiedAt: now })
@@ -75,6 +72,8 @@ async function recordReady(exec: Exec, accountId: string, ready: boolean, now = 
       .returning({ customerId: availabilityWatches.customerId })
     after.push(() => notifyBookingEvent('payout-setup-complete', p.ownerId, {}))
     for (const w of watchers) after.push(() => notifyBookingEvent('provider-available', w.customerId, p.slug ? { slug: p.slug } : {}))
+    return true
   })
   for (const fn of after) await fn() // notifyBookingEvent never throws
+  return changed
 }

@@ -5,7 +5,7 @@ import { getPage, publishedPages } from '@kando/domain'
 import { sql } from 'drizzle-orm'
 import { renderMarkdown } from '../lib/markdown'
 
-const { default: PageBySlug, generateMetadata } = await import('../app/(site)/[slug]/page')
+const { default: PageBySlug, generateMetadata } = await import('../app/(site)/[lang]/[slug]/page')
 
 const stamp = Date.now()
 const slug = (n: string) => `pg-${n}-${stamp}`
@@ -51,10 +51,7 @@ afterAll(async () => {
 
 const render = async (s: string, lang?: string) =>
   renderToStaticMarkup(
-    await PageBySlug({
-      params: Promise.resolve({ slug: s }),
-      searchParams: Promise.resolve({ lang }),
-    }),
+    await PageBySlug({ params: Promise.resolve({ slug: s, lang: lang ?? 'de' }) }),
   )
 
 describe('pages tables', () => {
@@ -136,8 +133,7 @@ describe('legal page by slug', () => {
 
   it('metadata: title, canonical and hreflang for every language', async () => {
     const m = await generateMetadata({
-      params: Promise.resolve({ slug: slug('both') }),
-      searchParams: Promise.resolve({ lang: 'en' }),
+      params: Promise.resolve({ slug: slug('both'), lang: 'en' }),
     })
     expect(m.title).toBe('Privacy Test')
     expect(m.alternates?.canonical).toBe(`/${slug('both')}?lang=en`)
@@ -148,8 +144,7 @@ describe('legal page by slug', () => {
     })
     expect(
       await generateMetadata({
-        params: Promise.resolve({ slug: 'nope' }),
-        searchParams: Promise.resolve({}),
+        params: Promise.resolve({ slug: 'nope', lang: 'de' }),
       }),
     ).toEqual({})
   })

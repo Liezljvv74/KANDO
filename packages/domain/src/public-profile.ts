@@ -64,6 +64,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   const ratings = await ratingsOf(tx, [p.owner_id], 'customer') // shown reviews only (RLS and the filter agree)
   const reviews = await latestReviews(tx, p.owner_id)
   const approved = new Set(checked.rows[0]?.docs ?? [])
+  const rating = ratings.get(p.owner_id) ?? null
 
   const detail: ProviderDetail = {
     providerId: p.id,
@@ -93,9 +94,9 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     // Without a description of its own, a photo is described by the current public name (it follows renames).
     photos: photos.rows.map((ph) => ({ id: ph.id, url: photoUrl(ph.key), alt: ph.alt || p.public_name })),
     checkedDocuments: DOCUMENT_TYPES.filter((d) => approved.has(d)),
-    isNew: true, // Until ratings exist (Stage 6).
+    isNew: rating === null,
     reliability: Number(reliability.rows[0]?.n ?? 0),
-    rating: ratings.get(p.owner_id) ?? null,
+    rating,
     reviews,
     verified: paymentsEnabled() && p.payouts_ready_at !== null, // payout set-up done (Stripe checked identity); means nothing while payments are off
     canBook: canTransact({

@@ -1,0 +1,12 @@
+ALTER TABLE "notifications" DROP CONSTRAINT "notifications_kind_check";--> statement-breakpoint
+ALTER TABLE "requests" DROP CONSTRAINT "requests_status_check";--> statement-breakpoint
+ALTER TABLE "countries" ADD COLUMN "currency" text;--> statement-breakpoint
+ALTER TABLE "services" ADD COLUMN "offerable" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "notifications" ADD COLUMN "mailed_at" timestamp with time zone DEFAULT now();--> statement-breakpoint
+ALTER TABLE "countries" ADD CONSTRAINT "countries_currency_currencies_code_fk" FOREIGN KEY ("currency") REFERENCES "public"."currencies"("code") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_kind_check" CHECK (kind in ('profile-live','request-received','quote-received','booking-proposed','booking-accepted','booking-declined','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','pending-slot-requested','message-received','booking-paid','payment-received','payment-late-refunded','payout-setup-complete','customers-waiting','provider-available','refund-issued','job-finished','confirm-reminder','payment-released','was-job-done','booking-cancelled','no-show-reported','dispute-opened','dispute-decided','job-stopped','stop-amount-stated','additional-task-requested','review-requested','review-visible','provider-warning','invoice-ready','commission-invoice-ready','request-withdrawn','request-declined','request-reopened')) NOT VALID;--> statement-breakpoint
+ALTER TABLE "requests" ADD CONSTRAINT "requests_status_check" CHECK (status in ('open','quoted','booked','expired','withdrawn','declined')) NOT VALID;--> statement-breakpoint
+UPDATE "countries" SET "currency" = 'EUR' WHERE "code" = 'DE';--> statement-breakpoint
+ALTER TABLE "countries" ALTER COLUMN "currency" SET NOT NULL;--> statement-breakpoint
+-- same rule as offerable_service_ids, minus the publish and suspension condition (read-time)
+UPDATE "services" s SET "offerable" = true FROM "categories" c, "providers" p WHERE c.id = s.category_id AND p.id = s.provider_id AND s.price_type IS NOT NULL AND (s.price_type = 'on-request' OR s.price IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM unnest(c.required_documents) AS r(requirement) WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.owner_id = p.owner_id AND d.requirement = r.requirement AND d.status = 'approved'));

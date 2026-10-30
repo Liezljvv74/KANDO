@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runDueTimersFor, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runDueTimersFor, runExpiryAndReminders, runMoneySteps, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
-import { fakeGateway, type FakeGateway } from './fake-gateway'
+import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const finishRoute = await import('../app/app-api/v1/bookings/[id]/finish/route')
@@ -184,6 +184,16 @@ it('a suspended customer can still confirm', async () => {
   } finally {
     await pool.query('UPDATE users SET suspended_until = NULL WHERE id = $1', [U.cust])
   }
+})
+
+it('the confirm route pays out with no request transaction open', async () => {
+  const { id } = await paidBooking()
+  expect((await call(finishRoute.POST, U.owner, 'POST', {}, { id })).status).toBe(200)
+  const open = appConnectionsAtMoneyCalls(g)
+  const res = await call(confirmRoute.POST, U.cust, 'POST', undefined, { id })
+  expect(res.status).toBe(200)
+  expect(await res.json()).toMatchObject({ id, status: 'completed' })
+  expect(open).toEqual([0])
 })
 
 it('7 days of silence release automatically', async () => {
@@ -421,7 +431,7 @@ it('a booking with an open chargeback flag is not picked by the release', async 
   expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [id])).rows[0].n).toBe(0) // not tried, so not flagged
 })
 
-it('the other rules and their emails happen even when the release loop fails (the releases run before the emails)', async () => {
+it('the other rules and their emails happen even when the release loop fails (the rules and their emails run in their own step, before the money)', async () => {
   const T = new Date('2028-04-03T10:00:00Z')
   const reminded = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: new Date(T.getTime() + 6 * DAY) }) // reminder 1 due at T + 7 d
   const asked = await paidBooking({ startAt: new Date(T.getTime() + 5 * DAY) }) // ends T + 5 d 1 h: asked at T + 7 d
@@ -432,7 +442,8 @@ it('the other rules and their emails happen even when the release loop fails (th
     if (reads++ === 0) return 0 // the run's start; then the release loop breaks
     throw new Error('release loop broke')
   }
-  await expect(runDueTimers(db, new Date(T.getTime() + 7 * DAY), { clock: boom })).rejects.toThrow('release loop broke')
+  await runExpiryAndReminders(db, new Date(T.getTime() + 7 * DAY))
+  await expect(runMoneySteps(db, new Date(T.getTime() + 7 * DAY), { clock: boom })).rejects.toThrow('release loop broke')
   expect((await row(reminded.id)).confirm_reminders_sent).toBe(1)
   expect((await row(asked.id)).asked_done_at).not.toBeNull()
   expect((await row(released.id)).status).toBe('finished')
@@ -442,7 +453,7 @@ it('the other rules and their emails happen even when the release loop fails (th
   expect((await runDueTimers(db, new Date(T.getTime() + 7 * DAY))).autoReleased).toBe(1)
 })
 
-it('the time budget counts from the start of the run: steps before the releases use it up too', async () => {
+it("a step's time budget counts from that step's start: a no-show settled first can use it up before the releases", async () => {
   const T = new Date('2028-05-02T10:00:00Z')
   const reported = await paidBooking({ startAt: new Date(T.getTime() - 3 * DAY) })
   await pool.query("UPDATE bookings SET no_show = 'customer', no_show_reported_at = $2 WHERE id = $1", [reported.id, new Date(T.getTime() - 3 * DAY + HOUR)])

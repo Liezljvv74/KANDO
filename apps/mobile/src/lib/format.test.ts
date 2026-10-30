@@ -1,6 +1,6 @@
 import { photoSrc, searchPath } from '@/api/providers'
 import { setLang } from '@/i18n'
-import { formatDistance, formatPrice } from './format'
+import { formatDistance, formatPrice, ratingBadge } from './format'
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
@@ -25,6 +25,15 @@ test('distance shows km, remote or nothing', () => {
   expect(formatDistance({ distanceKm: 12, worksRemotely: false })).toBe('≈ 12 km')
   expect(formatDistance({ distanceKm: null, worksRemotely: true })).toBe('remote')
   expect(formatDistance({ distanceKm: null, worksRemotely: false })).toBeNull()
+})
+
+test('the badge shows the rating once rated, else New', () => {
+  setLang('de')
+  expect(ratingBadge({ average: 4.5, count: 2 })).toBe('4,5 ★ (2)')
+  expect(ratingBadge(null)).toBe('Neu')
+  setLang('en')
+  expect(ratingBadge({ average: 4.5, count: 2 })).toBe('4.5 ★ (2)')
+  expect(ratingBadge(undefined)).toBe('New') // an older cached response has no rating
 })
 
 test('search path leaves out empty filters and trims text', () => {

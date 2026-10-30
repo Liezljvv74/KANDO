@@ -4,15 +4,14 @@ import { StyleSheet, Text } from 'react-native'
 
 import type { Booking } from '@kando/contract'
 
-import { threadIdForBooking } from '@/api/chat'
-import { answerBooking, confirmJob, listBookings, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
+import { answerBooking, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang, type Key } from '@/i18n'
-import { actionLabel, bookingActions, bookingStatusText, daysLeft, type BookingAction, type Viewer } from '@/lib/booking-status'
+import { actionLabel, bookingActions, bookingStatusText, daysLeft, type BookingAction } from '@/lib/booking-status'
 import { confirmDanger } from '@/lib/confirm'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
@@ -25,16 +24,6 @@ import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
-
-type Found = { booking: Booking; viewer: Viewer } | null
-
-/** There is no read-one route: the booking is in the person's customer list or, for a provider, in the provider list. */
-async function find(id: string): Promise<Found> {
-  const mine = (await listBookings('customer')).find((b) => b.id === id)
-  if (mine) return { booking: mine, viewer: 'customer' }
-  const theirs = (await listBookings('provider')).find((b) => b.id === id)
-  return theirs ? { booking: theirs, viewer: 'provider' } : null
-}
 
 const placeOf = (b: Booking) => {
   if (!b.onSite) return t('booking.remote')
@@ -51,7 +40,7 @@ const DANGER: readonly BookingAction[] = ['decline', 'withdraw', 'cancel']
 export default function BookingDetail() {
   useLang()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const fetch = useCallback(() => find(id), [id])
+  const fetch = useCallback(() => getBooking(id), [id])
   const { data, done, error, retry } = useLoad(fetch)
   const { busy, problem, submit } = useSubmit()
   const [sheet, setSheet] = useState<Sheet | null>(null)
@@ -112,7 +101,7 @@ export default function BookingDetail() {
       <BookingInvoiceRow booking={b} />
       {b.status === 'disputed' && <DisputeInfo booking={b} />}
       {b.status === 'completed' && !b.parentBookingId && <ReviewPanel booking={b} />}
-      <OpenChat find={() => threadIdForBooking(b)} />
+      <OpenChat find={async () => data.threadId} />
       {!!notice && <Info text={notice} />}
       <ErrorText text={problem} />
       {bookingActions(b, viewer, now).map((a) => (

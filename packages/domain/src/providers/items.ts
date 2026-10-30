@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { categories, categoryTexts, providerReferences, providers, services, users, type Tx } from '@kando/db'
+import { categories, categoryTexts, providerReferences, providers, serviceAppInsert, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
 import { missingRequirements } from './eligibility'
@@ -10,7 +10,7 @@ import { getMyProfile, isSuspendedNow, lockProfile, ownProvider } from './profil
 export const MAX_PROVIDER_REFERENCES = 2
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-type ServiceRow = typeof services.$inferSelect
+type ServiceRow = typeof serviceAppInsert.$inferSelect // offerable is read through missingRequirements, not the row
 
 const toService = (r: ServiceRow): OwnService => ({
   id: r.id,
@@ -69,7 +69,7 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
   await assertCategory(tx, input.categoryId)
   const price = input.priceType === 'on-request' ? null : (input.price ?? null)
   const [row] = await tx
-    .insert(services)
+    .insert(serviceAppInsert) // offerable is set by the trigger, never by the app
     .values({
       providerId: profile.id, // always the caller's own profile, never from the body
       categoryId: input.categoryId,

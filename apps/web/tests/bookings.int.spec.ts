@@ -1,17 +1,20 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
+import { BookingSchema, BookingViewSchema, LIST_PAGE, QuoteSchema, RequestSchema } from '@kando/contract'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
+const bookingOne = await import('../app/app-api/v1/bookings/[id]/route')
+const requestsList = await import('../app/app-api/v1/requests/route')
+const threadsList = await import('../app/app-api/v1/threads/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const withdraw = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
 
-const U = { cust: 'bk-cust', cust2: 'bk-cust2', owner: 'bk-owner', remote: 'bk-remote', susp: 'bk-susp', draft: 'bk-draft', third: 'bk-third' }
+const U = { cust: 'bk-cust', cust2: 'bk-cust2', owner: 'bk-owner', remote: 'bk-remote', susp: 'bk-susp', draft: 'bk-draft', third: 'bk-third', pager: 'bk-pager' }
 let pOwner: string, pRemote: string, pSusp: string, pDraft: string
 let sOwner: string, sRemote: string, sSusp: string, sDraft: string, sHourly: string
 
@@ -20,7 +23,7 @@ const serviceOf = async (providerId: string) => (await pool.query('SELECT id FRO
 beforeAll(async () => {
   await cleanupUsers()
   const { categoryId } = await seedBase()
-  for (const u of [U.cust, U.cust2, U.third]) await seedUser(u)
+  for (const u of [U.cust, U.cust2, U.third, U.pager]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Bk Owner', categoryId })
   pRemote = await seedProvider(U.remote, { name: 'Bk Remote', categoryId, remote: true, price: 40 })
   pSusp = await seedProvider(U.susp, { name: 'Bk Susp', categoryId, suspended: true })
@@ -313,4 +316,119 @@ it('a lapsed payment window no longer holds the slot before any sweep runs', asy
   await pool.query("UPDATE bookings SET pay_by = now() - interval '1 minute' WHERE id = $1", [held.id])
   const second = await direct(sOwner, { startAt: base, durationMin: 60 }, U.cust2)
   expect((await answering(second.id, U.owner, { type: 'accept' })).status).toBe(200)
+})
+
+// A quote-born booking that ends unagreed reopens its request and quote (trigger bookings_reopen_request, rls.ts)
+const quoteBorn = async (as = U.cust) => {
+  await relaxLimits(as)
+  const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix' })).json())
+  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence' }, { id: r.id })).json())
+  const b = BookingSchema.parse(await (await call(accept.POST, as, 'POST', proposal(), { id: q.id })).json())
+  return { r, q, b }
+}
+const statusOf = async (table: 'requests' | 'quotes', id: string) => (await pool.query(`SELECT status FROM ${table} WHERE id = $1`, [id])).rows[0].status as string
+const noticesOf = async (bookingId: string, uid = U.cust) => (await pool.query("SELECT user_id, kind, payload FROM notifications WHERE payload->>'bookingId' = $1 AND user_id = $2 ORDER BY kind", [bookingId, uid])).rows
+
+it('provider declines a quote-born proposal: request quoted, quote sent, the customer can accept again and gets request-reopened', async () => {
+  const { r, q, b } = await quoteBorn()
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
+  expect((await answering(b.id, U.owner, { type: 'decline' })).status).toBe(200)
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['quoted', 'sent'])
+  expect(await noticesOf(b.id)).toEqual([{ user_id: U.cust, kind: 'request-reopened', payload: { requestId: r.id, bookingId: b.id } }])
+  const again = await call(accept.POST, U.cust, 'POST', proposal(), { id: q.id })
+  expect(again.status).toBe(200)
+  expect(BookingSchema.parse(await again.json())).toMatchObject({ status: 'proposed', quoteId: q.id, requestId: r.id })
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
+})
+
+it('the customer withdraws an awaiting-payment booking: the provider can send a revised quote', async () => {
+  const { r, q, b } = await quoteBorn()
+  expect((await answering(b.id, U.owner, { type: 'accept' })).status).toBe(200)
+  await pool.query('DELETE FROM notifications WHERE user_id = ANY($1)', [[U.cust, U.owner]])
+  expect((await withdrawing(b.id, U.cust)).status).toBe(200)
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['quoted', 'sent'])
+  expect([...(await noticesOf(b.id)), ...(await noticesOf(b.id, U.owner))]).toEqual([]) // the customer acted: nobody is told
+  const revised = await call(quotes.POST, U.owner, 'POST', { amount: 90, scope: 'Fence, smaller' }, { id: r.id })
+  expect(revised.status).toBe(201)
+  expect(QuoteSchema.parse(await revised.json())).toMatchObject({ version: 2, status: 'sent' })
+  expect(await statusOf('quotes', q.id)).toBe('superseded')
+})
+
+const getAs = (handler: typeof bookingsRoute.GET, uid: string, query: string) =>
+  handler(new Request(`http://localhost/app-api/v1/x?${query}`, { headers: { cookie: `uid=${uid}:${EMAIL(uid)}` } }), { params: Promise.resolve({}) })
+
+it('GET /bookings/{id} answers each party with viewer and threadId, a stranger 404, and writes nothing', async () => {
+  const b = await direct()
+  const threadId = (await pool.query('SELECT id FROM threads WHERE booking_id = $1', [b.id])).rows[0].id
+  const one = async (as: string, id = b.id) => {
+    const res = await call(bookingOne.GET, as, 'GET', undefined, { id })
+    return { status: res.status, body: res.status === 200 ? BookingViewSchema.parse(await res.json()) : null }
+  }
+  expect((await one(U.cust)).body).toMatchObject({ viewer: 'customer', threadId, booking: { id: b.id, address: { postcode: '10115' } } })
+  expect((await one(U.owner)).body).toMatchObject({ viewer: 'provider', threadId, booking: { id: b.id, address: null } }) // not accepted: no address
+  expect((await one(U.third)).status).toBe(404)
+  expect((await one(U.cust, 'not-a-uuid')).status).toBe(404)
+  // an additional task talks in its root's thread
+  await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [b.id])
+  const kid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, parent_booking_id) SELECT customer_id, provider_id, service_id, 'direct', 'declined', start_at, 60, 5, id FROM bookings WHERE id = $1 RETURNING id", [b.id])).rows[0].id
+  expect((await one(U.owner, kid)).body).toMatchObject({ viewer: 'provider', threadId, booking: { parentBookingId: b.id } })
+  // no writes: a lapsed proposal stays as it is and a missing thread is not created
+  const late = await direct()
+  await pool.query("UPDATE bookings SET answer_by = now() - interval '1 hour' WHERE id = $1", [late.id])
+  await pool.query('DELETE FROM threads WHERE booking_id = $1', [late.id])
+  expect((await one(U.cust, late.id)).body).toMatchObject({ viewer: 'customer', threadId: null, booking: { status: 'proposed' } })
+  expect((await row(late.id)).status).toBe('proposed')
+  expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE booking_id = $1', [late.id])).rows[0].n).toBe(0)
+})
+
+/** LIST_PAGE + 2 root bookings of the pager with one created_at (ties broken by id only); the lowest id is the last root. */
+let pagerRows: Promise<string[]> | undefined
+const pagerBookings = () =>
+  (pagerRows ??= pool
+    .query(
+      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, created_at) SELECT $1, $2, $3, 'direct', 'declined', now() + g * interval '1 day', 60, 10, '2026-01-01T00:00:00.123456Z' FROM generate_series(1, $4::int) g RETURNING id",
+      [U.pager, pOwner, sOwner, LIST_PAGE + 2],
+    )
+    .then((r) => r.rows.map((x: { id: string }) => x.id)))
+const pages = async (handler: typeof bookingsRoute.GET, uid: string, query: string) => {
+  const out: { id: string; parentBookingId?: string | null }[][] = []
+  let cursor: string | null = null
+  do {
+    const res = await getAs(handler, uid, `${query}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+    expect(res.status).toBe(200)
+    const page = (await res.json()) as { docs: { id: string }[]; next: string | null }
+    out.push(page.docs)
+    cursor = page.next
+  } while (cursor && out.length < 10)
+  return out
+}
+
+it('cursor pages over equal createdAt without loss', async () => {
+  const made = await pagerBookings()
+  const got = await pages(bookingsRoute.GET, U.pager, 'role=customer')
+  expect(got.map((p) => p.length)).toEqual([LIST_PAGE, 2])
+  const ids = got.flat().map((b) => b.id)
+  expect(ids).toHaveLength(made.length) // none twice
+  expect([...ids].sort()).toEqual([...made].sort()) // none lost
+  expect(ids).toEqual([...made].sort().reverse()) // newest first, the id breaks the tie
+})
+
+it("an additional task follows its root on the root's page", async () => {
+  const made = await pagerBookings()
+  const root = [...made].sort()[0]!
+  await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [root])
+  const kid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, parent_booking_id, created_at) VALUES ($1, $2, $3, 'direct', 'declined', now() + interval '1 day', 60, 5, $4, now()) RETURNING id", [U.pager, pOwner, sOwner, root])).rows[0].id
+  const got = await pages(bookingsRoute.GET, U.pager, 'role=customer')
+  expect(got.map((p) => p.length)).toEqual([LIST_PAGE, 3]) // the newest row is a task: it does not open the first page
+  expect(got[1]!.slice(-2).map((b) => b.id)).toEqual([root, kid])
+})
+
+it('a bad cursor is 400', async () => {
+  const uuid = crypto.randomUUID()
+  for (const q of ['cursor=garbage', `cursor=${encodeURIComponent(`yesterday|${uuid}`)}`, `cursor=${encodeURIComponent(`2026-02-30T00:00:00.000000Z|${uuid}`)}`, `cursor=${encodeURIComponent('2026-01-01T00:00:00.000Z|------------------------------------')}`, 'role=admin']) {
+    expect((await getAs(bookingsRoute.GET, U.pager, q)).status, q).toBe(400)
+    expect((await getAs(requestsList.GET, U.pager, q)).status, q).toBe(400)
+  }
+  expect((await getAs(threadsList.GET, U.pager, 'cursor=garbage')).status).toBe(400)
+  expect((await getAs(bookingsRoute.GET, U.pager, `cursor=${encodeURIComponent(`2026-01-01T00:00:00.123456Z|${uuid}`)}`)).status).toBe(200)
 })

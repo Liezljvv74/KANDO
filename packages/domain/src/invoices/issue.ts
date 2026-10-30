@@ -189,7 +189,7 @@ async function storePdf(inv: typeof invoices.$inferSelect): Promise<void> {
       return !!d
     })
     if (!done) return
-    for (const u of parties) await notifyBookingEvent('invoice-ready', u, { bookingId: inv.rootBookingId, ...(inv.kind === 'receipt' && { variant: 'receipt' }) })
+    for (const u of parties) await notifyBookingEvent('invoice-ready', u, { bookingId: inv.rootBookingId, ...(inv.kind === 'receipt' && { variant: 'receipt' }) }, { written: true })
   } catch (e) {
     console.error(`[invoices] PDF of ${inv.number} not stored: ${describeError(e)}`)
   }

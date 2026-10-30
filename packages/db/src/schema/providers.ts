@@ -66,23 +66,33 @@ export const providers = pgTable(
   ],
 )
 
+/**
+ * The service columns the app role writes; `offerable` is trigger-only (rls.ts COLUMN_STAFF_ONLY.services). A Drizzle
+ * insert names every column of its table, so app inserts go through `serviceAppInsert` (../app-tables.ts), this shape.
+ */
+export const serviceAppColumns = () => ({
+  id: uuid().primaryKey().defaultRandom(),
+  providerId: uuid('provider_id')
+    .notNull()
+    .references(() => providers.id, { onDelete: 'cascade' }),
+  categoryId: uuid('category_id')
+    .notNull()
+    .references(() => categories.id),
+  title: text().notNull(),
+  description: text(),
+  priceType: text('price_type'), // NULL until set: a service may exist with a category alone, never offerable
+  price: numeric({ precision: 10, scale: 2 }),
+  currency: text().notNull().default('EUR'),
+  sort: integer().notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const services = pgTable(
   'services',
   {
-    id: uuid().primaryKey().defaultRandom(),
-    providerId: uuid('provider_id')
-      .notNull()
-      .references(() => providers.id, { onDelete: 'cascade' }),
-    categoryId: uuid('category_id')
-      .notNull()
-      .references(() => categories.id),
-    title: text().notNull(),
-    description: text(),
-    priceType: text('price_type'), // NULL until set: a service may exist with a category alone, never offerable
-    price: numeric({ precision: 10, scale: 2 }),
-    currency: text().notNull().default('EUR'),
-    sort: integer().notNull().default(0),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    ...serviceAppColumns(),
+    // Kept up to date by triggers (rls.ts): priced and every required document of the category approved. Publish and suspension are checked at read time.
+    offerable: boolean().notNull().default(false),
   },
   (t) => [
     check('services_price_type_check', sql`price_type in ('fixed','hourly','from','on-request')`),

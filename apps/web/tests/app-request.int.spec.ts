@@ -1,9 +1,11 @@
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
-import { createAppRequest } from '@kando/domain'
+import { clearOutbox, createAppRequest, finishJob, outboxForTests, sendEmail } from '@kando/domain'
+import { t } from '@kando/i18n'
+import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 // Fake session source: cookie "uid=<id>:<email>" is a (confirmed) session, anything else is not.
 const appRequest = createAppRequest(async (request) => {
@@ -28,7 +30,7 @@ beforeAll(async () => {
 })
 afterAll(async () => {
   await pool.query('DROP TABLE IF EXISTS wrap_probe')
-  await pool.query("DELETE FROM users WHERE email LIKE '%@test.skilled.invalid'")
+  await cleanupUsers()
 })
 
 it('first contact creates the users row', async () => {
@@ -235,4 +237,70 @@ it('a Response thrown by an after-transaction answer is the answer', async () =>
   const res = await after(as('u-after'), ctx)
   expect(res.status).toBe(409)
   expect(await res.json()).toEqual({ error: 'x' })
+})
+
+/** A request wrapper whose scheduler only stores the job (as Next's after() would run it once the answer is sent). */
+function scheduled() {
+  const jobs: (() => Promise<void>)[] = []
+  const wrap = createAppRequest(
+    async (request) => {
+      const m = /uid=([^:;]+):([^;]+)/.exec(request.headers.get('cookie') ?? '')
+      return m ? { id: m[1]!, email: m[2]!, emailVerified: true } : null
+    },
+    { schedule: (w) => void jobs.push(w) },
+  )
+  return { wrap, jobs }
+}
+
+it('the response is returned before after-commit work and sends run', async () => {
+  vi.stubEnv('RESEND_API_KEY', '')
+  clearOutbox()
+  const { wrap, jobs } = scheduled()
+  const ran: string[] = []
+  const h = wrap({ auth: 'required' }, async ({ afterCommit }) => {
+    await sendEmail({ to: 'in-tx@test.skilled.invalid', lang: 'en', template: 'document-approved', params: { requirement: 'permit' } })
+    afterCommit(async () => void ran.push('after-commit'))
+    return Response.json({ ok: true })
+  })
+  const res = await h(as('u-sched'), ctx)
+  expect(res.status).toBe(200)
+  expect(outboxForTests()).toHaveLength(0)
+  expect(ran).toEqual([])
+  expect(jobs).toHaveLength(1)
+  await jobs[0]!()
+  expect(ran).toEqual(['after-commit'])
+  expect(outboxForTests().map((m) => m.to)).toEqual(['in-tx@test.skilled.invalid'])
+  vi.unstubAllEnvs()
+})
+
+it('notices of a committed owner step go out when the request then fails', async () => {
+  vi.stubEnv('RESEND_API_KEY', '')
+  clearOutbox()
+  const { categoryId } = await seedBase()
+  await seedUser('aq-cust')
+  const providerId = await seedProvider('aq-owner', { name: 'Aq Owner', categoryId, price: 100 })
+  const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id
+  const startAt = new Date(Date.now() - 2 * 3_600_000)
+  const id = (
+    await pool.query(
+      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
+       VALUES ('aq-cust', $1, $2, 'direct', 'confirmed', $3, 60, $3::timestamptz - interval '2 days', $3::timestamptz - interval '2 days', 'pi_aq_' || gen_random_uuid(), 0.12) RETURNING id`,
+      [providerId, service, startAt],
+    )
+  ).rows[0].id as string
+  const { wrap, jobs } = scheduled()
+  const h = wrap({ auth: 'required' }, async ({ tx, user }) => {
+    await finishJob(tx, user!.id, id, {})
+    throw new Error('after the finish')
+  })
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const res = await h(as('aq-owner'), ctx)
+  expect(res.status).toBe(500)
+  expect((await pool.query('SELECT status FROM bookings WHERE id = $1', [id])).rows[0].status).toBe('finished')
+  expect(outboxForTests()).toHaveLength(0)
+  for (const job of jobs) await job()
+  const mail = outboxForTests().find((m) => m.to === EMAIL('aq-cust'))
+  expect(mail?.subject).toBe(t('de', 'email.jobFinished.subject'))
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })

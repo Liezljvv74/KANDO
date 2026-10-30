@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, notifyBookingEvent, outboxForTests, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, notifyBookingEvent, outboxForTests, payoutStatus, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -130,6 +130,18 @@ it('two parallel set-ups create one account', async () => {
   expect(g.attempts.createAccount).toBe(1) // the second waited and found the stored account
 })
 
+it('payoutStatus says whether this call changed the stored readiness (the route refreshes public pages only then)', async () => {
+  const p = await provider()
+  await startSetup(p.uid)
+  const acct = (await prow(p.id)).stripe_account_id as string
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: false, changed: false })
+  g.ready.add(acct)
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: true, changed: true })
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: true, changed: false })
+  g.ready.delete(acct)
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: false, changed: true })
+})
+
 it('status turns ready and the public profile shows verified', async () => {
   const p = await provider()
   expect(await (await getStatus(p.uid)).json()).toEqual({ ready: false }) // no account yet: the gateway is not asked
@@ -254,8 +266,8 @@ it('no notice and no email when nobody is waiting (count 0), nor for an unpublis
   await runDueTimers(db, new Date(Date.now() + HOUR))
   expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
   clearOutbox()
-  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' })
-  await notifyBookingEvent('customers-waiting', p.uid, {})
+  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' }, { written: true })
+  await notifyBookingEvent('customers-waiting', p.uid, {}, { written: true })
   expect(outboxForTests()).toHaveLength(0)
   for (const hide of ["status = 'draft'", "suspended_until = now() + interval '1 day'"]) {
     const q = await provider()

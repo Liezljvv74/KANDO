@@ -95,11 +95,12 @@ export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): Bo
       return [...(customer ? asked : ['finish' as const]), ...extra, 'stop', 'reportNoShow']
     }
     case 'finished':
-      return customer && b.confirmBy && now.getTime() < ms(b.confirmBy) ? ['confirm', 'dispute', ...extra] : extra
-    case 'stopped':
+      if (!b.confirmBy || now.getTime() >= ms(b.confirmBy)) return extra
+      return customer ? ['confirm', 'dispute', ...extra] : ['dispute', ...extra]
+    case 'stopped': // either side may report a problem until an amount is agreed (confirmBy set)
       if (b.confirmBy) return []
-      if (!b.stopStatedAt) return customer ? [] : ['stateStopAmount']
-      return customer ? ['answerStop'] : []
+      if (!b.stopStatedAt) return customer ? ['dispute'] : ['stateStopAmount', 'dispute']
+      return customer ? ['answerStop', 'dispute'] : ['dispute']
     default:
       return []
   }

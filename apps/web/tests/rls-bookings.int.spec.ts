@@ -136,6 +136,26 @@ it('app_user cannot make a status move the domain does not make', async () => {
   await expect(book(sql`'proposed', now() + interval '1 day', NULL`)).rejects.toMatchObject(rls)
 })
 
+it('app_user may move a request to withdrawn (customer) and declined (provider), not the other way round', async () => {
+  const move = (uid: string, id: string, to: string) => run(uid, sql`UPDATE requests SET status = ${to} WHERE id = ${id}`)
+  for (const from of ['open', 'quoted']) {
+    expect((await move(ids.customer, await newRequest(from), 'withdrawn')).rowCount).toBe(1)
+    expect((await move(ids.owner, await newRequest(from), 'declined')).rowCount).toBe(1)
+    await expect(move(ids.owner, await newRequest(from), 'withdrawn')).rejects.toMatchObject(notAppMove)
+    await expect(move(ids.customer, await newRequest(from), 'declined')).rejects.toMatchObject(notAppMove)
+  }
+  // closing a quoted request declines its sent quote (trigger requests_close_quotes, past the app role's guard)
+  const q = await newQuote()
+  const r = (await pool.query('SELECT request_id FROM quotes WHERE id = $1', [q])).rows[0].request_id
+  expect((await move(ids.customer, r, 'withdrawn')).rowCount).toBe(1)
+  expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q])).rows[0].status).toBe('declined')
+})
+
+it('app_user cannot set a request from booked to quoted by hand', async () => {
+  for (const uid of [ids.customer, ids.owner])
+    await expect(run(uid, sql`UPDATE requests SET status = 'quoted' WHERE id = ${await newRequest('booked')}`)).rejects.toMatchObject(notAppMove)
+})
+
 it('accepted_at must be about now, and the address is frozen once the booking is no longer proposed', async () => {
   const back = await newBooking('proposed')
   const acceptAt = (id: string, at: string) =>
