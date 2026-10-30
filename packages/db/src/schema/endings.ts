@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { bookings } from './bookings'
 import { users } from './users'
 
@@ -7,6 +7,8 @@ import { users } from './users'
  * One per booking. Readable by the two parties, written only on the owner connection after the domain checked the caller
  * (rls.ts PUBLISHED_READ_TABLES). Deleted with the booking's account (account.ts), like the chat it rests on.
  * decided_by is the staff member's id without a foreign key: the decision stays when that staff account goes.
+ * A decision comes whole (decision, decided_at, decision_reason and provider_share together): provider_share is what the
+ * provider is paid out of the booking, for every outcome (full-payout: the paid amount, partial: the share, full-refund: 0).
  */
 export const disputes = pgTable(
   'disputes',
@@ -32,6 +34,10 @@ export const disputes = pgTable(
     check('disputes_opened_by_check', sql`opened_by in ('customer','provider')`),
     check('disputes_reason_check', sql`reason in ('problem','no-show-objection','no-response','stop-disagreed','chargeback')`),
     check('disputes_decision_check', sql`decision in ('full-payout','partial','full-refund')`),
+    // a customer's problem report and a no-show objection are opened by a person; the others may come from the system
+    check('disputes_opened_by_needed_check', sql`reason not in ('problem','no-show-objection') OR opened_by IS NOT NULL`),
+    check('disputes_decided_check', sql`(decision IS NULL AND decided_at IS NULL AND decision_reason IS NULL AND provider_share IS NULL) OR (decision IS NOT NULL AND decided_at IS NOT NULL AND decision_reason IS NOT NULL AND provider_share IS NOT NULL)`),
+    check('disputes_provider_share_check', sql`provider_share >= 0 AND (decision <> 'full-refund' OR provider_share = 0)`),
   ],
 )
 
@@ -65,5 +71,6 @@ export const reviews = pgTable(
     check('reviews_author_role_check', sql`author_role in ('customer','provider')`),
     check('reviews_stars_check', sql`stars between 1 and 5`),
     uniqueIndex('reviews_booking_id_author_id_idx').on(t.bookingId, t.authorId),
+    index('reviews_subject_id_idx').on(t.subjectId),
   ],
 )

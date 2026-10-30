@@ -45,7 +45,7 @@ describe('overlaps', () => {
 })
 
 describe('canTransition', () => {
-  const all = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn'] as const
+  const all = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
   const allowed = new Set([
     'proposed>proposed',
     'proposed>awaiting-payment',

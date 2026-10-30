@@ -84,7 +84,16 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
  */
 export const OWNER_ONLY_BOOKING_STATUSES = ['confirmed', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
-/** Statuses whose booking holds the provider's time (busy_times, slotIsHeld): paid, and every ending where the work was on. */
+/**
+ * Private tables app_user may read and write but never delete from. Bookings: a delete would cascade to the chat and the
+ * additional tasks and strand held money; only account deletion removes them, on the owner connection.
+ */
+export const NO_APP_DELETE: string[] = ['bookings']
+
+/**
+ * Paid, and every ending where the work was on: such a booking holds the provider's time (busy_times, slotIsHeld) and can
+ * take an additional task (check_parent_booking).
+ */
 export const SLOT_HOLDING_STATUSES = ['confirmed', 'finished', 'disputed', 'stopped', 'completed'] as const
 
 // Suspensions end by their date: a past suspended_until counts as none.
@@ -181,7 +190,7 @@ function policyStatements(table: string): string[] {
     const rule = INSERT_RULES[table]
     const immutable = IMMUTABLE_COLUMNS[table]
     return [
-      `GRANT INSERT, UPDATE, DELETE ON ${t} TO ${APP_ROLE}`,
+      `GRANT INSERT, UPDATE${NO_APP_DELETE.includes(table) ? '' : ', DELETE'} ON ${t} TO ${APP_ROLE}`,
       ...columnRestrictions(table),
       ...head,
       `CREATE POLICY owner_only ON ${t} TO ${APP_ROLE} USING (${priv}) WITH CHECK (${priv})`,
@@ -371,20 +380,25 @@ const BOOKING_TRIGGERS = [
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_fill_amount ON bookings`,
   `CREATE TRIGGER bookings_fill_amount BEFORE INSERT OR UPDATE OF quote_id, service_id ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_fill_amount()`,
-  // An owner-only status (paid) is set, and left, only by the payment code and staff: an app request can neither move a
-  // booking into it (insert or update) nor out of it (that would dodge settlement).
+  // An owner-only status (paid, or an ending) is set, and left, only on the owner connection: an app request can neither
+  // move a booking into it (insert or update) nor out of it (that would dodge settlement), nor change any other column of
+  // such a booking (its start time decides money: late cancellation, Finished, no-shows). An update that changes nothing passes.
   `CREATE OR REPLACE FUNCTION bookings_guard_status() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
     BEGIN
-      IF current_user = '${APP_ROLE}' AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status) THEN
-        IF NEW.status = ANY (${OWNER_ONLY}) THEN RAISE EXCEPTION 'bookings: status % is set by the payment code only', NEW.status; END IF;
-        IF TG_OP = 'UPDATE' AND OLD.status = ANY (${OWNER_ONLY}) THEN RAISE EXCEPTION 'bookings: a % booking is changed by the payment code only', OLD.status; END IF;
+      IF current_user = '${APP_ROLE}' THEN
+        IF (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status) AND NEW.status = ANY (${OWNER_ONLY}) THEN
+          RAISE EXCEPTION 'bookings: status % is set by the payment code only', NEW.status;
+        END IF;
+        IF TG_OP = 'UPDATE' AND OLD.status = ANY (${OWNER_ONLY}) AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN
+          RAISE EXCEPTION 'bookings: a % booking is changed by the payment code only', OLD.status;
+        END IF;
       END IF;
       RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
-  `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE OF status ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
+  `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
-  // provider that is paid and not cancelled or refunded. A booking made from an additional task's request names that
+  // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that
   // request's parent (and an ordinary request makes no additional task). Invoker rights: a parent the inserting customer
   // cannot see counts as foreign. Runs after bookings_fill_amount (trigger names sort), so request_id is the quote's.
   // The column never changes after insert (IMMUTABLE_COLUMNS).
@@ -392,7 +406,7 @@ const BOOKING_TRIGGERS = [
     BEGIN
       IF NEW.parent_booking_id IS NOT NULL AND NOT EXISTS (
         SELECT 1 FROM bookings b WHERE b.id = NEW.parent_booking_id AND b.customer_id = NEW.customer_id AND b.provider_id = NEW.provider_id
-          AND b.parent_booking_id IS NULL AND b.status IN ('confirmed', 'finished', 'disputed', 'stopped', 'completed')
+          AND b.parent_booking_id IS NULL AND b.status = ANY (${HOLDING})
       ) THEN
         RAISE EXCEPTION '%: parent booking % does not belong to this customer and provider, or is not paid', TG_TABLE_NAME, NEW.parent_booking_id;
       END IF;

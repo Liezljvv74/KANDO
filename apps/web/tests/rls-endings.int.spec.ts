@@ -57,7 +57,7 @@ it('parties read their dispute; a third user does not; app_user cannot insert on
   await expect(pool.query("INSERT INTO disputes (booking_id, reason, description, decide_by) VALUES ($1, 'no-response', '', now())", [rootId])).rejects.toThrow(/disputes_booking_id_unique/)
   const b2 = await booking()
   await expect(pool.query("INSERT INTO disputes (booking_id, reason, description, decide_by) VALUES ($1, 'other', '', now())", [b2])).rejects.toThrow(/disputes_reason_check/)
-  await expect(pool.query("INSERT INTO disputes (booking_id, reason, description, decide_by, decision) VALUES ($1, 'problem', '', now(), 'half')", [b2])).rejects.toThrow(/disputes_decision_check/)
+  await expect(pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by, decision, provider_share, decision_reason, decided_at) VALUES ($1, 'customer', 'problem', '', now(), 'half', 0, 'r', now())", [b2])).rejects.toThrow(/disputes_decision_check/)
   await expect(pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'staff', 'problem', '', now())", [b2])).rejects.toThrow(/disputes_opened_by_check/)
   await pool.query("INSERT INTO disputes (booking_id, reason, description, decide_by) VALUES ($1, 'no-response', '', now())", [b2])
 })
@@ -243,7 +243,11 @@ it('deleting an account with a finished, disputed or stopped booking is 409; rev
     await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [id])
   }
   const done = await booking({ customer: U.gone, status: 'completed' })
-  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by, decision, decided_by, decided_at) VALUES ($1, 'customer', 'problem', 'x', now(), 'full-payout', 'staff-1', now())", [done])
+  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by, decision, provider_share, decision_reason, decided_by, decided_at) VALUES ($1, 'customer', 'problem', 'x', now(), 'full-payout', 100, 'erledigt', 'staff-1', now())", [done])
+  // an additional task of it (child booking from its request and quote): goes too
+  const childRequest = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES ($1, $2, 'Zusatz', now(), $3) RETURNING id", [U.gone, providerId, done])).rows[0].id
+  const childQuote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 20, 'Zusatz', now() + interval '7 days', 'accepted') RETURNING id", [childRequest, providerId])).rows[0].id
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id) VALUES ($1, $2, $3, 'quote', 'completed', now() + interval '3 days', 60, $4)", [U.gone, providerId, childQuote, done])
   await pool.query("INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars) VALUES ($1, $2, $3, 'customer', 2), ($1, $3, $2, 'provider', 5)", [done, U.gone, U.owner])
   await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES ($1, $2, 'Noch ein Tor', now(), $3)", [U.gone, providerId, done]) // an additional task's request
   await deleteAccount(U.gone, EMAIL(U.gone), () => {})
@@ -251,4 +255,41 @@ it('deleting an account with a finished, disputed or stopped booking is 409; rev
   expect((await pool.query('SELECT count(*)::int n FROM disputes WHERE booking_id = $1', [done])).rows[0].n).toBe(0)
   expect((await pool.query('SELECT count(*)::int n FROM reviews WHERE booking_id = $1', [done])).rows[0].n).toBe(0)
   expect((await pool.query('SELECT count(*)::int n FROM users WHERE id = $1', [U.gone])).rows[0].n).toBe(0)
+})
+
+it('a dispute decision is complete and consistent; a person-opened reason names the side', async () => {
+  const b = await booking({ status: 'disputed' })
+  const add = (cols: string, vals: string) => pool.query(`INSERT INTO disputes (booking_id, reason, description, decide_by, ${cols}) VALUES ($1, ${vals})`, [b])
+  const open = "'problem', 'x', now(), 'customer'"
+  await expect(add('opened_by', "'problem', 'x', now(), NULL")).rejects.toThrow(/disputes_opened_by_needed_check/)
+  await expect(add('opened_by', "'no-show-objection', 'x', now(), NULL")).rejects.toThrow(/disputes_opened_by_needed_check/)
+  await expect(add('opened_by, decision', `${open}, 'full-payout'`)).rejects.toThrow(/disputes_decided_check/) // no date, share or reason
+  await expect(add('opened_by, decision, decided_at, decision_reason', `${open}, 'partial', now(), 'r'`)).rejects.toThrow(/disputes_decided_check/) // no share
+  await expect(add('opened_by, decided_at', `${open}, now()`)).rejects.toThrow(/disputes_decided_check/) // a date without a decision
+  await expect(add('opened_by, decision, decided_at, decision_reason, provider_share', `${open}, 'partial', now(), 'r', -1`)).rejects.toThrow(/disputes_provider_share_check/)
+  await expect(add('opened_by, decision, decided_at, decision_reason, provider_share', `${open}, 'full-refund', now(), 'r', 5`)).rejects.toThrow(/disputes_provider_share_check/)
+  await add('opened_by, decision, decided_at, decision_reason, provider_share', `${open}, 'partial', now(), 'r', 30`)
+})
+
+it('app_user cannot delete a booking in any status; account deletion on the owner connection still can', async () => {
+  for (const status of ['proposed', 'withdrawn', ...OWNER_ONLY_BOOKING_STATUSES]) {
+    const id = await booking({ status })
+    for (const uid of [U.cust, U.owner]) await expect(run(uid, sql`DELETE FROM bookings WHERE id = ${id}`)).rejects.toMatchObject(denied)
+  }
+})
+
+it('app_user cannot change any column of an owner-only booking; a proposed booking stays writable', async () => {
+  for (const status of OWNER_ONLY_BOOKING_STATUSES) {
+    const id = await booking({ status })
+    for (const uid of [U.cust, U.owner]) {
+      for (const set of [sql`start_at = now() + interval '30 days'`, sql`duration_min = 600`, sql`pay_by = now()`, sql`address_street = 'Neu 1'`, sql`address_postcode = '10115'`, sql`note = 'x'`, sql`on_site = false`, sql`updated_at = now()`]) {
+        await expect(run(uid, sql`UPDATE bookings SET ${set} WHERE id = ${id}`), status).rejects.toMatchObject(ownerOnly)
+      }
+      expect((await run(uid, sql`UPDATE bookings SET status = status, note = note WHERE id = ${id}`)).rowCount).toBe(1) // nothing changed: fine
+    }
+    expect((await pool.query("UPDATE bookings SET note = 'Staff' WHERE id = $1", [id])).rowCount).toBe(1) // the owner connection can
+  }
+  const proposed = await booking({ status: 'proposed' })
+  expect((await run(U.owner, sql`UPDATE bookings SET start_at = now() + interval '4 days', duration_min = 90, counter_by = 'provider', answer_by = now() + interval '1 day' WHERE id = ${proposed}`)).rowCount).toBe(1)
+  expect((await run(U.cust, sql`UPDATE bookings SET note = 'Tor', address_street = 'Hauptstr. 2' WHERE id = ${proposed}`)).rowCount).toBe(1)
 })

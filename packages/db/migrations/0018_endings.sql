@@ -14,7 +14,10 @@ CREATE TABLE "disputes" (
 	CONSTRAINT "disputes_booking_id_unique" UNIQUE("booking_id"),
 	CONSTRAINT "disputes_opened_by_check" CHECK (opened_by in ('customer','provider')),
 	CONSTRAINT "disputes_reason_check" CHECK (reason in ('problem','no-show-objection','no-response','stop-disagreed','chargeback')),
-	CONSTRAINT "disputes_decision_check" CHECK (decision in ('full-payout','partial','full-refund'))
+	CONSTRAINT "disputes_decision_check" CHECK (decision in ('full-payout','partial','full-refund')),
+	CONSTRAINT "disputes_opened_by_needed_check" CHECK (reason not in ('problem','no-show-objection') OR opened_by IS NOT NULL),
+	CONSTRAINT "disputes_decided_check" CHECK ((decision IS NULL AND decided_at IS NULL AND decision_reason IS NULL AND provider_share IS NULL) OR (decision IS NOT NULL AND decided_at IS NOT NULL AND decision_reason IS NOT NULL AND provider_share IS NOT NULL)),
+	CONSTRAINT "disputes_provider_share_check" CHECK (provider_share >= 0 AND (decision <> 'full-refund' OR provider_share = 0))
 );
 --> statement-breakpoint
 CREATE TABLE "reviews" (
@@ -60,6 +63,7 @@ ALTER TABLE "reviews" ADD CONSTRAINT "reviews_booking_id_bookings_id_fk" FOREIGN
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_author_id_users_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_subject_id_users_id_fk" FOREIGN KEY ("subject_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "reviews_booking_id_author_id_idx" ON "reviews" USING btree ("booking_id","author_id");--> statement-breakpoint
+CREATE INDEX "reviews_subject_id_idx" ON "reviews" USING btree ("subject_id");--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_parent_booking_id_bookings_id_fk" FOREIGN KEY ("parent_booking_id") REFERENCES "public"."bookings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "requests" ADD CONSTRAINT "requests_parent_booking_id_bookings_id_fk" FOREIGN KEY ("parent_booking_id") REFERENCES "public"."bookings"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "bookings_parent_booking_id_idx" ON "bookings" USING btree ("parent_booking_id");--> statement-breakpoint

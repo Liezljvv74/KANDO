@@ -1,5 +1,5 @@
 {
-  "id": "7fb06734-36ea-42f5-8b64-60ec7a63b364",
+  "id": "f8c975ea-29a2-497f-9297-6188f111b7ed",
   "prevId": "6215b6fb-da16-4331-9b29-3126f50affe4",
   "version": "7",
   "dialect": "postgresql",
@@ -3329,6 +3329,18 @@
         "disputes_decision_check": {
           "name": "disputes_decision_check",
           "value": "decision in ('full-payout','partial','full-refund')"
+        },
+        "disputes_opened_by_needed_check": {
+          "name": "disputes_opened_by_needed_check",
+          "value": "reason not in ('problem','no-show-objection') OR opened_by IS NOT NULL"
+        },
+        "disputes_decided_check": {
+          "name": "disputes_decided_check",
+          "value": "(decision IS NULL AND decided_at IS NULL AND decision_reason IS NULL AND provider_share IS NULL) OR (decision IS NOT NULL AND decided_at IS NOT NULL AND decision_reason IS NOT NULL AND provider_share IS NOT NULL)"
+        },
+        "disputes_provider_share_check": {
+          "name": "disputes_provider_share_check",
+          "value": "provider_share >= 0 AND (decision <> 'full-refund' OR provider_share = 0)"
         }
       },
       "isRLSEnabled": false
@@ -3432,6 +3444,21 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "reviews_subject_id_idx": {
+          "name": "reviews_subject_id_idx",
+          "columns": [
+            {
+              "expression": "subject_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

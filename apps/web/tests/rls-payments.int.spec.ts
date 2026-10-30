@@ -141,7 +141,7 @@ it('app_user cannot set status confirmed; the owner connection can', async () =>
   // other changes by the parties still work
   expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist blau' WHERE id = ${bookingId}`)).rowCount).toBe(1)
   await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [bookingId])
-  expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist rot' WHERE id = ${bookingId}`)).rowCount).toBe(1) // a confirmed row stays writable for other columns
+  await expect(run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist rot' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly) // a paid row is frozen for the parties (rls-endings)
   // a paid booking cannot be moved away by a party (that would dodge settlement); the owner connection can
   for (const uid of [ids.customer, ids.owner]) {
     for (const to of ['withdrawn', 'expired', 'declined', 'proposed']) {

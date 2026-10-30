@@ -167,6 +167,6 @@ it('0018 on a database with data: existing bookings keep their status and get sa
   await pool.query("UPDATE bookings SET status = 'finished', finished_at = now() WHERE id = $1", [paid])
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m18-c', 'job-finished'), ('m18-p', 'provider-warning')")
   await pool.query("INSERT INTO staff_flags (kind, ref_id) VALUES ('dispute-overdue', $1), ('provider-no-shows', $2), ('ignored-requests', $2)", [paid, p])
-  await pool.query("INSERT INTO disputes (booking_id, reason, description, decide_by) VALUES ($1, 'problem', 'x', now())", [paid])
+  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now())", [paid])
   await pool.query('DELETE FROM disputes; DELETE FROM staff_flags; DELETE FROM notifications; DELETE FROM bookings; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
 }, 60_000)

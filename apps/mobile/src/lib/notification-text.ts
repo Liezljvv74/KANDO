@@ -2,6 +2,8 @@ import type { Notification } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 
+// The in-app payload carries ids only (and the customers-waiting count), so the ending texts name their periods
+// (7 days, 48 hours, 12 months, 30 days) in the catalogue; change them there together with the domain rules.
 const KEY: Record<Notification['kind'], Key> = {
   'profile-live': 'notification.profileLive',
   'request-received': 'notification.requestReceived',
