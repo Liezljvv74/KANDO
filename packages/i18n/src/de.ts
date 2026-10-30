@@ -857,6 +857,7 @@ export const de = {
   'booking.cancelLate': 'Stornieren kostet jetzt {percent} %: {fee}. Du bekommst {back} zurück; das kann ein paar Tage dauern.',
   'booking.cancelByProvider': 'Wenn du stornierst, bekommt der Kunde den vollen Preis zurück.',
   'booking.cancelByProviderLate': 'Wenn du stornierst, bekommt der Kunde den vollen Preis zurück. Weil der Beginn weniger als 24 Stunden entfernt ist, zählt das 12 Monate lang als späte Stornierung in deinem öffentlichen Profil.',
+  'booking.cancelChildren': 'Bezahlte zusätzliche Aufgaben dieser Buchung werden mit storniert, nach derselben Regel.',
   'booking.cancelYes': 'Ja, stornieren',
   'booking.keep': 'Buchung behalten',
   'booking.finishHint': 'Der Kunde hat dann 7 Tage Zeit, den Auftrag zu bestätigen oder ein Problem zu melden. Ohne Antwort wird die Zahlung nach den 7 Tagen freigegeben.',

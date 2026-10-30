@@ -21,11 +21,11 @@ export type BookingAction =
   | 'stateStopAmount'
   | 'answerStop'
 
-// The same rules as the server (packages/domain/src/bookings/ending-rules.ts); the app only uses them to choose what to show,
-// the server decides. Change them together.
-const LATE_CANCEL_PERCENT = 50
-const FREE_CANCEL_HOURS = 24
-const STOP_ANSWER_DAYS = 7
+// The same rules as the server (packages/domain/src/bookings/ending-rules.ts; a test checks they are equal); the app only
+// uses them to choose what to show, the server decides.
+export const LATE_CANCEL_PERCENT = 50
+export const FREE_CANCEL_HOURS = 24
+export const STOP_ANSWER_DAYS = 7
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
 
@@ -108,13 +108,26 @@ export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): Bo
 /** The button text: the customer asks for an "Additional task", the provider for a "Scope/quote review" (the same flow). */
 export const actionLabel = (a: BookingAction, viewer: Viewer): string => t(a === 'additionalTask' && viewer === 'provider' ? 'booking.scopeReview' : (`booking.${a}` as Key))
 
-/** What cancelling now means, shown before the person confirms: free until 24 hours before the start, then half the price; a provider cancellation refunds the customer fully. */
+/**
+ * What cancelling now means, shown before the person confirms: free until 24 hours before the start, then half the price; a
+ * provider cancellation refunds the customer fully. A root booking's paid additional tasks are cancelled with it, by the same rule.
+ */
 export function cancelStatement(b: Booking, viewer: Viewer, now = new Date()): string {
   const late = now.getTime() > ms(b.startAt) - FREE_CANCEL_HOURS * HOUR
-  if (viewer === 'provider') return t(late ? 'booking.cancelByProviderLate' : 'booking.cancelByProvider')
-  if (!late) return t('booking.cancelFree')
+  const kids = b.parentBookingId === null ? ` ${t('booking.cancelChildren')}` : ''
+  if (viewer === 'provider') return t(late ? 'booking.cancelByProviderLate' : 'booking.cancelByProvider') + kids
+  if (!late) return t('booking.cancelFree') + kids
   const fee = cents(lateFee(b.amount))
-  return t('booking.cancelLate', { percent: LATE_CANCEL_PERCENT, fee: money(b, fee), back: money(b, cents(b.amount) - fee) })
+  return t('booking.cancelLate', { percent: LATE_CANCEL_PERCENT, fee: money(b, fee), back: money(b, cents(b.amount) - fee) }) + kids
+}
+
+/**
+ * The tap on "Yes, cancel": the statement is worked out again with the time of the tap. When it differs from the one the person
+ * read (the 24-hour mark passed meanwhile), nothing is sent: the new statement shows and a second tap confirms it.
+ */
+export function cancelTap(shown: string, b: Booking, viewer: Viewer, now = new Date()): { send: boolean; statement: string } {
+  const statement = cancelStatement(b, viewer, now)
+  return { send: statement === shown, statement }
 }
 
 /** The customer's choice after a stop: the stated amount goes to the provider, the rest of the price comes back. */

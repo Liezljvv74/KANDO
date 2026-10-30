@@ -858,6 +858,7 @@ export const en: Record<Key, string> = {
   'booking.cancelLate': 'Cancelling now costs {percent}%: {fee}. You get {back} back; this can take a few days.',
   'booking.cancelByProvider': 'If you cancel, the customer gets the full price back.',
   'booking.cancelByProviderLate': 'If you cancel, the customer gets the full price back. Because the start is less than 24 hours away, it counts as a late cancellation on your public profile for 12 months.',
+  'booking.cancelChildren': 'Paid additional tasks of this booking are cancelled with it, by the same rule.',
   'booking.cancelYes': 'Yes, cancel',
   'booking.keep': 'Keep the booking',
   'booking.finishHint': 'The customer then has 7 days to confirm or report a problem. Without an answer the payment is released after the 7 days.',

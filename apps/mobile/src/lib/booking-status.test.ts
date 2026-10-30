@@ -1,6 +1,7 @@
 import type { Booking } from '@kando/contract'
 
-import { actionLabel, bookingActions, bookingStatusText, cancelStatement, daysLeft, lateFee, stopAnswerText } from './booking-status'
+import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, FREE_CANCEL_HOURS, lateFee, LATE_CANCEL_PERCENT, STOP_ANSWER_DAYS, stopAnswerText } from './booking-status'
+import * as rules from '../../../../packages/domain/src/bookings/ending-rules'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -137,14 +138,40 @@ test('cancel: free until 24 hours before the start, then half (half-up cents, as
   const start = new Date('2027-01-05T09:00:00.000Z').getTime()
   const at24 = new Date(start - DAY)
   const late = new Date(start - DAY + 1)
-  expect(cancelStatement(b({ status: 'confirmed' }), 'customer', at24)).toBe('booking.cancelFree')
-  expect(cancelStatement(b({ status: 'confirmed' }), 'customer', late)).toBe('booking.cancelLate 50 EUR 50.00 EUR 50.00')
-  expect(cancelStatement(b({ status: 'confirmed', amount: 33.33 }), 'customer', late)).toBe('booking.cancelLate 50 EUR 16.67 EUR 16.66')
-  expect(cancelStatement(b({ status: 'confirmed', amount: 0.01 }), 'customer', late)).toBe('booking.cancelLate 50 EUR 0.01 EUR 0.00')
-  expect(cancelStatement(b({ status: 'confirmed' }), 'provider', at24)).toBe('booking.cancelByProvider')
-  expect(cancelStatement(b({ status: 'confirmed' }), 'provider', late)).toBe('booking.cancelByProviderLate')
+  const kids = ' booking.cancelChildren' // a root booking: its paid additional tasks are cancelled by the same rule
+  expect(cancelStatement(b({ status: 'confirmed' }), 'customer', at24)).toBe('booking.cancelFree' + kids)
+  expect(cancelStatement(b({ status: 'confirmed' }), 'customer', late)).toBe('booking.cancelLate 50 EUR 50.00 EUR 50.00' + kids)
+  expect(cancelStatement(b({ status: 'confirmed', amount: 33.33 }), 'customer', late)).toBe('booking.cancelLate 50 EUR 16.67 EUR 16.66' + kids)
+  expect(cancelStatement(b({ status: 'confirmed', amount: 0.01 }), 'customer', late)).toBe('booking.cancelLate 50 EUR 0.01 EUR 0.00' + kids)
+  expect(cancelStatement(b({ status: 'confirmed' }), 'provider', at24)).toBe('booking.cancelByProvider' + kids)
+  expect(cancelStatement(b({ status: 'confirmed' }), 'provider', late)).toBe('booking.cancelByProviderLate' + kids)
+  expect(cancelStatement(b({ status: 'confirmed', parentBookingId: 'p1' }), 'customer', at24)).toBe('booking.cancelFree') // an additional task has none
   expect(lateFee(33.33)).toBe(16.67)
   expect(lateFee(0.03)).toBe(0.02) // 1.5 cents rounds half up, as the server's Math.round
+})
+
+test('the cancel statement is checked again at the tap: across the 24-hour mark the new text shows and nothing is sent', () => {
+  const start = new Date('2027-01-05T09:00:00.000Z').getTime()
+  const justBefore = new Date(start - DAY - 60_000) // free
+  const justAfter = new Date(start - DAY + 60_000) // late
+  const booking = b({ status: 'confirmed' })
+  const shownFree = cancelStatement(booking, 'customer', justBefore)
+  expect(cancelTap(shownFree, booking, 'customer', justBefore)).toEqual({ send: true, statement: shownFree })
+  const changed = cancelTap(shownFree, booking, 'customer', justAfter) // read while free, tapped after the mark
+  expect(changed).toEqual({ send: false, statement: cancelStatement(booking, 'customer', justAfter) })
+  expect(changed.statement).toContain('booking.cancelLate')
+  expect(cancelTap(changed.statement, booking, 'customer', new Date(justAfter.getTime() + 5_000))).toEqual({ send: true, statement: changed.statement }) // the second tap sends
+  const provider = cancelStatement(booking, 'provider', justBefore)
+  expect(cancelTap(provider, booking, 'provider', justAfter).send).toBe(false) // the late note for the provider is new too
+})
+
+test('the mirrored rules equal the server rules', () => {
+  expect(LATE_CANCEL_PERCENT / 100).toBe(rules.LATE_CANCEL_SHARE)
+  expect(STOP_ANSWER_DAYS).toBe(rules.STOP_ANSWER_DAYS)
+  const start = new Date('2027-01-05T09:00:00.000Z')
+  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000))).toBe(false)
+  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000 + 1))).toBe(true)
+  expect(lateFee(33.33)).toBe(rules.customerCancelShare(33.33, start, new Date(start.getTime() - 1)))
 })
 
 test('the endings say in plain words what happened, for each side', () => {
