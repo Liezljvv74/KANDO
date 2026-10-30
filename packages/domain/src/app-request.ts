@@ -63,6 +63,7 @@ export function createAppRequest(getSession: SessionResolver) {
         const user = session ? await ensureUser(session, request) : null
         // A suspended person can still read (GET) and erase their own data (DELETE), never create or edit; an expired date counts as not suspended.
         if (user?.suspendedUntil && user.suspendedUntil > new Date() && !['GET', 'DELETE'].includes(request.method) && !opts.allowWhenSuspended) {
+          for (const fn of failQueue) await fn().catch((e) => console.error(`[app-request ${requestId}] cleanup failed ${describeError(e)}`))
           return Response.json({ error: 'SUSPENDED' }, { status: 403 })
         }
         const params = await ctx.params

@@ -1,7 +1,7 @@
 import { and, eq, notExists } from 'drizzle-orm'
 import sharp from 'sharp'
 import { isDevTarget } from '@kando/db/src/seed/guard'
-import { addPhoto } from '../photos'
+import { addPhoto, putPhoto } from '../photos'
 import { asUser, db, photos, providers } from '@kando/db'
 
 const COLOURS = ['#2f6f8f', '#8f4f2f', '#4f8f5f', '#7a4f8f', '#8f7a2f', '#2f4f8f', '#8f2f5f', '#3f7f7f']
@@ -23,7 +23,14 @@ export function placeholderJpeg(name: string): Promise<{ data: Buffer; width: nu
 export async function givePlaceholderPhoto(userId: string, name: string): Promise<void> {
   const img = await placeholderJpeg(name)
   const after: (() => Promise<void>)[] = []
-  await asUser(userId, (tx) => addPhoto(tx, userId, { kind: 'profile', alt: name, ...img }, (fn) => void after.push(fn)))
+  const failed: (() => Promise<void>)[] = []
+  const key = await putPhoto('profile', img.data, (fn) => void failed.push(fn))
+  try {
+    await asUser(userId, (tx) => addPhoto(tx, userId, { kind: 'profile', alt: name, ...img, key }, (fn) => void after.push(fn)))
+  } catch (e) {
+    for (const fn of failed) await fn()
+    throw e
+  }
   for (const fn of after) await fn()
 }
 

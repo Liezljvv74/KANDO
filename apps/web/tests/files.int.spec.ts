@@ -1,9 +1,9 @@
 import sharp from 'sharp'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
-import { asUser, pool } from '@kando/db'
+import { appPool, asUser, pool } from '@kando/db'
 import { DocumentSchema, DocumentsListSchema, PhotosListSchema } from '@kando/contract'
-import { setStorageForTests, uploadFile } from '@kando/domain'
+import { createAppRequest, prepareDocument, setStorageForTests } from '@kando/domain'
 import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -142,12 +142,12 @@ it('files: a PDF goes to the private bucket, a non-PDF is 400, another user gets
   const res = await upload(files.POST, 'fl1', PDF)
   expect(res.status).toBe(201)
   const { id } = await res.json()
-  expect(keys('documents')[0]).toMatch(/^documents\/documents\/fl1\/[0-9a-f-]{36}\.pdf$/)
+  expect(keys('documents')[0]).toMatch(/^documents\/documents\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/)
   expect((await call(file.GET, 'fl2', 'GET', undefined, { id })).status).toBe(404)
   expect((await call(file.GET, 'fl1', 'GET', undefined, { id: 'nope' })).status).toBe(404)
   const link = await call(file.GET, 'fl1', 'GET', undefined, { id })
   expect(link.status).toBe(200)
-  expect((await link.json()).url).toContain('https://signed.test/documents/documents/fl1/')
+  expect((await link.json()).url).toMatch(/^https:\/\/signed\.test\/documents\/documents\/[0-9a-f-]{36}\//)
   expect((await call(file.DELETE, 'fl2', 'DELETE', undefined, { id })).status).toBe(404)
   expect((await call(file.DELETE, 'fl1', 'DELETE', undefined, { id })).status).toBe(204)
   expect(keys('documents')).toHaveLength(0)
@@ -165,7 +165,7 @@ it('documents also take JPEG, PNG and WEBP photos: re-encoded without metadata, 
     const res = await upload(files.POST, 'fl1', bytes)
     expect(res.status).toBe(201)
     const [key] = keys('documents')
-    expect(key).toMatch(new RegExp(`^documents/documents/fl1/[0-9a-f-]{36}\\.${ext}$`))
+    expect(key).toMatch(new RegExp(`^documents/documents/[0-9a-f-]{36}/[0-9a-f-]{36}\\.${ext}$`))
     expect(store.types.get(key!)).toBe(type)
     const meta = await sharp(store.objects.get(key!)!).metadata()
     expect(meta.format).toBe(ext === 'jpg' ? 'jpeg' : ext)
@@ -197,13 +197,57 @@ it('staff open an image document through the same signed link; it is served as a
   const res = await adminCall(adminItem.GET, 'fl-staff', 'GET', `/api/admin/documents/${docId}`, undefined, { resource: 'documents', id: docId })
   expect(res.status).toBe(200)
   const { link } = (await res.json()).data
-  expect(link).toMatch(/^https:\/\/signed\.test\/documents\/documents\/fl3\/[0-9a-f-]{36}\.png\?expires=300$/)
+  expect(link).toMatch(/^https:\/\/signed\.test\/documents\/documents\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png\?expires=300$/)
   expect(store.types.get(new URL(link).pathname.slice(1))).toBe('image/png')
 })
 
-it('a failed file insert removes the uploaded object', async () => {
-  await expect(asUser('fl1', (tx) => uploadFile(tx, 'someone-else', { data: PDF, type: 'application/pdf', ext: 'pdf' }))).rejects.toThrow()
+it('a document stored before the transaction is removed when the request then fails', async () => {
+  const route = createAppRequest((await import('./helpers')).fakeSession)({ auth: 'required', prepare: prepareDocument }, async () => {
+    throw new Error('boom')
+  })
+  const form = new FormData()
+  form.append('file', new Blob([new Uint8Array(PDF)]), 'a.pdf')
+  const res = await route(new Request('http://localhost/x', { method: 'POST', headers: { cookie: `uid=fl1:${EMAIL('fl1')}` }, body: form }), { params: Promise.resolve({}) })
+  expect(res.status).toBe(500)
   expect(keys('documents')).toHaveLength(0)
+})
+
+it('a refused upload leaves no object', async () => {
+  const img = await png(10, 10)
+  for (let i = 0; i < 12; i++) await sendPhoto('fl2', 'portfolio', img) // fills the portfolio (earlier tests may have)
+  const before = store.objects.size
+  expect((await sendPhoto('fl2', 'portfolio', img)).status).toBe(409) // 13th portfolio photo
+  expect(store.objects.size).toBe(before)
+  for (let i = 0; i < 10; i++) expect((await upload(files.POST, 'fl4', PDF)).status).toBe(201)
+  const docs = keys('documents').length
+  expect((await upload(files.POST, 'fl4', PDF)).status).toBe(409) // 11th pending document
+  expect(keys('documents')).toHaveLength(docs)
+  await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'fl1'")
+  try {
+    const n = store.objects.size
+    expect((await sendPhoto('fl1', 'profile')).status).toBe(403)
+    expect((await upload(files.POST, 'fl1', PDF)).status).toBe(403)
+    expect(store.objects.size).toBe(n)
+  } finally {
+    await pool.query("UPDATE users SET suspended_until = NULL WHERE id = 'fl1'")
+  }
+})
+
+it('the object is stored before the transaction opens', async () => {
+  const inUse: number[] = []
+  const put = store.put
+  store.put = async (...a) => {
+    inUse.push(appPool.totalCount - appPool.idleCount)
+    return put(...a)
+  }
+  try {
+    expect((await sendPhoto('fl1', 'profile')).status).toBe(201)
+    expect((await upload(files.POST, 'fl3', PDF)).status).toBe(201)
+  } finally {
+    store.put = put
+  }
+  expect(inUse.length).toBeGreaterThan(1)
+  expect(inUse.every((n) => n === 0)).toBe(true)
 })
 
 const submit = (uid: string, requirement: string, document: string) => call(verifications.POST, uid, 'POST', { requirement, document })
