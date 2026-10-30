@@ -45,3 +45,32 @@ export const DisputeSchema = z.object({
   decidedAt: z.string().nullable(),
 })
 export type Dispute = z.infer<typeof DisputeSchema>
+
+/** PATCH /reviews/:id (its author, for 14 days): 1 to 5 whole stars and an optional text. */
+export const ReviewInputSchema = z.object({ stars: z.number().int().min(1).max(5), text: z.string().trim().max(2000).optional() }).strict()
+export type ReviewInput = z.infer<typeof ReviewInputSchema>
+/** POST /reviews (a party of a completed booking, once, within 7 days of completion). */
+export const WriteReviewSchema = ReviewInputSchema.extend({ bookingId: z.string().uuid() }).strict()
+
+/** A review as its author and (once shown) the other party see it (GET /reviews). */
+export const ReviewSchema = z.object({
+  id: z.string(),
+  bookingId: z.string(),
+  /** Written by the caller. */
+  mine: z.boolean(),
+  authorRole: z.enum(['customer', 'provider']),
+  stars: z.number().int(),
+  text: z.string().nullable(),
+  createdAt: z.string(),
+  /** When the other side sees it: once both are in, or 7 days after completion. */
+  visibleAt: z.string().nullable(),
+  /** The caller's own review can be edited until then; null on the other side's. */
+  editableUntil: z.string().nullable(),
+  /** Hidden by staff (only ever true on the caller's own review). */
+  hidden: z.boolean(),
+})
+export type Review = z.infer<typeof ReviewSchema>
+
+/** Average stars (one decimal) and the number of visible reviews; null when there are none. */
+export const RatingSchema = z.object({ average: z.number(), count: z.number().int() })
+export type Rating = z.infer<typeof RatingSchema>

@@ -16,6 +16,7 @@ import { canTransact } from '../payments/rules'
 import { assertFuture, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { NO_SHOW_OBJECTION_HOURS } from './ending-rules'
 import { acceptAdditional } from './additional'
+import { ratingsOf } from '../reviews'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -151,15 +152,23 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
 export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<BookingRequest[]> {
   await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  return (await tx.select().from(requests).where(mine).orderBy(desc(requests.createdAt), desc(requests.id))).map(toRequest)
+  const list = (await tx.select().from(requests).where(mine).orderBy(desc(requests.createdAt), desc(requests.id))).map(toRequest)
+  return role === 'provider' ? withCustomerRatings(tx, list) : list
+}
+
+/** The provider's view adds what providers' shown reviews say about each customer. */
+async function withCustomerRatings(tx: Tx, list: BookingRequest[]): Promise<BookingRequest[]> {
+  const ratings = await ratingsOf(tx, [...new Set(list.map((r) => r.customerId))], 'provider')
+  return list.map((r) => ({ ...r, customerRating: ratings.get(r.customerId) ?? null }))
 }
 
 /** One request; 404 unless the caller is its customer or the provider owner. */
 export async function getRequest(tx: Tx, userId: string, id: string): Promise<BookingRequest> {
   const row = isUuid(id) ? (await tx.select().from(requests).where(eq(requests.id, id)))[0] : undefined
   if (!row) return notFound()
-  if (row.customerId !== userId && (await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
-  return toRequest(row)
+  if (row.customerId === userId) return toRequest(row)
+  if ((await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
+  return (await withCustomerRatings(tx, [toRequest(row)]))[0]!
 }
 
 /** Quotes of a request, newest version first, for either party. */

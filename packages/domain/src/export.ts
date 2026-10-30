@@ -1,6 +1,6 @@
 import { asc, eq, getTableColumns, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import { availabilityWatches, bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quotes, requests, services, threads, users, type Tx } from '@kando/db'
+import { availabilityWatches, bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quotes, requests, reviews, services, threads, users, type Tx } from '@kando/db'
 import { listBlocks } from './chat/blocks'
 import { documentsBucket, photoUrl, storage } from './storage'
 
@@ -78,6 +78,8 @@ export async function exportMyData(tx: Tx, userId: string) {
     })),
     // only what the person sent themselves; a photo by its file name, not the file
     messages: sent.map(({ m, requestId, bookingId }) => ({ id: m.id, threadId: m.threadId, requestId, bookingId, kind: m.kind, body: m.body, photo: m.photoKey?.split('/').pop() ?? null, card: m.card, createdAt: m.createdAt })),
+    // reviews they wrote (those about them are the other person's words)
+    reviews: (await tx.select().from(reviews).where(eq(reviews.authorId, userId)).orderBy(asc(reviews.createdAt))).map((r) => ({ bookingId: r.bookingId, role: r.authorRole, stars: r.stars, text: r.text, hidden: r.hidden, createdAt: r.createdAt, updatedAt: r.updatedAt, visibleAt: r.visibleAt })),
     blocks: (await listBlocks(tx, userId)).map((b) => ({ name: b.name })),
     // "notify me" on providers: by their public name only (a provider no longer public shows as null)
     watches: (
@@ -116,7 +118,7 @@ export function exportRows(data: Export): string[][] {
   add('export', 1, { exportedAt: data.exportedAt })
   if (data.user) add('user', 1, data.user)
   if (data.provider) add('provider', 1, data.provider)
-  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'messages', 'blocks', 'watches', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
+  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'reviews', 'messages', 'blocks', 'watches', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
     data[section].forEach((r, i) => add(section, i + 1, r))
   }
   data.notes.forEach((n, i) => rows.push(['notes', String(i + 1), 'text', n]))

@@ -68,6 +68,8 @@ export const de = {
   'provider.translatedLabel': 'Automatisch übersetzt (KI) · Original anzeigen',
   'provider.translateError': 'Die Übersetzung ist gerade nicht verfügbar. Bitte versuche es in ein paar Minuten noch einmal.',
   'provider.verified': 'Verifiziert',
+  'provider.rating': '★ {average} von 5 (Anzahl Bewertungen: {count})',
+  'provider.reviews': 'Bewertungen',
   'provider.notifyMe': 'Benachrichtige mich, wenn verfügbar',
   'provider.notifyMeOn': 'Wir sagen dir Bescheid, sobald du bei diesem Anbieter buchen kannst.',
   'provider.notifyMeStop': 'Nicht mehr benachrichtigen',

@@ -6,9 +6,11 @@ import { canTransact, paymentsEnabled } from './payments/rules'
 import type { Lang } from '@kando/i18n'
 import { photoUrl } from './storage'
 import { needsTranslation, textsOf } from './translate'
+import { latestReviews, ratingsOf } from './reviews'
 
 type Row = {
   id: string
+  owner_id: string
   slug: string
   public_name: string
   type: string
@@ -32,7 +34,7 @@ type Row = {
  */
 export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promise<ProviderDetail | null> {
   const { rows } = await tx.execute<Row>(sql`
-    SELECT p.id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
+    SELECT p.id, p.owner_id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
            p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key, p.payouts_ready_at
     FROM providers p LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
     WHERE p.slug = ${slug} AND p.status = 'published' AND ${notSuspendedSql('p')}`)
@@ -41,7 +43,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   const ids = await offerableServiceIds(tx, p.id)
   if (!ids.length) return null // same rule as search: no page until a service may be offered
 
-  const [services, references, photos, place, checked, reliability] = await Promise.all([
+  const [services, references, photos, place, checked, reliability, ratings, reviews] = await Promise.all([
     tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
       SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
       WHERE s.provider_id = ${p.id} AND s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
@@ -54,6 +56,8 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     p.base_postcode ? lookupPostcode(p.country, p.base_postcode, tx) : null,
     tx.execute<{ docs: string[] }>(sql`SELECT public_checked_documents(${p.id}) AS docs`), // SECURITY DEFINER: type keys only
     tx.execute<{ n: number }>(sql`SELECT provider_reliability(${p.id}) AS n`), // SECURITY DEFINER: a count only
+    ratingsOf(tx, [p.owner_id], 'customer'), // shown reviews only (RLS and the filter agree)
+    latestReviews(tx, p.owner_id),
   ])
   const approved = new Set(checked.rows[0]?.docs ?? [])
 
@@ -87,6 +91,8 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     checkedDocuments: DOCUMENT_TYPES.filter((d) => approved.has(d)),
     isNew: true, // Until ratings exist (Stage 6).
     reliability: Number(reliability.rows[0]?.n ?? 0),
+    rating: ratings.get(p.owner_id) ?? null,
+    reviews,
     verified: paymentsEnabled() && p.payouts_ready_at !== null, // payout set-up done (Stripe checked identity); means nothing while payments are off
     canBook: canTransact({ payoutsReadyAt: p.payouts_ready_at === null ? null : new Date(p.payouts_ready_at) }),
     translatable: false,

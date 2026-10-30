@@ -69,6 +69,8 @@ export const en: Record<Key, string> = {
   'provider.translatedLabel': 'Automatically translated (AI) · Show original',
   'provider.translateError': 'Translation is not available right now. Please try again in a few minutes.',
   'provider.verified': 'Verified',
+  'provider.rating': '★ {average} of 5 (number of reviews: {count})',
+  'provider.reviews': 'Reviews',
   'provider.notifyMe': 'Notify me when available',
   'provider.notifyMeOn': 'We will tell you as soon as you can book this provider.',
   'provider.notifyMeStop': 'Stop notifying me',

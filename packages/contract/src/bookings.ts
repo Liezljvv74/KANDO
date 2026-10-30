@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { AmountSchema, CurrencySchema, requiredText, text } from './common'
+import { RatingSchema } from './endings'
 
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
 export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn'] as const
@@ -38,6 +39,8 @@ export const RequestSchema = z.object({
   answerBy: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** On the provider's view only: what providers' visible reviews say about this customer (null: none yet). */
+  customerRating: RatingSchema.nullish(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>

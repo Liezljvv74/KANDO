@@ -5,7 +5,7 @@ import { notifyBookingEvent, type BookingKind } from './notify'
 import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
 import { IGNORED_FLAG_DAYS, IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
-import { ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, endOf, NO_ACTION_STAFF_DAYS, STOP_ANSWER_DAYS } from './ending-rules'
+import { ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, endOf, NO_ACTION_STAFF_DAYS, REVIEW_VISIBLE_DAYS, STOP_ANSWER_DAYS } from './ending-rules'
 import { RELEASE_FAILED, tryRelease } from './finish'
 import { resolveNoShows, trySettleCancelled } from './cancel'
 import { openSystemDispute } from './disputes'
@@ -41,6 +41,8 @@ export type TimerReport = {
   overdueDisputes: number
   /** Providers still silent IGNORED_FLAG_DAYS after a requests-ignored notice: one `ignored-requests` staff flag each. */
   ignoredNoticeFlags: number
+  /** Reviews shown by their 7 days (the other side wrote none): both sides got their one `review-visible`. */
+  reviewsShown: number
 }
 
 /**
@@ -94,7 +96,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -126,6 +128,20 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('n')}`)
   })
 
+  // A review shown by its 7 days (the other side wrote none) tells both sides once (`review-visible`, in-app only; a second
+  // review shows both at once and writeReview tells them). A constant-key lock serialises overlapping runs, so the second
+  // finds the first one's rows. Looks back REVIEW_VISIBLE_DAYS only, so a long-past reveal is never told late.
+  const reviewsShown = await (exec as typeof db).transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('reviews_shown'))`)
+    return countOn(tx, sql`
+    WITH s AS (SELECT r.booking_id, r.author_id, r.subject_id FROM reviews r
+      WHERE NOT r.hidden AND r.visible_at <= ${t}::timestamptz AND r.visible_at > ${t}::timestamptz - make_interval(days => ${REVIEW_VISIBLE_DAYS})
+        AND NOT EXISTS (SELECT 1 FROM notifications x WHERE x.kind = 'review-visible' AND x.payload->>'bookingId' = r.booking_id::text)),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
+      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING 1)
+    SELECT count(*)::int AS n FROM s`)
+  })
+
   // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
   // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.
   const waiting = paymentsEnabled() ? await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS) : []
@@ -133,7 +149,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   const customersWaiting = waiting.length
 
   const endings = await endingRules(exec, now, count)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, events }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, events }
 }
 
 // The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
