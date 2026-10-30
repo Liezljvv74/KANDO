@@ -45,23 +45,32 @@ export function requestLang(request: Request): Lang {
   return acceptLang(request.headers.get('accept-language')) ?? DEFAULT_LANG
 }
 
-/** First contact creates the users row (owner connection); names and address are the person's own, set through the app. */
+// The Neon Auth schema neither appears nor vanishes while the process runs: checked once.
+let neonAuthPresent: boolean | undefined
+
+/** First contact creates the users row (owner connection); names and address are the person's own, set through the app. Two reads; a write only for a new person or a changed email. */
 export async function ensureUser(session: { id: string; email: string }, request: Request): Promise<SessionUser> {
   // Where Neon Auth lives in this database, an id it no longer knows (a deleted account) gets no users row: 401 instead.
-  if ((await db.execute(sql`SELECT to_regclass('neon_auth."user"') AS t`)).rows[0]!.t) {
-    if (!(await db.execute(sql`SELECT 1 FROM neon_auth."user" WHERE id = ${session.id}`)).rows.length) throw new SessionGoneError()
+  neonAuthPresent ??= !!(await db.execute(sql`SELECT to_regclass('neon_auth."user"') AS t`)).rows[0]!.t
+  if (neonAuthPresent && !(await db.execute(sql`SELECT 1 FROM neon_auth."user" WHERE id = ${session.id}`)).rows.length) throw new SessionGoneError()
+  let row = (await db.select().from(users).where(eq(users.id, session.id)))[0]
+  if (!row || row.email !== session.email) {
+    try {
+      row = (
+        row
+          ? await db.update(users).set({ email: session.email }).where(eq(users.id, session.id)).returning()
+          : await db
+              .insert(users)
+              .values({ id: session.id, email: session.email, language: requestLang(request) })
+              .onConflictDoUpdate({ target: users.id, set: { email: session.email } }) // a concurrent first contact
+              .returning()
+      )[0]!
+    } catch (error) {
+      const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
+      if (cause?.code === '23505') throw new EmailConflictError()
+      throw error
+    }
   }
-  try {
-    await db
-      .insert(users)
-      .values({ id: session.id, email: session.email, language: requestLang(request) })
-      .onConflictDoUpdate({ target: users.id, set: { email: session.email } }) // keeps a Neon Auth email change in sync
-  } catch (error) {
-    const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
-    if (cause?.code === '23505') throw new EmailConflictError()
-    throw error
-  }
-  const row = (await db.select().from(users).where(eq(users.id, session.id)))[0]!
   return {
     id: row.id,
     email: row.email,

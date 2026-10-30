@@ -1,4 +1,4 @@
-export * from './client'
+export { db, pool, OWNER_POOL_MAX, APP_POOL_MAX, POOL_IDLE_MS, type Tx } from './client'
 export * from './schema'
 export * from './app-tables'
 export * from './rls'

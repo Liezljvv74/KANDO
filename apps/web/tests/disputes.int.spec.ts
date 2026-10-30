@@ -66,6 +66,7 @@ afterAll(cleanupUsers)
 
 /** A paid booking (as the payment webhook leaves it), 60 minutes, 100 EUR, with its charge row; `finishedAt` makes it finished. */
 async function paidBooking(o: { startAt?: Date; provider?: string; finishedAt?: Date; paymentRef?: string; parent?: string } = {}): Promise<{ id: string; startAt: Date }> {
+  const ref = o.paymentRef ?? `pi_dp_${randomUUID()}`
   const p = o.provider ?? providerId
   const startAt = o.startAt ?? new Date(Date.now() - 2 * HOUR - ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
@@ -73,10 +74,10 @@ async function paidBooking(o: { startAt?: Date; provider?: string; finishedAt?: 
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by, parent_booking_id)
        VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', $7, 0.12, $6::timestamptz, $6::timestamptz + interval '7 days', $8) RETURNING id`,
-      [U.cust, p, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null, o.paymentRef ?? 'pi_dp', o.parent ?? null],
+      [U.cust, p, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null, ref, o.parent ?? null],
     )
   ).rows[0].id as string
-  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, $3, $4)", [id, p, o.paymentRef ?? 'pi_dp', `charge:${id}`])
+  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, $3, $4)", [id, p, ref, `charge:${id}`])
   return { id, startAt }
 }
 

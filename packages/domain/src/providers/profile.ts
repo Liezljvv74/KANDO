@@ -29,7 +29,7 @@ const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
 })
 
 /** The caller's provider row (RLS also shows published rows of others; the owner filter picks the caller's). */
-export async function ownProvider(tx: Tx, userId: string): Promise<Row | null> {
+export async function ownProvider(tx: Pick<Tx, 'select'>, userId: string): Promise<Row | null> {
   return (await tx.select().from(providers).where(eq(providers.ownerId, userId)))[0] ?? null
 }
 

@@ -53,7 +53,9 @@ export const providers = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  () => [
+  (t) => [
+    index('providers_location_gist').using('gist', sql`(${t.location}::geography)`),
+    index('providers_suspended_until_idx').on(t.suspendedUntil).where(sql`suspended_until IS NOT NULL`),
     check('providers_type_check', sql`type in ('private','business')`),
     check('providers_status_check', sql`status in ('draft','published')`),
     check('providers_radius_check', sql`service_radius_km between 1 and 200`),
@@ -85,6 +87,9 @@ export const services = pgTable(
   (t) => [
     check('services_price_type_check', sql`price_type in ('fixed','hourly','from','on-request')`),
     index('services_provider_id_idx').on(t.providerId),
+    index('services_category_id_idx').on(t.categoryId),
+    check('services_price_check', sql`price >= 0`),
+    check('services_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
   ],
 )
 

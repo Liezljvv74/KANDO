@@ -37,7 +37,7 @@ async function paidBooking(o: { paid?: number | null; rate?: number; provider?: 
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'direct', 'confirmed', now() + make_interval(hours => $4), 60, now(), 'pi_st', $5) RETURNING id`,
+       VALUES ($1, $2, $3, 'direct', 'confirmed', now() + make_interval(hours => $4), 60, now(), 'pi_st_' || gen_random_uuid(), $5) RETURNING id`,
       [o.customer ?? U.cust, p, service, 48 + ++hour * 2, o.rate ?? 0.12],
     )
   ).rows[0].id as string
@@ -61,7 +61,7 @@ it('settle full: one transfer of amount minus commission, one commission row, no
   expect(await settle(db, id, 100)).toEqual({ refunded: 0, transferred: 88, commission: 12 })
   expect(await rows(id)).toEqual({ transfer: { amount: '88.00', key: `transfer:${id}` }, commission: { amount: '12.00', key: `commission:${id}` } })
   expect(callsOf('refund')).toEqual([])
-  expect(callsOf('transfer')).toEqual([{ accountId: 'acct_st_1', amountCents: 8800, currency: 'EUR', paymentRef: 'pi_st', bookingId: id, idempotencyKey: `transfer:${id}` }])
+  expect(callsOf('transfer')).toEqual([{ accountId: 'acct_st_1', amountCents: 8800, currency: 'EUR', paymentRef: expect.stringMatching(/^pi_st_/), bookingId: id, idempotencyKey: `transfer:${id}` }])
   expect(await releasedAt(id)).not.toBeNull()
 })
 
@@ -69,7 +69,7 @@ it('settle zero: one refund of the full amount, no commission', async () => {
   const id = await paidBooking()
   expect(await settle(db, id, 0)).toEqual({ refunded: 100, transferred: 0, commission: 0 })
   expect(await rows(id)).toEqual({ refund: { amount: '100.00', key: `refund:${id}` } })
-  expect(callsOf('refund')).toEqual([{ paymentRef: 'pi_st', amountCents: 10000, bookingId: id, idempotencyKey: `refund:${id}` }])
+  expect(callsOf('refund')).toEqual([{ paymentRef: expect.stringMatching(/^pi_st_/), amountCents: 10000, bookingId: id, idempotencyKey: `refund:${id}` }])
   expect(callsOf('transfer')).toEqual([])
 })
 
@@ -91,7 +91,7 @@ it('settle partial 40 of 100 at 0.12: refund 60, transfer 35.20, commission 4.80
     transfer: { amount: '35.20', key: `transfer:${id}` },
     commission: { amount: '4.80', key: `commission:${id}` },
   })
-  expect(callsOf('refund')).toEqual([{ paymentRef: 'pi_st', amountCents: 6000, bookingId: id, idempotencyKey: `refund:${id}` }])
+  expect(callsOf('refund')).toEqual([{ paymentRef: expect.stringMatching(/^pi_st_/), amountCents: 6000, bookingId: id, idempotencyKey: `refund:${id}` }])
   expect(callsOf('transfer')).toMatchObject([{ amountCents: 3520, idempotencyKey: `transfer:${id}` }])
 })
 

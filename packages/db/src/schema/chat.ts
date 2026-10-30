@@ -23,7 +23,11 @@ export const threads = pgTable(
       .references(() => providers.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  () => [check('threads_one_parent_check', sql`(request_id IS NULL) <> (booking_id IS NULL)`)],
+  (t) => [
+    check('threads_one_parent_check', sql`(request_id IS NULL) <> (booking_id IS NULL)`),
+    index('threads_customer_id_idx').on(t.customerId),
+    index('threads_provider_id_idx').on(t.providerId),
+  ],
 )
 
 export const messages = pgTable(
@@ -47,6 +51,7 @@ export const messages = pgTable(
     check('messages_kind_check', sql`kind in ('text','photo','card')`),
     check('messages_content_check', sql`(kind = 'text' AND body IS NOT NULL AND body <> '' AND photo_key IS NULL AND card IS NULL) OR (kind = 'photo' AND photo_key IS NOT NULL AND body IS NULL AND card IS NULL) OR (kind = 'card' AND card IS NOT NULL AND body IS NULL AND photo_key IS NULL)`),
     index('messages_thread_id_created_at_idx').on(t.threadId, t.createdAt, t.id),
+    index('messages_sender_id_idx').on(t.senderId),
   ],
 )
 
@@ -62,7 +67,7 @@ export const blocks = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] })],
+  (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] }), index('blocks_blocked_id_idx').on(t.blockedId)],
 )
 
 // Staff only (rls.ts). Later plans widen the kind list. The open-flag index folds a NULL user to '' (drizzle-kit has no NULLS NOT DISTINCT on indexes yet).
@@ -80,21 +85,28 @@ export const staffFlags = pgTable(
   },
   (t) => [
     check('staff_flags_kind_check', sql`kind in ('contact-attempts','message-reported','chargeback','refund-failed','payment-unprocessed','ignored-requests','provider-no-shows','dispute-overdue')`),
+    index('staff_flags_user_id_idx').on(t.userId),
+    // the timers' NOT EXISTS lookups carry no resolved_at filter, so the partial open index does not serve them
+    index('staff_flags_kind_ref_id_idx').on(t.kind, t.refId),
     uniqueIndex('staff_flags_open_idx').on(t.kind, t.refId, sql`coalesce(${t.userId}, '')`).where(sql`resolved_at IS NULL`),
   ],
 )
 
 // What the contact filter caught; staff only.
-export const contactAttempts = pgTable('contact_attempts', {
-  id: uuid().primaryKey().defaultRandom(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  threadId: uuid('thread_id').references(() => threads.id, { onDelete: 'cascade' }),
-  hit: text().notNull(),
-  text: text().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const contactAttempts = pgTable(
+  'contact_attempts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    threadId: uuid('thread_id').references(() => threads.id, { onDelete: 'cascade' }),
+    hit: text().notNull(),
+    text: text().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('contact_attempts_user_id_created_at_idx').on(t.userId, t.createdAt), index('contact_attempts_thread_id_idx').on(t.threadId)],
+)
 
 // Staff only (rls.ts), only ever inserted: who tried to read which thread, and whether it was allowed (flag_id is the reason).
 // No foreign keys on purpose: the log must survive the deletion of a staff account, a flag or a thread, and never block them.

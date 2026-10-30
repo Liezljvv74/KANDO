@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { detect } from 'tinyld'
 import type { ProviderDetail, TranslatableTexts } from '@kando/contract'
-import type { Tx } from '@kando/db'
+import type { Exec } from './providers/eligibility'
 import type { Lang } from '@kando/i18n'
 import type { SessionUser } from './users'
 
@@ -110,9 +110,9 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
 /**
  * Translates the texts into `lang`: from the store, else one model call for whatever is missing. Throws TranslationUnavailable.
  * `storedOnly` never calls the model (a plain page view must not cost money): anything missing throws TranslationUnavailable.
- * Everything runs in the caller's request transaction `tx` (as app_user); no second connection is opened.
+ * Reads work on any `exec`; the counter, the model call and the stored answers need the owner connection (`db`, never a request transaction).
  */
-export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lang, clientKey: string, storedOnly = false): Promise<TranslatableTexts> {
+export async function translateTexts(exec: Exec, texts: TranslatableTexts, lang: Lang, clientKey: string, storedOnly = false): Promise<TranslatableTexts> {
   if (!needsTranslation(texts, lang)) return texts
   requireSecret() // before any count, insert or model call
   const flat = flatten(texts)
@@ -121,7 +121,7 @@ export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lan
 
   const hashes = [...new Set(Object.values(keys))]
   if (hashes.length) {
-    const { rows } = await tx.execute<{ key: string; text: string }>(
+    const { rows } = await exec.execute<{ key: string; text: string }>(
       sql`SELECT key, text FROM translations WHERE lang = ${lang} AND key IN (${sql.join(hashes.map((h) => sql`${h}`), sql`, `)})`,
     )
     const stored = new Map(rows.map((r) => [r.key, r.text]))
@@ -135,32 +135,29 @@ export async function translateTexts(tx: Tx, texts: TranslatableTexts, lang: Lan
   const missing = Object.keys(flat).filter((id) => !(id in result))
   if (missing.length) {
     if (storedOnly) throw new TranslationUnavailable('Not translated yet')
-    const answer = await askModel(tx, Object.fromEntries(missing.map((id) => [id, flat[id]!])), lang, clientKey)
+    const answer = await askModel(exec, Object.fromEntries(missing.map((id) => [id, flat[id]!])), lang, clientKey)
     for (const id of missing) {
       result[id] = answer[id]!
-      await tx.execute(sql`INSERT INTO translations (key, lang, text) VALUES (${keys[id]}, ${lang}, ${answer[id]}) ON CONFLICT (key, lang) DO NOTHING`)
+      await exec.execute(sql`INSERT INTO translations (key, lang, text) VALUES (${keys[id]}, ${lang}, ${answer[id]}) ON CONFLICT (key, lang) DO NOTHING`)
     }
   }
   return rebuild(texts, result)
 }
 
-async function askModel(tx: Tx, sent: Record<string, string>, lang: Lang, clientKey: string): Promise<Record<string, string>> {
+async function askModel(exec: Exec, sent: Record<string, string>, lang: Lang, clientKey: string): Promise<Record<string, string>> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new TranslationUnavailable('No translation key configured')
 
   const limit = Number(process.env.TRANSLATE_LIMIT_PER_HOUR) || TRANSLATE_LIMIT_PER_HOUR
-  // ponytail: the counter lives in the request transaction, so a row is visible to other requests only after commit and a
-  // burst of parallel requests from one client can slightly exceed the limit. Upgrade: count on a second (owner) connection
-  // with autocommit, as the Payload version did, once the pool can afford it.
-  await tx.execute(sql`SELECT prune_translation_requests()`) // app_user cannot DELETE; a definer function does it
-  const { rows } = await tx.execute<{ n: number }>(
+  await exec.execute(sql`DELETE FROM translation_requests WHERE created_at < now() - interval '24 hours'`)
+  const { rows } = await exec.execute<{ n: number }>(
     sql`SELECT count(*)::int AS n FROM translation_requests WHERE client_key = ${clientKey} AND created_at > now() - interval '1 hour'`,
   )
   if (rows[0]!.n >= limit) throw new TranslationUnavailable('Rate limit reached')
   const globalLimit = Number(process.env.TRANSLATE_GLOBAL_LIMIT_PER_DAY) || TRANSLATE_GLOBAL_LIMIT_PER_DAY
-  const day = await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM translation_requests WHERE created_at > now() - interval '24 hours'`)
+  const day = await exec.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM translation_requests WHERE created_at > now() - interval '24 hours'`)
   if (day.rows[0]!.n >= globalLimit) throw new TranslationUnavailable('Global rate limit reached')
-  await tx.execute(sql`INSERT INTO translation_requests (client_key) VALUES (${clientKey})`)
+  await exec.execute(sql`INSERT INTO translation_requests (client_key) VALUES (${clientKey})`)
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), Number(process.env.TRANSLATE_TIMEOUT_MS) || TRANSLATE_TIMEOUT_MS)

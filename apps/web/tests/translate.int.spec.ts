@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { asUser, pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import type { ProviderDetail } from '@kando/contract'
 import {
   clientKeyOf,
@@ -13,9 +14,11 @@ import {
   translateTexts,
   type TranslatableTexts,
 } from '@kando/domain'
-import { sql } from 'drizzle-orm'
+import { cleanupUsers, seedBase, seedProvider } from './helpers'
 
+vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 process.env.NEON_AUTH_COOKIE_SECRET ||= 'test-secret-not-real'
+const translationRoute = await import('../app/app-api/v1/providers/[slug]/translation/route')
 const stamp = Date.now()
 const clients: string[] = []
 const sources: string[] = []
@@ -44,8 +47,8 @@ const texts = (over: Partial<TranslatableTexts> = {}): TranslatableTexts => ({
   ...over,
 })
 
-// The request transaction of an anonymous caller, as the website path uses it.
-const translate = (t: TranslatableTexts, lang: 'de' | 'en', key: string) => asUser(null, (tx) => translateTexts(tx, t, lang, key))
+// The owner connection, as the route's after-transaction answer uses it.
+const translate = (t: TranslatableTexts, lang: 'de' | 'en', key: string) => translateTexts(db, t, lang, key)
 
 // Fake OpenRouter: records each request and answers with whatever `map` makes of the sent texts.
 let calls: { url: string; init: RequestInit; body: { temperature: number; response_format: unknown; max_tokens: number; messages: { content: string }[] } }[]
@@ -319,25 +322,27 @@ describe('translate', () => {
   })
 })
 
-describe('translation tables are insert-only for app_user', () => {
-  const k = `tr-iso-${stamp}`
-  const src = `iso-${stamp}`
-  const rejected = (q: ReturnType<typeof sql>) => expect(asUser(null, (tx) => tx.execute(q))).rejects.toMatchObject({ cause: { message: expect.stringContaining('permission denied') } })
-
-  it('anonymous callers can insert and read, never update or delete', async () => {
-    clients.push(k)
-    sources.push(src)
-    await asUser(null, async (tx) => {
-      await tx.execute(sql`INSERT INTO translation_requests (client_key) VALUES (${k})`)
-      await tx.execute(sql`INSERT INTO translations (key, lang, text) VALUES (${keyOf(src)}, 'de', 'x')`)
+it('the model call runs with no request transaction open; a failed call still counts', async () => {
+  const { categoryId } = await seedBase()
+  const uid = `ptr-open-${stamp}`
+  try {
+    await seedProvider(uid, { name: `Tischlerei open ${stamp}`, categoryId })
+    await pool.query('UPDATE providers SET bio = $1 WHERE owner_id = $2', [en('open'), uid])
+    const ip = `10.6.${stamp % 255}.${stamp % 191}`
+    const key = clientKeyOf(null, new Headers({ 'x-vercel-forwarded-for': ip }))
+    clients.push(key)
+    let open = -1
+    vi.spyOn(global, 'fetch').mockImplementation(async () => {
+      open = appPool.totalCount - appPool.idleCount
+      return new Response('{}', { status: 500 })
     })
-    const rows = await asUser(null, (tx) =>
-      tx.execute(sql`SELECT (SELECT count(*) FROM translation_requests WHERE client_key = ${k})::int AS r, (SELECT count(*) FROM translations WHERE key = ${keyOf(src)})::int AS t`),
-    )
-    expect(rows.rows[0]).toEqual({ r: 1, t: 1 })
-    await rejected(sql`UPDATE translations SET text = 'y'`)
-    await rejected(sql`DELETE FROM translations`)
-    await rejected(sql`UPDATE translation_requests SET client_key = 'z'`)
-    await rejected(sql`DELETE FROM translation_requests`)
-  })
+    const res = await translationRoute.GET(new Request('http://localhost/app-api/v1/providers/x?lang=de', { headers: { 'x-vercel-forwarded-for': ip } }), {
+      params: Promise.resolve({ slug: `${uid}-slug` }),
+    })
+    expect(res.status).toBe(503)
+    expect(open).toBe(0)
+    expect(await counted(key)).toBe(1)
+  } finally {
+    await cleanupUsers()
+  }
 })

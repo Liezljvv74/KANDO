@@ -5,8 +5,10 @@ import { assertTestDatabase } from './guard'
 
 export default async function setup(): Promise<void> {
   const { migrate, pool } = await import('../index')
+  const { appPool } = await import('../client')
   assertTestDatabase(pool.options.connectionString!)
   await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await migrate()
   await pool.end()
+  await appPool.end()
 }

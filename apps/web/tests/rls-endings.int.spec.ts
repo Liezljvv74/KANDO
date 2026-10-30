@@ -11,7 +11,8 @@ let serviceId: string
 let rootId: string // a confirmed (paid) booking of cust with owner
 
 const denied = { cause: { message: expect.stringContaining('permission denied') } }
-const ownerOnly = { cause: { message: expect.stringMatching(/payment code only/) } }
+// a status move is stopped first by app_status_guard (rls.ts APP_STATUS_MOVES), anything else by bookings_guard_status
+const ownerOnly = { cause: { message: expect.stringMatching(/payment code only|not a move the app makes/) } }
 const unchangeable = { cause: { message: expect.stringContaining('cannot be changed') } }
 const foreignParent = { cause: { message: expect.stringMatching(/parent booking/) } }
 const run = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, (tx) => tx.execute(q))

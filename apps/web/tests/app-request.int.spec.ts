@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
-import { pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
 import { createAppRequest } from '@kando/domain'
 
@@ -194,4 +195,44 @@ it('a suspended person can still erase their own data (DELETE) and use a route m
   expect((await plain(req('DELETE'), ctx)).status).toBe(200)
   for (const m of ['POST', 'PUT', 'PATCH']) expect((await plain(req(m), ctx)).status).toBe(403)
   expect((await open(req('POST'), ctx)).status).toBe(200)
+})
+
+const xmin = async (id: string) => (await pool.query('SELECT xmin::text AS x FROM users WHERE id = $1', [id])).rows[0].x
+const asEmail = (id: string, email: string) => new Request('http://localhost/x', { headers: { cookie: `uid=${id}:${email}` } })
+
+it('a known user with an unchanged email is not rewritten', async () => {
+  await me(as('ux1'), ctx)
+  const before = await xmin('ux1')
+  expect((await me(as('ux1'), ctx)).status).toBe(200)
+  expect(await xmin('ux1')).toBe(before)
+})
+
+it('an email changed in Neon Auth is synced', async () => {
+  await me(as('ux2'), ctx)
+  const res = await me(asEmail('ux2', 'ux2-new@test.skilled.invalid'), ctx)
+  expect((await res.json()).user.email).toBe('ux2-new@test.skilled.invalid')
+  expect((await pool.query("SELECT email FROM users WHERE id='ux2'")).rows[0].email).toBe('ux2-new@test.skilled.invalid')
+})
+
+const busy = () => appPool.totalCount - appPool.idleCount
+
+it('an after-transaction answer runs once the transaction committed', async () => {
+  const after = appRequest({ auth: 'required' }, async ({ tx }) => {
+    await tx.execute(sql`INSERT INTO wrap_probe (note) VALUES ('after-answer')`)
+    return async () => {
+      const seen = await db.execute(sql`SELECT 1 FROM wrap_probe WHERE note = 'after-answer'`)
+      return Response.json({ seen: seen.rows.length, busy: busy() })
+    }
+  })
+  const res = await after(as('u-after'), ctx)
+  expect(await res.json()).toEqual({ seen: 1, busy: 0 })
+})
+
+it('a Response thrown by an after-transaction answer is the answer', async () => {
+  const after = appRequest({ auth: 'required' }, async () => async () => {
+    throw Response.json({ error: 'x' }, { status: 409 })
+  })
+  const res = await after(as('u-after'), ctx)
+  expect(res.status).toBe(409)
+  expect(await res.json()).toEqual({ error: 'x' })
 })

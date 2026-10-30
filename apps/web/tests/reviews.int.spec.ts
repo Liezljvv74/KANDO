@@ -46,7 +46,7 @@ async function done(o: { completedAt?: Date; status?: string; provider?: string;
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, completed_at, released_at, parent_booking_id)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_rv', 0.12, $5::timestamptz + interval '1 hour',
+       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_rv_' || gen_random_uuid(), 0.12, $5::timestamptz + interval '1 hour',
          CASE WHEN $4 = 'completed' THEN $6::timestamptz END, CASE WHEN $4 = 'completed' THEN $6::timestamptz END, $7) RETURNING id`,
       [o.customer ?? U.cust, p, service, status, startAt, completedAt, o.parent ?? null],
     )

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { PayLinkSchema } from '@kando/contract'
 import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, outboxForTests, runDueTimers, setGatewayForTests, type GatewayEvent } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
@@ -93,6 +94,17 @@ it('the customer gets a pay link; the provider and a third user get 404', async 
   expect(args!.successUrl).toMatch(/\/payment-done$/)
   expect(String(args!.successUrl)).not.toContain(b.id) // nothing of the booking in the return address
   expect((await row(b.id)).checkout_ref).toContain('cs_fake_1') // stored on the owner connection (staff-only column)
+})
+
+it('the checkout session is created with no request transaction open', async () => {
+  const b = await awaiting()
+  const open: number[] = []
+  const create = g.createCheckout
+  g.createCheckout = async (args) => (open.push(appPool.totalCount - appPool.idleCount), create(args))
+  const res = await payLink(b.id)
+  expect(res.status).toBe(200)
+  expect(open).toEqual([0])
+  PayLinkSchema.parse(await res.json())
 })
 
 it('no pay link before acceptance or after payBy (409)', async () => {

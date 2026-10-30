@@ -1,6 +1,6 @@
 import { index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core'
 
-// Stored machine translations, keyed by sha256 of the source text. Insert-only for app_user (see INSERT_ONLY_TABLES).
+// Stored machine translations, keyed by sha256 of the source text. Read by app_user, written on the owner connection.
 export const translations = pgTable(
   'translations',
   {

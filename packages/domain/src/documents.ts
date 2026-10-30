@@ -21,14 +21,23 @@ const IMAGE: Record<string, { type: string; ext: string }> = {
   webp: { type: 'image/webp', ext: 'webp' },
 }
 
-export type PreparedDocument = { data: Buffer; type: string; ext: string }
+export type PreparedDocument = { key: string }
 
 /**
  * Reads and checks the document by its leading bytes, never the declared type or name: a PDF is kept as is; a JPEG,
  * PNG or WEBP (a scan or a photo of a certificate) is turned upright, re-encoded in its own format at most 2400 px,
- * without metadata (EXIF, GPS). Anything else is 400. Runs before the transaction.
+ * without metadata (EXIF, GPS). Anything else is 400. Then stores it in the private bucket (`onFailure` removes it if the
+ * request does not commit). Runs before the transaction, so the key carries no user id.
  */
-export async function prepareDocument(request: Request): Promise<PreparedDocument> {
+export async function prepareDocument(request: Request, onFailure: AfterCommit): Promise<PreparedDocument> {
+  const doc = await readDocument(request)
+  const key = `documents/${randomUUID()}/${randomUUID()}.${doc.ext}`
+  await storage().put(documentsBucket(), key, doc.data, doc.type)
+  onFailure(() => removeObject(documentsBucket(), key))
+  return { key }
+}
+
+async function readDocument(request: Request): Promise<{ data: Buffer; type: string; ext: string }> {
   const form = await request.formData().catch(() => new FormData())
   const file = form.get('file')
   if (!(file instanceof File)) return fail(400, { error: 'Missing file' })
@@ -50,20 +59,13 @@ export async function prepareDocument(request: Request): Promise<PreparedDocumen
   }
 }
 
-/** Stores the document in the private bucket with its own type (object first; a failed insert removes it). */
+/** Inserts the row for the document `prepareDocument` already stored. */
 export async function uploadFile(tx: Tx, userId: string, doc: PreparedDocument): Promise<{ id: string }> {
   await lockProfile(tx, userId) // per user: concurrent uploads cannot pass the cap together
   const pending = (await tx.select({ n: sql<number>`count(*)::int` }).from(privateFiles).where(eq(privateFiles.ownerId, userId)))[0]!.n
   if (pending >= MAX_PENDING_UPLOADS) return fail(409, { error: 'Too many pending uploads' })
-  const key = `documents/${userId}/${randomUUID()}.${doc.ext}`
-  await storage().put(documentsBucket(), key, doc.data, doc.type)
-  try {
-    const [row] = await tx.insert(privateFiles).values({ ownerId: userId, key }).returning({ id: privateFiles.id })
-    return { id: row!.id }
-  } catch (e) {
-    await removeObject(documentsBucket(), key)
-    throw e
-  }
+  const [row] = await tx.insert(privateFiles).values({ ownerId: userId, key: doc.key }).returning({ id: privateFiles.id })
+  return { id: row!.id }
 }
 
 /** A short-lived link to the caller's own file (uploaded or submitted); null when it is not theirs. */

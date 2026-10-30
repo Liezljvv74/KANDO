@@ -26,11 +26,31 @@ export const PRIVATE_TABLES: Record<string, string> = {
 }
 
 // Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.
+// Every row starts at its first status: later statuses only through APP_STATUS_MOVES (or the owner connection).
 export const INSERT_RULES: Record<string, string> = {
-  requests: 'customer_id = app_current_user_id()',
-  bookings: 'customer_id = app_current_user_id()',
+  requests: `customer_id = app_current_user_id() AND status = 'open'`,
+  // A booking starts as the customer's proposal: accepting (pay_by, accepted_at) and countering (counter_by) are updates.
+  bookings: `customer_id = app_current_user_id() AND status = 'proposed' AND pay_by IS NULL AND accepted_at IS NULL AND counter_by IS NULL`,
   // Only the provider's owner quotes, and only on a request addressed to that provider (qualified: requests has provider_id too).
-  quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id)`,
+  quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id) AND status = 'sent'`,
+}
+
+/**
+ * The status moves app_user may make, per table, keyed '<from>><to>', with the side that makes it (trigger app_status_guard).
+ * Only moves made inside a request transaction belong here; the owner connection (expiry, endings, additional tasks, staff)
+ * is not affected. Customer: the row's customer_id (quotes: the request's customer); provider: the owner of its provider_id.
+ * Answerer (bookings only): the side whose turn it is, as answerBooking decides it from the old counter_by (NULL or
+ * 'customer' = the customer proposed last, so the provider answers; 'provider' = the customer answers).
+ */
+export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'answerer'>> = {
+  requests: { 'open>quoted': 'provider', 'quoted>booked': 'customer' },
+  quotes: { 'sent>superseded': 'provider', 'sent>accepted': 'customer' },
+  bookings: {
+    'proposed>awaiting-payment': 'answerer',
+    'proposed>declined': 'answerer',
+    'proposed>withdrawn': 'customer',
+    'awaiting-payment>withdrawn': 'customer',
+  },
 }
 
 const PARTY = `customer_id = app_current_user_id() OR ${OWN_SERVICE}`
@@ -122,9 +142,6 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
   },
 }
 
-// Readable by everyone, insertable by any app request, never updated or deleted by app_user.
-export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
-
 // Readable by app_user where the expression holds, written only on the owner connection (staff, or the domain after it
 // checked the caller), which sees everything.
 export const PUBLISHED_READ_TABLES: Record<string, string> = {
@@ -141,10 +158,10 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 }
 
 // Readable by app_user, written only by staff (owner connection).
-export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
+export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'translations']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters']
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters', 'translation_requests']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
@@ -157,7 +174,6 @@ export function classifyTables(): { unclassified: string[]; duplicated: string[]
   const maps = [
     Object.keys(PRIVATE_TABLES),
     Object.keys(PUBLIC_OWNED_TABLES),
-    INSERT_ONLY_TABLES,
     Object.keys(APPEND_ONLY_TABLES),
     Object.keys(PUBLISHED_READ_TABLES),
     PUBLIC_REFERENCE_TABLES,
@@ -233,15 +249,7 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY party_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (${append.insert})`,
     ]
   }
-  if (INSERT_ONLY_TABLES.includes(table)) {
-    return [
-      `GRANT INSERT ON ${t} TO ${APP_ROLE}`,
-      ...head,
-      `CREATE POLICY public_read ON ${t} FOR SELECT TO ${APP_ROLE} USING (true)`,
-      `CREATE POLICY app_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (true)`,
-    ]
-  }
-  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES, INSERT_ONLY_TABLES or APPEND_ONLY_TABLES`)
+  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES or APPEND_ONLY_TABLES`)
 }
 
 // The only write path to a provider's domain-only columns. SECURITY DEFINER (runs as the table owner, past RLS) but
@@ -265,6 +273,8 @@ const PROVIDER_FUNCTIONS = [
       END IF;
       IF p_published AND r.slug IS NULL THEN
         s := p_slug_base;
+        -- one publisher per base at a time (the lock lasts to commit), else both pick the same free slug
+        PERFORM pg_advisory_xact_lock(hashtext('kando.slug'), hashtext(p_slug_base));
         WHILE EXISTS (SELECT 1 FROM providers WHERE slug = s) LOOP n := n + 1; s := p_slug_base || '-' || n; END LOOP;
         UPDATE providers SET slug = s WHERE id = r.id;
       END IF;
@@ -361,6 +371,10 @@ const BUSY_FUNCTIONS = [
 // provider's; request_id is the quote's request (whatever was supplied). On update quote_id and service_id are frozen:
 // only unchanged or NULL (an ON DELETE SET NULL cascade) passes.
 const OWNER_ONLY = `ARRAY[${OWNER_ONLY_BOOKING_STATUSES.map((s) => `'${s}'`).join(', ')}]::text[]`
+// 'table:from>to' → side, for app_status_guard's CASE (constants from this file, never input).
+const APP_STATUS_MOVE_CASES = Object.entries(APP_STATUS_MOVES)
+  .flatMap(([t, moves]) => Object.entries(moves).map(([move, side]) => `WHEN '${t}:${move}' THEN '${side}'`))
+  .join('\n        ')
 const BOOKING_TRIGGERS = [
   `CREATE OR REPLACE FUNCTION bookings_fill_amount() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
     DECLARE q_amount numeric; q_currency text; q_request uuid; s_price numeric; s_currency text;
@@ -399,11 +413,59 @@ const BOOKING_TRIGGERS = [
         IF TG_OP = 'UPDATE' AND OLD.status = ANY (${OWNER_ONLY}) AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN
           RAISE EXCEPTION 'bookings: a % booking is changed by the payment code only', OLD.status;
         END IF;
+        -- accepting sets pay_by and accepted_at, once, inside the time: payment due by the start, not before the acceptance
+        IF TG_OP = 'UPDATE' AND OLD.status = 'proposed' AND NEW.status = 'awaiting-payment' THEN
+          IF NOT coalesce(NEW.pay_by <= NEW.start_at AND NEW.accepted_at <= NEW.pay_by AND abs(extract(epoch FROM (NEW.accepted_at - now()))) <= 300, false) THEN
+            RAISE EXCEPTION 'bookings: pay_by must lie between accepted_at and start_at, and accepted_at within 5 minutes of now';
+          END IF;
+        ELSIF TG_OP = 'UPDATE' AND (NEW.pay_by IS DISTINCT FROM OLD.pay_by OR NEW.accepted_at IS DISTINCT FROM OLD.accepted_at) THEN
+          RAISE EXCEPTION 'bookings: pay_by and accepted_at are set by accepting only';
+        END IF;
+        -- the proposal (time, place, who answers by when) changes only while it is a proposal: the counter and the answer
+        IF TG_OP = 'UPDATE' AND OLD.status <> 'proposed' AND (NEW.answer_by, NEW.counter_by, NEW.start_at, NEW.duration_min, NEW.on_site, NEW.address_street, NEW.address_postcode, NEW.address_city)
+            IS DISTINCT FROM (OLD.answer_by, OLD.counter_by, OLD.start_at, OLD.duration_min, OLD.on_site, OLD.address_street, OLD.address_postcode, OLD.address_city) THEN
+          RAISE EXCEPTION 'bookings: answer_by, counter_by, start_at, duration_min, on_site and the address change only while proposed';
+        END IF;
       END IF;
       RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
   `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
+  // app_user changes a status only by a move in APP_STATUS_MOVES, from the listed side; a request's answer_by never changes.
+  // A proposed booking's proposal (counter_by, time, place, answer_by) changes only as answerBooking's counter: by the
+  // answering side, which becomes counter_by. Else a party could flip the turn and then answer its own proposal.
+  `CREATE OR REPLACE FUNCTION app_status_guard() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+    DECLARE n jsonb := to_jsonb(NEW); o jsonb := to_jsonb(OLD); side text; answerer text; is_customer boolean; is_provider boolean;
+    BEGIN
+      IF current_user <> '${APP_ROLE}' THEN RETURN NEW; END IF;
+      IF TG_TABLE_NAME = 'requests' AND n -> 'answer_by' IS DISTINCT FROM o -> 'answer_by' THEN
+        RAISE EXCEPTION 'requests: answer_by cannot be changed';
+      END IF;
+      is_customer := CASE WHEN TG_TABLE_NAME = 'quotes'
+        THEN EXISTS (SELECT 1 FROM requests r WHERE r.id = (n ->> 'request_id')::uuid AND r.customer_id = app_current_user_id())
+        ELSE n ->> 'customer_id' = app_current_user_id() END;
+      is_provider := EXISTS (SELECT 1 FROM providers p WHERE p.id = (n ->> 'provider_id')::uuid AND p.owner_id = app_current_user_id());
+      answerer := CASE WHEN o ->> 'counter_by' = 'provider' THEN 'customer' ELSE 'provider' END; -- as answerBooking
+      IF TG_TABLE_NAME = 'bookings' AND OLD.status = 'proposed' AND NEW.status = 'proposed'
+          AND (n -> 'counter_by', n -> 'start_at', n -> 'duration_min', n -> 'on_site', n -> 'answer_by')
+            IS DISTINCT FROM (o -> 'counter_by', o -> 'start_at', o -> 'duration_min', o -> 'on_site', o -> 'answer_by')
+          AND NOT coalesce(n ->> 'counter_by' = answerer AND CASE answerer WHEN 'customer' THEN is_customer ELSE is_provider END, false) THEN
+        RAISE EXCEPTION 'bookings: only the answering side counters a proposal, as itself';
+      END IF;
+      IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
+      side := CASE TG_TABLE_NAME || ':' || OLD.status || '>' || NEW.status
+        ${APP_STATUS_MOVE_CASES}
+      END;
+      IF side = 'answerer' THEN side := answerer; END IF;
+      IF side IS NULL OR NOT coalesce((side = 'customer' AND is_customer) OR (side = 'provider' AND is_provider), false) THEN
+        RAISE EXCEPTION '%: % > % is not a move the app makes (as this party)', TG_TABLE_NAME, OLD.status, NEW.status;
+      END IF;
+      RETURN NEW;
+    END $$`,
+  ...Object.keys(APP_STATUS_MOVES).flatMap((t) => [
+    `DROP TRIGGER IF EXISTS ${t}_app_status_guard ON ${t}`,
+    `CREATE TRIGGER ${t}_app_status_guard BEFORE UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION app_status_guard()`,
+  ]),
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
   // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that
   // request's parent (and an ordinary request makes no additional task). Invoker rights: a parent the inserting customer
@@ -445,14 +507,8 @@ const BOOKING_TRIGGERS = [
   `CREATE TRIGGER ledger_no_truncate BEFORE TRUNCATE ON ledger_entries FOR EACH STATEMENT EXECUTE FUNCTION ledger_append_only()`,
 ]
 
-// app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.
-const TRANSLATION_FUNCTIONS = [
-  `CREATE OR REPLACE FUNCTION prune_translation_requests() RETURNS void
-    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
-      DELETE FROM translation_requests WHERE created_at < now() - interval '24 hours' $$`,
-  `REVOKE ALL ON FUNCTION prune_translation_requests() FROM PUBLIC`,
-  `GRANT EXECUTE ON FUNCTION prune_translation_requests() TO ${APP_ROLE}`,
-]
+// The rate-limit log is owner-only now; the definer function that pruned it for app_user is gone.
+const TRANSLATION_FUNCTIONS = ['DROP FUNCTION IF EXISTS prune_translation_requests()']
 
 // Blocks are private to the blocker, so the check that must see both directions runs as the table owner. Returns a boolean only,
 // and only answers for a caller who is one of the two (anyone else, and the owner connection without app.user_id, gets false).
@@ -470,7 +526,7 @@ const BLOCK_FUNCTIONS = [
 
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
-  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...INSERT_ONLY_TABLES, ...Object.keys(APPEND_ONLY_TABLES)],
+  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...Object.keys(APPEND_ONLY_TABLES)],
 ): string[] {
   const dup = classifyTables().duplicated
   if (dup.length) throw new Error(`rlsStatements: ${dup.join(', ')} in more than one map`)
@@ -510,7 +566,10 @@ export function rlsStatements(
   ]
 }
 
-export async function applyRls(): Promise<void> {
+/** All statements in one transaction: a failure leaves the previous grants and policies untouched (the parameter is for the test). */
+export async function applyRls(statements: string[] = rlsStatements()): Promise<void> {
   const { db } = await import('./client')
-  for (const statement of rlsStatements()) await db.execute(sql.raw(statement))
+  await db.transaction(async (tx) => {
+    for (const statement of statements) await tx.execute(sql.raw(statement))
+  })
 }

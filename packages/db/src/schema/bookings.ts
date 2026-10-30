@@ -3,7 +3,7 @@ import { boolean, check, index, uniqueIndex, integer, numeric, date, pgTable, te
 import { providers, services } from './providers'
 import { users } from './users'
 
-// Private to the two parties (rls.ts). Status columns stay writable by them: transitions are enforced in the domain.
+// Private to the two parties (rls.ts). Status moves: rls.ts APP_STATUS_MOVES (the app role makes only those, from the listed side).
 // Money columns are staff-only (rls.ts COLUMN_STAFF_ONLY).
 export const requests = pgTable(
   'requests',
@@ -30,6 +30,9 @@ export const requests = pgTable(
     check('requests_status_check', sql`status in ('open','quoted','booked','expired','withdrawn')`),
     index('requests_provider_id_status_idx').on(t.providerId, t.status),
     index('requests_customer_id_idx').on(t.customerId),
+    index('requests_service_id_idx').on(t.serviceId),
+    index('requests_parent_booking_id_idx').on(t.parentBookingId),
+    index('requests_open_answer_by_idx').on(t.answerBy).where(sql`status = 'open'`),
   ],
 )
 
@@ -60,6 +63,11 @@ export const quotes = pgTable(
     index('quotes_provider_id_status_idx').on(t.providerId, t.status),
     index('quotes_start_at_idx').on(t.startAt),
     uniqueIndex('quotes_request_id_version_idx').on(t.requestId, t.version),
+    index('quotes_sent_expires_at_idx').on(t.expiresAt).where(sql`status = 'sent'`),
+    check('quotes_amount_check', sql`amount >= 0`),
+    check('quotes_duration_check', sql`duration_min > 0`),
+    check('quotes_version_check', sql`version >= 1`),
+    check('quotes_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
   ],
 )
 
@@ -148,5 +156,17 @@ export const bookings = pgTable(
     check('bookings_no_show_check', sql`no_show in ('customer','provider')`),
     check('bookings_stopped_by_check', sql`stopped_by in ('customer','provider')`),
     index('bookings_parent_booking_id_idx').on(t.parentBookingId),
+    index('bookings_service_id_idx').on(t.serviceId),
+    index('bookings_quote_id_idx').on(t.quoteId),
+    index('bookings_proposed_answer_by_idx').on(t.answerBy).where(sql`status = 'proposed'`),
+    index('bookings_awaiting_pay_by_idx').on(t.payBy).where(sql`status = 'awaiting-payment'`),
+    index('bookings_finished_confirm_by_idx').on(t.confirmBy).where(sql`status = 'finished'`),
+    uniqueIndex('bookings_payment_ref_idx').on(t.paymentRef),
+    check('bookings_amount_check', sql`amount >= 0`),
+    check('bookings_commission_rate_check', sql`commission_rate >= 0 AND commission_rate < 1`),
+    check('bookings_stop_amount_check', sql`stop_amount >= 0 AND stop_amount <= amount`),
+    check('bookings_material_amount_check', sql`material_amount >= 0 AND material_amount <= amount`),
+    check('bookings_duration_check', sql`duration_min > 0`),
+    check('bookings_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
   ],
 )
