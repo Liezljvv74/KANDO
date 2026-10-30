@@ -750,6 +750,7 @@ export const en: Record<Key, string> = {
   'booking.acceptExpiry': 'This quote is valid until {date}. After that it expires.',
   'chat.contactBlocked': "Contact details can't be shared here. Please keep the conversation in the app: payment protection, reviews and our help with disputes only apply to what happens in the app.",
   'chat.blocked': 'You can no longer exchange messages in this conversation.',
+  'chat.sendLimit': 'You are sending messages very quickly. Please wait a few minutes, then try again.',
   'chat.report.action': 'Report message',
   'chat.report.reasonLabel': 'What is wrong with this message?',
   'chat.report.send': 'Send report',

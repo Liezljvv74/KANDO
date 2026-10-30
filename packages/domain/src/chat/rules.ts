@@ -5,6 +5,9 @@ export { MAX_MESSAGE_CHARS } from '@kando/contract'
 /** This many blocked contact-detail attempts inside the window flag the sender to staff. */
 export const CONTACT_ATTEMPTS_LIMIT = 3
 export const CONTACT_ATTEMPTS_WINDOW_HOURS = 24
+/** A user may send at most this many text and photo messages (all threads together) inside the window; cards do not count. */
+export const MESSAGE_LIMIT = 30
+export const MESSAGE_LIMIT_WINDOW_MINUTES = 10
 /** At most one "new message" email per thread and recipient in this time. */
 export const CHAT_EMAIL_THROTTLE_MINUTES = 30
 /** Mobile polling interval for new messages. */

@@ -53,6 +53,16 @@ test('the chat rejections have their own text in both languages', () => {
   }
 })
 
+test('MESSAGE_LIMIT has its own text', () => {
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(errorText('MESSAGE_LIMIT')).toBe(t('chat.sendLimit'))
+    expect(errorText('MESSAGE_LIMIT')).not.toBe(errorText('unmapped'))
+  }
+  setLang('en')
+  expect(errorText('MESSAGE_LIMIT')).toContain('wait a few minutes')
+})
+
 test('every ending and review code a customer or provider can get has its own text in both languages', () => {
   // From the stage 2d routes (finish, confirm, cancel, no-show, dispute, stop, additional task, reviews); the staff-only codes
   // (DECISION_PENDING, SETTLEMENT_STARTED, ALREADY_DECIDED, CHARGEBACK_OPEN, INVALID_SHARE, DISPUTE_OPEN ...) never reach the app.

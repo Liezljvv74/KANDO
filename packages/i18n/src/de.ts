@@ -749,6 +749,7 @@ export const de = {
   'booking.acceptExpiry': 'Dieses Angebot gilt bis {date}. Danach läuft es ab.',
   'chat.contactBlocked': "Kontaktdaten können hier nicht geteilt werden. Bitte bleib in der App: Zahlungsschutz, Bewertungen und unsere Hilfe bei Streitfällen gelten nur für das, was in der App passiert.",
   'chat.blocked': 'In dieser Unterhaltung kannst du keine Nachrichten mehr austauschen.',
+  'chat.sendLimit': 'Du sendest sehr schnell Nachrichten. Bitte warte ein paar Minuten und versuche es dann noch einmal.',
   'chat.report.action': 'Nachricht melden',
   'chat.report.reasonLabel': 'Was ist an dieser Nachricht nicht in Ordnung?',
   'chat.report.send': 'Meldung senden',

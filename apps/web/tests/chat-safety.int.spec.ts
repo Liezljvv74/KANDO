@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { clearOutbox, notifyNewMessage, outboxForTests } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import sharp from 'sharp'
+import { clearOutbox, notifyNewMessage, outboxForTests, setStorageForTests } from '@kando/domain'
+import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -13,14 +14,15 @@ const requests = await import('../app/app-api/v1/requests/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
+const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 
-const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other', twin: 'cs-twin' }
+const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other', twin: 'cs-twin', fast: 'cs-fast', race: 'cs-race' }
 let pOwner: string, sOwner: string
 
 beforeAll(async () => {
   await cleanupUsers()
   const { categoryId } = await seedBase()
-  for (const u of [U.cust, U.third, U.other, U.twin]) await seedUser(u)
+  for (const u of [U.cust, U.third, U.other, U.twin, U.fast, U.race]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Cs Owner', categoryId })
   sOwner = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pOwner])).rows[0].id
 })
@@ -178,6 +180,62 @@ it('two messages within 30 minutes send one email; one after 31 minutes sends an
   // the other direction is its own recipient
   await sendOk(t.id, U.owner, 'Reply')
   expect(mails(U.cust).some((m) => m.subject.length > 0)).toBe(true)
+})
+
+const photo = async (thread: string, as: string) => {
+  const form = new FormData()
+  const png = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#c00' } }).png().toBuffer()
+  form.set('file', new File([new Uint8Array(png)], 'a.png', { type: 'image/png' }))
+  return photosRoute.POST(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form }), { params: Promise.resolve({ id: thread }) })
+}
+/** `n` messages of `kind` by `as` in `thread`, stamped `ago` before now, straight into the table. */
+const fill = (thread: string, as: string, n: number, kind: 'text' | 'photo' | 'card' = 'text', ago = '0 minutes') =>
+  pool.query(
+    `INSERT INTO messages (thread_id, sender_id, kind, body, photo_key, card, created_at)
+     SELECT $1, $2, $3::text, CASE WHEN $3 = 'text' THEN 'hi' END, CASE WHEN $3 = 'photo' THEN 'chat/x.jpg' END, CASE WHEN $3 = 'card' THEN '{"type":"quote"}'::jsonb END, now() - $5::interval
+     FROM generate_series(1, $4)`,
+    [thread, as, kind, n, ago],
+  )
+const sentBy = async (as: string) => (await pool.query('SELECT count(*)::int n FROM messages WHERE sender_id = $1', [as])).rows[0].n
+
+it('the 31st message in 10 minutes is 429 MESSAGE_LIMIT, also for a photo, and no object is stored', async () => {
+  const store = memoryStorage()
+  setStorageForTests(store)
+  try {
+    const t1 = await threadOf(U.fast, (await newRequest(U.fast)).id)
+    const t2 = await threadOf(U.fast, (await newRequest(U.fast)).id)
+    await fill(t1.id, U.fast, 20)
+    await fill(t2.id, U.fast, 9, 'photo') // counted across threads, text and photo alike
+    expect((await send(t2.id, U.fast, 'the 30th')).status).toBe(201)
+    const res = await send(t1.id, U.fast, 'the 31st')
+    expect([res.status, await res.json()]).toEqual([429, { error: 'MESSAGE_LIMIT' }])
+    const objects = store.objects.size
+    const pic = await photo(t1.id, U.fast)
+    expect([pic.status, await pic.json()]).toEqual([429, { error: 'MESSAGE_LIMIT' }])
+    expect(store.objects.size).toBe(objects)
+    expect(await sentBy(U.fast)).toBe(30)
+    expect((await send(t1.id, U.owner, 'the other side may still answer')).status).toBe(201)
+  } finally {
+    setStorageForTests(undefined)
+  }
+})
+
+it('messages older than 10 minutes and cards do not count', async () => {
+  const t = await threadOf(U.race, (await newRequest(U.race)).id)
+  await fill(t.id, U.race, 29, 'text', '10 minutes 1 second')
+  await fill(t.id, U.race, 29, 'card')
+  await fill(t.id, U.race, 29)
+  expect((await send(t.id, U.race, 'the 30th')).status).toBe(201)
+  expect((await send(t.id, U.race, 'the 31st')).status).toBe(429)
+  await pool.query('DELETE FROM messages WHERE sender_id = $1', [U.race])
+})
+
+it('31 parallel sends at the limit store at most 30 messages', async () => {
+  const t = await threadOf(U.race, (await newRequest(U.race)).id)
+  const res = await Promise.all(Array.from({ length: 31 }, (_, i) => send(t.id, U.race, `parallel ${i}`)))
+  expect(res.filter((r) => r.status === 201)).toHaveLength(30)
+  expect(res.filter((r) => r.status === 429)).toHaveLength(1)
+  expect(await sentBy(U.race)).toBe(30)
 })
 
 it('the throttle boundary: exactly 30 minutes sends, 29:59.999 does not (controlled time)', async () => {
