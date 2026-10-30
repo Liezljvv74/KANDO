@@ -1,10 +1,10 @@
-import { and, count, eq, gte } from 'drizzle-orm'
+import { and, count, eq, gte, sql } from 'drizzle-orm'
 import { contactAttempts, db, staffFlags } from '@kando/db'
 import { describeError } from '../log-error'
 import { fail } from '../providers/http'
 import type { Exec } from '../providers/eligibility'
 import { checkContactDetails } from './contact-check'
-import { CONTACT_ATTEMPTS_LIMIT, CONTACT_ATTEMPTS_WINDOW_HOURS } from './rules'
+import { CONTACT_ATTEMPTS_KEEP_DAYS, CONTACT_ATTEMPTS_LIMIT, CONTACT_ATTEMPTS_WINDOW_HOURS } from './rules'
 
 /** The `staff_flags.kind` values; later plans widen this with the table's check. */
 export type StaffFlagKind = 'contact-attempts' | 'message-reported' | 'chargeback' | 'refund-failed' | 'payment-unprocessed' | 'provider-no-shows' | 'ignored-requests' | 'dispute-overdue'
@@ -38,4 +38,10 @@ export async function assertNoContactDetails(userId: string, text: string, threa
 export async function assertNoContactDetailsIn(userId: string, texts: (string | null | undefined)[]): Promise<void> {
   const joined = texts.filter((t): t is string => !!t?.trim()).join('\n') // the digit rule never crosses a line break
   if (joined) await assertNoContactDetails(userId, joined, undefined, false)
+}
+
+/** The daily clean-up: deletes blocked contact texts older than CONTACT_ATTEMPTS_KEEP_DAYS, except those of a user with an open contact-attempts flag (staff still need them). Owner connection. The count removed. */
+export async function purgeContactAttempts(exec: typeof db, now = new Date()): Promise<number> {
+  const r = await exec.execute(sql`DELETE FROM contact_attempts c WHERE c.created_at < ${now.toISOString()}::timestamptz - make_interval(days => ${CONTACT_ATTEMPTS_KEEP_DAYS}) AND NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'contact-attempts' AND f.user_id = c.user_id AND f.resolved_at IS NULL)`)
+  return r.rowCount ?? 0
 }

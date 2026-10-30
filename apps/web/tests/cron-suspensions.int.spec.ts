@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { clearOutbox, inBatches, outboxForTests, pruneOldRows } from '@kando/domain'
+import { clearOutbox, inBatches, outboxForTests, pruneOldRows, purgeContactAttempts } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
 
 const cron = await import('../app/api/cron/suspensions/route')
@@ -33,7 +33,7 @@ it('ends a past suspension once: both columns cleared, one email; a future one i
   await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'cr-future'")
   const res = await get('Bearer s3cret')
   expect(res.status).toBe(200)
-  expect(await res.json()).toEqual({ ended: expect.arrayContaining(['cr-past', 'cr-cust']), pendingObjects: 0, purged: 0, pruned: { notifications: expect.any(Number), stripeEvents: expect.any(Number), pushTokens: expect.any(Number) } })
+  expect(await res.json()).toEqual({ ended: expect.arrayContaining(['cr-past', 'cr-cust']), pendingObjects: 0, purged: 0, pruned: { notifications: expect.any(Number), stripeEvents: expect.any(Number), pushTokens: expect.any(Number) }, contactAttempts: expect.any(Number) })
   expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('cr-past'), 'Dein Profil ist wieder veröffentlicht']])
   expect((await pool.query("SELECT suspended_until, suspended_reason FROM users WHERE id = 'cr-past'")).rows[0]).toEqual({ suspended_until: null, suspended_reason: null })
   expect((await pool.query("SELECT suspended_until FROM providers WHERE owner_id = 'cr-past'")).rows[0].suspended_until).toBeNull()
@@ -116,4 +116,19 @@ it('pruneOldRows keeps unseen notices and requests-ignored, removes old seen one
   expect((await pool.query("SELECT id FROM stripe_events WHERE id LIKE 'evt_cr_%'")).rows).toEqual([{ id: 'evt_cr_new' }])
   expect((await pool.query("SELECT token FROM push_tokens WHERE user_id = 'cr-prune'")).rows).toEqual([{ token: 'ExponentPushToken[cr-new]' }])
   await pool.query("DELETE FROM stripe_events WHERE id LIKE 'evt_cr_%'")
+})
+
+it('the clean-up route declares maxDuration 60', () => {
+  expect(cron.maxDuration).toBe(60)
+})
+
+it('the daily clean-up deletes contact attempts older than 90 days and keeps newer ones (and any of a user with an open flag)', async () => {
+  for (const id of ['cr-att', 'cr-att-open']) await pool.query('INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, EMAIL(id)])
+  await pool.query("INSERT INTO contact_attempts (user_id, hit, text, created_at) VALUES ('cr-att', 'phone', 'old', now() - interval '91 days'), ('cr-att', 'phone', 'new', now() - interval '89 days'), ('cr-att-open', 'phone', 'old-open', now() - interval '120 days')")
+  await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id) VALUES ('contact-attempts', 'cr-att-open', 'cr-att-open')")
+  expect(await purgeContactAttempts(db, new Date())).toBeGreaterThanOrEqual(1)
+  expect((await pool.query("SELECT text FROM contact_attempts WHERE user_id IN ('cr-att', 'cr-att-open') ORDER BY text")).rows).toEqual([{ text: 'new' }, { text: 'old-open' }])
+  await pool.query("UPDATE staff_flags SET resolved_at = now() WHERE user_id = 'cr-att-open'")
+  expect(await purgeContactAttempts(db, new Date())).toBeGreaterThanOrEqual(1)
+  expect((await pool.query("SELECT 1 FROM contact_attempts WHERE user_id = 'cr-att-open'")).rowCount).toBe(0)
 })
