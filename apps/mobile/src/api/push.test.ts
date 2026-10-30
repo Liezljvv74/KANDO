@@ -10,9 +10,9 @@ test('saving the token POSTs it with the platform', async () => {
   expect(api).toHaveBeenCalledWith('/app-api/v1/push-tokens', { method: 'POST', body: { token: 'ExponentPushToken[x]', platform: 'ios' } })
 })
 
-test('removing the token is a DELETE with the token in the body, never the URL', async () => {
+test('removing the token is a time-limited DELETE with the token in the body, never the URL', async () => {
   await removePushToken('ExponentPushToken[x]')
-  expect(api).toHaveBeenCalledWith('/app-api/v1/push-tokens', { method: 'DELETE', body: { token: 'ExponentPushToken[x]' } })
+  expect(api).toHaveBeenCalledWith('/app-api/v1/push-tokens', { method: 'DELETE', body: { token: 'ExponentPushToken[x]' }, timeLimit: true })
 })
 
 test('the switches are read with GET and changed with PATCH of /me/push', async () => {

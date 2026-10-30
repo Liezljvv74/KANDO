@@ -3,10 +3,12 @@ import * as client from '@/api/client'
 import * as profile from '@/api/my-profile'
 import { loadMe } from '@/hooks/use-me'
 import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
+import { registerForPush, unregisterPush } from '@/lib/push'
 
 import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, verify } from './use-session'
 
 jest.mock('@/api/auth')
+jest.mock('@/lib/push', () => ({ registerForPush: jest.fn(), unregisterPush: jest.fn() }))
 jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn() }))
 let mockFileExists = true
 jest.mock('expo-file-system', () => ({ File: class { get exists() { return mockFileExists } } }))
@@ -43,6 +45,8 @@ beforeEach(async () => {
   api.updateMe.mockResolvedValue({})
   jest.mocked(loadMe).mockResolvedValue({} as never)
   photos.add.mockResolvedValue({} as never)
+  jest.mocked(registerForPush).mockResolvedValue()
+  jest.mocked(unregisterPush).mockResolvedValue()
   await clearPending()
   mockFileExists = true
 })
@@ -235,4 +239,39 @@ test('finishing a sign-up reloads /me so the home nudge sees the new picture; no
   a.verifyEmail.mockResolvedValueOnce(user)
   await verify('a@b.de', '123456')
   expect(loadMe).not.toHaveBeenCalled()
+})
+
+test('every session start registers for push; an unverified account or no session does not', async () => {
+  const register = jest.mocked(registerForPush)
+  a.session.mockResolvedValueOnce(null)
+  await loadSession()
+  a.signIn.mockResolvedValueOnce(unverified)
+  await signIn('a@b.de', 'secret123')
+  expect(register).not.toHaveBeenCalled()
+  a.session.mockResolvedValueOnce(user)
+  await loadSession()
+  expect(register).toHaveBeenCalledTimes(1)
+  a.signIn.mockResolvedValueOnce(user)
+  await signIn('a@b.de', 'secret123')
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(register).toHaveBeenCalledTimes(3)
+})
+
+test('a push registration that never answers does not hold up sign-in', async () => {
+  jest.mocked(registerForPush).mockReturnValue(new Promise(() => {}))
+  a.signIn.mockResolvedValueOnce(user)
+  await expect(signIn('a@b.de', 'secret123')).resolves.toBe('signed-in')
+})
+
+test('sign-out removes the push token before the session is dropped', async () => {
+  a.signOut.mockResolvedValueOnce()
+  await signOut()
+  expect(unregisterPush).toHaveBeenCalledTimes(1)
+  expect(jest.mocked(unregisterPush).mock.invocationCallOrder[0]).toBeLessThan(a.signOut.mock.invocationCallOrder[0])
+})
+
+test('a session the server dropped forgets the push token too', () => {
+  onUnauthorized()
+  expect(unregisterPush).toHaveBeenCalledTimes(1)
 })

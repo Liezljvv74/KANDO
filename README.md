@@ -287,6 +287,17 @@ Needed before payments can be tried; the code does nothing with Stripe while `PA
 
 **Stage 2c on a phone (after the set-up and migration 0017 on `kando-dev`):** Pay now with the Stripe test card 4242 4242 4242 4242 on iOS and Android (the booking turns Confirmed); the declined card 4000 0000 0000 0002; the 3-D Secure card 4000 0027 6000 3184; close the Stripe page before paying (the "being confirmed" state, Refresh, Pay again); a booking after its pay-by time; the provider payout set-up flow and the verified mark; the notify me toggle and both notices; German and English texts. The list is in `Reports/Stage-2c-Test-Report.xlsx` (Other Checks).
 
+### Push notifications: owner steps
+
+The app asks for permission and registers the phone after every sign-in (and again when a push switch on the Account tab is turned on); sign-out removes the phone. Nothing arrives until these steps are done:
+
+1. The EAS project id must be in the app config: `apps/mobile/app.json`, `expo.extra.eas.projectId` (already set). A build without it quietly skips push.
+2. Optional, for enhanced push security: turn on "Enhanced security for push notifications" in the Expo account settings, create an access token there and set it as `EXPO_ACCESS_TOKEN` on Vercel (Production and Preview). The server sends it when it is set. Never paste it into a chat, a commit or a report.
+3. Android: upload the FCM credentials (a Firebase service account key, FCM V1) with `npx eas-cli@latest credentials` (Android, Google Service Account, push notifications).
+4. iOS: needs the paid Apple Developer account. Create the APNs key with `npx eas-cli@latest credentials` (iOS, Push Notifications) or let `eas build` create it.
+5. Make a new development build (`eas build --profile development`): `expo-notifications` is native code, and Expo Go cannot receive these pushes.
+6. Test on a real phone (a simulator gets no token): allow notifications, check the token is saved (the `push_tokens` table on `kando-dev`), send a chat message and a booking event from a second account, tap the push (it must open the booking or the chat, also when the app was closed), sign out and check the token is gone, refuse the permission and check sign-in still works.
+
 ### Legal points to clear with a lawyer (before payments are built or promised in any text)
 
 These are questions to ask, not answers. Do not publish any of the related texts before they are settled.

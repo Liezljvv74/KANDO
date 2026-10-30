@@ -17,6 +17,7 @@ import { loadMe, markNotificationsSeen, unseenOf, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
+import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
@@ -129,6 +130,7 @@ function PushSwitches() {
   if (!settings) return null
   const change = (key: keyof PushSettings) => (value: boolean) => {
     setSettings({ ...settings, [key]: value })
+    if (value) registerForPush() // a phone that refused or failed earlier gets another try
     setPushSettings({ [key]: value }).then(setSettings, () => setSettings(settings))
   }
   return (
