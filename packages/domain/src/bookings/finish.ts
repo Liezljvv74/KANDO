@@ -10,7 +10,7 @@ import { ownProvider } from '../providers/profile'
 import { paidAmount } from '../payments/ledger'
 import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
-import { CONFIRM_DAYS } from './ending-rules'
+import { CONFIRM_DAYS, REVIEW_VISIBLE_DAYS } from './ending-rules'
 import { notifyBookingEvent } from './notify'
 import { toBooking } from './requests'
 
@@ -103,7 +103,9 @@ export async function releaseBooking(exec: Exec, bookingId: string, now: Date): 
   const variant: Record<string, string> = b.status === 'stopped' ? { variant: 'stop' } : {}
   await notifyBookingEvent('payment-released', b.customerId, { bookingId: b.id, ...variant })
   if (owner) await notifyBookingEvent('payment-released', owner, { bookingId: b.id, role: 'provider', ...variant })
-  if (!b.parentBookingId) for (const u of [b.customerId, owner]) if (u) await notifyBookingEvent('review-requested', u, { bookingId: b.id })
+  // the last moment to write one: the reveal (reviews.ts writeReview)
+  const reviewBy = new Date(now.getTime() + REVIEW_VISIBLE_DAYS * DAY).toISOString()
+  if (!b.parentBookingId) for (const u of [b.customerId, owner]) if (u) await notifyBookingEvent('review-requested', u, { bookingId: b.id, date: reviewBy })
 }
 
 /**

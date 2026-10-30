@@ -3,7 +3,7 @@ import { db, notifications, providers, reviews, type Tx } from '@kando/db'
 import type { Rating, Review, ReviewInput } from '@kando/contract'
 import { isUuid } from './admin/common'
 import { lockRow, sideOf } from './bookings/finish'
-import { REVIEW_EDIT_DAYS, REVIEW_VISIBLE_DAYS, reviewVisibleAt } from './bookings/ending-rules'
+import { canEditReview, REVIEW_VISIBLE_DAYS, reviewFinalAt, reviewVisibleAt } from './bookings/ending-rules'
 import { assertNoContactDetails } from './chat/flags'
 import type { Exec } from './providers/eligibility'
 import { fail } from './providers/http'
@@ -24,7 +24,7 @@ const toReview = (r: Row, userId: string): Review => {
     text: r.text,
     createdAt: r.createdAt.toISOString(),
     visibleAt: r.visibleAt?.toISOString() ?? null,
-    editableUntil: mine ? new Date(r.createdAt.getTime() + REVIEW_EDIT_DAYS * DAY).toISOString() : null,
+    editableUntil: mine ? reviewFinalAt(r.createdAt, r.visibleAt).toISOString() : null,
     hidden: r.hidden,
   }
 }
@@ -53,7 +53,7 @@ export async function writeReview(tx: Tx, userId: string, bookingId: string, inp
       .returning()
     if (!r) return fail(409, { error: 'REVIEW_EXISTS' })
     if (other) {
-      await o.update(reviews).set({ visibleAt: now }).where(eq(reviews.id, other.id))
+      await o.update(reviews).set({ visibleAt: now, revealToldAt: now }).where(inArray(reviews.id, [other.id, r.id]))
       await o.insert(notifications).values([b.customerId, owner].map((u) => ({ userId: u, kind: 'review-visible', payload: { bookingId: b.id }, createdAt: now })))
     }
     return r
@@ -61,14 +61,23 @@ export async function writeReview(tx: Tx, userId: string, bookingId: string, inp
   return toReview(row, userId)
 }
 
-/** The author changes stars or text until 14 days after writing (else 409 REVIEW_FINAL); anyone else 404. Owner connection. */
+/**
+ * The author changes stars or text until the review is final (reviewFinalAt: shown to the other side, or 14 days after
+ * writing, whichever first; else 409 REVIEW_FINAL), so nobody edits after reading the other side's. Anyone else 404.
+ * Owner connection, the review row locked: an edit racing the second review either commits before the reveal or is refused.
+ */
 export async function editReview(tx: Tx, userId: string, reviewId: string, input: ReviewInput, now = new Date()): Promise<Review> {
   const own = isUuid(reviewId) ? (await tx.select().from(reviews).where(and(eq(reviews.id, reviewId), eq(reviews.authorId, userId))))[0] : undefined
   if (!own) return notFound()
   if (input.text) await assertNoContactDetails(userId, input.text)
-  if (now.getTime() > own.createdAt.getTime() + REVIEW_EDIT_DAYS * DAY) fail(409, { error: 'REVIEW_FINAL' })
-  const [r] = await db.update(reviews).set({ stars: input.stars, text: textOf(input.text), updatedAt: now }).where(eq(reviews.id, own.id)).returning()
-  return toReview(r!, userId)
+  const r = await db.transaction(async (o) => {
+    const [cur] = await o.select().from(reviews).where(eq(reviews.id, own.id)).for('update')
+    // both in = shown, even if this request's clock was read a moment before the other review revealed it
+    const bothIn = (await o.select({ id: reviews.id }).from(reviews).where(and(eq(reviews.bookingId, own.bookingId), ne(reviews.authorId, userId)))).length > 0
+    if (!cur || bothIn || !canEditReview(cur.createdAt, cur.visibleAt, now)) fail(409, { error: 'REVIEW_FINAL' })
+    return (await o.update(reviews).set({ stars: input.stars, text: textOf(input.text), updatedAt: now }).where(eq(reviews.id, own.id)).returning())[0]!
+  })
+  return toReview(r, userId)
 }
 
 /**

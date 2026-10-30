@@ -66,6 +66,8 @@ export const reviews = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     visibleAt: timestamp('visible_at', { withTimezone: true }),
+    // when both sides were told it is shown (`review-visible`): by the second review, or by the timer at the 7-day reveal
+    revealToldAt: timestamp('reveal_told_at', { withTimezone: true }),
   },
   (t) => [
     check('reviews_author_role_check', sql`author_role in ('customer','provider')`),

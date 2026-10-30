@@ -129,18 +129,15 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   })
 
   // A review shown by its 7 days (the other side wrote none) tells both sides once (`review-visible`, in-app only; a second
-  // review shows both at once and writeReview tells them). A constant-key lock serialises overlapping runs, so the second
-  // finds the first one's rows. Looks back REVIEW_VISIBLE_DAYS only, so a long-past reveal is never told late.
-  const reviewsShown = await (exec as typeof db).transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('reviews_shown'))`)
-    return countOn(tx, sql`
-    WITH s AS (SELECT r.booking_id, r.author_id, r.subject_id FROM reviews r
-      WHERE NOT r.hidden AND r.visible_at <= ${t}::timestamptz AND r.visible_at > ${t}::timestamptz - make_interval(days => ${REVIEW_VISIBLE_DAYS})
-        AND NOT EXISTS (SELECT 1 FROM notifications x WHERE x.kind = 'review-visible' AND x.payload->>'bookingId' = r.booking_id::text)),
+  // review shows both at once and writeReview tells them). One statement marking reveal_told_at, so a concurrent run
+  // cannot tell twice. Looks back REVIEW_VISIBLE_DAYS only, so a long-past reveal is never told late.
+  const reviewsShown = await count(sql`
+    WITH s AS (UPDATE reviews SET reveal_told_at = ${t}::timestamptz
+      WHERE reveal_told_at IS NULL AND NOT hidden AND visible_at <= ${t}::timestamptz AND visible_at > ${t}::timestamptz - make_interval(days => ${REVIEW_VISIBLE_DAYS})
+      RETURNING booking_id, author_id, subject_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
       SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING 1)
     SELECT count(*)::int AS n FROM s`)
-  })
 
   // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
   // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.

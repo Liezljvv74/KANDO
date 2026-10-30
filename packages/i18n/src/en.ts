@@ -375,7 +375,7 @@ export const en: Record<Key, string> = {
   'email.wasJobDone.body':
     'The time of your booking has passed, but the provider has not marked the job as finished. Was the job done? Confirm it in the app, or report a problem. Until then no payment is made to the provider.',
   'email.reviewRequested.subject': 'How did the job go?',
-  'email.reviewRequested.body': 'The job is completed. Write a short review in the app: it helps others choose.',
+  'email.reviewRequested.body': 'The job is completed. Write a short review in the app by {date}: it helps others choose.',
   'email.bookingCancelled.subject': 'A booking was cancelled',
   'email.bookingCancelled.body': 'The customer cancelled the booking more than 24 hours before the start. The customer gets the full amount back, so there is no payment for you. The time is free again in your calendar.',
   'email.bookingCancelled.late.subject': 'A booking was cancelled at short notice',
@@ -427,7 +427,7 @@ export const en: Record<Key, string> = {
   'notification.jobStopped': 'A job was stopped.',
   'notification.stopAmountStated': 'The provider stated the amount for the work done so far. Please agree or disagree.',
   'notification.additionalTaskRequested': 'An additional task was requested for a booking.',
-  'notification.reviewRequested': 'How did the job go? Write a review.',
+  'notification.reviewRequested': 'How did the job go? Write a review within 7 days.',
   'notification.reviewVisible': 'A review of your job is now visible.',
   'notification.providerWarning': 'A no-show was recorded for you. Another one within 12 months can suspend your profile for 30 days.',
   'email.suspended.subject': 'Your profile was suspended',

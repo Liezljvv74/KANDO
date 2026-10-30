@@ -33,6 +33,7 @@ CREATE TABLE "reviews" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"visible_at" timestamp with time zone,
+	"reveal_told_at" timestamp with time zone,
 	CONSTRAINT "reviews_author_role_check" CHECK (author_role in ('customer','provider')),
 	CONSTRAINT "reviews_stars_check" CHECK (stars between 1 and 5)
 );

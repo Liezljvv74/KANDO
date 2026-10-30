@@ -147,8 +147,15 @@ describe('reviews', () => {
   it('only one in and 7 days passed: the 7-day mark (already in the past)', () => {
     expect(reviewVisibleAt(c, false, new Date(c.getTime() + 8 * D))).toEqual(new Date(c.getTime() + 7 * D))
   })
-  it('the author may edit for 14 days, then it is final', () => {
-    expect(canEditReview(c, new Date(c.getTime() + 14 * D))).toBe(true)
-    expect(canEditReview(c, new Date(c.getTime() + 14 * D + 1))).toBe(false)
+  it('the author may edit until it is shown or 14 days passed, whichever first', () => {
+    // not shown yet (no reveal time): the 14 days bound
+    expect(canEditReview(c, null, new Date(c.getTime() + 14 * D - 1))).toBe(true)
+    expect(canEditReview(c, null, new Date(c.getTime() + 14 * D))).toBe(false)
+    // shown on day 3 (both in): final from that moment
+    const shown = new Date(c.getTime() + 3 * D)
+    expect(canEditReview(c, shown, new Date(shown.getTime() - 1))).toBe(true)
+    expect(canEditReview(c, shown, shown)).toBe(false)
+    // a reveal after the 14 days: the 14 days still end it
+    expect(canEditReview(c, new Date(c.getTime() + 20 * D), new Date(c.getTime() + 14 * D))).toBe(false)
   })
 })

@@ -77,8 +77,15 @@ export const customerCancelShare = (amount: number, startAt: Date, now: Date): n
 export const reviewVisibleAt = (completedAt: Date, bothIn: boolean, now: Date): Date =>
   bothIn ? now : new Date(completedAt.getTime() + REVIEW_VISIBLE_DAYS * DAY)
 
-/** The author may edit for 14 days after completion, then the review is final. */
-export const canEditReview = (completedAt: Date, now: Date): boolean => now.getTime() <= completedAt.getTime() + REVIEW_EDIT_DAYS * DAY
+/**
+ * The moment a review becomes final: 14 days after it was written, or when it is shown (both are in, or the 7 days ran
+ * out), whichever comes first. Nobody edits after the other side can read theirs, so reviews stay blind.
+ */
+export const reviewFinalAt = (createdAt: Date, visibleAt: Date | null): Date =>
+  new Date(Math.min(createdAt.getTime() + REVIEW_EDIT_DAYS * DAY, visibleAt?.getTime() ?? Infinity))
+
+/** The author may edit until reviewFinalAt (exclusive). */
+export const canEditReview = (createdAt: Date, visibleAt: Date | null, now: Date): boolean => now.getTime() < reviewFinalAt(createdAt, visibleAt).getTime()
 
 /**
  * Reminder number `sent + 1` is due once its day mark has passed. One per run: a late run sends the

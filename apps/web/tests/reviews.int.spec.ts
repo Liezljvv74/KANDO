@@ -109,6 +109,7 @@ it('both appear together when the second is written', async () => {
   expect((await mine(U.owner)).find((x) => x.bookingId === id && !x.mine)?.editableUntil).toBeNull() // only the author's own edit date
   expect(await visibleNotes(id)).toEqual([U.cust, U.owner].sort())
   // a later timer run tells nobody again
+  expect((await pool.query('SELECT reveal_told_at FROM reviews WHERE booking_id = $1', [id])).rows[0].reveal_told_at).not.toBeNull()
   await runDueTimers(db, new Date())
   expect(await visibleNotes(id)).toEqual([U.cust, U.owner].sort())
 })
@@ -126,9 +127,11 @@ it('one review alone appears after 7 days', async () => {
   expect(await refusal(write(U.owner, id, new Date(at)))).toEqual({ status: 409, body: { error: 'REVIEW_CLOSED' } })
   // the reveal is told once to both (the timer), and a second run sends nothing more
   expect(await visibleNotes(id)).toEqual([])
+  expect((await pool.query('SELECT reveal_told_at FROM reviews WHERE booking_id = $1', [id])).rows[0].reveal_told_at).toBeNull()
   const first = await runDueTimers(db, new Date())
   expect(first.reviewsShown).toBeGreaterThanOrEqual(1)
   expect(await visibleNotes(id)).toEqual([U.cust, U.owner].sort())
+  expect((await pool.query('SELECT reveal_told_at FROM reviews WHERE booking_id = $1', [id])).rows[0].reveal_told_at).not.toBeNull()
   await runDueTimers(db, new Date())
   expect(await visibleNotes(id)).toEqual([U.cust, U.owner].sort())
 })
@@ -141,21 +144,41 @@ it('a review written one millisecond before the 7 days end still reveals both at
   expect((await rows(id)).map((x) => x.visible_at.getTime())).toEqual([now.getTime(), now.getTime()])
 })
 
-it('editing on day 14 works and on day 15 is 409', async () => {
+it('editing works until the review is shown, then it is final (blind: nobody edits after reading the other side)', async () => {
   const { id, completedAt } = await done()
   const created = new Date(completedAt.getTime() + MIN)
   const r = await write(U.cust, id, created, { stars: 2, text: 'Naja' })
-  expect(r.editableUntil).toBe(new Date(created.getTime() + 14 * DAY).toISOString())
+  const reveal = completedAt.getTime() + 7 * DAY
+  expect(r.editableUntil).toBe(new Date(reveal).toISOString()) // the reveal comes before the 14 days
   const edit = (uid: string, now: Date, input = { stars: 3, text: 'Doch ganz gut' }) => asUser(uid, (tx) => editReview(tx, uid, r.id, input, now))
-  const ok = await edit(U.cust, new Date(created.getTime() + 14 * DAY))
-  expect(ok).toMatchObject({ stars: 3, text: 'Doch ganz gut', visibleAt: r.visibleAt })
-  expect(await refusal(edit(U.cust, new Date(created.getTime() + 14 * DAY + 1)))).toEqual({ status: 409, body: { error: 'REVIEW_FINAL' } })
-  expect(await refusal(edit(U.cust, new Date(created.getTime() + 15 * DAY)))).toEqual({ status: 409, body: { error: 'REVIEW_FINAL' } })
+  // before the reveal: allowed, up to its last millisecond
+  expect(await edit(U.cust, new Date(created.getTime() + DAY))).toMatchObject({ stars: 3, text: 'Doch ganz gut', visibleAt: r.visibleAt })
+  expect(await edit(U.cust, new Date(reveal - 1), { stars: 4, text: 'Gut' })).toMatchObject({ stars: 4 })
+  // shown by the 7 days, and after 14 days: final
+  const final = { status: 409, body: { error: 'REVIEW_FINAL' } }
+  expect(await refusal(edit(U.cust, new Date(reveal)))).toEqual(final)
+  expect(await refusal(edit(U.cust, new Date(created.getTime() + 14 * DAY)))).toEqual(final)
+  expect(await refusal(edit(U.cust, new Date(created.getTime() + 15 * DAY)))).toEqual(final)
   // only its author: the other side and a third person get 404 (through the route as well)
   expect(await refusal(edit(U.owner, created))).toEqual({ status: 404, body: { error: 'Not found' } })
   expect((await call(reviewRoute.PATCH, U.third, 'PATCH', { stars: 1 }, { id: r.id })).status).toBe(404)
   expect((await call(reviewRoute.PATCH, U.cust, 'PATCH', { stars: 6 }, { id: r.id })).status).toBe(400)
-  expect((await rows(id))[0]).toMatchObject({ stars: 3, text: 'Doch ganz gut' })
+  expect((await rows(id))[0]).toMatchObject({ stars: 4, text: 'Gut' })
+})
+
+it('once both reviews are in, neither can be edited', async () => {
+  const { id } = await done()
+  const first = await write(U.cust, id, new Date(), { stars: 1, text: 'Schlecht' })
+  // the first author may still edit while alone
+  expect(await asUser(U.cust, (tx) => editReview(tx, U.cust, first.id, { stars: 2, text: 'Mäßig' }, new Date()))).toMatchObject({ stars: 2 })
+  const second = await write(U.owner, id, new Date(), { stars: 5 })
+  expect(second.editableUntil).toBe(second.visibleAt) // final the moment it is written: both are shown
+  const final = { status: 409, body: { error: 'REVIEW_FINAL' } }
+  expect(await refusal(asUser(U.owner, (tx) => editReview(tx, U.owner, second.id, { stars: 1, text: 'Retourkutsche' }, new Date())))).toEqual(final)
+  expect(await refusal(asUser(U.cust, (tx) => editReview(tx, U.cust, first.id, { stars: 1 }, new Date())))).toEqual(final)
+  // even with a clock read a moment before the reveal: both in is final
+  expect(await refusal(asUser(U.cust, (tx) => editReview(tx, U.cust, first.id, { stars: 1 }, new Date(Date.now() - 60_000))))).toEqual(final)
+  expect((await rows(id)).map((x) => x.stars)).toEqual([2, 5])
 })
 
 it('a review with a phone number is 422', async () => {

@@ -374,7 +374,7 @@ export const de = {
   'email.wasJobDone.body':
     'Der Termin deiner Buchung ist vorbei, aber der Anbieter hat den Auftrag nicht als erledigt markiert. Wurde der Auftrag erledigt? Bestätige ihn in der App oder melde ein Problem. Bis dahin wird keine Zahlung an den Anbieter ausgeführt.',
   'email.reviewRequested.subject': 'Wie lief der Auftrag?',
-  'email.reviewRequested.body': 'Der Auftrag ist abgeschlossen. Schreib in der App eine kurze Bewertung: Sie hilft anderen bei der Wahl.',
+  'email.reviewRequested.body': 'Der Auftrag ist abgeschlossen. Schreib bis {date} in der App eine kurze Bewertung: Sie hilft anderen bei der Wahl.',
   'email.bookingCancelled.subject': 'Eine Buchung wurde storniert',
   'email.bookingCancelled.body': 'Der Kunde hat die Buchung mehr als 24 Stunden vor dem Termin storniert. Er bekommt den vollen Betrag zurück, für dich gibt es daher keine Zahlung. Die Zeit ist in deinem Kalender wieder frei.',
   'email.bookingCancelled.late.subject': 'Eine Buchung wurde kurzfristig storniert',
@@ -426,7 +426,7 @@ export const de = {
   'notification.jobStopped': 'Ein Auftrag wurde abgebrochen.',
   'notification.stopAmountStated': 'Der Anbieter hat den Betrag für die bisher erledigte Arbeit genannt. Bitte stimme zu oder widersprich.',
   'notification.additionalTaskRequested': 'Zu einer Buchung wurde eine zusätzliche Aufgabe angefragt.',
-  'notification.reviewRequested': 'Wie lief der Auftrag? Schreib eine Bewertung.',
+  'notification.reviewRequested': 'Wie lief der Auftrag? Schreib innerhalb von 7 Tagen eine Bewertung.',
   'notification.reviewVisible': 'Eine Bewertung zu deinem Auftrag ist jetzt sichtbar.',
   'notification.providerWarning': 'Ein Nichterscheinen wurde bei dir vermerkt. Bei einem weiteren innerhalb von 12 Monaten kann dein Profil für 30 Tage gesperrt werden.',
   'email.suspended.subject': 'Dein Profil wurde gesperrt',
