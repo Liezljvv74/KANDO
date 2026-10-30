@@ -70,7 +70,7 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
   await postCard(r.threadId, userId, { type: 'additional-task', refId: r.row.id })
   const to = side === 'customer' ? (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, r.row.providerId)))[0]?.id : r.row.customerId
   if (to) await notifyBookingEvent('additional-task-requested', to, { requestId: r.row.id, ...(side === 'customer' && { role: 'provider' }) }) // the provider is asked to quote
-  return toRequest(r.row)
+  return toRequest(r.row, now)
 }
 
 /**

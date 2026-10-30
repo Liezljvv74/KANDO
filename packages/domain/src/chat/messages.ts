@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { db, messages, type Tx } from '@kando/db'
 import { MESSAGES_PAGE, type Card, type Message, type MessageInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
@@ -9,7 +9,7 @@ import type { NormalizedImage } from '../photos'
 import { documentsBucket, removeObject, storage } from '../storage'
 import { assertNoContactDetails } from './flags'
 import { notifyNewMessage } from './notice'
-import { CHAT_PHOTO_LINK_SECONDS } from './rules'
+import { CHAT_PHOTO_LINK_SECONDS, MESSAGE_LIMIT, MESSAGE_LIMIT_WINDOW_MINUTES } from './rules'
 import { ownThread } from './threads'
 
 type Row = typeof messages.$inferSelect
@@ -35,11 +35,26 @@ async function toMessage(r: Row & { ts: string }, userId: string): Promise<Messa
   }
 }
 
-/** The thread, for one of its parties; 403 BLOCKED when either side blocked the other (RLS refuses the insert as well). */
-async function writableThread(tx: Tx, threadId: string) {
+/**
+ * 429 MESSAGE_LIMIT once the user sent MESSAGE_LIMIT text and photo messages (all threads, cards excluded) inside the window.
+ * The user's advisory lock (held to the end of the transaction) makes parallel sends take turns, so they cannot all pass.
+ */
+export async function assertSendRate(tx: Tx, userId: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('message_limit'), hashtext(${userId}))`)
+  const { n } = (await tx.select({ n: sql<number>`count(*)::int` }).from(messages).where(and(
+    eq(messages.senderId, userId),
+    inArray(messages.kind, ['text', 'photo']),
+    sql`${messages.createdAt} > clock_timestamp() - make_interval(mins => ${MESSAGE_LIMIT_WINDOW_MINUTES})`,
+  )))[0]!
+  if (n >= MESSAGE_LIMIT) fail(429, { error: 'MESSAGE_LIMIT' })
+}
+
+/** The thread, for one of its parties; 403 BLOCKED when either side blocked the other (RLS refuses the insert as well); 429 over the send limit. */
+async function writableThread(tx: Tx, userId: string, threadId: string) {
   const t = await ownThread(tx, threadId)
   const blocked = (await tx.execute(sql`SELECT is_blocked(${t.customerId}, ${t.providerId}::uuid) AS b`)).rows[0]?.b === true
   if (blocked) fail(403, { error: 'BLOCKED' })
+  await assertSendRate(tx, userId)
   return t
 }
 
@@ -60,7 +75,7 @@ async function listWhere(tx: Tx, userId: string, where: SQL, limit = PAGE): Prom
 
 /** A text message. The contact check runs before anything is stored. */
 export async function sendMessage(tx: Tx, userId: string, threadId: string, input: MessageInput, afterCommit: AfterCommit): Promise<Message> {
-  const t = await writableThread(tx, threadId)
+  const t = await writableThread(tx, userId, threadId)
   await assertNoContactDetails(userId, input.body, t.id)
   const sent = await insertMessage(tx, { threadId: t.id, senderId: userId, kind: 'text', body: input.body }, userId)
   notifyNewMessage(afterCommit, t, userId)
@@ -69,7 +84,7 @@ export async function sendMessage(tx: Tx, userId: string, threadId: string, inpu
 
 /** A photo, in the private documents bucket: the object first, then the row; the object is removed once, by the caller's `onFailure`, when the insert or the commit fails. */
 export async function sendPhoto(tx: Tx, userId: string, threadId: string, photo: NormalizedImage, afterCommit: AfterCommit, onFailure: AfterCommit = () => {}): Promise<Message> {
-  const t = await writableThread(tx, threadId)
+  const t = await writableThread(tx, userId, threadId)
   const key = `chat/${t.id}/${randomUUID()}.jpg`
   await storage().put(documentsBucket(), key, photo.data, 'image/jpeg')
   onFailure(() => removeObject(documentsBucket(), key))

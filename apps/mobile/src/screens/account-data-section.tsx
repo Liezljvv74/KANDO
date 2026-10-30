@@ -7,14 +7,14 @@ import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { signOutGeneration } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
-import { accountError, afterDeleteFailure, emailMatches, exportText } from '@/lib/account-data'
+import { accountError, afterDeleteFailure, exportText } from '@/lib/account-data'
 
-/** Export of the person's data through the share sheet, and the deletion of the account behind a typed-email confirmation. */
+/** Export of the person's data through the share sheet, and the deletion of the account behind a password confirmation. */
 export function AccountDataSection() {
   useLang()
   const { user, signOut } = useSession()
   const [confirming, setConfirming] = useState(false)
-  const [typed, setTyped] = useState('')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<ExportFormat | 'delete' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,15 +33,16 @@ export function AccountDataSection() {
   }
 
   async function remove() {
-    if (busy || !user || !emailMatches(typed, user.email)) return
+    if (busy || !user || !password) return
     setBusy('delete')
     setError(null)
     try {
-      await deleteAccount(typed.trim())
+      await deleteAccount(password)
     } catch (e) {
       const after = await afterDeleteFailure(e, getMe) // the server may have committed: never claim "not deleted" without asking
       if (!after.deleted) {
         setError(after.text)
+        setPassword('') // never kept after a refusal
         return setBusy(null)
       }
     }
@@ -60,10 +61,10 @@ export function AccountDataSection() {
           <Text style={styles.danger}>{t('account.deleteHeading')}</Text>
           <Text style={styles.text}>{t('account.deleteWarning')}</Text>
           <Text style={styles.text}>{t('account.deleteRetention')}</Text>
-          <Field label={t('account.deleteType')} value={typed} onChangeText={setTyped} placeholder={user?.email} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} editable={!busy} />
+          <Field label={t('account.deletePassword')} value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" autoCapitalize="none" autoCorrect={false} editable={!busy} />
           <ErrorText text={error} />
-          <Button label={t('account.deleteConfirm')} danger onPress={remove} busy={busy === 'delete'} disabled={!user || !emailMatches(typed, user.email) || (!!busy && busy !== 'delete')} />
-          <LinkText label={t('account.deleteCancel')} onPress={() => (setConfirming(false), setTyped(''), setError(null))} />
+          <Button label={t('account.deleteConfirm')} danger onPress={remove} busy={busy === 'delete'} disabled={!user || !password || (!!busy && busy !== 'delete')} />
+          <LinkText label={t('account.deleteCancel')} onPress={() => (setConfirming(false), setPassword(''), setError(null))} />
         </>
       ) : (
         <>

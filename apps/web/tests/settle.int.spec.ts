@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { deleteAccount, setGatewayForTests, settle } from '@kando/domain'
-import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 const U = { cust: 'st-cust', owner: 'st-owner', bare: 'st-bare', cust2: 'st-cust2' }
@@ -239,16 +239,16 @@ it('two parallel settles of the same booking: exactly one wins', async () => {
 it('deleting an account with paid, unsettled money in any status is 409 OPEN_BOOKINGS; once settled it is allowed', async () => {
   const id = await paidBooking({ customer: U.cust2 })
   await pool.query("UPDATE bookings SET status = 'expired' WHERE id = $1", [id]) // not a money-open status, but paid and not released
-  expect(await refusal(deleteAccount(U.cust2, EMAIL(U.cust2), () => {}))).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
+  expect(await refusal(deleteAccount(U.cust2, () => {}))).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
   await settle(db, id, 0)
-  await deleteAccount(U.cust2, EMAIL(U.cust2), () => {})
+  await deleteAccount(U.cust2, () => {})
   expect((await pool.query('SELECT count(*)::int n FROM users WHERE id = $1', [U.cust2])).rows[0].n).toBe(0)
   expect((await pool.query('SELECT count(*)::int n FROM ledger_entries WHERE booking_id = $1', [id])).rows[0].n).toBe(2) // the money rows stay
 })
 
 it('deleting an account with a confirmed booking is 409 OPEN_BOOKINGS', async () => {
   const id = await paidBooking()
-  for (const uid of [U.cust, U.owner]) expect(await refusal(deleteAccount(uid, EMAIL(uid), () => {}))).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
+  for (const uid of [U.cust, U.owner]) expect(await refusal(deleteAccount(uid, () => {}))).toEqual({ status: 409, body: { error: 'OPEN_BOOKINGS' } })
   expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE id = $1', [id])).rows[0].n).toBe(1)
   expect((await pool.query('SELECT count(*)::int n FROM users WHERE id = ANY($1)', [[U.cust, U.owner]])).rows[0].n).toBe(2)
 })

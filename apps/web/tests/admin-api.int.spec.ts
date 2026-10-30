@@ -352,3 +352,21 @@ it('suspension and published-again emails go to published profiles only; the cro
   expect(outboxForTests()).toHaveLength(1)
   expect((await pool.query("SELECT count(*)::int AS n FROM users WHERE id LIKE 'aa-s%' AND suspended_until IS NOT NULL")).rows[0].n).toBe(0)
 })
+
+it('a Reviewer and an Administrator reading a provider get no Stripe, tax or VAT field', async () => {
+  await pool.query("UPDATE providers SET stripe_account_id = 'acct_aa_secret', payouts_ready_at = now(), tax_number = '12/345/67890', vat_id = 'DE123456789', legal_status = 'business', invoice_consent_at = now() WHERE id = $1", [providerId])
+  for (const uid of ['aa-rev', 'aa-admin']) {
+    const res = await get('providers', uid, '', providerId)
+    const data = (await res.json()).data
+    for (const k of ['stripeAccountId', 'payoutsReadyAt', 'taxNumber', 'vatId', 'legalStatus', 'invoiceConsentAt', 'location']) expect(data).not.toHaveProperty(k)
+    expect(data.ownerEmail).toBe(EMAIL('aa-owner'))
+    expect(JSON.stringify(data)).not.toContain('acct_aa_secret')
+  }
+})
+
+it('a user id of 65 characters or with a slash is 404 for read and suspend', async () => {
+  for (const id of ['a'.repeat(65), 'a/b', 'a b']) {
+    expect((await get('users', 'aa-admin', '', id)).status).toBe(404)
+    expect((await adminCall(suspend.POST, 'aa-admin', 'POST', '/x', { until: null, reason: '' }, { id })).status).toBe(404)
+  }
+})

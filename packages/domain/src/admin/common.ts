@@ -3,6 +3,7 @@ import type { AdminListQuery } from '@kando/contract'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const isUuid = (s: string) => UUID.test(s)
+export const isUserId = (s: string) => /^[A-Za-z0-9_-]{1,64}$/.test(s)
 
 /** The filter object of a list query (`{ "q": "...", "status": "..." }`); anything else is empty. */
 export function filterOf(q: AdminListQuery): Record<string, unknown> {

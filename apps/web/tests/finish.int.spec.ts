@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runDueTimersFor, runExpiryAndReminders, runMoneySteps, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runExpiryAndReminders, runMoneySteps, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -365,17 +365,6 @@ it('7 days after the end with no action the booking goes to staff with a no-resp
   expect(d[0].decide_by.getTime()).toBeGreaterThan(end + 7 * DAY)
   expect(g.calls).toEqual([]) // the money stays frozen
   expect(await refusal(confirm(U.cust, id, new Date(end + 8 * DAY)))).toEqual({ status: 409, body: { error: 'not-open' } })
-})
-
-it('the lazy per-user path never runs the release, reminder or silent-provider rules', async () => {
-  const T = new Date('2027-12-01T10:00:00Z')
-  const fin = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T })
-  const conf = await paidBooking({ startAt: T })
-  await runDueTimersFor(db, U.cust, new Date(T.getTime() + 30 * DAY))
-  await runDueTimersFor(db, U.owner, new Date(T.getTime() + 30 * DAY))
-  expect(await row(fin.id)).toMatchObject({ status: 'finished', confirm_reminders_sent: 0, released_at: null })
-  expect(await row(conf.id)).toMatchObject({ status: 'confirmed', asked_done_at: null })
-  expect(g.calls).toEqual([])
 })
 
 it('a cron that was down never asks and escalates in the same run: staff get it 24 hours after the question', async () => {

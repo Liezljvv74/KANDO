@@ -1,3 +1,4 @@
+import { assertNoContactDetailsIn } from './chat/flags'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import sharp from 'sharp'
@@ -10,7 +11,7 @@ import { mediaBucket, photoUrl, removeObject, storage } from './storage'
 
 export const MAX_PORTFOLIO_PHOTOS = 12
 export const MAX_PHOTO_BYTES = 10_000_000
-const MAX_PIXELS = 40_000_000 // decompression-bomb cap, above any phone camera
+export const MAX_PIXELS = 25_000_000 // decompression-bomb cap; the app sends photos at most 1600 px
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export type PreparedPhoto = { kind: 'profile' | 'portfolio'; alt: string | null; data: Buffer; width: number; height: number; key: string }
@@ -84,6 +85,7 @@ export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
 
 /** Inserts the row for the photo `preparePhoto` already stored. A profile photo replaces the old one. */
 export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCommit: AfterCommit) {
+  await assertNoContactDetailsIn(userId, [p.alt])
   await lockProfile(tx, userId)
   const profile = await ownProvider(tx, userId)
   if (p.kind === 'portfolio') {

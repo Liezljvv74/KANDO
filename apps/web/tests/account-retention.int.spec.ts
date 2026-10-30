@@ -3,7 +3,7 @@ import { pool } from '@kando/db'
 import { clearOutbox, outboxForTests, setStorageForTests } from '@kando/domain'
 import { cleanupUsers, EMAIL, memoryStorage, seedBase, seedUser } from './helpers'
 
-vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
+vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
 const me = await import('../app/app-api/v1/me/route')
 const cron = await import('../app/api/cron/suspensions/route')
 
@@ -36,7 +36,7 @@ afterAll(async () => {
 
 const del = (uid: string) =>
   me.DELETE(
-    new Request('http://localhost/app-api/v1/me', { method: 'DELETE', headers: { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' }, body: JSON.stringify({ confirmEmail: EMAIL(uid) }) }),
+    new Request('http://localhost/app-api/v1/me', { method: 'DELETE', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' }, body: JSON.stringify({ password: 'right-password' }) }),
     { params: Promise.resolve({}) },
   )
 const runCron = () => cron.GET(new Request('http://localhost/api/cron/suspensions', { headers: { authorization: 'Bearer s3cret' } }))

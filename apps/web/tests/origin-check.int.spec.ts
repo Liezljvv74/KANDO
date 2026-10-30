@@ -9,13 +9,29 @@ const ctx = { params: Promise.resolve({}) }
 const app = createAppRequest(async () => ({ id: 'oc-user', email: 'oc-user@test.skilled.invalid', emailVerified: true }))
 const appRoute = app({ auth: 'required' }, async () => Response.json({ ran: true }))
 const adminRoute = adminRequest('any', async () => Response.json({ ran: true }))
-const req = (method: string, origin?: string) =>
-  new Request('http://localhost:3000/x', { method, headers: origin ? { origin } : {} })
+const req = (method: string, origin?: string, cookie?: string) =>
+  new Request('http://localhost:3000/x', { method, headers: { ...(origin ? { origin } : {}), ...(cookie ? { cookie } : {}) } })
 
 afterEach(() => vi.unstubAllEnvs())
 
 for (const [name, route] of [['app API', appRoute], ['back office API', adminRoute]] as const) {
-  it(`${name}: no Origin and the same Origin pass, a foreign Origin on a write is 403, a read with a foreign Origin passes`, async () => {
+  it(`${name}: a cookie write without Origin is 403; a cookieless write and a GET without Origin pass`, async () => {
+    await seedUser('oc-user', 'admin')
+    staff.id = 'oc-user'
+    const cookie = 'uid=oc-user:oc-user@test.skilled.invalid'
+    for (const method of ['POST', 'PATCH', 'DELETE']) {
+      const refused = await route(req(method, undefined, cookie), ctx)
+      expect(refused.status).toBe(403)
+      expect(await refused.json()).toEqual({ error: 'Forbidden' })
+    }
+    expect((await route(req('POST', 'http://localhost:3000', cookie), ctx)).status).toBe(200) // the phone app and the browser send Origin
+    expect((await route(req('POST'), ctx)).status).toBe(200)
+    const read = await route(req('GET', undefined, cookie), ctx)
+    expect(read.status).toBe(200)
+    expect(read.headers.get('cache-control')).toBe('private, no-store')
+  })
+
+  it(`${name}: no Origin without a cookie and the same Origin pass, a foreign Origin on a write is 403, a read with a foreign Origin passes`, async () => {
     await seedUser('oc-user', 'admin')
     staff.id = 'oc-user'
     expect((await route(req('POST'), ctx)).status).toBe(200)

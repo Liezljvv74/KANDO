@@ -1,3 +1,4 @@
+import { assertNoContactDetailsIn } from './chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, isPostcode, photos, users, type Tx } from '@kando/db'
 import type { Me, MePatch } from '@kando/contract'
@@ -107,6 +108,7 @@ export async function getMe(tx: Tx, userId: string): Promise<Me> {
 
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */
 export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<Me> {
+  await assertNoContactDetailsIn(userId, [patch.firstName, patch.lastName])
   const a = patch.address
   if (a && !(await isPostcode(a.country, a.postcode, tx))) fail(400, { error: 'Invalid postcode' }) // the format only: a real but unlisted postcode is fine
   await tx

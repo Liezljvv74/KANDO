@@ -1,3 +1,4 @@
+import { assertNoContactDetailsIn } from '../chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
 import { lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
 import type { Missing, MyProfile, ProfileInput } from '@kando/contract'
@@ -143,6 +144,7 @@ export async function upsertMyProfile(
   userId: string,
   input: ProfileInput,
 ): Promise<{ profile: MyProfile; created: boolean }> {
+  await assertNoContactDetailsIn(userId, [input.businessName, input.bio, input.strengths, input.experience, ...(input.skills ?? [])]) // impressum and taxNumber may hold contact details
   const { created } = await ensure(tx, userId)
   const existing = (await ownProvider(tx, userId))!
   const type = input.providerType ? (input.providerType === 'business' ? 'business' : 'private') : undefined

@@ -33,6 +33,23 @@ type Handler<P> = (ctx: {
   onFailure: AfterCommit
 }) => Promise<Response | AfterTransaction>
 
+/** Reads a clone of the body chunk by chunk and stops (cancelling the reader) as soon as more than `max` bytes were seen: never buffers a body that does not end. */
+async function exceedsBytes(request: Request, max: number): Promise<boolean> {
+  const reader = request.clone().body?.getReader()
+  if (!reader) return false
+  let seen = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return false
+    seen += value.byteLength
+    if (seen > max) {
+      // Not awaited: cancelling one branch of the clone's tee settles only once the original body is cancelled too.
+      reader.cancel().catch(() => {})
+      return true
+    }
+  }
+}
+
 /**
  * Builds the app request wrapper around a session source (the web app passes the Neon Auth one):
  * session check, body-size limit, first-contact users row, one transaction as app_user, rollback on error.
@@ -60,13 +77,13 @@ export function createAppRequest(getSession: SessionResolver, opts: { schedule?:
           return Response.json({ error: 'EMAIL_NOT_VERIFIED' }, { status: 403 })
         }
         const session = found?.emailVerified ? found : null
+        const length = request.headers.get('content-length')
+        // An upload must declare its size (the phone's fetch does); the count below still catches a wrong one.
+        if (opts.prepare && length === null) return Response.json({ error: 'LENGTH_REQUIRED' }, { status: 411 })
         if (opts.maxBodyBytes !== undefined) {
-          const declared = Number(request.headers.get('content-length') ?? 0)
-          if (declared > opts.maxBodyBytes) return Response.json({ error: 'Payload too large' }, { status: 413 })
-          // Content-Length can be absent or wrong: count the real bytes on a clone, still before the handler.
-          if (request.body && (await request.clone().arrayBuffer()).byteLength > opts.maxBodyBytes) {
-            return Response.json({ error: 'Payload too large' }, { status: 413 })
-          }
+          if (Number(length ?? 0) > opts.maxBodyBytes) return Response.json({ error: 'Payload too large' }, { status: 413 })
+          // Content-Length can be absent or wrong: count the real bytes on a clone while reading, still before the handler.
+          if (await exceedsBytes(request, opts.maxBodyBytes)) return Response.json({ error: 'Payload too large' }, { status: 413 })
         }
         const onFailure: AfterCommit = (fn) => void failQueue.push(fn)
         const prepared = (opts.prepare ? await opts.prepare(request, onFailure) : undefined) as P
@@ -90,6 +107,7 @@ export function createAppRequest(getSession: SessionResolver, opts: { schedule?:
           for (const fn of queue) await fn().catch((e) => console.error(`[app-request ${requestId}] after-commit task failed ${describeError(e)}`))
           await runSends()
         })
+        if (!response.headers.has('cache-control')) response.headers.set('Cache-Control', 'private, no-store') // signed links, personal data
         return response
       } catch (error) {
         for (const fn of failQueue) await fn().catch((e) => console.error(`[app-request ${requestId}] cleanup failed ${describeError(e)}`))

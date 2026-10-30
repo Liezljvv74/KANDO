@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm'
-import { bookingAppInsert, bookings, db, providers, quotes, services, type Tx } from '@kando/db'
+import { bookingAppInsert, bookings, providers, quotes, services, type Tx } from '@kando/db'
 import { LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type DirectBookingInput, type Page } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
@@ -12,7 +12,6 @@ import { threadForBooking, threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { assertSlotFree, lockProviderSlots } from './busy'
 import { notifyBookingEvent, notifyProposal } from './notify'
-import { runDueTimersFor } from './timers'
 import { assertWithinLimits, toBooking } from './requests'
 import { canTransact } from '../payments/rules'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
@@ -23,8 +22,8 @@ const notFound = () => fail(404, { error: 'Not found' })
 type Row = typeof bookings.$inferSelect
 
 /** The job address stays private to the customer; the provider sees it only once the booking was accepted (payBy is set then). */
-const view = (b: Row, userId: string): Booking => {
-  const dto = toBooking(b)
+const view = (b: Row, userId: string, now = new Date()): Booking => {
+  const dto = toBooking(b, now)
   return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
 }
 
@@ -60,7 +59,7 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
     .returning(getTableColumns(bookings))
   await threadForBooking(tx, row!.id) // a direct booking gets its own chat
   notifyProposal(afterCommit, provider, row!)
-  return view(row!, userId)
+  return view(row!, userId, now)
 }
 
 /**
@@ -68,7 +67,6 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
  * is followed by its additional tasks (oldest first), so a task is always on its root's page.
  */
 export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string): Promise<Page<Booking>> {
-  await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   const found = await tx
     .select({ b: bookings, ts: stampOf(bookings.createdAt), id: bookings.id })
@@ -110,7 +108,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
   const set = async (to: Booking['status'], patch: Partial<Row>) => {
     if (!canTransition(b.status as Booking['status'], to)) fail(409, { error: 'not-open' })
     const [row] = await tx.update(bookings).set({ ...patch, status: to, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
-    return view(row!, userId)
+    return view(row!, userId, now)
   }
   const tell = (kind: 'booking-declined' | 'booking-accepted' | 'request-reopened', extra: Record<string, string> = {}) => role === 'provider' && afterCommit(() => notifyBookingEvent(kind, b.customerId, { bookingId: b.id, ...extra })) // only the provider's answer is told to the customer
   if (answer.type === 'decline') {
@@ -151,5 +149,5 @@ export async function withdrawBooking(tx: Tx, userId: string, bookingId: string,
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
-  return view(row!, userId)
+  return view(row!, userId, now)
 }

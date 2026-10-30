@@ -65,7 +65,8 @@ export const errorKeys: Record<string, Key> = {
   network: 'error.network',
   'Server error': 'error.server',
   BAD_FORMAT: 'error.badFormat',
-  EMAIL_MISMATCH: 'account.emailMismatch',
+  WRONG_PASSWORD: 'account.wrongPassword',
+  AUTH_BUSY: 'error.authBusy',
   LAST_ADMIN: 'account.lastAdmin',
   REPLACEMENT_FIRST: 'error.replacementFirst',
   // Booking rules (`error`)
@@ -113,6 +114,8 @@ export const errorKeys: Record<string, Key> = {
   // Chat (`error`)
   CONTACT_DETAILS: 'chat.contactBlocked',
   BLOCKED: 'chat.blocked',
+  MESSAGE_LIMIT: 'chat.sendLimit',
+  LENGTH_REQUIRED: 'error.generic', // an upload sent without Content-Length (the app always sends it)
   // Auth server (`code`)
   INVALID_EMAIL_OR_PASSWORD: 'error.invalidLogin',
   USER_ALREADY_EXISTS: 'error.emailTaken',

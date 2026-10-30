@@ -21,7 +21,7 @@ import {
   type InvoiceDraft,
   type Storage,
 } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -233,7 +233,7 @@ it('account deletion keeps invoices', async () => {
   await tryRelease(db, b, cust, new Date())
   const [inv] = await invoicesOf(p.id)
   expect(inv.customer_id).toBe(cust)
-  await deleteAccount(cust, EMAIL(cust), () => {})
+  await deleteAccount(cust, () => {})
   expect((await pool.query('SELECT id FROM users WHERE id = $1', [cust])).rows).toEqual([])
   expect((await pool.query('SELECT id FROM bookings WHERE id = $1', [b])).rows).toEqual([])
   const [kept] = await invoicesOf(p.id)
@@ -287,10 +287,7 @@ it('an account deletion first invoices paid-out groups that still wait on an unp
   expect(await tryRelease(db, root, cust, new Date())).toBe(true)
   await issueDueInvoices(db, new Date())
   expect(await invoicesOf(p.id)).toEqual([])
-  // a refused deletion (wrong email) invoices nothing early
-  await expect(deleteAccount(cust, 'wrong@test.skilled.invalid', () => {})).rejects.toMatchObject({ status: 400 })
-  expect(await invoicesOf(p.id)).toEqual([])
-  await deleteAccount(cust, EMAIL(cust), () => {})
+  await deleteAccount(cust, () => {})
   const [inv] = await invoicesOf(p.id)
   expect(inv).toMatchObject({ root_booking_id: root, customer_id: cust })
   expect((inv.draft as InvoiceDraft).lines.map((l) => [l.bookingId, l.kind, l.gross])).toEqual([[root, 'job', 100]])
@@ -304,10 +301,10 @@ it('an account deletion is refused while paid-out money has no invoice (issuing 
   const root = await paid(p.id, { customer: cust })
   await releaseBooking(db, root, new Date()) // settled, no invoice yet
   await pool.query("UPDATE providers SET country = 'XX' WHERE id = $1", [p.id]) // no VAT rate: issuing throws (logged)
-  await expect(deleteAccount(cust, EMAIL(cust), () => {})).rejects.toMatchObject({ status: 409 })
+  await expect(deleteAccount(cust, () => {})).rejects.toMatchObject({ status: 409 })
   expect((await pool.query('SELECT id FROM users WHERE id = $1', [cust])).rows).toHaveLength(1)
   await pool.query("UPDATE providers SET country = 'DE' WHERE id = $1", [p.id])
-  await deleteAccount(cust, EMAIL(cust), () => {})
+  await deleteAccount(cust, () => {})
   expect(await invoicesOf(p.id)).toHaveLength(1)
 })
 

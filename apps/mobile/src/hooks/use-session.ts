@@ -95,10 +95,15 @@ async function finish(p: PendingSignup) {
     if (p.firstName && p.lastName) {
       const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
       // A postcode the server refuses must not block the names for good (the form cannot show it any more): saved without the address.
-      await updateMe({ ...names, ...(p.address && { address: p.address }) }).catch((e) => {
-        if (e instanceof ApiError && e.code === 'Invalid postcode') return updateMe(names)
-        throw e
-      })
+      try {
+        await updateMe({ ...names, ...(p.address && { address: p.address }) }).catch((e) => {
+          if (e instanceof ApiError && e.code === 'Invalid postcode') return updateMe(names)
+          throw e
+        })
+      } catch (e) {
+        // A name the server refuses as contact details never passes: dropped, not retried; the account screen shows the refusal later.
+        if (!(e instanceof ApiError && e.code === 'CONTACT_DETAILS')) throw e
+      }
       // Saved: a retry only repeats the picture, so later edits are never overwritten.
       await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri })
     }
