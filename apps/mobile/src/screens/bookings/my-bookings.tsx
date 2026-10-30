@@ -1,22 +1,26 @@
+import { useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 
 import { listBookings, listRequests, type Role } from '@/api/bookings'
 import { Button, ErrorText } from '@/components/auth-ui'
+import { NotificationBanners } from '@/components/notification-banner'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
-import { useMe } from '@/hooks/use-me'
+import { loadMe, useMe } from '@/hooks/use-me'
 import { useMore } from '@/hooks/use-more'
 import { t, useLang, type Key } from '@/i18n'
 import { bookingStatusText } from '@/lib/booking-status'
 import { formatWhen } from '@/lib/booking-time'
 import { go } from '@/lib/go'
+import { isBookingNotice } from '@/lib/notification-text'
 
 /** "My requests and bookings": as customer, and as provider for people who offer services. */
 export default function MyBookings() {
   useLang()
   const me = useMe()
+  useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
   const [role, setRole] = useState<Role>('customer')
   const fetch = useCallback(async () => ({ role, bookings: await listBookings(role), requests: await listRequests(role) }), [role])
   const { data, error, retry } = useLoad(fetch)
@@ -35,12 +39,14 @@ export default function MyBookings() {
     return (
       <FormScreen title={title}>
         {switcher}
+        <NotificationBanners me={me} only={isBookingNotice} />
         {error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}
       </FormScreen>
     )
   return (
     <FormScreen title={title}>
       {switcher}
+      <NotificationBanners me={me} only={isBookingNotice} />
       <SectionTitle text={t('booking.bookings')} />
       {bookings.docs.map((b) => (
         <Pressable key={b.id} accessibilityRole="button" onPress={() => go(`/bookings/${b.id}`)}>
