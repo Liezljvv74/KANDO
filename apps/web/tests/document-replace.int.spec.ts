@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { offerableServiceIds, setStorageForTests } from '@kando/domain'
+import { offerableServiceIds } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

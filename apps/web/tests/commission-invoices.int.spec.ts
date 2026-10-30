@@ -2,7 +2,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { CommissionInvoiceListSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, clearPushOutbox, pushOutboxForTests, deleteAccount, issueCommissionInvoices, runDueTimers, setGatewayForTests, setStorageForTests, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
+import { cancelBooking, clearOutbox, clearPushOutbox, deleteAccount, issueCommissionInvoices, runDueTimers, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
+import { pushOutboxForTests, setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 

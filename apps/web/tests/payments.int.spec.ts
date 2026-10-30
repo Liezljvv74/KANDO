@@ -3,7 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { PayLinkSchema } from '@kando/contract'
-import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, outboxForTests, runDueTimers, setGatewayForTests, type GatewayEvent } from '@kando/domain'
+import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, runDueTimers, type GatewayEvent } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 

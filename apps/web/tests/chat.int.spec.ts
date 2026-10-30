@@ -3,7 +3,8 @@ import sharp from 'sharp'
 import { sql } from 'drizzle-orm'
 import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { sendMessage, setStorageForTests } from '@kando/domain'
+import { sendMessage } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

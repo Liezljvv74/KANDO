@@ -2,22 +2,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { randomUUID } from 'node:crypto'
 import { asUser, db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import {
-  cancelBooking,
-  clearOutbox,
-  confirmJob,
-  createPayLink,
-  finishJob,
-  handleGatewayEvent,
-  objectNoShow,
-  openDispute,
-  outboxForTests,
-  reportNoShow,
-  runDueTimers,
-  setGatewayForTests,
-  stopJob,
-  type GatewayEvent,
-} from '@kando/domain'
+import { cancelBooking, clearOutbox, confirmJob, createPayLink, finishJob, handleGatewayEvent, objectNoShow, openDispute, reportNoShow, runDueTimers, stopJob, type GatewayEvent } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 

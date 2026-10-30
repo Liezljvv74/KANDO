@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { clientKeyOf, setStorageForTests } from '@kando/domain'
+import { clientKeyOf } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

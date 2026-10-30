@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runExpiryAndReminders, runMoneySteps, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, confirmJob, finishJob, releaseBooking, runDueTimers, runExpiryAndReminders, runMoneySteps } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 

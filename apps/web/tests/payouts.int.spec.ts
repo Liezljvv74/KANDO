@@ -3,7 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, getPublicProfile, notifyBookingEvent, outboxForTests, payoutStatus, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, getPublicProfile, notifyBookingEvent, payoutStatus, refreshAccount, runDueTimers } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 

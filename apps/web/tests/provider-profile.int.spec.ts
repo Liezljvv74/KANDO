@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { setStorageForTests } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { MeSchema, MyProfileSchema } from '@kando/contract'
 import { call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase } from './helpers'
 

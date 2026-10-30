@@ -4,7 +4,8 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { DocumentSchema, DocumentsListSchema, PhotosListSchema } from '@kando/contract'
-import { createAppRequest, prepareDocument, setStorageForTests } from '@kando/domain'
+import { createAppRequest, prepareDocument } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))

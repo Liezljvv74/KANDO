@@ -1,9 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { getPage, getPublicProfile, listCategories, offerableServiceIds, setStorageForTests, visibleProviderSlugs } from '@kando/domain'
+import { getPage, getPublicProfile, listCategories, offerableServiceIds, visibleProviderSlugs } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { endExpiredSuspensions } from '@kando/domain'
 import { TIME_ZONE } from '@kando/i18n'
-import { clearOutbox, outboxForTests } from '@kando/domain'
+import { clearOutbox } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
