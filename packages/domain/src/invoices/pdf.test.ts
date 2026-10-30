@@ -56,6 +56,14 @@ describe('renderPdf', () => {
     expect(await drawn(bytes)).toContain('Arbeit 59 äöüß')
   })
 
+  it('a business invoice prints the VAT rate with net, VAT and gross (section 14 UStG)', async () => {
+    const d: InvoiceDraft = { ...draft(), kind: 'invoice', legalStatus: 'business', vatRate: 0.19, lines: [{ ...line(0), net: 100, vat: 19, gross: 119 }], totals: { net: 100, vat: 19, gross: 119, labour: 99, material: 20 } }
+    const text = await drawn(await renderPdf(d, 'ABCDEF12-2026-0003', new Date('2026-10-30T10:00:00Z'), false))
+    expect(text).toContain('Rechnung (Invoice)')
+    expect(text).toMatch(/USt\. 19\s%/)
+    expect(text).toMatch(/Brutto \(Gross\): 119,00\s€/)
+  })
+
   it('pdfSafe keeps WinAnsi text and replaces what Helvetica cannot draw', async () => {
     const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica)
     expect(pdfSafe('Ärger über Öl, Fuß: 12,50 €', font)).toBe('Ärger über Öl, Fuß: 12,50 €')
@@ -67,6 +75,8 @@ describe('numbering', () => {
   it('series per provider and Berlin year, four digits', () => {
     expect(yearOf(new Date('2026-12-31T22:59:59Z'))).toBe(2026)
     expect(yearOf(new Date('2026-12-31T23:00:00Z'))).toBe(2027)
-    expect(formatNumber(providerSeries('abcdef12-3456-7890-abcd-ef1234567890', new Date('2026-06-01T00:00:00Z')), 7)).toBe('ABCDEF12-2026-0007')
+    const id = 'abcdef12-3456-7890-abcd-ef1234567890'
+    expect(providerSeries(id, 2026)).toBe(`${id}-2026`) // the counter: the full id, never shared by two providers
+    expect(formatNumber(id, 2026, 7)).toBe('ABCDEF12-2026-0007') // the printed number: the short prefix
   })
 })

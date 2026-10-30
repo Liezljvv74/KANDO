@@ -17,8 +17,8 @@ export async function nextNumber(exec: Exec, series: string): Promise<number> {
 /** The calendar year of an instant in TIME_ZONE (an invoice at 00:30 on 1 January in Berlin belongs to the new year). */
 export const yearOf = (d: Date): number => Number(new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric' }).format(d))
 
-/** A provider's invoice series: the first 8 characters of their id in upper case, and the year. */
-export const providerSeries = (providerId: string, issuedAt: Date): string => `${providerId.slice(0, 8).toUpperCase()}-${yearOf(issuedAt)}`
+/** A provider's counter for a year: keyed by the FULL provider id, so two providers never share one (gapless per issuer). */
+export const providerSeries = (providerId: string, year: number): string => `${providerId}-${year}`
 
-/** `<series>-0001`. */
-export const formatNumber = (series: string, n: number): string => `${series}-${String(n).padStart(4, '0')}`
+/** The printed number `<first 8 characters of the provider id, upper case>-<year>-0001` (unique per provider, not globally). */
+export const formatNumber = (providerId: string, year: number, n: number): string => `${providerId.slice(0, 8).toUpperCase()}-${year}-${String(n).padStart(4, '0')}`

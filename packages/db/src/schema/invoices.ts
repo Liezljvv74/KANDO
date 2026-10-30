@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { check, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 /**
  * An issued invoice or receipt for one booking group (the root booking and its additional tasks), in the provider's name.
@@ -13,7 +13,8 @@ export const invoices = pgTable(
     rootBookingId: uuid('root_booking_id').notNull().unique(),
     providerId: uuid('provider_id').notNull(),
     customerId: text('customer_id').notNull(),
-    number: text().notNull().unique(),
+    // unique per issuer (section 14 UStG); two providers may print the same number
+    number: text().notNull(),
     kind: text().notNull(),
     issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
     currency: text().notNull(),
@@ -25,12 +26,12 @@ export const invoices = pgTable(
   },
   (t) => [
     check('invoices_kind_check', sql`kind in ('invoice','receipt')`),
-    index('invoices_provider_id_idx').on(t.providerId),
+    uniqueIndex('invoices_provider_id_number_idx').on(t.providerId, t.number),
     index('invoices_customer_id_idx').on(t.customerId),
   ],
 )
 
-/** The last number per series (`<provider>-<year>`), staff only; bumped in the same transaction as the invoice insert. */
+/** The last number per series (`<full provider id>-<year>`), staff only; bumped in the same transaction as the invoice insert. */
 export const invoiceCounters = pgTable('invoice_counters', {
   series: text().primaryKey(),
   last: integer().notNull(),

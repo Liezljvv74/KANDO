@@ -86,7 +86,7 @@ export async function cleanupUsers(): Promise<void> {
   })
   // Invoices keep plain ids (they outlive account deletion): a test's invoices go by its people, its providers, or a
   // booking of theirs (a deleted customer's invoice still has the provider), and their numbering series with them.
-  await pool.query(`DELETE FROM invoice_counters WHERE left(series, 8) IN (SELECT upper(left(id::text, 8)) FROM providers WHERE owner_id IN ${mine})`)
+  await pool.query(`DELETE FROM invoice_counters WHERE left(series, 36) IN (SELECT id::text FROM providers WHERE owner_id IN ${mine})`)
   await pool.query(`DELETE FROM invoices WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   const myBookings = `(SELECT id FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
   await pool.query(`DELETE FROM disputes WHERE booking_id IN ${myBookings}`)

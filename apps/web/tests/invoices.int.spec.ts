@@ -7,6 +7,7 @@ import {
   clearOutbox,
   decideDispute,
   deleteAccount,
+  dueRoots,
   issueDueInvoices,
   releaseBooking,
   setGatewayForTests,
@@ -150,7 +151,7 @@ it('concurrent issuing creates one invoice and no gap', async () => {
   await releaseBooking(db, b, new Date())
   await Promise.all([issueDueInvoices(db, new Date()), issueDueInvoices(db, new Date())])
   expect((await invoicesOf(p.id)).map((i) => i.number)).toEqual([`${p.prefix}-${year()}-0001`, `${p.prefix}-${year()}-0002`])
-  expect((await pool.query('SELECT last FROM invoice_counters WHERE series = $1', [`${p.prefix}-${year()}`])).rows).toEqual([{ last: 2 }])
+  expect((await pool.query('SELECT last FROM invoice_counters WHERE series = $1', [`${p.id}-${year()}`])).rows).toEqual([{ last: 2 }])
 })
 
 it('numbers restart at 0001 in a new year (Berlin time)', async () => {
@@ -159,7 +160,7 @@ it('numbers restart at 0001 in a new year (Berlin time)', async () => {
   const early = new Date('2031-12-31T23:30:00Z') // 00:30 on 1 January 2032 in Berlin
   for (const now of [late, late, early]) {
     await releaseBooking(db, await paid(p.id), new Date())
-    await issueDueInvoices(db, now)
+    await issueDueInvoices(db, now, { clock: () => now })
   }
   expect((await invoicesOf(p.id)).map((i) => i.number)).toEqual([`${p.prefix}-2031-0001`, `${p.prefix}-2031-0002`, `${p.prefix}-2032-0001`])
 })
@@ -245,7 +246,62 @@ it('a stop agreed at 0 ends refunded with no invoice; a provider cancellation ha
   await asUser(p.uid, (tx) => cancelBooking(tx, p.uid, future))
   expect((await pool.query('SELECT status, released_at FROM bookings WHERE id = $1', [future])).rows[0]).toMatchObject({ status: 'cancelled', released_at: expect.any(Date) })
   await issueDueInvoices(db, new Date())
+  await issueDueInvoices(db, new Date())
   expect(await invoicesOf(p.id)).toEqual([])
+  // no number was taken, and neither group is ever picked again
+  expect((await pool.query('SELECT series FROM invoice_counters WHERE series LIKE $1', [`${p.id}-%`])).rows).toEqual([])
+  const due = await dueRoots(db, new Date())
+  expect(due).not.toContain(stopped)
+  expect(due).not.toContain(future)
+  // issuing is live for this provider: the next normal booking gets the first number
+  await tryRelease(db, await paid(p.id), U.cust, new Date())
+  expect((await invoicesOf(p.id)).map((i) => i.number)).toEqual([`${p.prefix}-${year()}-0001`])
+})
+
+it('two providers whose ids share the first 8 characters number independently and without gaps', async () => {
+  const ids = ['abcd1234-0000-4000-8000-00000000000a', 'abcd1234-0000-4000-8000-00000000000b']
+  for (const [i, id] of ids.entries()) {
+    await seedUser(`inv-twin${i}`)
+    await pool.query("INSERT INTO providers (id, owner_id, type, status, stripe_account_id, payouts_ready_at, invoice_consent_at) VALUES ($1, $2, 'private', 'published', $3, now(), now())", [id, `inv-twin${i}`, `acct_twin_${i}`])
+  }
+  for (const id of [ids[0]!, ids[1]!, ids[0]!, ids[1]!]) await tryRelease(db, await paid(id), U.cust, new Date())
+  for (const id of ids) expect((await invoicesOf(id)).map((i) => i.number)).toEqual([`ABCD1234-${year()}-0001`, `ABCD1234-${year()}-0002`])
+  expect((await pool.query('SELECT series, last FROM invoice_counters WHERE series LIKE $1 ORDER BY series', ['abcd1234-%'])).rows).toEqual(ids.map((id) => ({ series: `${id}-${year()}`, last: 2 })))
+})
+
+it('an account deletion first invoices paid-out groups that still wait on an unpaid additional task or an open request', async () => {
+  const p = await provider()
+  const cust = 'inv-cust-del2'
+  await seedUser(cust, null, 'Bald Weg')
+  const root = await paid(p.id, { customer: cust })
+  // an additional task still awaiting payment, and a request for another: once the root is paid out the group is still not due
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, pay_by, accepted_at, parent_booking_id) VALUES ($1, $2, 'direct', 'awaiting-payment', now(), 60, 40, now() + interval '1 day', now(), $3)", [cust, p.id, root])
+  await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES ($1, $2, 'Noch was', now() + interval '1 day', $3)", [cust, p.id, root])
+  expect(await tryRelease(db, root, cust, new Date())).toBe(true)
+  await issueDueInvoices(db, new Date())
+  expect(await invoicesOf(p.id)).toEqual([])
+  // a refused deletion (wrong email) invoices nothing early
+  await expect(deleteAccount(cust, 'wrong@test.skilled.invalid', () => {})).rejects.toMatchObject({ status: 400 })
+  expect(await invoicesOf(p.id)).toEqual([])
+  await deleteAccount(cust, EMAIL(cust), () => {})
+  const [inv] = await invoicesOf(p.id)
+  expect(inv).toMatchObject({ root_booking_id: root, customer_id: cust })
+  expect((inv.draft as InvoiceDraft).lines.map((l) => [l.bookingId, l.kind, l.gross])).toEqual([[root, 'job', 100]])
+  expect(pdfOf(inv)).toBeDefined()
+})
+
+it('an account deletion is refused while paid-out money has no invoice (issuing failed)', async () => {
+  const p = await provider()
+  const cust = 'inv-cust-del3'
+  await seedUser(cust)
+  const root = await paid(p.id, { customer: cust })
+  await releaseBooking(db, root, new Date()) // settled, no invoice yet
+  await pool.query("UPDATE providers SET country = 'XX' WHERE id = $1", [p.id]) // no VAT rate: issuing throws (logged)
+  await expect(deleteAccount(cust, EMAIL(cust), () => {})).rejects.toMatchObject({ status: 409 })
+  expect((await pool.query('SELECT id FROM users WHERE id = $1', [cust])).rows).toHaveLength(1)
+  await pool.query("UPDATE providers SET country = 'DE' WHERE id = $1", [p.id])
+  await deleteAccount(cust, EMAIL(cust), () => {})
+  expect(await invoicesOf(p.id)).toHaveLength(1)
 })
 
 it('a late customer cancellation is invoiced as a fee line with the provider share', async () => {

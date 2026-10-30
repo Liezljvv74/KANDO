@@ -16,13 +16,12 @@ CREATE TABLE "invoices" (
 	"draft" jsonb NOT NULL,
 	"file_key" text,
 	CONSTRAINT "invoices_root_booking_id_unique" UNIQUE("root_booking_id"),
-	CONSTRAINT "invoices_number_unique" UNIQUE("number"),
 	CONSTRAINT "invoices_kind_check" CHECK (kind in ('invoice','receipt'))
 );
 --> statement-breakpoint
 ALTER TABLE "notifications" DROP CONSTRAINT "notifications_kind_check";--> statement-breakpoint
 ALTER TABLE "providers" ADD COLUMN "tax_number" text;--> statement-breakpoint
 ALTER TABLE "providers" ADD COLUMN "invoice_consent_at" timestamp with time zone;--> statement-breakpoint
-CREATE INDEX "invoices_provider_id_idx" ON "invoices" USING btree ("provider_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "invoices_provider_id_number_idx" ON "invoices" USING btree ("provider_id","number");--> statement-breakpoint
 CREATE INDEX "invoices_customer_id_idx" ON "invoices" USING btree ("customer_id");--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_kind_check" CHECK (kind in ('profile-live','request-received','quote-received','booking-proposed','booking-accepted','booking-declined','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','pending-slot-requested','message-received','booking-paid','payment-received','payment-late-refunded','payout-setup-complete','customers-waiting','provider-available','refund-issued','job-finished','confirm-reminder','payment-released','was-job-done','booking-cancelled','no-show-reported','dispute-opened','dispute-decided','job-stopped','stop-amount-stated','additional-task-requested','review-requested','review-visible','provider-warning','invoice-ready'));

@@ -1,5 +1,5 @@
 {
-  "id": "903c3819-1d05-419b-9cb3-071bafb58f39",
+  "id": "3d4f5025-b20e-414f-8f20-91da9e4f8b6c",
   "prevId": "c33ed91e-9e9f-49dc-9a6d-e5d097a676f6",
   "version": "7",
   "dialect": "postgresql",
@@ -3745,17 +3745,23 @@
         }
       },
       "indexes": {
-        "invoices_provider_id_idx": {
-          "name": "invoices_provider_id_idx",
+        "invoices_provider_id_number_idx": {
+          "name": "invoices_provider_id_number_idx",
           "columns": [
             {
               "expression": "provider_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3784,13 +3790,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "root_booking_id"
-          ]
-        },
-        "invoices_number_unique": {
-          "name": "invoices_number_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "number"
           ]
         }
       },

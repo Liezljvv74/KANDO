@@ -3,6 +3,8 @@ import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, r
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
+import { hasUninvoicedPayout, issueDueInvoices } from './invoices/issue'
+import type { Exec } from './providers/eligibility'
 import { fail } from './providers/http'
 import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
@@ -74,12 +76,25 @@ export async function flushPendingObjects(ids?: string[]): Promise<number> {
  * Deletes the person and everything of theirs for good (GDPR erasure), in one transaction on the owner connection (app_user
  * may not delete from several of these tables). 400 EMAIL_MISMATCH unless `confirmEmail` is their stored email; 409
  * LAST_ADMIN for the only Administrator; 409 OPEN_BOOKINGS while they are customer or provider on a booking holding money
- * (MONEY_OPEN_STATUSES). The object keys are written to pending_object_deletes in the same transaction; after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
+ * (MONEY_OPEN_STATUSES), or with paid-out money on a booking group that has no invoice yet. The object keys are written to pending_object_deletes in the same transaction; after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
  * the files does not hang on one attempt. Then the confirmation email goes to the address as it was before.
  * The shared translations cache and the rate-limit rows keyed by an ip hash are not the person's data and stay.
  */
+/** The person has money still open on a booking (either side): paid and not released, or a money-open status. */
+async function moneyOpen(exec: Exec, userId: string): Promise<boolean> {
+  const r = await exec.execute(sql`SELECT 1 FROM bookings b WHERE (b.customer_id = ${userId} OR b.provider_id IN (SELECT id FROM providers WHERE owner_id = ${userId}))
+    AND ((b.paid_at IS NOT NULL AND b.released_at IS NULL) OR b.status IN (${sql.join(MONEY_OPEN_STATUSES.map((x) => sql`${x}`), sql`, `)})) LIMIT 1`)
+  return r.rows.length > 0
+}
+
 export async function deleteAccount(userId: string, confirmEmail: string, afterCommit: AfterCommit): Promise<void> {
   const months = retentionMonths()
+  // Invoices first, while the bookings still exist: a group whose provider money was paid out gets its invoice now, even
+  // with an unpaid additional task or an open request (the deletion withdraws those). Outside the transaction (issuing locks
+  // the root bookings itself), and only when the deletion is not refused anyway (wrong email, money still open), so a
+  // refused deletion never invoices a group early. The transaction below refuses if one is still missing.
+  const [me] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
+  if (me && confirmEmail.trim().toLowerCase() === me.email.toLowerCase() && !(await moneyOpen(db, userId))) await issueDueInvoices(db, new Date(), { userId, forDeletion: true })
   const { email, language, tombstones, keepUntil } = await db.transaction(async (tx) => {
     // Lock order everywhere: the Administrator set (by id) first, then the person's own row.
     const admins = await lockAdmins(tx)
@@ -99,6 +114,8 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
       .orderBy(asc(bookings.id))
       .for('update')
     if (theirs.some((b) => (b.paidAt && !b.releasedAt) || (MONEY_OPEN_STATUSES as readonly string[]).includes(b.status))) fail(409, { error: 'OPEN_BOOKINGS' })
+    // provider money paid out on a group without its invoice (issuing failed just now): the invoice must exist first
+    if (await hasUninvoicedPayout(tx, userId)) fail(409, { error: 'OPEN_BOOKINGS' })
     // Every object key first: after the rows are gone nothing says where the files are.
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))

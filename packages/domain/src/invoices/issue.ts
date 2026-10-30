@@ -10,7 +10,7 @@ import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
 import { buildInvoice, type InvoiceDraft } from './build'
-import { formatNumber, nextNumber, providerSeries } from './numbering'
+import { formatNumber, nextNumber, providerSeries, yearOf } from './numbering'
 import { renderPdf } from './pdf'
 
 /** Statuses a booking never leaves. `disputed`, `stopped`, `finished` and `confirmed` still move money; they wait. */
@@ -30,14 +30,45 @@ const inGroup = (alias: string, root: SQL) => sql`(${sql.identifier(alias)}.id =
  * at least one booking whose payout counts as a line (buildInvoice's rule: not refunded, not cancelled by the provider, not
  * a provider no-show), so a group that paid the provider nothing is never picked again.
  */
-const isDue = (now: Date) => sql`r.parent_booking_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.root_booking_id = r.id)
-  AND NOT EXISTS (SELECT 1 FROM bookings g WHERE ${inGroup('g', sql`r.id`)} AND (g.status NOT IN (${FINAL}) OR (g.paid_at IS NOT NULL AND g.released_at IS NULL)))
-  AND NOT EXISTS (SELECT 1 FROM requests q WHERE q.parent_booking_id = r.id AND (q.status = 'open'
-    OR (q.status = 'quoted' AND EXISTS (SELECT 1 FROM quotes x WHERE x.request_id = q.id AND x.status = 'sent' AND x.expires_at > ${now.toISOString()}::timestamptz))))
-  AND EXISTS (SELECT 1 FROM bookings g JOIN ledger_entries l ON l.booking_id = g.id AND l.kind IN ('transfer', 'commission')
+/** The root `r` has provider money paid out that counts as an invoice line (released, transfer/commission rows). */
+const hasPayout = sql`EXISTS (SELECT 1 FROM bookings g JOIN ledger_entries l ON l.booking_id = g.id AND l.kind IN ('transfer', 'commission')
     WHERE ${inGroup('g', sql`r.id`)} AND g.released_at IS NOT NULL AND g.status <> 'refunded'
       AND g.cancelled_by IS DISTINCT FROM 'provider' AND g.no_show IS DISTINCT FROM 'provider')`
+/**
+ * `forDeletion`: an account deletion is about to remove the group, and withdraws its unpaid parts anyway: only the paid
+ * bookings must be final and released (an unpaid additional task or an open request no longer holds the invoice back).
+ */
+const isDue = (now: Date, forDeletion = false) => sql`r.parent_booking_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.root_booking_id = r.id)
+  ${
+    forDeletion
+      ? sql`AND NOT EXISTS (SELECT 1 FROM bookings g WHERE ${inGroup('g', sql`r.id`)} AND g.paid_at IS NOT NULL AND (g.status NOT IN (${FINAL}) OR g.released_at IS NULL))`
+      : sql`AND NOT EXISTS (SELECT 1 FROM bookings g WHERE ${inGroup('g', sql`r.id`)} AND (g.status NOT IN (${FINAL}) OR (g.paid_at IS NOT NULL AND g.released_at IS NULL)))
+  AND NOT EXISTS (SELECT 1 FROM requests q WHERE q.parent_booking_id = r.id AND (q.status = 'open'
+    OR (q.status = 'quoted' AND EXISTS (SELECT 1 FROM quotes x WHERE x.request_id = q.id AND x.status = 'sent' AND x.expires_at > ${now.toISOString()}::timestamptz))))`
+  }
+  AND ${hasPayout}`
+
+/** The person's root bookings (as customer or as a provider's owner), as an SQL condition on `r`. */
+const ofUser = (userId: string) => sql`(r.customer_id = ${userId} OR r.provider_id IN (SELECT id FROM providers WHERE owner_id = ${userId}))`
+
+type Scope = { bookingId?: string; userId?: string; forDeletion?: boolean }
+const rootOf = (bookingId: string) => sql`(SELECT coalesce(parent_booking_id, id) FROM bookings WHERE id = ${bookingId})`
+
+/** The root bookings due for their invoice now (oldest id first, at most ISSUE_CAP), optionally of one booking's group or one person. */
+export async function dueRoots(exec: Exec, now: Date, scope: Scope = {}): Promise<string[]> {
+  const rows = await exec.execute<{ id: string }>(sql`SELECT r.id FROM bookings r WHERE ${isDue(now, scope.forDeletion)}
+    ${scope.bookingId ? sql`AND r.id = ${rootOf(scope.bookingId)}` : sql``} ${scope.userId ? sql`AND ${ofUser(scope.userId)}` : sql``}
+    ORDER BY r.id LIMIT ${ISSUE_CAP}`)
+  return rows.rows.map((r) => r.id)
+}
+
+/** Whether the person has a booking group whose provider money was paid out and which has no invoice (account deletion refuses then). */
+export async function hasUninvoicedPayout(exec: Exec, userId: string): Promise<boolean> {
+  const r = await exec.execute(sql`SELECT 1 FROM bookings r WHERE r.parent_booking_id IS NULL AND ${ofUser(userId)}
+    AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.root_booking_id = r.id) AND ${hasPayout} LIMIT 1`)
+  return r.rows.length > 0
+}
 
 type GroupRow = {
   id: string
@@ -61,11 +92,11 @@ const nameOf = (first: string | null, last: string | null) => [first, last].filt
  * and the invoice inserted. A conflict on the root (never expected under the lock) throws, so the counter bump rolls back
  * with it: no gap.
  */
-async function issueOne(rootId: string, now: Date): Promise<typeof invoices.$inferSelect | null> {
+async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: () => Date): Promise<typeof invoices.$inferSelect | null> {
   return db.transaction(async (o) => {
     const [root] = await o.select().from(bookings).where(eq(bookings.id, rootId)).for('update')
     if (!root) return null
-    const due = await o.execute(sql`SELECT 1 FROM bookings r WHERE r.id = ${rootId} AND ${isDue(now)}`)
+    const due = await o.execute(sql`SELECT 1 FROM bookings r WHERE r.id = ${rootId} AND ${isDue(now, forDeletion)}`)
     if (!due.rows.length) return null
     const group = (
       await o.execute<GroupRow>(sql`
@@ -106,11 +137,17 @@ async function issueOne(rootId: string, now: Date): Promise<typeof invoices.$inf
       currency: root.currency,
     })
     if (!draft) return null
-    const series = providerSeries(root.providerId, now)
-    const number = formatNumber(series, await nextNumber(o, series))
+    // The date of issue is read once the counter lock is held, so numbers and dates of one series stay in the same order
+    // (the year is taken just before; at the turn of the year the earlier instant wins).
+    const before = clock()
+    const year = yearOf(before)
+    const n = await nextNumber(o, providerSeries(root.providerId, year))
+    const after = clock()
+    const issuedAt = yearOf(after) === year ? after : before
+    const number = formatNumber(root.providerId, year, n)
     const [row] = await o
       .insert(invoices)
-      .values({ rootBookingId: rootId, providerId: root.providerId, customerId: root.customerId, number, kind: draft.kind, issuedAt: now, currency: draft.currency, total: draft.totals.gross.toFixed(2), draft })
+      .values({ rootBookingId: rootId, providerId: root.providerId, customerId: root.customerId, number, kind: draft.kind, issuedAt, currency: draft.currency, total: draft.totals.gross.toFixed(2), draft })
       .onConflictDoNothing({ target: invoices.rootBookingId })
       .returning()
     if (!row) throw new Error(`invoice for ${rootId} already exists`) // rolls the counter back: no gap
@@ -142,23 +179,26 @@ async function storePdf(inv: typeof invoices.$inferSelect): Promise<void> {
  * PDFs a storage failure left out, then every due group (isDue), each in its own transaction (issueOne), oldest id first,
  * until `timeUp` or ISSUE_CAP. `bookingId` narrows it to that booking's group (the ending paths, after their commit).
  * Returns how many invoices it issued. Never throws: a failure is logged and the next run retries.
- * ponytail: the due query scans the root bookings without an invoice; an index or a "checked" mark if that grows slow.
+ * `clock` gives the date of issue (default the real time; `now` only decides what is due); `userId` + `forDeletion` issue a
+ * person's groups before their account is deleted (deleteAccount).
+ * ponytail: the due query scans the root bookings without an invoice; an index or a "checked" mark if that grows slow. A
+ * group that fails on every run (e.g. a country without a VAT rate) is retried and logged each run, oldest id first: 200
+ * such groups would starve the rest; skip recently failed groups if that ever happens.
  */
-export async function issueDueInvoices(exec: Exec, now: Date, opts: { bookingId?: string; timeUp?: () => boolean } = {}): Promise<number> {
+export async function issueDueInvoices(exec: Exec, now: Date, opts: Scope & { timeUp?: () => boolean; clock?: () => Date } = {}): Promise<number> {
   const timeUp = opts.timeUp ?? (() => false)
   let issued = 0
   try {
-    const root = opts.bookingId ? sql`(SELECT coalesce(parent_booking_id, id) FROM bookings WHERE id = ${opts.bookingId})` : null
-    const pending = await exec.select().from(invoices).where(and(isNull(invoices.fileKey), root ? sql`${invoices.rootBookingId} = ${root}` : undefined)).orderBy(asc(invoices.issuedAt)).limit(ISSUE_CAP)
+    const scope = opts.bookingId ? sql`${invoices.rootBookingId} = ${rootOf(opts.bookingId)}` : opts.userId ? sql`${invoices.rootBookingId} IN (SELECT r.id FROM bookings r WHERE ${ofUser(opts.userId)})` : undefined
+    const pending = await exec.select().from(invoices).where(and(isNull(invoices.fileKey), scope)).orderBy(asc(invoices.issuedAt)).limit(ISSUE_CAP)
     for (const inv of pending) {
       if (timeUp()) return issued
       await storePdf(inv)
     }
-    const due = (await exec.execute<{ id: string }>(sql`SELECT r.id FROM bookings r WHERE ${isDue(now)} ${root ? sql`AND r.id = ${root}` : sql``} ORDER BY r.id LIMIT ${ISSUE_CAP}`)).rows
-    for (const { id } of due) {
+    for (const id of await dueRoots(exec, now, opts)) {
       if (timeUp()) break
       try {
-        const inv = await issueOne(id, now)
+        const inv = await issueOne(id, now, !!opts.forDeletion, opts.clock ?? (() => new Date()))
         if (!inv) continue
         issued++
         await storePdf(inv)

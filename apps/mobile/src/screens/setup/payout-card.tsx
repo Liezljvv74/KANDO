@@ -12,7 +12,7 @@ import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
-import { payoutState } from '@/lib/payouts'
+import { payoutState, saveSwitch } from '@/lib/payouts'
 import { isHttps } from '@/lib/safe-url'
 
 /** "Set up payouts": the status and the Stripe link. `useLoad` re-checks the status on focus and when the app returns to the front (no polling). */
@@ -95,8 +95,9 @@ function InvoicingFields({ initial }: { initial: MyProfile }) {
         label={t('payouts.invoiceConsent')}
         value={consent}
         onChange={(v) => {
-          setConsent(v)
-          void save({ invoiceConsent: v })
+          setProblem(null)
+          // a failed save puts the switch back, so it never shows a consent the server does not have
+          saveSwitch(v, setConsent, (x) => saveMyProfile({ invoiceConsent: x })).catch((e) => setProblem(paymentsProblem(e)))
         }}
       />
       {!consent && <Text style={styles.small}>{t('payouts.invoiceConsentNeeded')}</Text>}
