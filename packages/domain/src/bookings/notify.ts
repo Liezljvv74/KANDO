@@ -1,3 +1,4 @@
+import { REQUEST_SCREEN_KINDS } from '@kando/contract'
 import { eq } from 'drizzle-orm'
 import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t, type Key } from '@kando/i18n'
@@ -16,8 +17,8 @@ const WITH_URL: NotificationKind[] = ['message-received', 'provider-available', 
 
 
 /** The app screen a push opens: the booking, the request, the provider, the thread (`params.url`), else the profile tab. */
-const appUrl = (p: Record<string, string>): string =>
-  p.bookingId ? `skilled://bookings/${p.bookingId}`
+const appUrl = (kind: NotificationKind, p: Record<string, string>): string =>
+  p.bookingId && !(REQUEST_SCREEN_KINDS.includes(kind) && p.requestId) ? `skilled://bookings/${p.bookingId}`
   : p.requestId ? `skilled://bookings/request/${p.requestId}`
   : p.slug ? `skilled://provider/${p.slug}`
   : p.url?.startsWith('skilled://') ? p.url
@@ -70,7 +71,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
     }
     // invoice-ready names what the provider issued: an invoice, or (private providers) a receipt
     const push = kind === 'invoice-ready' && params.variant === 'receipt' ? 'invoice-ready.receipt' : kind
-    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: t(lang, `push.${push}.body` as Key), url: appUrl(params) })
+    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: t(lang, `push.${push}.body` as Key), url: appUrl(kind, params) })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

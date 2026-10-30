@@ -16,6 +16,7 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [resending, setResending] = useState(false)
 
   async function submit() {
     setBusy(true)
@@ -33,10 +34,13 @@ export default function VerifyEmailScreen() {
 
   async function resend() {
     setError(null)
+    setResending(true)
     try {
       await sendVerificationCode(email)
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))
+    } finally {
+      setResending(false)
     }
   }
 
@@ -46,7 +50,7 @@ export default function VerifyEmailScreen() {
       <Field label={t('auth.enterCode')} value={code} onChangeText={setCode} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} />
       <ErrorText text={error} />
       <Button label={t('auth.verifySubmit')} onPress={submit} busy={busy} />
-      <LinkText label={t('auth.resendCode')} onPress={resend} />
+      <LinkText label={t('auth.resendCode')} onPress={resend} disabled={resending} />
       <LinkText label={t('auth.back')} onPress={() => router.replace('/login')} />
     </AuthScreen>
   )

@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import sharp from 'sharp'
-import { clearOutbox, notifyNewMessage, outboxForTests, setStorageForTests } from '@kando/domain'
+import { clearOutbox, notifyNewMessage } from '@kando/domain'
+import { outboxForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

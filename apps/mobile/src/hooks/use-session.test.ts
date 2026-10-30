@@ -118,6 +118,17 @@ test('a network error on load sets offline (not signed out); retry recovers', as
   expect(getSession()).toEqual({ user, loading: false, offline: false })
 })
 
+test('a busy login server (429, 5xx) on load is offline with the Retry screen, never the login form; a 401 is signed out', async () => {
+  for (const status of [429, 503]) {
+    a.session.mockRejectedValueOnce(new client.ApiError(status, 'AUTH_BUSY'))
+    await loadSession()
+    expect(getSession()).toEqual({ user: null, loading: false, offline: true })
+  }
+  a.session.mockRejectedValueOnce(new client.ApiError(401, 'UNAUTHORIZED'))
+  await loadSession()
+  expect(getSession()).toEqual({ user: null, loading: false, offline: false })
+})
+
 test('onUnauthorized from the API client signs the user out', async () => {
   a.signIn.mockResolvedValueOnce(user)
   await signIn('a@b.de', 'secret123')

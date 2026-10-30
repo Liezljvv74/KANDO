@@ -1,5 +1,5 @@
 import type { Rating } from '@kando/contract'
-import { formatPrice as priceLabel, type PriceType } from '@kando/i18n'
+import { formatPrice as priceLabel, type PriceType } from '@kando/i18n/app'
 
 import { getLang, t } from '@/i18n'
 

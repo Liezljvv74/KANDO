@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { BookingSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, outboxForTests, pushOutboxForTests, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
+import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, fakeSession, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -213,4 +214,11 @@ it('inside a push batch (the cron) pushes are held back and sent together at its
     expect(pushes(U.cust)).toEqual([]) // nothing sent yet
   })
   expect(pushes(U.cust).map((m) => m.title)).toEqual(['T', 'T', 'T2', 'T2'])
+})
+
+it('the push of request-reopened opens the request (the booking it names has ended); a booking kind still opens the booking', async () => {
+  await giveTokens(U.cust)
+  await notifyBookingEvent('request-reopened', U.cust, { requestId: '0b6e2c1a-0000-4000-8000-000000000001', bookingId: '0b6e2c1a-0000-4000-8000-000000000002' })
+  await notifyBookingEvent('booking-accepted', U.cust, { requestId: '0b6e2c1a-0000-4000-8000-000000000001', bookingId: '0b6e2c1a-0000-4000-8000-000000000002' })
+  expect(pushes(U.cust).map((m) => [m.data.kind, m.data.url])).toEqual([['request-reopened', 'skilled://bookings/request/0b6e2c1a-0000-4000-8000-000000000001'], ['booking-accepted', 'skilled://bookings/0b6e2c1a-0000-4000-8000-000000000002']])
 })

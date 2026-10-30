@@ -1,7 +1,6 @@
 import type { Booking } from '@kando/contract'
 
-import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, FREE_CANCEL_HOURS, lateFee, LATE_CANCEL_PERCENT, STOP_ANSWER_DAYS, stopAnswerText } from './booking-status'
-import * as rules from '../../../../packages/domain/src/bookings/ending-rules'
+import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -180,15 +179,6 @@ test('the cancel statement is checked again at the tap: across the 24-hour mark 
   expect(cancelTap(provider, booking, 'provider', justAfter).send).toBe(false) // the late note for the provider is new too
 })
 
-test('the mirrored rules equal the server rules', () => {
-  expect(LATE_CANCEL_PERCENT / 100).toBe(rules.LATE_CANCEL_SHARE)
-  expect(STOP_ANSWER_DAYS).toBe(rules.STOP_ANSWER_DAYS)
-  const start = new Date('2027-01-05T09:00:00.000Z')
-  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000))).toBe(false)
-  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000 + 1))).toBe(true)
-  expect(lateFee(33.33)).toBe(rules.customerCancelShare(33.33, start, new Date(start.getTime() - 1)))
-})
-
 test('the endings say in plain words what happened, for each side', () => {
   const cases: [Partial<Booking>, string, string][] = [
     [{ cancelledBy: 'customer', lateCancel: false }, 'bookingStatus.cancelledByYou', 'bookingStatus.cancelledByCustomer'],
@@ -213,4 +203,16 @@ test('the customer asks for an "Additional task", the provider for a "Scope/quot
   expect(actionLabel('additionalTask', 'customer')).toBe('booking.additionalTask')
   expect(actionLabel('additionalTask', 'provider')).toBe('booking.scopeReview')
   expect(actionLabel('finish', 'provider')).toBe('booking.finish')
+})
+
+test('late fee is rounded from cents: 33.33 -> 16.67', () => {
+  expect(lateFee(33.33)).toBe(16.67)
+  expect(lateFee(100)).toBe(50)
+})
+
+test('the exact 24 h mark is free, one minute inside is late (same numbers as the server)', () => {
+  const booking = b({ startAt: '2027-01-05T12:00:00.000Z', amount: 100 })
+  const mark = new Date('2027-01-04T12:00:00.000Z')
+  expect(cancelStatement(booking, 'customer', mark)).toBe('booking.cancelFree booking.cancelChildren')
+  expect(cancelStatement(booking, 'customer', new Date(mark.getTime() + 60_000))).toContain('booking.cancelLate 50')
 })

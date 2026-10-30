@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm'
+import { DAY } from '@kando/contract'
 import { bookings, db, providers, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t } from '@kando/i18n'
 import { isUuid } from '../admin/common'
@@ -11,7 +12,6 @@ import { isSuspendedNow } from '../providers/profile'
 import { AmountTooSmallError, gateway } from './gateway'
 import { belowMinCharge, checkoutExpiry, MAX_PAY_AHEAD_DAYS, toCents } from './rules'
 
-const DAY = 86_400_000
 /** A stored session is reused only while it has more than this left: the customer needs time to pay. */
 const REUSE_MIN_MS = 5 * 60_000
 

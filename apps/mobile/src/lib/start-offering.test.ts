@@ -43,6 +43,21 @@ test('a failure returns the error text and does not navigate', async () => {
   expect(consumePending()).toBeNull()
 })
 
+test('a draft that does not make a provider gives the offer-not-saved text', async () => {
+  ;(loadMe as jest.Mock).mockResolvedValueOnce({ isProvider: false })
+  expect(await startOffering()).toBe('error:OFFER_NOT_SAVED')
+})
+
+test('a network failure gives the network text', async () => {
+  ;(ensureDraft as jest.Mock).mockRejectedValueOnce(new ApiError(0, 'network'))
+  expect(await startOffering()).toBe('error:network')
+})
+
+test('AUTH_BUSY gives the busy text', async () => {
+  ;(loadMe as jest.Mock).mockRejectedValueOnce(new ApiError(503, 'AUTH_BUSY'))
+  expect(await startOffering()).toBe('error:AUTH_BUSY')
+})
+
 test('a second call while one runs does nothing extra', async () => {
   const [a, b] = await Promise.all([startOffering(), startOffering()])
   expect([a, b]).toEqual([null, null])
@@ -54,7 +69,7 @@ test('a second call while one runs does nothing extra', async () => {
 
 test('no target when /me says the person is not a provider', async () => {
   ;(loadMe as jest.Mock).mockResolvedValueOnce({ isProvider: false })
-  expect(await startOffering()).toBe('error:')
+  expect(await startOffering()).toBe('error:OFFER_NOT_SAVED')
   expect(consumePending()).toBeNull()
 })
 

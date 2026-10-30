@@ -1,9 +1,7 @@
+import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE } from '@kando/contract'
 import { TIME_ZONE } from '@kando/i18n'
 
-export const LATE_CANCEL_SHARE = 0.5
-export const NO_SHOW_OBJECTION_HOURS = 48
 export const DISPUTE_DECISION_WORKING_DAYS = 14
-export const STOP_ANSWER_DAYS = 7
 export const REVIEW_VISIBLE_DAYS = 7
 export const REVIEW_EDIT_DAYS = 14
 export const CONFIRM_DAYS = 7
@@ -11,11 +9,8 @@ export const CONFIRM_REMINDER_DAYS = [1, 3, 6] as const
 export const ASK_DONE_HOURS = 24
 export const NO_ACTION_STAFF_DAYS = 7
 export const ADDITIONAL_PAY_HOURS = 48
-const FREE_CANCEL_HOURS = 24
 
 const MIN = 60_000
-const HOUR = 3_600_000
-const DAY = 24 * HOUR
 
 /** The end of a booking: real elapsed minutes, so a DST change inside the job does not shift it. */
 export const endOf = (b: { startAt: Date; durationMin: number }): Date => {

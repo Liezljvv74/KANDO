@@ -79,7 +79,7 @@ export default function ProviderScreen() {
         <View style={styles.headerText}>
           <View style={styles.titleRow}>
             <Text style={styles.name}>{p.publicName}</Text>
-            <Text style={styles.badge}>{ratingBadge(p.rating)}</Text>
+            {!p.rating && <Text style={styles.badge}>{ratingBadge(p.rating)}</Text>}
             {!!p.verified && <Text style={styles.badge}>{t('provider.verified')}</Text>}
           </View>
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
@@ -198,7 +198,7 @@ export default function ProviderScreen() {
         </Section>
       )}
 
-      {canRequest && (waitlist ? <NotifyMe slug={slug} /> : <RequestButton provider={p} />)}
+      {canRequest && (waitlist ? <NotifyMe slug={slug} watching={!!p.watching} /> : <RequestButton provider={p} />)}
     </ScrollView>
   )
 }

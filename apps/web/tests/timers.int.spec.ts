@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { acceptQuote, clearOutbox, createRequest, drainOutbox, getBooking, getRequest, listBookings, listQuotes, listRequests, outboxForTests, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
+import { acceptQuote, clearOutbox, createRequest, drainOutbox, getBooking, getRequest, listBookings, listQuotes, listRequests, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 'tm-cust', cust2: 'tm-cust2', owner: 'tm-owner', owner2: 'tm-owner2' }

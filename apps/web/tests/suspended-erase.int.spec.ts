@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { setStorageForTests } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))

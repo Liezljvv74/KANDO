@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MeSchema } from '@kando/contract'
-import { clearOutbox, clearPushOutbox, notifyDocumentDecision, outboxForTests, pushOutboxForTests } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, notifyDocumentDecision } from '@kando/domain'
+import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
 import { TIME_ZONE } from '@kando/i18n'
 import { call, cleanupUsers, seedBase, seedProvider } from './helpers'
 

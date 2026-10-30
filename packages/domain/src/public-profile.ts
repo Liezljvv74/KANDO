@@ -63,6 +63,8 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   const reliability = await tx.execute<{ n: number }>(sql`SELECT provider_reliability(${p.id}) AS n`) // SECURITY DEFINER: a count only
   const ratings = await ratingsOf(tx, [p.owner_id], 'customer') // shown reviews only (RLS and the filter agree)
   const reviews = await latestReviews(tx, p.owner_id)
+  // Row security shows only the caller's own watches, and an anonymous caller has none: the flag never reaches a cached site page.
+  const watch = await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM availability_watches WHERE provider_id = ${p.id} AND notified_at IS NULL`)
   const approved = new Set(checked.rows[0]?.docs ?? [])
   const rating = ratings.get(p.owner_id) ?? null
 
@@ -106,6 +108,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
       vatId: p.vat_id,
       taxNumber: p.tax_number,
     }),
+    watching: Number(watch.rows[0]?.n ?? 0) > 0,
     translatable: false,
   }
   detail.translatable = needsTranslation(textsOf(detail), lang)

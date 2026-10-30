@@ -15,6 +15,8 @@ export type Address = z.infer<typeof AddressSchema>
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
 export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested', 'message-received', 'booking-paid', 'payment-received', 'payment-late-refunded', 'payout-setup-complete', 'customers-waiting', 'provider-available', 'refund-issued', 'job-finished', 'confirm-reminder', 'payment-released', 'was-job-done', 'booking-cancelled', 'no-show-reported', 'dispute-opened', 'dispute-decided', 'job-stopped', 'stop-amount-stated', 'additional-task-requested', 'review-requested', 'review-visible', 'provider-warning', 'invoice-ready', 'commission-invoice-ready', 'request-withdrawn', 'request-declined', 'request-reopened'] as const
+/** Kinds about a request whose booking (if named) has ended: the push and the in-app notice open the request, not the booking. */
+export const REQUEST_SCREEN_KINDS: readonly (typeof NOTIFICATION_KINDS)[number][] = ['request-withdrawn', 'request-declined', 'request-reopened']
 export const NotificationSchema = z.object({
   id: z.string(),
   kind: z.enum(NOTIFICATION_KINDS),
@@ -39,6 +41,8 @@ export const MeSchema = z.object({
   /** The person's picture (their profile photo), if any. */
   photoUrl: z.string().nullable(),
   address: AddressSchema.nullable(),
+  /** Whether the server takes payments (optional: an older server lacks it). */
+  paymentsEnabled: z.boolean().optional(),
   /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
   notifications: z.array(z.unknown()).transform((items) => items.flatMap((i) => { const r = NotificationSchema.safeParse(i); return r.success ? [r.data] : [] })),
 })

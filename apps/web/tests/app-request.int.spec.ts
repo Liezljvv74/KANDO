@@ -3,7 +3,8 @@ import { sql } from 'drizzle-orm'
 import { db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
-import { clearOutbox, createAppRequest, finishJob, outboxForTests, sendEmail } from '@kando/domain'
+import { AuthUnavailableError, clearOutbox, createAppRequest, finishJob, sendEmail } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { t } from '@kando/i18n'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -84,6 +85,29 @@ it('an unconfirmed email: 403 where auth is required, signed out where optional;
   const optional = unconfirmed({ auth: 'optional' }, async ({ user }) => Response.json({ user }))
   expect(await (await optional(new Request('http://localhost/x'), ctx)).json()).toEqual({ user: null })
   expect((await pool.query("SELECT 1 FROM users WHERE id = 'u-unv'")).rows).toHaveLength(0)
+})
+
+it('a 429 from the session lookup is 503 AUTH_BUSY', async () => {
+  const busy = createAppRequest(async () => {
+    throw new AuthUnavailableError('auth status 429')
+  })
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const ran: string[] = []
+  const run = async () => (ran.push('handler'), Response.json({ ran: true }))
+  const req = (method: string) => new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: 'session_token=secret-token-value' } })
+  for (const [auth, method] of [['required', 'GET'], ['required', 'POST'], ['optional', 'POST']] as const) {
+    const res = await busy({ auth }, run)(req(method), ctx)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'AUTH_BUSY' })
+  }
+  expect(ran).toEqual([])
+  // An optional public read is still served, as anonymous.
+  const read = await busy({ auth: 'optional' }, async ({ user }) => Response.json({ user }))(req('GET'), ctx)
+  expect(await read.json()).toEqual({ user: null })
+  const lines = spy.mock.calls.map((c) => c.join(' '))
+  expect(lines.some((l) => l.includes('429'))).toBe(true)
+  expect(lines.join('\n')).not.toContain('secret-token-value')
+  vi.restoreAllMocks()
 })
 
 it('a handler error rolls back and returns 500', async () => {
@@ -359,4 +383,19 @@ it('notices of a committed owner step go out when the request then fails', async
   expect(mail?.subject).toBe(t('de', 'email.jobFinished.subject'))
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
+})
+
+it('thrown, busy and early answers carry no-store; a handler header is kept; an immutable Response is not turned into a 500', async () => {
+  const NO_STORE = 'private, no-store'
+  const thrown = appRequest({ auth: 'required' }, async () => { throw Response.json({ error: 'nope' }, { status: 404 }) })
+  expect((await thrown(as('nstore'), ctx)).headers.get('cache-control')).toBe(NO_STORE)
+  const own = appRequest({ auth: 'required' }, async () => { throw Response.json({}, { status: 400, headers: { 'Cache-Control': 'public, max-age=60' } }) })
+  expect((await own(as('nstore'), ctx)).headers.get('cache-control')).toBe('public, max-age=60')
+  const busy = createAppRequest(async () => { throw new AuthUnavailableError('503') })({ auth: 'required' }, async () => Response.json({}))
+  const busyRes = await busy(as('nstore'), ctx)
+  expect([busyRes.status, busyRes.headers.get('cache-control')]).toEqual([503, NO_STORE])
+  const unauth = await me(new Request('http://localhost/x'), ctx)
+  expect([unauth.status, unauth.headers.get('cache-control')]).toEqual([401, NO_STORE])
+  const redirect = appRequest({ auth: 'required' }, async () => { throw Response.redirect('http://localhost/y', 302) })
+  expect((await redirect(as('nstore'), ctx)).status).toBe(302)
 })

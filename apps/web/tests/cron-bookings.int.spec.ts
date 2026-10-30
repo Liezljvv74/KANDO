@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { setGatewayForTests, setStorageForTests, tryRelease, withDeferredInvoices } from '@kando/domain'
+import { tryRelease, withDeferredInvoices } from '@kando/domain'
+import { setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 

@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, decideDispute, getPublicProfile, objectNoShow, openDispute, outboxForTests, reportNoShow, runDueTimers, setGatewayForTests, threadForBooking } from '@kando/domain'
+import { clearOutbox, decideDispute, getPublicProfile, objectNoShow, openDispute, reportNoShow, runDueTimers, threadForBooking } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { adminCall, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 

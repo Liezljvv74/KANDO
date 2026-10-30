@@ -17,6 +17,9 @@ export const requiredText = (max: number) => z.string().trim().min(1).max(max)
 /** The envelope the app reads lists from: `{ docs: [...] }`. */
 export const docsOf = <S extends z.ZodType>(schema: S) => z.object({ docs: z.array(schema) })
 
+export const HOUR = 3_600_000
+export const DAY = 86_400_000
+
 /** Rows per page of the app's lists (bookings, requests, threads). */
 export const LIST_PAGE = 50
 

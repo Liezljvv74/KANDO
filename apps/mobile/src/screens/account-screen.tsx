@@ -10,6 +10,7 @@ import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
+import { ErrorRetry } from '@/components/state-view'
 import { NotificationBanners } from '@/components/notification-banner'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useFlash } from '@/hooks/use-flash'
@@ -32,18 +33,20 @@ export default function AccountScreen() {
   const [lastName, setLastName] = useState('')
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [saved, showSaved, hideSaved] = useFlash()
 
   const load = useCallback(async () => {
     try {
       const m = await loadMe()
+      setLoadError(null)
       setMe(m)
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
       setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
-    } catch {
-      // The form stays hidden; the next visit loads again.
+    } catch (e) {
+      setLoadError(e instanceof ApiError ? e.code : '') // the form stays hidden behind a retry
     }
   }, [])
   useEffect(() => {
@@ -97,14 +100,15 @@ export default function AccountScreen() {
               <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy} />
               <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy} />
               <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy} />
-              <ErrorText text={error} />
               <Button label={t('common.save')} onPress={save} busy={busy} />
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}
+          {!me && loadError !== null && <ErrorRetry code={loadError} onRetry={load} />}
           <LinkText label={t('booking.myBookings')} onPress={() => go('/bookings')} />
           <LinkText label={t('chat.title')} onPress={() => go('/threads')} />
           <LinkText label={t('account.offerServices')} onPress={offer} />
+          <ErrorText text={error} />
           <LanguageSwitch />
         </View>
         <PushSwitches />

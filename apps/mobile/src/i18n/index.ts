@@ -1,4 +1,4 @@
-import { DEFAULT_LANG, isLang, t as translate, type Key, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, t as translate, type AppKey as Key, type Lang } from '@kando/i18n/app'
 import { getLocales } from 'expo-localization'
 import * as SecureStore from 'expo-secure-store'
 import { useSyncExternalStore } from 'react'
@@ -67,6 +67,7 @@ export const errorKeys: Record<string, Key> = {
   BAD_FORMAT: 'error.badFormat',
   WRONG_PASSWORD: 'account.wrongPassword',
   AUTH_BUSY: 'error.authBusy',
+  OFFER_NOT_SAVED: 'error.offerNotSaved',
   LAST_ADMIN: 'account.lastAdmin',
   REPLACEMENT_FIRST: 'error.replacementFirst',
   // Booking rules (`error`)

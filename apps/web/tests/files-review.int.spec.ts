@@ -3,7 +3,8 @@ import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { DocumentsListSchema, PhotoSchema } from '@kando/contract'
-import { createAppRequest, deletePhoto, offerableServiceIds, setStorageForTests, storage } from '@kando/domain'
+import { createAppRequest, deletePhoto, offerableServiceIds, storage } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, fakeSession, memoryStorage, profile, seedBase, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

@@ -1,0 +1,9 @@
+import { expect, it } from 'vitest'
+
+import { DAY, HOUR } from './common'
+import { FREE_CANCEL_HOURS, LATE_CANCEL_SHARE, NO_SHOW_OBJECTION_HOURS, STOP_ANSWER_DAYS } from './endings'
+
+it('LATE_CANCEL_SHARE is 0.5, FREE_CANCEL_HOURS 24, STOP_ANSWER_DAYS 7, NO_SHOW_OBJECTION_HOURS 48', () => {
+  expect([LATE_CANCEL_SHARE, FREE_CANCEL_HOURS, STOP_ANSWER_DAYS, NO_SHOW_OBJECTION_HOURS]).toEqual([0.5, 24, 7, 48])
+  expect([HOUR, DAY]).toEqual([3_600_000, 86_400_000])
+})

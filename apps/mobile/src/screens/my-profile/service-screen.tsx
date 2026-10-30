@@ -157,7 +157,7 @@ function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows
           {problem('price', price)}
         </>
       )}
-      {busy && <Text style={styles.hint}>…</Text>}
+      {busy && <Text style={styles.hint}>â€¦</Text>}
       <ErrorText text={code.remove ? errorText(code.remove) : null} />
       <SmallButton label={t('setup.removeService')} onPress={remove} disabled={busy} />
     </Card>

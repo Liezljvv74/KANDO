@@ -1,4 +1,4 @@
-import { DEFAULT_LANG } from '@kando/i18n'
+import { DEFAULT_LANG } from '@kando/i18n/lang'
 import { z } from 'zod'
 
 import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
@@ -90,6 +90,8 @@ export const ProviderDetailSchema = z.object({
   verified: z.boolean().nullish(),
   /** False: requests and bookings are refused (PROVIDER_NOT_READY) and the app offers "Notify me when available". Nullish: an older response lacks it; read as true. */
   canBook: z.boolean().nullish(),
+  /** The signed-in caller has an open "notify me" for this provider. False when signed out (so never in a cached site page). Nullish: an older response lacks it. */
+  watching: z.boolean().nullish(),
   /** True when the page texts are not in the reader's language, so the translate button shows. */
   translatable: z.boolean(),
 })

@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm'
 import { bookingAppInsert, bookings, providers, quotes, services, type Tx } from '@kando/db'
-import { LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type DirectBookingInput, type Page } from '@kando/contract'
-import { isUuid } from '../admin/common'
+import { HOUR, LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type DirectBookingInput, type Page } from '@kando/contract'
+import { NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
-import { fail } from '../providers/http'
+import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -11,14 +11,12 @@ import { assertNoContactDetails } from '../chat/flags'
 import { threadForBooking, threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { assertSlotFree, lockProviderSlots } from './busy'
+import { lockRow, partyOf } from './party'
 import { notifyBookingEvent, notifyProposal } from './notify'
 import { assertWithinLimits, toBooking } from './requests'
 import { canTransact } from '../payments/rules'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
-const HOUR = 3_600_000
-const NO_ID = '00000000-0000-0000-0000-000000000000'
-const notFound = () => fail(404, { error: 'Not found' })
 type Row = typeof bookings.$inferSelect
 
 /** The job address stays private to the customer; the provider sees it only once the booking was accepted (payBy is set then). */
@@ -85,16 +83,6 @@ export async function getBooking(tx: Tx, userId: string, id: string): Promise<Bo
   const b = (await tx.select().from(bookings).where(eq(bookings.id, id)))[0] ?? notFound()
   return { booking: view(b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, b) }
 }
-
-/** Which side the caller is on; 404 for anyone else. */
-async function partyOf(tx: Tx, userId: string, bookingId: string) {
-  const b = isUuid(bookingId) ? (await tx.select().from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
-  if (!b) return notFound()
-  const role = b.customerId === userId ? 'customer' : (await ownProvider(tx, userId))?.id === b.providerId ? 'provider' : null
-  return role ? { role, providerId: b.providerId } : notFound()
-}
-
-const lockRow = async (tx: Tx, id: string) => (await tx.select().from(bookings).where(eq(bookings.id, id)).for('update'))[0] ?? notFound()
 
 /** Answer the other side's last proposal: accept, decline or counter. Works for quote-born and direct bookings alike. */
 export async function answerBooking(tx: Tx, userId: string, bookingId: string, answer: BookingAnswer, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {

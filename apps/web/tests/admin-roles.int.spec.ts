@@ -114,3 +114,8 @@ it('every route file under app/api/admin exports handlers built with adminReques
     expect(/export\s*\{|export\s+default/.test(src), `${file} re-exports`).toBe(false)
   }
 })
+
+it('a refused staff call (thrown 403) carries no-store', async () => {
+  const res = await adminCall(list.GET, 'ar-rev', 'GET', '/x', undefined, { resource: 'staff' })
+  expect([res.status, res.headers.get('cache-control')]).toEqual([403, 'private, no-store'])
+})

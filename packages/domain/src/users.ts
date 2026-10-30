@@ -6,6 +6,7 @@ import { fail } from './providers/http'
 import { ownProvider, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
+import { paymentsEnabled } from './payments/rules'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
 export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null }
@@ -96,6 +97,7 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   isProvider: row.isProvider,
   photoUrl: pictureKey ? photoUrl(pictureKey) : null,
   address: addressOf(row),
+  paymentsEnabled: paymentsEnabled(),
   notifications,
 })
 

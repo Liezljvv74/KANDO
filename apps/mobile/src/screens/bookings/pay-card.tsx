@@ -11,6 +11,7 @@ import { errorText, t } from '@/i18n'
 import type { Viewer } from '@/lib/booking-status'
 import { formatWhen } from '@/lib/booking-time'
 import { payCard } from '@/lib/pay-state'
+import { useMe } from '@/hooks/use-me'
 import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { isHttps } from '@/lib/safe-url'
 
@@ -24,6 +25,7 @@ const sessions = new Map<string, Session>()
  * browser closes; Android right when it opens, so there the return is the app coming back to the front (the screen reloads then too).
  */
 export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; viewer: Viewer; onRefresh: () => void }) {
+  const me = useMe()
   const [, rerender] = useState(0)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -89,7 +91,7 @@ export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; vie
   return (
     <Card>
       {!!booking.payBy && <Text style={styles.text}>{t('bookingStatus.payBy', { date: formatWhen(booking.payBy) })}</Text>}
-      {paymentsOff() ? (
+      {paymentsOff(me) ? (
         <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text>
       ) : (
         <SmallButton label={t(kind === 'payAgain' ? 'booking.payAgain' : 'booking.payNow')} onPress={pay} busy={busy} />

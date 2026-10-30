@@ -16,7 +16,7 @@ export function startOffering(welcome = false): Promise<string | null> {
       const account = signOutGeneration()
       await ensureDraft()
       const me = await loadMe()
-      if (!me?.isProvider) return errorText('') // the draft did not make this person a provider: the tab would stay hidden
+      if (!me?.isProvider) return errorText('OFFER_NOT_SAVED') // the draft did not make this person a provider: the tab would stay hidden
       if (account !== signOutGeneration()) return null // signed out meanwhile: nothing to open
       setPending({ path: '/my-profile', welcome }) // the tabs layout navigates once the tab is visible
       return null

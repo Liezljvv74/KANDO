@@ -1,9 +1,15 @@
+import type { Me } from '@kando/contract'
+
 import { ApiError } from '@/api/client'
 import { errorText } from '@/i18n'
 
 let off = false
-/** True once the server answered PAYMENTS_OFF in this session: the pay and payout buttons then stay hidden. */
-export const paymentsOff = () => off
+/** True when /me says payments are off, or the server answered PAYMENTS_OFF in this session: the pay and payout buttons then stay hidden. An older server sends no flag: only a noted answer counts. */
+export const paymentsOff = (me?: Pick<Me, 'paymentsEnabled'> | null) => me?.paymentsEnabled === false || off
+/** Every /me load: the flag follows what the server says now. */
+export function noteMe(me: Me) {
+  if (me.paymentsEnabled !== undefined) off = !me.paymentsEnabled
+}
 export const resetPaymentsOff = () => {
   off = false
 }

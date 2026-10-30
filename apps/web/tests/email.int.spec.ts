@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { clearOutbox, EMAIL_TIMEOUT_MS, notifyDocumentDecision, outboxForTests, sendEmail } from '@kando/domain'
+import { clearOutbox, EMAIL_TIMEOUT_MS, notifyDocumentDecision, sendEmail } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { EMAIL, seedUser } from './helpers'
 
 const send = vi.hoisted(() => vi.fn())

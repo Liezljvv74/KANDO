@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { clearOutbox, inBatches, outboxForTests, pruneOldRows, purgeContactAttempts } from '@kando/domain'
+import { clearOutbox, inBatches, pruneOldRows, purgeContactAttempts } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, EMAIL, seedBase, seedProvider } from './helpers'
 
 const cron = await import('../app/api/cron/suspensions/route')

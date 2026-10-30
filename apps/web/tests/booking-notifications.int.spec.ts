@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, notifyBookingEvent, outboxForTests, runDueTimers } from '@kando/domain'
+import { clearOutbox, notifyBookingEvent, runDueTimers } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))

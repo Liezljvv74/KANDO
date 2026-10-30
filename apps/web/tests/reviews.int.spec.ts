@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { sql } from 'drizzle-orm'
-import { clearOutbox, clearPushOutbox, outboxForTests, pushOutboxForTests, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, setGatewayForTests, writeReview } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, writeReview } from '@kando/domain'
+import { outboxForTests, pushOutboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 

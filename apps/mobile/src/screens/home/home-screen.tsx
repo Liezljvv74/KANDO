@@ -1,4 +1,4 @@
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { photosApi } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card } from '@/components/form-ui'
+import { NotificationBanners } from '@/components/notification-banner'
 import { Select } from '@/components/select'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
@@ -102,6 +103,8 @@ function ProviderCard() {
 export default function HomeScreen() {
   useLang()
   const { categories, error, retry } = useCategories()
+  const me = useMe()
+  useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
   const k = (key: string) => t(`home.${key}` as Key)
 
   return (
@@ -111,6 +114,7 @@ export default function HomeScreen() {
           {k('headline')}
         </Text>
         <Text style={styles.intro}>{k('intro')}</Text>
+        <NotificationBanners me={me} />
         <PictureNudge />
         <Button label={t('home.cta')} onPress={() => router.navigate('/search')} />
         <ProviderCard />

@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import { AmountSchema, requiredText } from './common'
 
+// The cancellation and ending rules the server applies and the app shows (one copy for both).
+export const LATE_CANCEL_SHARE = 0.5
+export const FREE_CANCEL_HOURS = 24
+export const STOP_ANSWER_DAYS = 7
+export const NO_SHOW_OBJECTION_HOURS = 48
+
 /** POST /bookings/:id/finish (provider): the material part of the price, 0 up to the booking amount (the server checks the upper bound). */
 export const FinishInputSchema = z.object({ materialAmount: AmountSchema.optional() }).strict()
 export type FinishInput = z.infer<typeof FinishInputSchema>
