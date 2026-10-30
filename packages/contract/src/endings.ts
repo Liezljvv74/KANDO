@@ -83,7 +83,16 @@ const staffReason = z.string().trim().min(10).max(2000)
  * that it is below the paid amount and in whole cents); a full payout pays everything, a full refund nothing.
  */
 export const DisputeDecisionSchema = z
-  .object({ decision: z.enum(['full-payout', 'partial', 'full-refund']), providerShare: AmountSchema.optional(), reason: staffReason })
+  .object({
+    decision: z.enum(['full-payout', 'partial', 'full-refund']),
+    providerShare: AmountSchema.optional(),
+    reason: staffReason,
+    /**
+     * Replace a recorded decision whose money step has not begun (the payout or refund keeps failing): the `decidedAt` of
+     * the decision being replaced, so two staff replacing at once cannot both win (the second finds a newer one: 409).
+     */
+    redecide: z.string().optional(),
+  })
   .strict()
   .refine((d) => (d.decision === 'partial' ? d.providerShare !== undefined && d.providerShare > 0 : d.providerShare === undefined), { path: ['providerShare'], message: 'A share only with partial, and more than 0' })
 export type DisputeDecision = z.infer<typeof DisputeDecisionSchema>

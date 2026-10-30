@@ -819,4 +819,7 @@ export const de = {
   'admin.review.shown': 'Sichtbar',
   'admin.review.notYet': 'Noch nicht sichtbar',
   'admin.filter.allStatuses': 'Alle Status',
+  'admin.settle.noShowHint': 'Eine Meldung „nicht erschienen“ ist noch offen: sie endet nach ihren 48 Stunden oder mit der Entscheidung über den Widerspruch.',
+  'admin.dispute.redecideHint': 'Die Auszahlung oder Erstattung dieser Entscheidung schlägt immer wieder fehl und es ist noch kein Geld geflossen, darum kannst du die Entscheidung ersetzen. Hat die Bank das Geld schon zurückgeholt (verlorene Rückbuchung), schließe den Fall im Stripe-Dashboard ab.',
+  'admin.action.redecide': 'Entscheidung ersetzen',
 }

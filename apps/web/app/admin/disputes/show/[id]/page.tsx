@@ -36,6 +36,8 @@ export default function DisputeShow() {
   const [decision, setDecision] = useState<Decision>('partial')
   const [share, setShare] = useState<number | null>(null)
   const [reason, setReason] = useState('')
+  // decided, but its payout or refund keeps failing: an Administrator may replace the decision until money has moved
+  const pending = !!d?.decision && d.booking.status === 'disputed'
   const ready = reason.trim().length >= 10 && (decision !== 'partial' || (share !== null && share > 0 && d !== undefined && share < d.paid))
   return (
     <Show title={at('admin.one.disputes')} isLoading={query.isLoading} canEdit={false} canDelete={false}>
@@ -72,9 +74,9 @@ export default function DisputeShow() {
               <Link href={`/admin/threads/${d.threadId}`}>{at('admin.action.openThread')}</Link> <small>{at('admin.thread.logged')}</small>
             </p>
           )}
-          {!d.decision && me?.staffRole === 'admin' && (
+          {(!d.decision || pending) && me?.staffRole === 'admin' && (
             <Space direction="vertical" style={{ width: '100%' }}>
-              <small>{at('admin.decide.hint')}</small>
+              <small>{at(pending ? 'admin.dispute.redecideHint' : 'admin.decide.hint')}</small>
               <Radio.Group value={decision} onChange={(e) => setDecision(e.target.value)}>
                 <Space direction="vertical">
                   {(['full-payout', 'partial', 'full-refund'] as const).map((x) => (
@@ -95,10 +97,10 @@ export default function DisputeShow() {
                 loading={decide.mutation.isPending}
                 disabled={!ready}
                 onClick={() =>
-                  decide.mutate({ url: `/api/admin/disputes/${d.id}/decide`, method: 'post', values: { decision, reason, ...(decision === 'partial' && { providerShare: share }) } }, { onSuccess: () => query.refetch() })
+                  decide.mutate({ url: `/api/admin/disputes/${d.id}/decide`, method: 'post', values: { decision, reason, ...(decision === 'partial' && { providerShare: share }), ...(pending && { redecide: d.decidedAt! }) } }, { onSuccess: () => query.refetch() })
                 }
               >
-                {at('admin.action.decide')}
+                {at(pending ? 'admin.action.redecide' : 'admin.action.decide')}
               </Button>
             </Space>
           )}

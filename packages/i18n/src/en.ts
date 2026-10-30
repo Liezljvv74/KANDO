@@ -820,4 +820,7 @@ export const en: Record<Key, string> = {
   'admin.review.shown': 'Shown',
   'admin.review.notYet': 'Not shown yet',
   'admin.filter.allStatuses': 'All statuses',
+  'admin.settle.noShowHint': 'A no-show report is still open: it ends after its 48 hours, or with the decision on the objection.',
+  'admin.dispute.redecideHint': 'The payout or refund of this decision keeps failing and no money has moved yet, so you can replace the decision. If the bank already took the money back (a lost chargeback), close it in the Stripe dashboard.',
+  'admin.action.redecide': 'Replace the decision',
 }

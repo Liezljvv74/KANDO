@@ -47,6 +47,8 @@ export default function BookingShow() {
   const [share, setShare] = useState<number | null>(null)
   const [reason, setReason] = useState('')
   const canSettle = b && me?.staffRole === 'admin' && b.paidAt && !b.releasedAt && SETTLEABLE.includes(b.status)
+  // a no-show report still open ends by its 48 hours or the objection's decision (the server refuses with NO_SHOW_REPORTED)
+  const noShowOpen = b?.status === 'confirmed' && b.noShow !== null
   return (
     <Show title={at('admin.one.bookings')} isLoading={query.isLoading} canEdit={false} canDelete={false}>
       {b && (
@@ -106,13 +108,14 @@ export default function BookingShow() {
           {canSettle && (
             <Space direction="vertical" style={{ width: '100%' }}>
               <small>{at('admin.settle.hint')}</small>
+              {noShowOpen && <small>{at('admin.settle.noShowHint')}</small>}
               <InputNumber min={0} max={b.paid} step={0.01} precision={2} value={share} onChange={setShare} addonBefore={at('admin.field.providerShare')} />
               <Input.TextArea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={at('admin.field.reason')} />
               <small>{at('admin.reasonRequired')}</small>
               <Button
                 danger
                 loading={settle.mutation.isPending}
-                disabled={share === null || reason.trim().length < 10}
+                disabled={noShowOpen || share === null || reason.trim().length < 10}
                 onClick={() => settle.mutate({ url: `/api/admin/bookings/${b.id}/refund`, method: 'post', values: { providerShare: share, reason } }, { onSuccess: () => query.refetch() })}
               >
                 {at('admin.action.settle')}

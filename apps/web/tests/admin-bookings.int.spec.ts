@@ -24,6 +24,7 @@ beforeAll(async () => {
   const { categoryId } = await seedBase()
   await seedUser(U.admin, 'admin')
   await seedUser(U.rev, 'reviewer')
+  await seedUser('ab-admin2', 'admin')
   await seedUser(U.cust, null, 'Anna Kundin')
   providerId = await seedProvider(U.owner, { name: 'Ab Owner', categoryId, price: 100 })
   bareProviderId = await seedProvider(U.bare, { name: 'Ab Bare', categoryId, price: 100 })
@@ -100,12 +101,16 @@ const getList = (as: string, resource: string, filter?: object) => adminCall(lis
 const getOne = (as: string, resource: string, id: string) => adminCall(item.GET, as, 'GET', '/x', undefined, { resource, id })
 const report = (userId: string, id: string, now: Date) => asUser(userId, (tx) => reportNoShow(tx, userId, id, now))
 const object = (userId: string, id: string, now: Date) => asUser(userId, (tx) => objectNoShow(tx, userId, id, { description: 'Ich war um 10 Uhr da und habe geklingelt.' }, now))
+const decidedAt = async (disputeId: string) => ((await pool.query('SELECT decided_at FROM disputes WHERE id = $1', [disputeId])).rows[0].decided_at as Date).toISOString()
 const disputeOf = async (bookingId: string) => (await pool.query('SELECT id FROM disputes WHERE booking_id = $1', [bookingId])).rows[0].id as string
 
 it('an administrator decides partial 30 of 100: refund 70, commission on 30, both told with the reason', async () => {
   const { id, disputeId } = await disputed()
+  // the timer had flagged it overdue: the decision answers that flag
+  await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id, note) VALUES ('dispute-overdue', $1, $2, 'reason: problem')", [id, U.cust])
   const res = await decide(U.admin, disputeId, { decision: 'partial', providerShare: 30, reason: REASON })
   expect(res.status).toBe(200)
+  expect((await pool.query("SELECT resolved_by FROM staff_flags WHERE kind = 'dispute-overdue' AND ref_id = $1", [id])).rows).toEqual([{ resolved_by: U.admin }])
   const body = (await res.json()).data
   expect(body).toMatchObject({ id: disputeId, decision: 'partial', providerShare: 30, decisionReason: REASON, bookingStatus: 'completed', applied: true })
   expect(await ledger(id)).toEqual([
@@ -320,7 +325,7 @@ it('a staff refund settles an unsettled paid booking once, and is listed', async
   expect([again.status, await again.json()]).toEqual([409, { error: 'ALREADY_SETTLED' }])
   // a disputed booking is decided through its dispute
   const d = await disputed()
-  expect(await (await refund(U.admin, d.id, { providerShare: 0, reason: REASON })).json()).toEqual({ error: 'DISPUTE_OPEN' })
+  expect(await (await refund(U.admin, d.id, { providerShare: 0, reason: REASON })).json()).toEqual({ error: 'DECISION_PENDING' })
   // a full refund of a confirmed booking: refunded, never reviewable
   const c = await paidBooking()
   expect((await refund(U.admin, c.id, { providerShare: 0, reason: REASON })).status).toBe(200)
@@ -375,6 +380,8 @@ it('bookings and disputes lists put overdue disputes first; details carry no sec
   const detail = (await (await getOne(U.rev, 'bookings', id)).json()).data
   expect(detail).toMatchObject({ id, status: 'disputed', amount: 100, paid: 100, customerEmail: EMAIL(U.cust), providerName: 'Ab Owner', dispute: { id: disputeId } })
   expect(detail.ledger).toEqual([expect.objectContaining({ kind: 'charge', amount: 100 })])
+  // the dispute's evidence is read on the (logged) dispute page only
+  expect(detail.dispute).toEqual({ id: disputeId, decision: null, decidedAt: null })
   expect(detail).toHaveProperty('children')
   const text = JSON.stringify(detail)
   for (const secret of ['paymentRef', 'checkoutRef', 'gatewayRef', 'stripeAccountId', 'pi_ab', 'acct_ab', 'commissionRate']) expect(text).not.toContain(secret)
@@ -396,4 +403,103 @@ it('the domain call checks the share against the paid amount itself', async () =
   )
   expect(refusal).toBe(400)
   expect((await disputeRow(disputeId)).decided_at).toBeNull()
+})
+
+it('a decision whose payout keeps failing can be replaced until money moves: payout account gone', async () => {
+  const { id, disputeId } = await disputed({ provider: bareProviderId }) // no payout account, for good
+  expect((await (await decide(U.admin, disputeId, { decision: 'full-payout', reason: REASON })).json()).data).toMatchObject({ applied: false })
+  // a plain second decision is still refused; replacing it must be meant
+  expect(await (await decide(U.admin, disputeId, { decision: 'full-refund', reason: REASON })).json()).toEqual({ error: 'ALREADY_DECIDED' })
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  const redecide = await decidedAt(disputeId)
+  const res = await decide('ab-admin2', disputeId, { decision: 'full-refund', reason: 'Das Auszahlungskonto gibt es nicht mehr.', redecide })
+  const audit = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes('dispute-redecided'))
+  log.mockRestore()
+  expect(res.status).toBe(200)
+  expect((await res.json()).data).toMatchObject({ decision: 'full-refund', providerShare: 0, decidedBy: 'ab-admin2', bookingStatus: 'refunded', applied: true })
+  expect(JSON.parse(audit!)).toMatchObject({ disputeId, previous: { decision: 'full-payout', providerShare: '100.00', decidedBy: U.admin } })
+  expect(await ledger(id)).toEqual([{ kind: 'refund', amount: '100.00' }])
+  expect((await pool.query("SELECT resolved_at FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [id])).rows[0].resolved_at).not.toBeNull()
+  // once money has moved, nothing can replace it
+  expect(await (await decide(U.admin, disputeId, { decision: 'full-payout', reason: REASON, redecide: await decidedAt(disputeId) })).json()).toEqual({ error: 'ALREADY_DECIDED' })
+  expect(g.calls.filter((c) => c.method === 'refund')).toHaveLength(1)
+})
+
+it('a refund the bank no longer allows (chargeback reversed) can be replaced by another decision', async () => {
+  const { id, disputeId } = await disputed()
+  const refundOk = g.refund
+  g.refund = async () => {
+    throw new Error('charge_disputed: the charge was already reversed')
+  }
+  expect((await (await decide(U.admin, disputeId, { decision: 'full-refund', reason: REASON })).json()).data).toMatchObject({ bookingStatus: 'disputed', applied: false })
+  expect(await ledger(id)).toEqual([])
+  g.refund = refundOk
+  const res = await decide(U.admin, disputeId, { decision: 'full-payout', reason: 'Die Bank hat das Geld schon zurückgeholt.', redecide: await decidedAt(disputeId) })
+  expect((await res.json()).data).toMatchObject({ decision: 'full-payout', bookingStatus: 'completed', applied: true })
+  expect(await ledger(id)).toEqual([{ kind: 'commission', amount: '12.00' }, { kind: 'transfer', amount: '88.00' }])
+})
+
+it('a settle that began before the dispute fixes the split: only the matching decision finishes it', async () => {
+  // a stop agreed at 40: the refund of 60 went through, the transfer failed; then a chargeback dispute froze it
+  const { id } = await paidBooking()
+  await pool.query("UPDATE bookings SET status = 'disputed', stopped_at = now(), stopped_by = 'customer', stop_amount = 40, stop_stated_at = now(), confirm_by = now() WHERE id = $1", [id])
+  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'refund', 60, 're_ab', $3)", [id, providerId, `refund:${id}`])
+  const disputeId = (await pool.query("INSERT INTO disputes (booking_id, reason, description, decide_by) VALUES ($1, 'chargeback', '', now() + interval '14 days') RETURNING id", [id])).rows[0].id as string
+  const wrong = await decide(U.admin, disputeId, { decision: 'full-refund', reason: REASON })
+  expect([wrong.status, await wrong.json()]).toEqual([409, { error: 'SETTLEMENT_STARTED', providerShare: 40 }])
+  expect((await disputeRow(disputeId)).decided_at).toBeNull()
+  // paid counts the earlier refund as settle does: 40 of 100 is a partial
+  const res = await decide(U.admin, disputeId, { decision: 'partial', providerShare: 40, reason: REASON })
+  expect((await res.json()).data).toMatchObject({ bookingStatus: 'completed', applied: true })
+  expect(await ledger(id)).toEqual([
+    { kind: 'commission', amount: '4.80' },
+    { kind: 'refund', amount: '60.00' },
+    { kind: 'transfer', amount: '35.20' },
+  ])
+  expect(g.calls.filter((c) => c.method === 'refund')).toHaveLength(0)
+})
+
+it('settling by hand while a no-show report is open is 409; the report and its additional task are untouched', async () => {
+  const root = await paidBooking()
+  const kid = await paidChild(root.id, root.startAt, 40)
+  await report(U.cust, root.id, new Date())
+  for (const id of [root.id, kid]) {
+    const res = await refund(U.admin, id, { providerShare: 0, reason: REASON })
+    expect([res.status, await res.json()]).toEqual([409, { error: 'NO_SHOW_REPORTED' }])
+  }
+  expect(await row(root.id)).toMatchObject({ status: 'confirmed', no_show: 'provider', released_at: null })
+  expect(await row(kid)).toMatchObject({ status: 'confirmed', no_show: 'provider', released_at: null })
+  expect(await ledger(root.id)).toEqual([])
+  expect(await ledger(kid)).toEqual([])
+})
+
+it('two administrators replacing a stuck decision at once: exactly one outcome', async () => {
+  const { id, disputeId } = await disputed({ provider: bareProviderId })
+  await decide(U.admin, disputeId, { decision: 'full-payout', reason: REASON })
+  const redecide = await decidedAt(disputeId) // both replace the decision they saw
+  const holder = await pool.connect()
+  let both: Promise<Response[]>
+  try {
+    await holder.query('BEGIN')
+    await holder.query('SELECT id FROM bookings WHERE id = $1 FOR UPDATE', [id])
+    both = Promise.all([
+      decide(U.admin, disputeId, { decision: 'full-refund', reason: REASON, redecide }),
+      decide('ab-admin2', disputeId, { decision: 'partial', providerShare: 50, reason: REASON, redecide }),
+    ])
+    await new Promise((ok) => setTimeout(ok, 500))
+    await holder.query('COMMIT')
+  } finally {
+    holder.release()
+  }
+  // the first replacement wins; the second finds a newer decision than the one it saw
+  const res = await both
+  expect(res.map((r) => r.status).sort()).toEqual([200, 409])
+  const winner = (await disputeRow(disputeId)).decision as string
+  if (winner === 'full-refund') {
+    expect(await ledger(id)).toEqual([{ kind: 'refund', amount: '100.00' }])
+    expect((await row(id)).status).toBe('refunded')
+  } else {
+    expect(winner).toBe('partial') // still no payout account: decided, money pending, nothing moved
+    expect(await ledger(id)).toEqual([])
+  }
 })

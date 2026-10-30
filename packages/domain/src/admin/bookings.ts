@@ -1,7 +1,7 @@
-import { and, asc, count, desc, eq, ilike, isNotNull, isNull, like as sqlLike, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, like as sqlLike, or, sql } from 'drizzle-orm'
 import { bookings, db, disputes, ledgerEntries, providers, reviews, staffFlags, users, type Tx } from '@kando/db'
 import type { AdminListQuery, DisputeDecision, ReviewHide, StaffRefund } from '@kando/contract'
-import { lockFamily } from '../bookings/additional'
+import { lockFamily, parentNoShow } from '../bookings/additional'
 import { ownerOf, providerNoShowRule, trySettleCancelled } from '../bookings/cancel'
 import { toDispute } from '../bookings/disputes'
 import { REVIEW_VISIBLE_DAYS } from '../bookings/ending-rules'
@@ -25,6 +25,13 @@ const notFoundError = () => fail(404, { error: 'Not found' })
 const openChargeback = async (o: Exec, bookingId: string) =>
   (await o.select({ id: staffFlags.id }).from(staffFlags).where(and(eq(staffFlags.kind, 'chargeback'), eq(staffFlags.refId, bookingId), isNull(staffFlags.resolvedAt)))).length > 0
 
+/** Ledger rows of this booking's settlement (settle.ts keys): once one exists the split is fixed. */
+const settleRows = async (o: Exec, id: string) =>
+  (await o.select({ id: ledgerEntries.id }).from(ledgerEntries).where(inArray(ledgerEntries.idempotencyKey, [`refund:${id}`, `transfer:${id}`, `commission:${id}`]))).length
+/** The refund an earlier, half-done settle of this booking made (cents), which settle still counts as paid. */
+const ownRefundC = async (o: Exec, id: string) =>
+  toCents(Number((await o.select({ a: ledgerEntries.amount }).from(ledgerEntries).where(eq(ledgerEntries.idempotencyKey, `refund:${id}`)))[0]?.a ?? 0))
+
 /** The dispute as staff see it: the party DTO plus who decided (staff only). */
 const toAdminDispute = (d: DisputeRow) => ({ ...toDispute(d), decidedBy: d.decidedBy })
 
@@ -43,9 +50,12 @@ async function tellBoth(kind: 'dispute-decided' | 'refund-issued', b: Row, reaso
 /**
  * An Administrator decides a dispute (one decision per dispute). Step 1, on the owner connection with the booking row and
  * then the dispute row locked: refuses a decided dispute (409 ALREADY_DECIDED: two staff clicking at once get exactly one
- * outcome), a booking that is no longer `disputed` (409 not-open), and an open chargeback flag (409 CHARGEBACK_OPEN: staff
+ * outcome) unless `redecide` names that decision (its decidedAt: a replacement racing another finds a newer one), the booking is still `disputed` and no settle ledger row exists yet (the money step
+ * keeps failing, so the decision is replaced; once a row exists the split is fixed and only the stored share can finish
+ * it; the replaced decision is kept in an audit line); a booking that is no longer `disputed` (409 not-open), and an open chargeback flag (409 CHARGEBACK_OPEN: staff
  * resolve it first, settle stays frozen while it is open); the share is whole cents and for `partial` more than 0 and
- * below what was paid (400 INVALID_SHARE). The decision (decision, provider_share, reason, decided_by, decided_at) commits
+ * below what was paid (400 INVALID_SHARE; "paid" as settle counts it); when an earlier settle already moved money the
+ * share must be the one it began with (409 SETTLEMENT_STARTED, with that `providerShare`). It closes an open `dispute-overdue` flag. The decision (decision, provider_share, reason, decided_by, decided_at) commits
  * before any money moves, so settle no longer sees an open dispute. Step 2 is applyDecision (settle with the stored share,
  * then the final status); if it fails the decision stays recorded, the booking stays `disputed`, staff are flagged
  * (`payment-unprocessed`), and the timer applies it on its next run (releaseDue). Returns the dispute, the booking status
@@ -62,21 +72,38 @@ export async function decideDispute(exec: Exec, staffId: string, disputeId: stri
   const d = await exec.transaction(async (o) => {
     const b = await lockRow(o, found.bookingId)
     const [cur] = await o.select().from(disputes).where(eq(disputes.id, disputeId)).for('update')
-    if (cur!.decidedAt) fail(409, { error: 'ALREADY_DECIDED' })
+    // A decision is final once its money step has begun. Before that (still `disputed`, no settle row yet: the payout
+    // account is gone, the refund was refused ...) an Administrator may replace it on purpose (`redecide` = its decidedAt), so the
+    // booking never stays stuck; the replaced decision goes to the audit line below.
+    if (cur!.decidedAt && (input.redecide !== cur!.decidedAt.toISOString() || b.status !== 'disputed' || (await settleRows(o, b.id)) > 0)) fail(409, { error: 'ALREADY_DECIDED' })
     if (b.status !== 'disputed') fail(409, { error: 'not-open' })
     if (await openChargeback(o, b.id)) fail(409, { error: 'CHARGEBACK_OPEN' })
-    const paidC = b.paidAt && !b.releasedAt ? toCents(await paidAmount(o, b.id)) : 0
+    // what was paid, as settle counts it: a refund an earlier, half-done settle of this booking made still counts as paid
+    const paidC = b.paidAt && !b.releasedAt ? toCents(await paidAmount(o, b.id)) + (await ownRefundC(o, b.id)) : 0
     let shareC = input.decision === 'full-payout' ? paidC : 0
     if (input.decision === 'partial') {
       const share = input.providerShare ?? 0
       shareC = toCents(share)
       if (shareC / 100 !== share || shareC <= 0 || shareC >= paidC) fail(400, { error: 'INVALID_SHARE' })
     }
+    // an earlier settle of this booking already moved money (a half-done payout before the dispute): the split is fixed
+    // to what it began (settle refuses any other with SETTLEMENT_MISMATCH), so only that decision can finish it
+    if ((await settleRows(o, b.id)) > 0) {
+      const fixedC = paidC - (await ownRefundC(o, b.id))
+      if (shareC !== fixedC) fail(409, { error: 'SETTLEMENT_STARTED', providerShare: fixedC / 100 })
+    }
     const [r] = await o
       .update(disputes)
       .set({ decision: input.decision, providerShare: (shareC / 100).toFixed(2), decisionReason: input.reason, decidedBy: staffId, decidedAt: now })
       .where(eq(disputes.id, disputeId))
       .returning()
+    if (cur!.decidedAt)
+      console.log(JSON.stringify({ audit: 'dispute-redecided', time: now.toISOString(), staffId, disputeId, previous: { decision: cur!.decision, providerShare: cur!.providerShare, decidedBy: cur!.decidedBy, decidedAt: cur!.decidedAt.toISOString() } }))
+    // the timer's overdue flag is answered by the decision
+    await o
+      .update(staffFlags)
+      .set({ resolvedAt: now, resolvedBy: staffId })
+      .where(and(eq(staffFlags.kind, 'dispute-overdue'), eq(staffFlags.refId, b.id), isNull(staffFlags.resolvedAt)))
     return r!
   })
   const b = (await db.select({ customerId: bookings.customerId }).from(bookings).where(eq(bookings.id, d.bookingId)))[0]!
@@ -143,7 +170,9 @@ const REFUNDABLE = ['confirmed', 'finished', 'stopped', 'cancelled']
  * An Administrator settles an unsettled paid booking by hand (a refund after the payout is done in the Stripe dashboard):
  * the provider keeps `providerShare`, the customer gets the rest (settle: commission only on the share; 400 INVALID_SHARE
  * above what was paid; 409 DISPUTE_OPEN while a chargeback flag is open, the same freeze as everywhere). A disputed booking
- * is decided through its dispute (409 DISPUTE_OPEN); unpaid 409 NOT_PAID; settled 409 ALREADY_SETTLED; other statuses 409
+ * is decided (or re-decided) through its dispute (409 DECISION_PENDING); a booking with a no-show report still open, or an
+ * additional task its root's report covers, ends by the report's 48 hours or the objection's decision (409
+ * NO_SHOW_REPORTED: the no-show rule and the covered tasks follow there); unpaid 409 NOT_PAID; settled 409 ALREADY_SETTLED; other statuses 409
  * not-open. Settle and the status share one owner transaction with the row locked: a cancelled booking stays `cancelled`,
  * otherwise `completed` (with completedAt) when the provider keeps something, `refunded` when not. A failure moves
  * nothing but the ledger rows the gateway confirmed; staff click again with the same share (another share: 409
@@ -153,7 +182,9 @@ export async function staffRefund(exec: Exec, staffId: string, bookingId: string
   if (!isUuid(bookingId)) return notFoundError()
   const r = await exec.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
-    if (b.status === 'disputed') fail(409, { error: 'DISPUTE_OPEN' })
+    if (b.status === 'disputed') fail(409, { error: 'DECISION_PENDING' }) // decided (or re-decided) on its dispute page
+    // a no-show report still open ends by its 48 hours or a decision on the objection (the no-show rule, the covered additional tasks)
+    if (b.status === 'confirmed' && (b.noShow || (await parentNoShow(o, b)))) fail(409, { error: 'NO_SHOW_REPORTED' })
     if (!b.paidAt) fail(409, { error: 'NOT_PAID' })
     if (b.releasedAt) fail(409, { error: 'ALREADY_SETTLED' })
     if (!REFUNDABLE.includes(b.status)) fail(409, { error: 'not-open' })
@@ -295,7 +326,8 @@ async function getBooking(tx: Tx, id: string) {
     ...(await bookingSummary(tx, b)),
     ledger: ledger.map((l) => ({ kind: l.kind, amount: Number(l.amount), createdAt: iso(l.createdAt) })),
     children: children.map((k) => ({ ...k, amount: Number(k.amount), releasedAt: iso(k.releasedAt) })),
-    dispute: d ? toAdminDispute(d) : null,
+    // the dispute's evidence (its description) is read on the dispute page, which logs the read
+    dispute: d ? { id: d.id, decision: d.decision, decidedAt: iso(d.decidedAt) } : null,
   })
 }
 
