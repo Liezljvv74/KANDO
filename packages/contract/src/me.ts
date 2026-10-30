@@ -14,12 +14,12 @@ export const AddressSchema = z.object({
 export type Address = z.infer<typeof AddressSchema>
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
-export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested', 'message-received'] as const
+export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-proposed', 'booking-accepted', 'booking-declined', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'pending-slot-requested', 'message-received', 'booking-paid', 'payment-received', 'payment-late-refunded', 'payout-setup-complete', 'customers-waiting', 'provider-available', 'refund-issued'] as const
 export const NotificationSchema = z.object({
   id: z.string(),
   kind: z.enum(NOTIFICATION_KINDS),
   /** profile-live carries the profile link; message-received a link and the thread id; the booking kinds carry ids only (none for requests-ignored). */
-  payload: z.union([z.object({ url: z.string().url(), threadId: z.string().optional() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional() })]),
+  payload: z.union([z.object({ url: z.string().url(), threadId: z.string().optional() }), z.object({ requestId: z.string().optional(), bookingId: z.string().optional(), quoteId: z.string().optional(), /** customers-waiting: how many, never who */ count: z.number().int().nonnegative().optional() })]),
   createdAt: z.string(),
   seenAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),

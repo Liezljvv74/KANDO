@@ -2,9 +2,11 @@ import { sql, type SQL } from 'drizzle-orm'
 import type { db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
 import { notifyBookingEvent, type BookingKind } from './notify'
+import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
+import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
 import { IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
 
-export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number }
+export type TimerReport = { requestsExpired: number; quotesExpired: number; proposalsLapsed: number; unpaidExpired: number; remindersSent: number; ignoredNotices: number; customersWaiting: number }
 
 /**
  * Every rule is ONE statement (UPDATE .. RETURNING feeding the notification INSERT), so a concurrent run cannot
@@ -45,18 +47,19 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM e RETURNING user_id, kind, payload)
     ${result('e')}`)
 
+  // PAY_GRACE_MINUTES after pay_by: a payment made at the deadline may still be on its way (the webhook confirms it if the
+  // time is still free). The slot itself stops being held at pay_by (slotIsHeld, busy_times) and no pay link is given after it.
   const unpaidExpired = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'awaiting-payment' AND pay_by <= ${t}::timestamptz ${bookingScope} RETURNING id, customer_id, provider_id),
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope} RETURNING id, customer_id, provider_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
       SELECT u, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz
       FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING user_id, kind, payload)
     ${result('e')}`)
 
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, events }
 
-  // Reminders, each once (the reminded columns), never for a finished item. Acceptance time = updated_at: nothing
-  // touches an awaiting-payment booking between accepting and expiring/withdrawing it. If a later task writes to
-  // awaiting-payment rows, add an accepted_at column and use it here.
+  // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
+  // booking became awaiting-payment), so a later write to the row does not move them.
   const quoteReminders = await count(sql`
     WITH r AS (UPDATE quotes SET reminder_sent_at = ${t}::timestamptz WHERE status = 'sent' AND reminder_sent_at IS NULL AND expires_at > ${t}::timestamptz
         AND expires_at - interval '1 day' <= ${t}::timestamptz ${scoped(ownedBy('provider_id'), sql`request_id IN (SELECT id FROM requests WHERE customer_id = ${userId})`)} RETURNING id, request_id),
@@ -69,7 +72,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'payment-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
     ${result('r')}`)
   // halfway: only when 6h+ were given, and not when the last reminder is due as well (one message is enough)
-  const half = await payReminder('reminded_half_at', sql`pay_by - updated_at >= interval '6 hours' AND updated_at + (pay_by - updated_at) / 2 <= ${t}::timestamptz AND pay_by - interval '3 hours' > ${t}::timestamptz`)
+  const half = await payReminder('reminded_half_at', sql`pay_by - accepted_at >= interval '6 hours' AND accepted_at + (pay_by - accepted_at) / 2 <= ${t}::timestamptz AND pay_by - interval '3 hours' > ${t}::timestamptz`)
   const last = await payReminder('reminded_last_at', sql`pay_by - interval '3 hours' <= ${t}::timestamptz`)
 
   const ignoredNotices = await (exec as typeof db).transaction(async (tx) => {
@@ -85,7 +88,13 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('n')}`)
   })
 
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, events }
+  // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
+  // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.
+  const waiting = paymentsEnabled() ? await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS) : []
+  for (const w of waiting) events.push({ userId: w.userId, kind: 'customers-waiting', payload: { count: String(w.count) } })
+  const customersWaiting = waiting.length
+
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, events }
 }
 
 /**

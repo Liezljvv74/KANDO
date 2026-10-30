@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, expireQuotes, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -48,7 +48,7 @@ it('a quoted request whose quote has expired no longer counts toward the pair li
   const id = (await (await req(U.c5)).json()).id as string
   expect((await call(quotesRoute.POST, U.owner, 'POST', { amount: 10, scope: 'Fence' }, { id })).status).toBe(201)
   expect((await req(U.c5)).status).toBe(409) // a live quote counts
-  await pool.query("UPDATE quotes SET expires_at = now() - interval '1 minute' WHERE request_id = $1", [id])
+  await expireQuotes('request_id = $1', [id])
   expect((await req(U.c5)).status).toBe(201)
 })
 

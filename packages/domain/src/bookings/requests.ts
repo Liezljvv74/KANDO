@@ -1,5 +1,5 @@
-import { and, desc, eq, gt, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
+import { and, desc, eq, getTableColumns, gt, or, sql } from 'drizzle-orm'
+import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -12,6 +12,7 @@ import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
+import { canTransact } from '../payments/rules'
 import { assertFuture, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 
 const DAY = 86_400_000
@@ -55,6 +56,7 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   providerId: b.providerId,
   serviceId: b.serviceId,
   quoteId: b.quoteId,
+  requestId: b.requestId,
   source: b.source as Booking['source'],
   status: b.status as Booking['status'],
   startAt: iso(b.startAt),
@@ -103,6 +105,7 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
   const offerable = await offerableServiceIds(tx, provider.id)
   if (!offerable.length) return notFound()
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
+  if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // payout set-up unfinished: the app offers "notify me"
   if (input.serviceId && !offerable.includes(input.serviceId)) fail(400, { error: 'Unknown service' })
   const [row] = await tx
     .insert(requests)
@@ -156,6 +159,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   await lockRequest(tx, requestId)
   const req = (await own())[0]! // read again after the lock
   if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
+  if (!canTransact(provider)) fail(409, { error: 'PAYOUT_SETUP_FIRST' })
   if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed' })
   // The 3-day answer deadline binds the first quote only; a revision may follow while the last quote is still valid.
   const open = (await tx.select({ e: quotes.expiresAt }).from(quotes).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent'))))[0]
@@ -202,13 +206,14 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   if (quote.providerId !== req.providerId) return notFound()
   // a suspended or unpublished provider row is hidden from the customer by RLS: that is unavailable too
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return unavailable()
+  if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // the provider's payouts stopped being ready since the quote
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
   await tx.update(quotes).set({ status: 'accepted' }).where(eq(quotes.id, quote.id))
   await tx.update(requests).set({ status: 'booked', updatedAt: now }).where(eq(requests.id, req.id))
   const [row] = await tx
-    .insert(bookings)
+    .insert(bookingAppInsert) // the price comes from the quote (trigger bookings_fill_amount), never from the client
     .values({
       customerId: userId,
       providerId: provider.id,
@@ -218,8 +223,6 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
       status: 'proposed',
       startAt,
       durationMin: input.durationMin,
-      amount: quote.amount, // from the stored quote, never from the client
-      currency: quote.currency,
       onSite: input.onSite,
       ...(input.onSite && input.address && { addressStreet: input.address.street ?? null, addressPostcode: input.address.postcode, addressCity: input.address.city ?? null }),
       note: input.note ?? null,
@@ -227,7 +230,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
+    .returning(getTableColumns(bookings))
   const threadId = await threadForRequest(tx, req.id)
   afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: row!.currency as 'EUR' }))
   notifyProposal(afterCommit, provider, row!)

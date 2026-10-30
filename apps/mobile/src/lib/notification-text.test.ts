@@ -1,11 +1,14 @@
-import { notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
+import { notificationTarget, notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
 
-jest.mock('@/i18n', () => ({ t: (k: string) => k }))
+jest.mock('@/i18n', () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k} ${JSON.stringify(p)}` : k) }))
 
 test('every known kind has a text and an unknown kind is skipped without throwing', () => {
   expect(notificationText('requests-ignored')).toBe('notification.requestsIgnored')
   expect(notificationText('profile-live')).toBe('notification.profileLive')
   expect(notificationText('kind-from-a-newer-server')).toBeNull()
+  for (const [kind, key] of [['booking-paid', 'notification.bookingPaid'], ['payment-received', 'notification.paymentReceived'], ['payment-late-refunded', 'notification.paymentLateRefunded'], ['payout-setup-complete', 'notification.payoutSetupComplete'], ['customers-waiting', 'notification.customersWaiting'], ['provider-available', 'notification.providerAvailable'], ['refund-issued', 'notification.refundIssued']]) {
+    expect(notificationText(kind!)).toBe(key)
+  }
 })
 
 test('only the profile-live payload has a shareable url', () => {
@@ -28,4 +31,19 @@ test('only a message-received notice opens a thread: by its threadId, else by th
   expect(notificationThreadId({ kind: 'message-received', payload: { url: 'https://evil.test/threads/t3' } })).toBeNull()
   expect(notificationThreadId({ kind: 'profile-live', payload: { url: 'skilled://threads/t1', threadId: 't1' } })).toBeNull()
   expect(notificationThreadId({ kind: 'quote-received', payload: { bookingId: 'b' } })).toBeNull()
+})
+
+test('customers-waiting shows the count, singular or plural; without a count the plain text', () => {
+  expect(notificationText('customers-waiting', { count: 1 })).toBe('notification.customersWaitingOne')
+  expect(notificationText('customers-waiting', { count: 3 })).toBe('notification.customersWaitingMany {"count":3}')
+  expect(notificationText('customers-waiting', {})).toBe('notification.customersWaiting')
+})
+
+test('where a notice leads: provider-available to the provider page, customers-waiting to the payout card, the rest nowhere', () => {
+  const at = (kind: 'provider-available' | 'customers-waiting' | 'payout-setup-complete', payload: object) => notificationTarget({ kind, payload } as never)
+  expect(at('provider-available', { url: 'https://skillweb.space/providers/anna-b?lang=en' })).toEqual({ path: '/provider/anna-b' })
+  expect(at('provider-available', { url: 'https://skillweb.space/other' })).toBeNull()
+  expect(at('provider-available', {})).toBeNull()
+  expect(at('customers-waiting', { count: 2 })).toEqual({ path: '/my-profile' })
+  expect(at('payout-setup-complete', {})).toBeNull()
 })

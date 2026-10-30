@@ -30,7 +30,7 @@ const request = async (providerId: string, answerBy: string, status = 'open', cu
 const booking = async (status: string, o: { answerBy?: string; payBy?: string; acceptedAt?: string; startAt?: string } = {}) =>
   (
     await pool.query(
-      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, answer_by, pay_by, updated_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, 10, $6, $7, COALESCE($8::timestamptz, now())) RETURNING id",
+      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, $6, $7, COALESCE($8::timestamptz, CASE WHEN $4::text = 'awaiting-payment' THEN $7::timestamptz - interval '48 hours' END)) RETURNING id",
       [U.cust, prov, service, status, o.startAt ?? at(24 * 20), o.answerBy ?? null, o.payBy ?? null, o.acceptedAt ?? null],
     )
   ).rows[0].id as string
@@ -57,7 +57,7 @@ it('running the timers twice changes and notifies nothing the second time', asyn
   await run(0)
   const count = async () => Number((await pool.query('SELECT count(*) FROM notifications WHERE user_id LIKE $1', ['tm-%'])).rows[0].count)
   const after = await count()
-  expect(await run(0)).toEqual({ requestsExpired: 0, quotesExpired: 0, proposalsLapsed: 0, unpaidExpired: 0, remindersSent: 0, ignoredNotices: 0 }) // the first run took everything due
+  expect(await run(0)).toEqual({ requestsExpired: 0, quotesExpired: 0, proposalsLapsed: 0, unpaidExpired: 0, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0 }) // the first run took everything due
   expect(await count()).toBe(after)
   expect(after).toBe(4) // request, proposal, unpaid (customer and provider)
 })
@@ -107,6 +107,7 @@ it('payment reminders: halfway once, 3 hours before once; none under 6 hours or 
   await clean()
   const b = await booking('awaiting-payment', { acceptedAt: at(0), payBy: at(48) })
   const short = await booking('awaiting-payment', { acceptedAt: at(0), payBy: at(5) }) // under 6h: no halfway reminder
+  await pool.query('UPDATE bookings SET updated_at = $1 WHERE id = $2', [at(30), b]) // a later write to the row: the reminders still count from accepted_at
   const sent = async (h: number) => {
     const before = (await notes('payment-reminder')).length
     await run(h)
@@ -131,7 +132,10 @@ it('unpaid awaiting-payment past payBy expires and frees the time', async () => 
   await pool.query("UPDATE bookings SET pay_by = now() - interval '1 minute' WHERE id = $1", [b])
   expect(await busy()).toBe(0) // the lapsed window frees the time at once, before any sweep
   expect(await status('bookings', b)).toBe('awaiting-payment')
-  await run(0)
+  await runDueTimers(db, new Date())
+  expect(await status('bookings', b)).toBe('awaiting-payment') // PAY_GRACE_MINUTES: a payment made at the deadline may still arrive
+  await pool.query("UPDATE bookings SET pay_by = now() - interval '11 minutes' WHERE id = $1", [b])
+  await runDueTimers(db, new Date())
   expect(await status('bookings', b)).toBe('expired')
   expect(await busy()).toBe(0)
   expect((await notes('booking-expired')).map((n) => n.user_id).sort()).toEqual([U.cust, U.owner])
@@ -164,7 +168,7 @@ it('listRequests and listBookings show a just-due row as expired and leave other
   expect(reqs.find((r) => r.id === mine)?.status).toBe('expired')
   expect(await status('requests', theirs)).toBe('open') // another customer's due row is untouched
   expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).find((x) => x.id === b)?.status).toBe('expired')
-  const b2 = await booking('awaiting-payment', { payBy: past() }) // the provider side is lazy too
+  const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // the provider side is lazy too (after PAY_GRACE_MINUTES)
   expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).find((x) => x.id === b2)?.status).toBe('expired')
 })
 

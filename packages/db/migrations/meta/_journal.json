@@ -120,6 +120,13 @@
       "when": 1793299759150,
       "tag": "0016_staff_access_log",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793307173401,
+      "tag": "0017_payments",
+      "breakpoints": true
     }
   ]
 }

@@ -154,3 +154,19 @@
 - **Spec coverage:** 3.5 Finished, 7 days, reminders 1/3/6, automatic release, payment-made message, reviews triggered: Task 3, 7; stop job: Task 5. 3.6 cancellation (24 hours, 50%, no-shows, provider late recorded, fee absorbed): Task 4. 3.7 disputes (window, freeze, 14 working days, three outcomes, written reason): Tasks 5, 8. 3.8 additional task as linked booking with its own payment, clock, payout and dispute, explainer, several lines per booking: Task 6 (invoices are plan 2e). 3.9 reviews: Task 7. 4 commission at release, only on the amount paid out: through `settle`. 7a provider never taps: Task 3. Staff back office for bookings, money state, disputes and refunds: Task 8. Plan 2a's open item "staff are told after 14 days" about the ignored-requests notice: Task 5's `ignoredNoticeFlags` timer.
 - **Types:** plan 2a (`bookings`, `requests`, `quotes`, `canTransition`, `runDueTimers`, `TimerReport`, `acceptQuote`, `sendQuote`, `listBookings`, `notifyBookingEvent`), plan 2b (`threadForBooking`, `Card` `additional-task`, `staffMayReadThread`, `staffThread`, `flagForStaff`, `assertNoContactDetails`), plan 2c (`settle`, `paidAmount`, `OWNER_ONLY_BOOKING_STATUSES`, `fakeGateway`, `setGatewayForTests`, `commission_rate`) are used with their defined signatures. New names for plan 2e: `releaseBooking`, `materialAmount`, `parentBookingId`, `completedAt`, the notification kinds of Task 1.
 - **Proportion:** ten tasks for five spec sections plus the back office; signatures, constants and tests only.
+
+## Carry-over from the Stage 2c review (must be part of this plan)
+
+- `settle` must refuse while a `chargeback` flag or an open dispute exists on the booking.
+- Pass shares in integer cents: a float share such as 0.1 + 0.2 gives `INVALID_SHARE`.
+- Handle `ALREADY_SETTLED`, `NOT_PAID`, `NO_PAYOUT_ACCOUNT`, `SETTLEMENT_MISMATCH` and plain errors in the timers.
+- Flag repeated transfer failures to staff, including a provider who stopped being ready while holding a paid booking.
+- Staff refund keys are `staff-refund:<bookingId>:<n>`.
+- Additional-task bookings must not name `quote_id` or `service_id` (the fill trigger overwrites the amount) and are inserted on the owner connection.
+- The `refund-issued` notification kind is reserved but nothing sends it yet.
+- Judge paid-on-time by the Stripe event time, and still confirm a booking the timer expired if it was paid before `pay_by` and the slot is free.
+- Expire the open Checkout session when a booking is withdrawn or declined.
+- Deadlock note: account deletion locks bookings in id order, timer sweeps lock in scan order; make them agree or retry on deadlock.
+- A settle correction action for a partial run.
+- Settle one booking at a time.
+- The admin-roles test "last Administrator cannot be demoted" failed twice in full runs (an order-dependent flake): investigate.

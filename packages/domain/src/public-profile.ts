@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
 import { DOCUMENT_TYPES, type ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
+import { canTransact, paymentsEnabled } from './payments/rules'
 import type { Lang } from '@kando/i18n'
 import { photoUrl } from './storage'
 import { needsTranslation, textsOf } from './translate'
@@ -21,17 +22,18 @@ type Row = {
   country: string
   base_postcode: string | null
   photo_key: string | null
+  payouts_ready_at: Date | string | null
 }
 
 /**
  * A published, non-suspended provider with at least one offerable service, by slug; public fields only
- * (never owner, postcode or suspension). Everything runs in the request's `tx`; eligibility is a SECURITY DEFINER SQL function.
+ * (never owner, postcode, suspension or payment data: payout readiness only as the `verified` and `canBook` flags). Everything runs in the request's `tx`; eligibility is a SECURITY DEFINER SQL function.
  * `translatable`: the page texts are not in `lang`, so the translate button shows.
  */
 export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promise<ProviderDetail | null> {
   const { rows } = await tx.execute<Row>(sql`
     SELECT p.id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
-           p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key
+           p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key, p.payouts_ready_at
     FROM providers p LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
     WHERE p.slug = ${slug} AND p.status = 'published' AND ${notSuspendedSql('p')}`)
   const p = rows[0]
@@ -83,6 +85,8 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     photos: photos.rows.map((ph) => ({ id: ph.id, url: photoUrl(ph.key), alt: ph.alt || p.public_name })),
     checkedDocuments: DOCUMENT_TYPES.filter((d) => approved.has(d)),
     isNew: true, // Until ratings exist (Stage 6).
+    verified: paymentsEnabled() && p.payouts_ready_at !== null, // payout set-up done (Stripe checked identity); means nothing while payments are off
+    canBook: canTransact({ payoutsReadyAt: p.payouts_ready_at === null ? null : new Date(p.payouts_ready_at) }),
     translatable: false,
   }
   detail.translatable = needsTranslation(textsOf(detail), lang)

@@ -25,8 +25,8 @@ beforeAll(async () => {
   const quote = (await q("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 120, 'Zaun komplett', now() + interval '7 days', 'accepted') RETURNING id", [reqId, p])).rows[0].id
   bookingId = (
     await q(
-      `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, on_site, address_street, address_postcode, address_city, note, pay_by)
-       VALUES ($1, $2, $3, 'quote', 'awaiting-payment', now() + interval '10 days', 120, 120, true, $4, '10115', 'Berlin', 'Tor ist blau', now() + interval '2 days') RETURNING id`,
+      `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, on_site, address_street, address_postcode, address_city, note, pay_by, accepted_at)
+       VALUES ($1, $2, $3, 'quote', 'awaiting-payment', now() + interval '10 days', 120, 120, true, $4, '10115', 'Berlin', 'Tor ist blau', now() + interval '2 days', now()) RETURNING id`,
       [U.cust, p, quote, ADDRESS],
     )
   ).rows[0].id

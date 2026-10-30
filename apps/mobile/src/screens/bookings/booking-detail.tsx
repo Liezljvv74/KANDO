@@ -10,6 +10,7 @@ import { ApiError } from '@/api/client'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
+import { PayPanel } from '@/screens/bookings/pay-card'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang, type Key } from '@/i18n'
@@ -75,12 +76,8 @@ export default function BookingDetail() {
         <Text style={styles.text}>{`${t('booking.mode')}: ${placeOf(b)}`}</Text>
         {!!b.note && <Text style={styles.small}>{b.note}</Text>}
       </Card>
-      {b.status === 'awaiting-payment' && viewer === 'customer' && (
-        <Card>
-          <Text style={styles.small}>{t('booking.payPlaceholder')}</Text>
-        </Card>
-      )}
-      <OpenChat find={() => threadIdForBooking(b, viewer)} />
+      <PayPanel booking={b} viewer={viewer} onRefresh={retry} />
+      <OpenChat find={() => threadIdForBooking(b)} />
       <ErrorText text={problem} />
       {bookingActions(b, viewer).map((a) => (
         <Button key={a} label={t(`booking.${a}` as Key)} onPress={() => act(a)} busy={busy} danger={a === 'decline' || a === 'withdraw'} />

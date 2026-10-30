@@ -1,6 +1,6 @@
 import type { ProviderDetail } from '@kando/contract'
 
-import { requestTarget } from './request-target'
+import { notifyOnly, requestTarget } from './request-target'
 
 const service = (priceType: string, price: number | null) => ({ id: 's1', priceType, price }) as ProviderDetail['services'][number]
 const provider = (over: Partial<ProviderDetail>) => ({ slug: 'anna', providerId: 'p1', worksRemotely: false, ...over }) as ProviderDetail
@@ -15,4 +15,11 @@ test('a fixed-price service is booked, others ask for a quote', () => {
 test('a profile without providerId offers no request at all', () => {
   expect(requestTarget(provider({ providerId: undefined }), service('fixed', 50))).toBeNull()
   expect(requestTarget(provider({ providerId: null }))).toBeNull()
+})
+
+test('only an explicit canBook false turns Book into Notify me; an older profile without it keeps booking', () => {
+  expect(notifyOnly(provider({ canBook: false }))).toBe(true)
+  expect(notifyOnly(provider({ canBook: true }))).toBe(false)
+  expect(notifyOnly(provider({ canBook: null }))).toBe(false)
+  expect(notifyOnly(provider({ canBook: undefined }))).toBe(false)
 })

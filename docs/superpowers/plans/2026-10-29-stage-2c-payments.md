@@ -19,7 +19,7 @@
 - Money is `numeric(10,2)` plus `currency text default 'EUR'`; the gateway boundary uses integer cents (`toCents`); the contract currency stays `z.literal('EUR')`. No Stripe objects in domain tables beyond opaque reference strings.
 - Money rows are append-only: refunds and adjustments are new rows. Money columns on `bookings` and providers' Stripe columns are staff-only in RLS.
 - Payout set-up is Stripe-hosted; Stripe collects identity, address, bank account and the DAC7 tax information; KANDO stores only the account id and when it became ready. Completion gives the verified mark. Without it a provider cannot send quotes or accept bookings; customers see "Notify me when available"; the provider is told the count only, no names.
-- German and English for everything user-facing; no competitor names; no "Treuhand", "Escrow" or "Garantie" (use "payment protection" / "Zahlungsschutz", wording subject to the lawyer). Enums are `text` plus `check`. This plan's migration is `0015`. Every new table classified in `rls.ts` with an isolation test and added to `cleanupUsers()`. Owner merges; test report in `Reports/`; no AI co-author lines.
+- German and English for everything user-facing; no competitor names; no "Treuhand", "Escrow" or "Garantie" (use "payment protection" / "Zahlungsschutz", wording subject to the lawyer). Enums are `text` plus `check`. This plan's migration is `0017` (0015 and 0016 were used by plan 2b). Every new table classified in `rls.ts` with an isolation test and added to `cleanupUsers()`. Owner merges; test report in `Reports/`; no AI co-author lines.
 
 ## Review Focus
 
@@ -31,7 +31,7 @@
 
 ## File structure
 
-- `packages/db/src/schema/payments.ts` (new): `ledger_entries`, `stripe_events`, `availability_watches`; modify plan 2a's `schema/bookings.ts`, `schema/providers.ts`, `schema/notifications.ts`, plan 2b's `schema/chat.ts` (flag kind). Migration `0015_payments.sql` (generated).
+- `packages/db/src/schema/payments.ts` (new): `ledger_entries`, `stripe_events`, `availability_watches`; modify plan 2a's `schema/bookings.ts`, `schema/providers.ts`, `schema/notifications.ts`, plan 2b's `schema/chat.ts` (flag kind). Migration `0017_payments.sql` (generated).
 - `packages/db/src/rls.ts`: classify the new tables; staff-only money columns; triggers `bookings_fill_amount`, `bookings_guard_status`, `ledger_append_only`; constant `OWNER_ONLY_BOOKING_STATUSES`.
 - `packages/contract/src/payments.ts` (new).
 - `packages/domain/src/payments/rules.ts`, `gateway.ts`, `stripe-gateway.ts`, `ledger.ts`, `settle.ts`, `checkout.ts`, `webhook.ts`, `onboarding.ts`, `watches.ts` (new).
@@ -41,12 +41,19 @@
 
 ### Task 1: Tables, staff-only money and the append-only ledger
 
-**Files:** Create `packages/db/src/schema/payments.ts`, migration `0015_payments.sql`; modify the schema files listed above, `rls.ts`, `apps/web/tests/helpers.ts`; test `apps/web/tests/rls-payments.int.spec.ts`.
+**Files:** Create `packages/db/src/schema/payments.ts`, migration `0017_payments.sql`; modify the schema files listed above, `rls.ts`, `apps/web/tests/helpers.ts`; test `apps/web/tests/rls-payments.int.spec.ts`.
 
 **Interfaces:**
 - Changes to plan 2a's tables:
   - `bookings.status` check adds `confirmed`. New columns `commissionRate numeric(5,4)`, `paidAt`, `paymentRef` text, `checkoutRef` text, `releasedAt` (all nullable).
   - `providers`: `stripeAccountId` text (nullable, unique), `payoutsReadyAt` timestamptz (nullable).
+- **Carry-over hardening from the Stage 2a and 2b reviews (do these in this task, with tests; owner-approved list in the README "Before 2c" notes):**
+  - Quotes are immutable once written: `IMMUTABLE_COLUMNS.quotes` adds `amount`, `currency`, `scope`, `start_at`, `duration_min`, `expires_at` (only `status` and the reminder column may change), so a request's customer cannot edit a quote's price after the fact (the money now copies from the quote).
+  - The booking's `quote_id` and `service_id` are validated by a BEFORE INSERT trigger: the quote must belong to the booking's provider and to a request of the booking's customer; the service must belong to the booking's provider (a forged id gets an exception, tested as app_user).
+  - `bookings.acceptedAt timestamptz` (nullable) is set by the domain when a booking becomes `awaiting-payment`; plan 2a's payment-reminder timer uses `accepted_at` instead of `updated_at` (adjust `timers.ts` and its tests).
+  - A CHECK: `status <> 'awaiting-payment' OR pay_by IS NOT NULL` (an awaiting-payment booking always has a deadline; check existing rows/tests).
+  - Booking DTO gets `requestId` (nullable) so the app stops searching all requests for a booking's thread: add it to the contract, `toBooking`, the mobile `threadIdForBooking` helper (plan 2b) and tests.
+  - Payment (Task 4) must refuse when `pay_by <= now` and when the booking is no longer `awaiting-payment`, and must take the provider-keyed advisory lock `lockProviderSlots` and re-check `assertSlotFree` before confirming, because a lapsed hold can overlap a newer one until the timer runs.
 - New tables:
   - `ledger_entries`: `id`, `bookingId` uuid (no foreign key: a deleted booking must not take money rows with it), `providerId` uuid (no foreign key), `kind` check `charge|refund|transfer|commission`, `amount numeric(10,2)` check `> 0`, `currency`, `gatewayRef` text, `idempotencyKey` text unique, `createdAt`. My call: single-entry rows with a kind (the sum per booking balances: charge = refund + transfer + commission once settled), not a double-entry journal.
   - `stripe_events`: `id` text primary key (the Stripe event id), `type`, `receivedAt`.
@@ -58,7 +65,7 @@
 - Notification kinds added: `booking-paid` (provider), `payment-received` (customer), `payment-late-refunded`, `payout-setup-complete`, `customers-waiting`, `provider-available`, `refund-issued`. `staff_flags.kind` adds `chargeback`.
 - [ ] **Step 1: Write tests**: `app_user cannot read ledger_entries or stripe_events`, `app_user cannot set amount or payment_ref on a booking`, `a booking inserted without amount gets the quote's or the service's price`, `app_user cannot set status confirmed; the owner connection can`, `updating or deleting a ledger row fails, even on the owner connection`, `a customer sees only their own watches`; `db-migrations.int.spec.ts` passes.
 - [ ] **Step 2: Run** `pnpm --filter web exec vitest run tests/rls-payments.int.spec.ts tests/db-migrations.int.spec.ts`: FAIL.
-- [ ] **Step 3: Implement**; `pnpm db:generate` for `0015`; adjust plan 2a's two inserts. **Step 4: Run** the Step 2 command plus plan 2a's `bookings.int.spec.ts` and `requests-quotes.int.spec.ts`: PASS.
+- [ ] **Step 3: Implement**; `pnpm db:generate` for `0017`; adjust plan 2a's two inserts. **Step 4: Run** the Step 2 command plus plan 2a's `bookings.int.spec.ts` and `requests-quotes.int.spec.ts`: PASS.
 - [ ] **Step 5: Commit** `feat(db): ledger, staff-only money columns and payout columns`.
 
 ### Task 2: Rules and the gateway interface

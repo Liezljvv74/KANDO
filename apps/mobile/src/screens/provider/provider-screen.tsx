@@ -13,6 +13,8 @@ import { useCategories } from '@/hooks/use-categories'
 import { getLang, t, useLang, type Key } from '@/i18n'
 import { formatPrice } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
+import { notifyOnly } from '@/lib/request-target'
+import { NotifyMe } from '@/screens/provider/notify-me'
 import { RequestButton, useCanRequest } from '@/screens/provider/request-actions'
 
 export default function ProviderScreen() {
@@ -28,6 +30,7 @@ export default function ProviderScreen() {
   // The app draws edge to edge: without this the end of the page sits behind the phone's navigation bar.
   const { bottom } = useSafeAreaInsets()
   const canRequest = useCanRequest(slug)
+  const waitlist = !!p && notifyOnly(p)
 
   const load = useCallback(() => {
     setError('')
@@ -77,6 +80,7 @@ export default function ProviderScreen() {
           <View style={styles.titleRow}>
             <Text style={styles.name}>{p.publicName}</Text>
             {p.isNew && <Text style={styles.badge}>{t('badge.new')}</Text>}
+            {!!p.verified && <Text style={styles.badge}>{t('provider.verified')}</Text>}
           </View>
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
@@ -143,7 +147,7 @@ export default function ProviderScreen() {
               <View style={styles.serviceText}>
                 <Text style={styles.serviceTitle}>{s.title}</Text>
                 {!!s.description && <Text style={styles.small}>{s.description}</Text>}
-                {canRequest && <RequestButton provider={p} service={s} />}
+                {canRequest && !waitlist && <RequestButton provider={p} service={s} />}
               </View>
               <Text style={styles.price}>{formatPrice(s)}</Text>
             </View>
@@ -178,7 +182,7 @@ export default function ProviderScreen() {
         </Section>
       )}
 
-      {canRequest && <RequestButton provider={p} />}
+      {canRequest && (waitlist ? <NotifyMe slug={slug} /> : <RequestButton provider={p} />)}
     </ScrollView>
   )
 }

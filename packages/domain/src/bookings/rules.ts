@@ -1,5 +1,6 @@
 import type { BOOKING_STATUSES } from '@kando/contract'
 
+import { MAX_PAY_AHEAD_DAYS, paymentsEnabled } from '../payments/rules'
 import { fail } from '../providers/http'
 
 type BookingStatus = (typeof BOOKING_STATUSES)[number]
@@ -38,7 +39,9 @@ export const overlaps = (a: Span, b: Span, bufferMin: number): boolean => {
 
 const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   proposed: ['awaiting-payment', 'expired', 'declined', 'withdrawn', 'proposed'],
-  'awaiting-payment': ['expired', 'withdrawn'],
+  // -> confirmed only by the payment webhook on the owner connection (trigger bookings_guard_status); plan 2d adds the ways out of confirmed
+  'awaiting-payment': ['expired', 'withdrawn', 'confirmed'],
+  confirmed: [],
   expired: [],
   declined: [],
   withdrawn: [],
@@ -50,4 +53,6 @@ export const assertFuture = (startAt: Date, now: Date): void => {
   const t = startAt.getTime()
   if (t <= now.getTime()) fail(400, { error: 'start-in-past' })
   if (t > now.getTime() + MAX_AHEAD_DAYS * 24 * HOUR) fail(400, { error: 'start-too-far' })
+  // with payments on, a time must be payable: the money can be held only so long (payments/rules.ts)
+  if (paymentsEnabled() && t > now.getTime() + MAX_PAY_AHEAD_DAYS * 24 * HOUR) fail(400, { error: 'TOO_FAR_AHEAD' })
 }

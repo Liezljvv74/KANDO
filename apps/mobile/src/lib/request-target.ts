@@ -9,3 +9,6 @@ export function requestTarget(provider: ProviderDetail, service?: Service): { pa
     return { path: '/bookings/book', params: { slug: provider.slug, serviceId: service.id, ...(provider.worksRemotely && { remote: '1' }) }, book: true }
   return { path: '/bookings/new-request', params: { providerId: provider.providerId, ...(service && { serviceId: service.id }) }, book: false }
 }
+
+/** True only when the server says the provider cannot be booked yet; an older cached profile without `canBook` keeps today's buttons. */
+export const notifyOnly = (provider: Pick<ProviderDetail, 'canBook'>): boolean => provider.canBook === false

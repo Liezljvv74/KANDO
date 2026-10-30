@@ -7,7 +7,7 @@ import { checkContactDetails } from './contact-check'
 import { CONTACT_ATTEMPTS_LIMIT, CONTACT_ATTEMPTS_WINDOW_HOURS } from './rules'
 
 /** The `staff_flags.kind` values; later plans widen this with the table's check. */
-export type StaffFlagKind = 'contact-attempts' | 'message-reported'
+export type StaffFlagKind = 'contact-attempts' | 'message-reported' | 'chargeback' | 'refund-failed' | 'payment-unprocessed'
 
 /** One open flag per kind, ref and user: a second one is ignored. Staff-only table, so pass the owner connection. */
 export async function flagForStaff(exec: Exec, flag: { kind: StaffFlagKind; refId: string; userId?: string; note?: string }): Promise<void> {

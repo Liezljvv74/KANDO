@@ -110,3 +110,36 @@ it('0008 on a database with data: a suspended provider stays hidden, a published
   await pool.query("DELETE FROM providers WHERE owner_id LIKE 'm8-%'")
   await pool.query("DELETE FROM users WHERE id LIKE 'm8-%'")
 }, 60_000)
+
+it('0017 on a database with data: accepted_at and request_id backfilled, an awaiting-payment row without pay_by gets one, money columns empty', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const upTo16 = mkdtempSync(join(tmpdir(), 'mig16-'))
+  cpSync(join(process.cwd(), '../../packages/db/migrations'), upTo16, { recursive: true })
+  const journalPath = join(upTo16, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0017')
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo16 })
+  await pool.query("INSERT INTO users (id, email) VALUES ('m17-c', 'm17-c@test.skilled.invalid'), ('m17-p', 'm17-p@test.skilled.invalid')")
+  const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m17-p', 'published') RETURNING id")).rows[0].id
+  const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m17-c', $1, 'x', now(), 'booked') RETURNING id", [p])).rows[0].id
+  const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 80, 's', now(), 'accepted') RETURNING id", [r, p])).rows[0].id
+  const booking = async (status: string, quote: string | null, payBy: string | null) =>
+    (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, pay_by, updated_at) VALUES ('m17-c', $1, $2, $3, $4, now() + interval '9 days', 60, 80, $5, '2026-10-01T10:00:00Z') RETURNING id", [p, quote, quote ? 'quote' : 'direct', status, payBy])).rows[0].id as string
+  const paying = await booking('awaiting-payment', q, '2026-10-03T10:00:00Z')
+  const noDeadline = await booking('awaiting-payment', null, null)
+  const proposed = await booking('proposed', null, null)
+  await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m17-c', 'booking-accepted')")
+  await migrate()
+  const rows = Object.fromEntries((await pool.query('SELECT id, accepted_at, request_id, pay_by, amount, commission_rate, payment_ref, paid_at FROM bookings')).rows.map((b) => [b.id, b]))
+  expect(rows[paying]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), request_id: r, pay_by: new Date('2026-10-03T10:00:00Z'), amount: '80.00', commission_rate: null, payment_ref: null, paid_at: null })
+  expect(rows[noDeadline]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), pay_by: new Date('2026-10-01T10:00:00Z'), request_id: null }) // lapses at the next sweep
+  expect(rows[proposed]).toMatchObject({ accepted_at: null, pay_by: null })
+  expect((await pool.query("SELECT stripe_account_id, payouts_ready_at FROM providers WHERE owner_id = 'm17-p'")).rows).toEqual([{ stripe_account_id: null, payouts_ready_at: null }])
+  // the existing rows still satisfy every check, and the new kinds are accepted
+  await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m17-c', 'payment-received')")
+  await pool.query("INSERT INTO staff_flags (kind, ref_id) VALUES ('chargeback', $1)", [paying])
+  await pool.query('DELETE FROM staff_flags; DELETE FROM notifications; DELETE FROM bookings; DELETE FROM quotes; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
+}, 60_000)
