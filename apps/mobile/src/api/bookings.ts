@@ -25,6 +25,8 @@ const list = (path: string, role: Role, cursor?: string) => `${BASE}/${path}?rol
 export const createRequest = (body: RequestInput) => api<BookingRequest>(`${BASE}/requests`, json('POST', body))
 export const listRequests = (role: Role, cursor?: string) => api<Page<BookingRequest>>(list('requests', role, cursor))
 export const getRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${id}`)
+export const withdrawRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${encodeURIComponent(id)}/withdraw`, json('POST'))
+export const declineRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${encodeURIComponent(id)}/decline`, json('POST'))
 export const listQuotes = async (requestId: string) => (await api<{ docs: Quote[] }>(`${BASE}/requests/${requestId}/quotes`)).docs
 export const sendQuote = (requestId: string, body: QuoteInput) => api<Quote>(`${BASE}/requests/${requestId}/quotes`, json('POST', body))
 export const acceptQuote = (quoteId: string, body: AcceptQuoteInput) => api<Booking>(`${BASE}/quotes/${quoteId}/accept`, json('POST', body))

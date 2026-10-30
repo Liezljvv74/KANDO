@@ -35,7 +35,7 @@ export function DisputeInfo({ booking }: { booking: Booking }) {
   return (
     <Card>
       <Text style={styles.title}>{t('dispute.title')}</Text>
-      <Info text={t(`dispute.reason.${d.reason}` as Key)} />
+      <Info text={t((d.reason === 'problem' && d.openedBy === 'provider' ? 'dispute.reason.problemProvider' : `dispute.reason.${d.reason}`) as Key)} />
       {!!d.description && <Text style={styles.quote}>{d.description}</Text>}
       {d.decision ? (
         <Info text={t(`dispute.decision.${d.decision}` as Key, { amount: formatPrice({ priceType: 'fixed', price: d.providerShare ?? 0, currency: booking.currency }) })} />
