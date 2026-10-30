@@ -20,6 +20,7 @@ import { go } from '@/lib/go'
 import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { AccountDataSection } from '@/screens/account-data-section'
+import { InvoicesCard } from '@/screens/invoices/invoices-card'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -107,6 +108,7 @@ export default function AccountScreen() {
           <LanguageSwitch />
         </View>
         <PushSwitches />
+        <InvoicesCard me={shared ?? me} />
         <Button label={t('auth.logOut')} onPress={signOut} />
         <AccountDataSection />
         {/* Staff shortcut while testing; release builds never show it. The in-app browser's ✕ returns here (createTask false:

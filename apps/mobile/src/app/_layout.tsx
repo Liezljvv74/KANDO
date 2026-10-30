@@ -44,6 +44,7 @@ export default function RootLayout() {
           <Stack.Screen name="my-profile" />
           <Stack.Screen name="bookings" />
           <Stack.Screen name="threads" />
+          <Stack.Screen name="invoices" />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="(auth)" />
