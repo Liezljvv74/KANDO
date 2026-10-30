@@ -9,7 +9,10 @@ export type FinishInput = z.infer<typeof FinishInputSchema>
 export const NoShowObjectionSchema = z.object({ description: requiredText(2000) }).strict()
 export type NoShowObjection = z.infer<typeof NoShowObjectionSchema>
 
-/** POST /bookings/:id/dispute (the customer, from "Finished" until the 7 days run out, or once asked "Was the job done?"). */
+/**
+ * POST /bookings/:id/dispute: either side, from "Finished" until the 7 days run out or from a stop until an amount is
+ * agreed; the customer also once asked "Was the job done?".
+ */
 export const DisputeInputSchema = z.object({ description: requiredText(2000) }).strict()
 export type DisputeInput = z.infer<typeof DisputeInputSchema>
 
