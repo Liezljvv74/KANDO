@@ -1,4 +1,4 @@
-import { DEFAULT_LANG, isLang, t as translate, type Key, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, t as translate, type AppKey as Key, type Lang } from '@kando/i18n/app'
 import { getLocales } from 'expo-localization'
 import * as SecureStore from 'expo-secure-store'
 import { useSyncExternalStore } from 'react'

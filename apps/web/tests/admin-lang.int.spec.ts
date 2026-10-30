@@ -1,8 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { en } from '@kando/i18n/src/en'
-import { de } from '@kando/i18n/src/de'
+import { de, en } from '@kando/i18n'
 
 const jar = vi.hoisted(() => ({ cookie: undefined as string | undefined, accept: undefined as string | undefined }))
 vi.mock('next/headers', () => ({

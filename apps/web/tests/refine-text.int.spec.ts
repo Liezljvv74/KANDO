@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { en } from '@kando/i18n/src/en'
-import { de } from '@kando/i18n/src/de'
+import { de, en } from '@kando/i18n'
 import { refineText } from '../lib/admin/refine-text'
 
 describe('Refine texts follow the admin language', () => {

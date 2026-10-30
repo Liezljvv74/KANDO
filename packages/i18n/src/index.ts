@@ -1,55 +1,20 @@
-import { de } from './de'
-import { en } from './en'
+import { type AppKey, interpolate } from './app'
+import { de as appDe } from './de'
+import { en as appEn } from './en'
+import { de as serverDe } from './de-server'
+import { en as serverEn } from './en-server'
+import type { Lang } from './lang'
 
-export type Lang = 'de' | 'en'
-export const LANGS: readonly Lang[] = ['de', 'en']
-export const DEFAULT_LANG = 'de' satisfies Lang
-export const isLang = (v: unknown): v is Lang => LANGS.includes(v as Lang)
+export * from './lang'
+export { formatMoney, formatPrice, type AppKey, type PriceType } from './app'
 
-/** The first supported language of an Accept-Language header, in header order. */
-export function acceptLang(header: string | null | undefined): Lang | undefined {
-  for (const part of (header ?? '').split(',')) {
-    const tag = part.split(';')[0]!.trim().toLowerCase().split('-')[0]
-    if (isLang(tag)) return tag
-  }
-  return undefined
-}
-
-export type Key = keyof typeof de
-/** The raw catalogues (parity tests walk every key). */
-export { de, en }
+export type Key = AppKey | keyof typeof serverDe
+/** The raw catalogues, app and server texts merged (parity tests walk every key). */
+export const de = { ...appDe, ...serverDe }
+export const en = { ...appEn, ...serverEn }
 
 const catalogue: Record<Lang, Record<Key, string>> = { de, en }
 
-/** `{name}` placeholders come from `params`; `{brand}` is always filled. A key missing at runtime is returned as is. */
-export function t(lang: Lang, key: Key, params: Record<string, string | number> = {}): string {
-  const text: string | undefined = catalogue[lang][key]
-  const all: Record<string, string | number> = { brand: de['brand.name'], ...params }
-  return (text ?? key).replace(/\{(\w+)\}/g, (m, name: string) =>
-    name in all ? String(all[name]) : m,
-  )
-}
-
-export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
-
-/** The time zone dates in emails are shown in (the server runs in UTC); one place to change per country. */
-export const TIME_ZONE = 'Europe/Berlin'
-
-export const formatMoney = (amount: number, currency: string, lang: Lang): string =>
-  new Intl.NumberFormat(LOCALE[lang], { style: 'currency', currency }).format(amount)
-
-export type PriceType = 'fixed' | 'hourly' | 'from' | 'on-request'
-
-/** The price label of a service, e.g. "ab 20,00 €", "35,50 €/Std.", "Preis auf Anfrage". */
-export function formatPrice(
-  priceType: PriceType,
-  amount: number | null,
-  currency: string,
-  lang: Lang,
-): string {
-  if (priceType === 'on-request' || amount === null) return t(lang, 'price.onRequest')
-  const money = formatMoney(amount, currency, lang)
-  if (priceType === 'from') return `${t(lang, 'price.from')} ${money}`
-  if (priceType === 'hourly') return `${money}${t(lang, 'price.perHour')}`
-  return money
-}
+/** Like the app `t`, over every text including back-office and email. */
+export const t = (lang: Lang, key: Key, params?: Record<string, string | number>): string =>
+  interpolate(catalogue[lang][key], key, params)

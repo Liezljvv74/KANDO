@@ -1,4 +1,4 @@
-import { DEFAULT_LANG } from '@kando/i18n'
+import { DEFAULT_LANG } from '@kando/i18n/lang'
 import { z } from 'zod'
 
 import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
