@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import { bookings, db, disputes, providers, type Tx } from '@kando/db'
 import type { Booking, NoShowObjection } from '@kando/contract'
 import { assertNoContactDetails, flagForStaff } from '../chat/flags'
@@ -90,14 +90,17 @@ async function tellCancelled(b: Row): Promise<void> {
 export async function cancelBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
   const side = await sideOf(tx, userId, bookingId)
   const done = await db.transaction(async (o) => {
-    const b = await lockRow(o, bookingId)
+    // the booking and its additional tasks in ONE statement, in id order (as account deletion locks), so the two never deadlock
+    const rows = await o.select().from(bookings).where(or(eq(bookings.id, bookingId), eq(bookings.parentBookingId, bookingId))).orderBy(bookings.id).for('update')
+    const b = rows.find((r) => r.id === bookingId) ?? fail(404, { error: 'Not found' })
+    const kids = rows.filter((r) => r.id !== bookingId)
     if (b.status === 'cancelled') return []
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
+    if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' }) // a report that won the lock first stands (its clock may run a little ahead)
     if (now >= b.startAt) fail(409, { error: 'STARTED' })
     const cancel = async (r: Row) =>
       (await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, cancelledBy: side, lateCancel: isLate(r.startAt, now), updatedAt: now }).where(eq(bookings.id, r.id)).returning())[0]!
     const out = [await cancel(b)]
-    const kids = await o.select().from(bookings).where(eq(bookings.parentBookingId, b.id)).orderBy(bookings.id).for('update')
     const unpaid = kids.filter((k) => k.status === 'proposed' || k.status === 'awaiting-payment').map((k) => k.id)
     if (unpaid.length) await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(inArray(bookings.id, unpaid))
     for (const k of kids) if (k.status === 'confirmed') out.push(await cancel(k))

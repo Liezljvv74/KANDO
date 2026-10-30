@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { describeError } from './log-error'
+import { LATE_CANCEL_SHARE } from './bookings/ending-rules'
 import { t, type Lang } from '@kando/i18n'
 
 const FROM = 'SkillWeb <noreply@skillweb.space>'
@@ -69,7 +70,7 @@ const KEY: Record<Template, string> = {
 function compose(lang: Lang, template: Template, params: Params) {
   const key = KEY[template]
   const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
-  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', contact: REPLY_TO })}${template.startsWith('account-deleted') ? '' : `\n\n${APP_LINK}`}`
+  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', percent: String(Math.round(LATE_CANCEL_SHARE * 100)), contact: REPLY_TO })}${template.startsWith('account-deleted') ? '' : `\n\n${APP_LINK}`}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   return { subject: t(lang, `${key}.subject` as Parameters<typeof t>[1]), text, html }
 }

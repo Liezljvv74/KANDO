@@ -170,6 +170,11 @@ it('cancelling after the start is 409 (use stop job or no-show)', async () => {
   expect((await call(cancelRoute.POST, U.third, 'POST', undefined, { id })).status).toBe(404)
   const unpaid = await child((await paidBooking()).id, new Date(Date.now() + 5 * DAY), 30, false)
   expect(await refusal(cancel(U.cust, unpaid, new Date()))).toEqual({ status: 409, body: { error: 'not-open' } })
+  // a report that won the lock stands, even if the cancel's clock is a moment behind the start
+  const reported = await paidBooking({ startAt: new Date(Date.now() - HOUR) })
+  await report(U.cust, reported.id, new Date())
+  expect(await refusal(cancel(U.owner, reported.id, new Date(reported.startAt.getTime() - 5)))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
+  expect(await row(reported.id)).toMatchObject({ status: 'confirmed', no_show: 'provider', cancelled_at: null })
 })
 
 it('a suspended customer or provider can still cancel', async () => {
@@ -209,6 +214,7 @@ it('customer no-show unanswered for 48 hours pays the provider in full', async (
   ])
   await balanced(id)
   expect((await notes(id)).filter((n) => n.kind === 'booking-cancelled')).toEqual([{ user_id: U.owner, kind: 'booking-cancelled' }])
+  expect(outboxForTests().find((m) => m.to === EMAIL(U.owner) && /did not turn up/.test(m.text))!.text).not.toMatch(/released/) // the text never says the money moved
   expect((await runDueTimers(db, new Date(at.getTime() + 50 * HOUR))).noShowsResolved).toBe(0)
   expect(g.attempts.transfer).toBe(1)
 })
