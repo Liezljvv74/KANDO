@@ -10,6 +10,7 @@ import { fakeGateway, type FakeGateway } from './fake-gateway'
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const pay = await import('../app/app-api/v1/bookings/[id]/pay/route')
 const webhook = await import('../app/api/stripe/webhook/route')
+const me = await import('../app/app-api/v1/me/route')
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const busyRoute = await import('../app/app-api/v1/providers/[slug]/busy/route')
@@ -453,6 +454,13 @@ it('with PAYMENTS_ENABLED off the pay route is 503 PAYMENTS_OFF and the webhook 
   const hook = await webhook.POST(new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'stripe-signature': 'x' } }))
   expect(hook.status).toBe(404)
   expect(g.calls).toEqual([])
+})
+
+it('GET /me carries paymentsEnabled true with PAYMENTS_ENABLED=true and false without it', async () => {
+  const get = async () => (await (await call(me.GET, U.cust)).json()).paymentsEnabled
+  expect(await get()).toBe(true)
+  vi.stubEnv('PAYMENTS_ENABLED', 'false')
+  expect(await get()).toBe(false)
 })
 
 it('charge-disputed creates one chargeback flag', async () => {

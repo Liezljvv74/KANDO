@@ -39,6 +39,8 @@ export const MeSchema = z.object({
   /** The person's picture (their profile photo), if any. */
   photoUrl: z.string().nullable(),
   address: AddressSchema.nullable(),
+  /** Whether the server takes payments (optional: an older server lacks it). */
+  paymentsEnabled: z.boolean().optional(),
   /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
   notifications: z.array(z.unknown()).transform((items) => items.flatMap((i) => { const r = NotificationSchema.safeParse(i); return r.success ? [r.data] : [] })),
 })

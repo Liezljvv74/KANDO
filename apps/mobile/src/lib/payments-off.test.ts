@@ -1,7 +1,7 @@
 jest.mock('expo-secure-store', () => ({}))
 jest.mock('expo-file-system', () => ({ File: class {} }))
 import { ApiError } from '@/api/client'
-import { noteIfOff, paymentsOff, paymentsProblem, resetPaymentsOff } from './payments-off'
+import { noteIfOff, noteMe, paymentsOff, paymentsProblem, resetPaymentsOff } from './payments-off'
 
 jest.mock('@/i18n', () => ({ errorText: (c: string) => `text:${c}` }))
 
@@ -20,4 +20,21 @@ test('a failed status call with PAYMENTS_OFF is remembered (the card hides); oth
   expect(noteIfOff('PAYMENTS_OFF')).toBe(true)
   expect(paymentsOff()).toBe(true)
   expect(noteIfOff(undefined)).toBe(true) // stays off for the session
+})
+
+test('paymentsOff is true when /me says paymentsEnabled false before any tap', () => {
+  expect(paymentsOff({ paymentsEnabled: false })).toBe(true)
+})
+
+test('paymentsOff is false when /me says true even after an old PAYMENTS_OFF note', () => {
+  noteIfOff('PAYMENTS_OFF')
+  noteMe({ paymentsEnabled: true } as never)
+  expect(paymentsOff({ paymentsEnabled: true })).toBe(false)
+  expect(paymentsOff()).toBe(false)
+})
+
+test('paymentsOff is false when /me lacks the flag; only a noted PAYMENTS_OFF turns it on', () => {
+  expect(paymentsOff({})).toBe(false)
+  noteIfOff('PAYMENTS_OFF')
+  expect(paymentsOff({})).toBe(true)
 })

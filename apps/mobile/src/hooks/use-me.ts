@@ -4,6 +4,7 @@ import type { Me } from '@kando/contract'
 
 import { getMe } from '@/api/client'
 import { notificationsApi } from '@/api/my-profile'
+import { noteMe } from '@/lib/payments-off'
 import { clearPending } from '@/lib/pending-navigation'
 
 /** The one place `GET /me` is loaded: the home nudge, the account tab and the setup page all read this copy. */
@@ -25,6 +26,7 @@ export async function loadMe() {
   const started = generation
   const n = ++seq
   const m = await getMe()
+  noteMe(m)
   if (started === generation && n === seq) set(m) // the newest request wins; an older, slower answer never overwrites it
   return m
 }
