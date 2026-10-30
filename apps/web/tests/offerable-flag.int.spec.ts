@@ -73,6 +73,51 @@ it('deleting an approved document or clearing the price clears the flag', async 
   expect(await flag(plain)).toBe(false)
 })
 
+// Two real transactions on separate connections. `second` runs while `first` is open; we wait until it has either
+// finished (no lock to wait on) or is blocked on a lock, then commit `first`. Deterministic either way.
+const interleave = async (first: (c: import('pg').PoolClient) => Promise<unknown>, second: (c: import('pg').PoolClient) => Promise<unknown>) => {
+  const [a, b] = [await pool.connect(), await pool.connect()]
+  try {
+    await a.query('BEGIN')
+    await first(a)
+    const pidB = (await b.query('SELECT pg_backend_pid() AS pid')).rows[0].pid
+    let done = false
+    const running = second(b).finally(() => (done = true))
+    for (;;) {
+      if (done) break
+      const w = await pool.query("SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock'", [pidB])
+      if (w.rowCount) break
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    await a.query('COMMIT')
+    await running
+  } finally {
+    a.release()
+    b.release()
+  }
+}
+const insertService = (pid: string, cat: string) => (c: import('pg').PoolClient) =>
+  c.query("INSERT INTO services (provider_id, category_id, title, price_type, price) VALUES ($1, $2, 'race', 'fixed', 5)", [pid, cat])
+const raceFlag = async (pid: string) => (await pool.query("SELECT offerable FROM services WHERE provider_id = $1 AND title = 'race'", [pid])).rows[0].offerable as boolean
+
+it('a document deleted while a service is being added leaves the new service not offerable', async () => {
+  const cat = await newCategory(['police-certificate'])
+  const pid = await seedProvider('of-race-del', { name: 'Of Race Del', categoryId: cat })
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('of-race-del', 'police-certificate', 'k', 'approved')")
+  // the insert is open (and computed offerable) when the delete runs
+  await interleave(insertService(pid, cat), (c) => c.query("DELETE FROM documents WHERE owner_id = 'of-race-del'"))
+  expect(await raceFlag(pid)).toBe(false)
+})
+
+it('the last document approved while a service is being added leaves the new service offerable', async () => {
+  const cat = await newCategory(['police-certificate'])
+  const pid = await seedProvider('of-race-ok', { name: 'Of Race Ok', categoryId: cat })
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('of-race-ok', 'police-certificate', 'k', 'pending')")
+  // the approval is open when the insert runs
+  await interleave((c) => c.query("UPDATE documents SET status = 'approved' WHERE owner_id = 'of-race-ok'"), insertService(pid, cat))
+  expect(await raceFlag(pid)).toBe(true)
+})
+
 it('app_user cannot write offerable', async () => {
   const cat = await newCategory(['police-certificate'])
   const pid = await seedProvider('of-own', { name: 'Of Own', categoryId: cat })

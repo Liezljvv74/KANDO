@@ -281,6 +281,26 @@ it('withdraw racing sendQuote leaves no sent quote', async () => {
   expect((await pool.query("SELECT count(*)::int n FROM quotes WHERE request_id = $1 AND status = 'sent'", [r.id])).rows[0].n).toBe(0)
 })
 
+it('a request expiring between the read and the withdraw answers 409, not 500', async () => {
+  const r = await newRequest()
+  // the timers' expiry (which takes no request lock) is uncommitted when the withdraw reads 'open', committed before its UPDATE
+  const holder = await pool.connect()
+  let res: Promise<Response>
+  try {
+    await holder.query('BEGIN')
+    await holder.query("UPDATE requests SET status = 'expired' WHERE id = $1", [r.id])
+    res = closing(withdraw, r.id, U.cust)
+    while (!(await pool.query("SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE 'update \"requests\"%'")).rowCount)
+      await new Promise((ok) => setTimeout(ok, 10))
+    await holder.query('COMMIT')
+  } finally {
+    holder.release()
+  }
+  const w = await res
+  expect([w.status, (await w.json()).error]).toEqual([409, 'request-closed'])
+  expect(await statusOf('requests', r.id)).toBe('expired')
+})
+
 it('a declined request stops the requests-ignored flag', async () => {
   const { runDueTimers } = await import('@kando/domain')
   const { db } = await import('@kando/db')

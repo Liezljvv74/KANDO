@@ -305,7 +305,12 @@ const OFFERABLE_RULE = (s: string) => `coalesce(${s}.price_type IS NOT NULL AND 
 
 // services.offerable caches OFFERABLE_RULE; these triggers keep it true on every path (domain, staff, account deletion).
 // SECURITY DEFINER: documents are private. VOLATILE (the default), so a recompute that waited for a concurrent writer's
-// row lock reads that writer's committed change (READ COMMITTED takes a fresh snapshot per statement).
+// lock reads that writer's committed change (READ COMMITTED takes a fresh snapshot per statement).
+// Concurrency: an existing service row is serialised by its row lock (the document and category triggers UPDATE it). A
+// new service row (or one moved to another provider or category) is invisible to those UPDATEs, so it takes the
+// owner's advisory lock 'offerable:<owner>' (the document trigger takes it too) and a share lock on its category (the
+// category UPDATE holds the row lock). Lock order: document row -> owner lock -> service rows; service row -> owner lock
+// only for a row the document trigger cannot see, so no cycle.
 const OFFERABLE_TRIGGERS = [
   `CREATE OR REPLACE FUNCTION service_offerable(p_service uuid) RETURNS boolean
     LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -313,7 +318,13 @@ const OFFERABLE_TRIGGERS = [
   `REVOKE ALL ON FUNCTION service_offerable(uuid) FROM PUBLIC`,
   `CREATE OR REPLACE FUNCTION services_set_offerable() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
     BEGIN
-      NEW.offerable := ${OFFERABLE_RULE('NEW')};
+      IF TG_OP = 'INSERT' OR NEW.provider_id IS DISTINCT FROM OLD.provider_id THEN
+        PERFORM pg_advisory_xact_lock(hashtext('offerable:' || owner_id)) FROM providers WHERE id = NEW.provider_id;
+      END IF;
+      IF TG_OP = 'INSERT' OR NEW.category_id IS DISTINCT FROM OLD.category_id THEN
+        PERFORM 1 FROM categories WHERE id = NEW.category_id FOR SHARE;
+      END IF;
+      NEW.offerable := ${OFFERABLE_RULE('NEW')}; -- a fresh snapshot, after any wait above
       RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS services_set_offerable ON services`,
@@ -322,6 +333,8 @@ const OFFERABLE_TRIGGERS = [
   // A document approved, rejected, re-typed or deleted: the services of that owner's providers.
   `CREATE OR REPLACE FUNCTION documents_refresh_offerable() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
     BEGIN
+      -- ponytail: one owner's lock; a document moved between owners (no code path does) would need both, in id order
+      PERFORM pg_advisory_xact_lock(hashtext('offerable:' || coalesce(NEW.owner_id, OLD.owner_id)));
       UPDATE services s SET offerable = service_offerable(s.id) FROM providers p
         WHERE p.id = s.provider_id AND p.owner_id IN (OLD.owner_id, NEW.owner_id);
       RETURN NULL;

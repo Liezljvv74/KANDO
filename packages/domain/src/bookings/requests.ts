@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, gt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, getTableColumns, gt, inArray, or, sql } from 'drizzle-orm'
 import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import { LIST_PAGE, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
@@ -252,7 +252,13 @@ async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'cust
   await lockRequest(tx, requestId)
   const req = await read() // read again after the lock
   if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed' })
-  const [row] = await tx.update(requests).set({ status: by === 'customer' ? 'withdrawn' : 'declined', updatedAt: now }).where(eq(requests.id, requestId)).returning()
+  // the timers' expiry takes no request lock: it may commit after the read, so the UPDATE re-checks the status
+  const [row] = await tx
+    .update(requests)
+    .set({ status: by === 'customer' ? 'withdrawn' : 'declined', updatedAt: now })
+    .where(and(eq(requests.id, requestId), inArray(requests.status, ['open', 'quoted'])))
+    .returning()
+  if (!row) fail(409, { error: 'request-closed' })
   afterCommit(async () => {
     if (by === 'provider') return notifyBookingEvent('request-declined', req.customerId, { requestId })
     // the owner connection: RLS may hide a suspended provider's row from its customer

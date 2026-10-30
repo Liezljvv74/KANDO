@@ -215,6 +215,28 @@ it('a notice older than 48 hours is not emailed', async () => {
   await clean()
 })
 
+it('outbox: a reminder whose deadline has passed or whose item is closed is claimed but not emailed', async () => {
+  await clean()
+  const live = await booking('awaiting-payment', { acceptedAt: at(-10), payBy: at(2) })
+  const late = await booking('awaiting-payment', { acceptedAt: at(-10), payBy: at(-1) }) // not expired yet (grace), deadline passed
+  const r = await request(prov, at(24 * 5), 'quoted')
+  const quote = async (version: number, st: string) =>
+    (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status, version) VALUES ($1, $2, 50, 's', $3, $4, $5) RETURNING id", [r, prov, at(20), st, version])).rows[0].id as string
+  const qSuperseded = await quote(1, 'superseded')
+  const qLive = await quote(2, 'sent')
+  const row = (kind: string, payload: object) => pool.query('INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) VALUES ($1, $2, $3, $4, NULL)', [U.cust, kind, payload, at(-3)])
+  await row('payment-reminder', { bookingId: live })
+  await row('payment-reminder', { bookingId: late })
+  await row('quote-expiring', { quoteId: qLive, requestId: r })
+  await row('quote-expiring', { quoteId: qSuperseded, requestId: r })
+  clearOutbox()
+  expect(await drainOutbox(db, new Date(NOW))).toBe(2)
+  expect(mailsTo(U.cust)).toHaveLength(2)
+  expect(await unmailed()).toHaveLength(0) // the stale ones are claimed too: never retried
+  await pool.query('DELETE FROM quotes WHERE request_id = $1', [r])
+  await clean()
+})
+
 it('the lazy path sends the emails of its own rows only', async () => {
   await clean()
   await pool.query("INSERT INTO notifications (user_id, kind, payload, mailed_at) VALUES ($1, 'requests-ignored', '{}', NULL)", [U.owner2]) // someone else's waiting row

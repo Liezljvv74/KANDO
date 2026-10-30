@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, notifyBookingEvent, outboxForTests, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, notifyBookingEvent, outboxForTests, payoutStatus, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -128,6 +128,18 @@ it('two parallel set-ups create one account', async () => {
   expect((await a.json()).url).toBe((await b.json()).url)
   expect(g.calls.filter((c) => c.method === 'createAccount')).toHaveLength(1)
   expect(g.attempts.createAccount).toBe(1) // the second waited and found the stored account
+})
+
+it('payoutStatus says whether this call changed the stored readiness (the route refreshes public pages only then)', async () => {
+  const p = await provider()
+  await startSetup(p.uid)
+  const acct = (await prow(p.id)).stripe_account_id as string
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: false, changed: false })
+  g.ready.add(acct)
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: true, changed: true })
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: true, changed: false })
+  g.ready.delete(acct)
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: false, changed: true })
 })
 
 it('status turns ready and the public profile shows verified', async () => {
