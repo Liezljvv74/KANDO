@@ -11,7 +11,7 @@ import { mediaBucket, photoUrl, removeObject, storage } from './storage'
 
 export const MAX_PORTFOLIO_PHOTOS = 12
 export const MAX_PHOTO_BYTES = 10_000_000
-const MAX_PIXELS = 40_000_000 // decompression-bomb cap, above any phone camera
+export const MAX_PIXELS = 25_000_000 // decompression-bomb cap; the app sends photos at most 1600 px
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export type PreparedPhoto = { kind: 'profile' | 'portfolio'; alt: string | null; data: Buffer; width: number; height: number; key: string }

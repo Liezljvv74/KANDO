@@ -6,6 +6,7 @@ import { DOCUMENT_TYPES, type Document } from '@kando/contract'
 import { flushPendingObjects } from './account'
 import { fail } from './providers/http'
 import { lockProfile } from './providers/profile'
+import { MAX_PIXELS } from './photos'
 import type { AfterCommit } from './app-request'
 import { documentsBucket, removeObject, storage } from './storage'
 
@@ -13,7 +14,6 @@ export const MAX_DOCUMENT_BYTES = 4_500_000
 export const MAX_PENDING_UPLOADS = 10
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const MAX_PIXELS = 40_000_000 // decompression-bomb cap, as for photos
 const MAX_SIDE = 2400
 const IMAGE: Record<string, { type: string; ext: string }> = {
   jpeg: { type: 'image/jpeg', ext: 'jpg' },

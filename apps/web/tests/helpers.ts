@@ -29,6 +29,14 @@ export function call(
   )
 }
 
+/** The same request with `content-length` set to its body's byte length (an upload route answers 411 without one, as a phone's fetch sends it). */
+export async function sized(request: Request): Promise<Request> {
+  const body = await request.clone().arrayBuffer()
+  const headers = new Headers(request.headers)
+  headers.set('content-length', String(body.byteLength))
+  return new Request(request, { headers, body })
+}
+
 export async function seedBase(): Promise<{ categoryId: string; docCategoryId: string }> {
   await pool.query(
     `INSERT INTO postcodes (country, code, place, state, location) VALUES

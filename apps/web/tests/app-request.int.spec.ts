@@ -112,6 +112,53 @@ it('a body over maxBodyBytes is 413 before the handler runs', async () => {
   expect(res.status).toBe(413)
 })
 
+it('an upload route without Content-Length is 411 before the handler runs', async () => {
+  const ran: string[] = []
+  const h = appRequest(
+    { auth: 'required', maxBodyBytes: 100, prepare: async () => void ran.push('prepare') },
+    async () => {
+      ran.push('handler')
+      return Response.json({ ok: true })
+    },
+  )
+  const res = await h(
+    new Request('http://localhost/x', { method: 'POST', body: 'small', headers: { origin: 'http://localhost', cookie: 'uid=u1:u1@test.skilled.invalid' } }),
+    ctx,
+  )
+  expect(res.status).toBe(411)
+  expect(await res.json()).toEqual({ error: 'LENGTH_REQUIRED' })
+  expect(ran).toEqual([])
+})
+
+it('a body larger than declared is cut at the cap: 413', async () => {
+  const max = 10
+  let pulled = 0
+  // Declares 5 bytes, then never ends: reading it to the end would hang the test.
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) {
+      pulled++
+      c.enqueue(new Uint8Array([120]))
+    },
+  })
+  const ran: string[] = []
+  const h = appRequest({ auth: 'required', maxBodyBytes: max }, async () => {
+    ran.push('handler')
+    return Response.json({ ok: true })
+  })
+  const res = await h(
+    new Request('http://localhost/x', {
+      method: 'POST',
+      body,
+      duplex: 'half',
+      headers: { origin: 'http://localhost', cookie: 'uid=u1:u1@test.skilled.invalid', 'content-length': '5' },
+    } as RequestInit),
+    ctx,
+  )
+  expect(res.status).toBe(413)
+  expect(ran).toEqual([])
+  expect(pulled).toBeLessThan(max + 10) // stopped near max + 1, not read on
+}, 10_000)
+
 it('user A cannot read user B through the wrapper', async () => {
   await me(as('ua'), ctx)
   await me(as('ub'), ctx)

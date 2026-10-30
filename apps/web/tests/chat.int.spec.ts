@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { sendMessage, setStorageForTests } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -52,7 +52,7 @@ const png = () => sharp({ create: { width: 20, height: 20, channels: 3, backgrou
 const photoRequest = async (thread: string, as: string) => {
   const form = new FormData()
   form.set('file', new File([new Uint8Array(await png())], 'a.png', { type: 'image/png' }))
-  return photosRoute.POST(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form }), { params: Promise.resolve({ id: thread }) })
+  return photosRoute.POST(await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form })), { params: Promise.resolve({ id: thread }) })
 }
 
 it('creating a request opens a thread; both parties list it', async () => {

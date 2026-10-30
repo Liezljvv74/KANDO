@@ -5,7 +5,7 @@ import { asUser, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { DocumentSchema, DocumentsListSchema, PhotosListSchema } from '@kando/contract'
 import { createAppRequest, prepareDocument, setStorageForTests } from '@kando/domain'
-import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, seedUser } from './helpers'
+import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
 const adminItem = await import('../app/api/admin/[resource]/[id]/route')
@@ -35,12 +35,12 @@ afterAll(async () => {
 })
 beforeEach(() => store.objects.clear())
 
-function upload(handler: (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>, uid: string, bytes: Buffer, fields: Record<string, string> = {}) {
+async function upload(handler: (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>, uid: string, bytes: Buffer, fields: Record<string, string> = {}) {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(bytes)]), 'upload.bin')
   for (const [k, v] of Object.entries(fields)) form.append(k, v)
   return handler(
-    new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form }),
+    await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form })),
     { params: Promise.resolve({}) },
   )
 }
@@ -189,6 +189,13 @@ it('a GIF and a text file renamed to .pdf are refused as documents', async () =>
   expect(keys('documents')).toHaveLength(0)
 })
 
+it('an image over 25 megapixels is 400 Unsupported file type', async () => {
+  const res = await upload(files.POST, 'fl1', await png(6000, 4500))
+  expect(res.status).toBe(400)
+  expect(await res.json()).toEqual({ error: 'Unsupported file type' })
+  expect(keys('documents')).toHaveLength(0)
+})
+
 it('staff open an image document through the same signed link; it is served as an image', async () => {
   await seedUser('fl-staff', 'reviewer')
   const id = (await (await upload(files.POST, 'fl3', await png(20, 20))).json()).id as string
@@ -208,7 +215,7 @@ it('a document stored before the transaction is removed when the request then fa
   })
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(PDF)]), 'a.pdf')
-  const res = await route(new Request('http://localhost/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=fl1:${EMAIL('fl1')}` }, body: form }), { params: Promise.resolve({}) })
+  const res = await route(await sized(new Request('http://localhost/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=fl1:${EMAIL('fl1')}` }, body: form })), { params: Promise.resolve({}) })
   expect(res.status).toBe(500)
   expect(keys('documents')).toHaveLength(0)
 })

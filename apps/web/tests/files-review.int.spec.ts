@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { DocumentsListSchema, PhotoSchema } from '@kando/contract'
 import { createAppRequest, deletePhoto, offerableServiceIds, setStorageForTests, storage } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, fakeSession, memoryStorage, profile, seedBase } from './helpers'
+import { call, cleanupUsers, EMAIL, fakeSession, memoryStorage, profile, seedBase, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -35,12 +35,12 @@ afterAll(async () => {
 beforeEach(() => store.objects.clear())
 
 type Route = (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>
-function upload(handler: Route, uid: string, bytes: Buffer, fields: Record<string, string> = {}) {
+async function upload(handler: Route, uid: string, bytes: Buffer, fields: Record<string, string> = {}) {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(bytes)]), 'upload.bin')
   for (const [k, v] of Object.entries(fields)) form.append(k, v)
   return handler(
-    new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form }),
+    await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form })),
     { params: Promise.resolve({}) },
   )
 }
@@ -181,7 +181,7 @@ it('the body is read before the first-contact user row and the transaction exist
       return new Response(null, { status: 204 })
     },
   )
-  await route(withCookie('rv9', 'POST'), none)
+  await route(await sized(withCookie('rv9', 'POST')), none)
   expect(inPrepare).toBe(0)
   expect(inHandler).toBe(1)
 })

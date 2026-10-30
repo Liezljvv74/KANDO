@@ -3,7 +3,7 @@ import { pool } from '@kando/db'
 import { MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import sharp from 'sharp'
 import { clearOutbox, notifyNewMessage, outboxForTests, setStorageForTests } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -186,7 +186,7 @@ const photo = async (thread: string, as: string) => {
   const form = new FormData()
   const png = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#c00' } }).png().toBuffer()
   form.set('file', new File([new Uint8Array(png)], 'a.png', { type: 'image/png' }))
-  return photosRoute.POST(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form }), { params: Promise.resolve({ id: thread }) })
+  return photosRoute.POST(await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form })), { params: Promise.resolve({ id: thread }) })
 }
 /** `n` messages of `kind` by `as` in `thread`, stamped `ago` before now, straight into the table. */
 const fill = (thread: string, as: string, n: number, kind: 'text' | 'photo' | 'card' = 'text', ago = '0 minutes') =>
