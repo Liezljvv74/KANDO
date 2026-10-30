@@ -47,6 +47,12 @@ test('a 401 on the delete itself means the account is already gone', async () =>
   expect(await afterDeleteFailure(new ApiError(401, 'Unauthorized'), ok)).toEqual({ deleted: true })
 })
 
+test('a 503 AUTH_BUSY shows the busy text, not "unconfirmed", and does not ask the server again', async () => {
+  setLang('en')
+  const check = jest.fn(ok)
+  expect(await afterDeleteFailure(new ApiError(503, 'AUTH_BUSY'), check)).toEqual({ deleted: false, text: 'The login service is busy for a moment. Please try again in a minute.' })
+  expect(check).not.toHaveBeenCalled()
+})
 
 test('a wrong password shows the wrong-password text', () => {
   setLang('en')

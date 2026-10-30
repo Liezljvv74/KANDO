@@ -11,7 +11,7 @@ export const accountError = (action: 'delete' | 'export', code: string) =>
 export type DeleteFailure = { deleted: true } | { deleted: false; text: string }
 
 /**
- * A DELETE that did not answer ok. A refusal (400, 409 ...) means nothing was deleted. No answer (offline, the time limit)
+ * A DELETE that did not answer ok. A refusal (403 WRONG_PASSWORD, 409 LAST_ADMIN, 503 AUTH_BUSY: the password check did not run) means nothing was deleted. No answer (offline, the time limit)
  * or a server error means the server may have committed: ask `check` (a call with the session) and take a 401 as "gone".
  * Anything else there says the deletion is unconfirmed, never "not deleted".
  */
@@ -19,6 +19,7 @@ export async function afterDeleteFailure(error: unknown, check: () => Promise<un
   const status = error instanceof ApiError ? error.status : 0
   const code = error instanceof ApiError ? error.code : ''
   if (status === 401) return { deleted: true }
+  if (status === 503 && code === 'AUTH_BUSY') return { deleted: false, text: accountError('delete', code) }
   if (status >= 400 && status < 500) return { deleted: false, text: accountError('delete', code) }
   try {
     await check()
