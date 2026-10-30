@@ -935,4 +935,8 @@ export const en: Record<Key, string> = {
   'error.review.exists': 'You have already reviewed this booking.',
   'error.review.closed': 'The 7 days for a review have passed.',
   'error.review.final': 'Your review is shown now and can no longer be changed.',
+  'email.paymentReleased.stopRefund.subject': 'You get the full payment back',
+  'email.paymentReleased.stopRefund.body': 'The provider stated that nothing is owed for the stopped job, and you agreed. You get the full payment back. A refund usually takes a few days to show on your account, depending on your bank.',
+  'email.paymentReleased.stopRefund.provider.subject': 'The stopped job is closed without a payout',
+  'email.paymentReleased.stopRefund.provider.body': 'The customer agreed to the amount of 0 you stated for the stopped job. The payment goes back to the customer in full, and nothing is paid out for this job.',
 }

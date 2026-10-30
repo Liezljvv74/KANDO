@@ -934,4 +934,8 @@ export const de = {
   'error.review.exists': 'Du hast diese Buchung bereits bewertet.',
   'error.review.closed': 'Die 7 Tage für eine Bewertung sind vorbei.',
   'error.review.final': 'Deine Bewertung wird jetzt angezeigt und kann nicht mehr geändert werden.',
+  'email.paymentReleased.stopRefund.subject': 'Du bekommst die ganze Zahlung zurück',
+  'email.paymentReleased.stopRefund.body': 'Der Anbieter hat angegeben, dass für den abgebrochenen Auftrag nichts zu zahlen ist, und du hast zugestimmt. Du bekommst die ganze Zahlung zurück. Eine Erstattung ist je nach Bank meist nach ein paar Tagen auf deinem Konto zu sehen.',
+  'email.paymentReleased.stopRefund.provider.subject': 'Der abgebrochene Auftrag ist ohne Auszahlung abgeschlossen',
+  'email.paymentReleased.stopRefund.provider.body': 'Der Kunde hat dem von dir angegebenen Betrag von 0 für den abgebrochenen Auftrag zugestimmt. Die Zahlung geht vollständig an den Kunden zurück, für diesen Auftrag wird nichts ausgezahlt.',
 }

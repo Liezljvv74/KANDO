@@ -3,7 +3,7 @@ import { bookings, db, providers, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t } from '@kando/i18n'
 import { isUuid } from '../admin/common'
 import { slotIsHeld } from '../bookings/busy'
-import { parentNoShow } from '../bookings/additional'
+import { parentBlocksPayment } from '../bookings/additional'
 import { emailDateTime, siteBase } from '../notifications'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
@@ -53,7 +53,7 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
   if (provider?.status !== 'published' || (await isSuspendedNow(db, b.providerId))) fail(409, { error: 'provider-unavailable' })
   const stored = readRef(b.checkoutRef)
   if (stored && new Date(stored.expiresAt).getTime() > now.getTime() + REUSE_MIN_MS) return { url: stored.url }
-  if (b.parentBookingId ? await parentNoShow(db, b) : await slotIsHeld(db, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) fail(409, { error: b.parentBookingId ? 'not-open' : 'slot-pending' }) // a lapsed hold can overlap until the sweep; an additional task has its parent's time
+  if (b.parentBookingId ? await parentBlocksPayment(db, b) : await slotIsHeld(db, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) fail(409, { error: b.parentBookingId ? 'not-open' : 'slot-pending' }) // a lapsed hold can overlap until the sweep; an additional task has its parent's time
   const expiresAt = checkoutExpiry(b.payBy, now)
   if (!expiresAt) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' })
 

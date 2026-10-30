@@ -77,7 +77,7 @@ export async function confirmJob(tx: Tx, userId: string, bookingId: string, now 
 /**
  * Pays the provider the full paid amount of a `finished` booking (commission to KANDO in the same settle) and completes it;
  * a `stopped` booking whose customer agreed to the stated amount (`confirmBy` set, stop.ts) pays that amount and refunds the
- * rest. The share comes from the stored row, so the timer's retry pays the same split. Owner connection. Quiet when
+ * rest (an agreed 0 refunds everything and ends `refunded`: no payout, no review requests). The share comes from the stored row, so the timer's retry pays the same split. Owner connection. Quiet when
  * already `completed`; 409 not-open for any other status (an open dispute: `disputed`, so never released here). Settle and the status change share
  * one transaction (settle runs in a savepoint): released_at, the commission row and `completed` commit together.
  *   crash / failure point                       | left behind                                | the retry (confirm or timer)
@@ -90,19 +90,23 @@ export async function confirmJob(tx: Tx, userId: string, bookingId: string, now 
 export async function releaseBooking(exec: Exec, bookingId: string, now: Date): Promise<void> {
   const b = await exec.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
-    if (b.status === 'completed') return null
+    if (b.status === 'completed' || (b.status === 'refunded' && b.stoppedAt)) return null
     const stopped = b.status === 'stopped' && b.confirmBy !== null && b.stopAmount !== null // the customer agreed to the stated amount (stop.ts)
     if (b.status !== 'finished' && !stopped) fail(409, { error: 'not-open' })
     // the provider's share in whole cents: everything paid, or for a stopped job the amount the customer agreed to
-    if (!b.releasedAt) await settle(o, b.id, stopped ? toCents(Number(b.stopAmount)) / 100 : toCents(await paidAmount(o, b.id)) / 100)
-    await o.update(bookings).set({ status: 'completed', completedAt: now, updatedAt: now }).where(eq(bookings.id, b.id))
-    return b
+    const shareC = stopped ? toCents(Number(b.stopAmount)) : toCents(await paidAmount(o, b.id))
+    if (!b.releasedAt) await settle(o, b.id, shareC / 100)
+    // a stop agreed at 0 earned nothing: a full refund, not a completed job (no payout, no reviews)
+    const refunded = stopped && shareC === 0
+    await o.update(bookings).set({ status: refunded ? 'refunded' : 'completed', ...(!refunded && { completedAt: now }), updatedAt: now }).where(eq(bookings.id, b.id))
+    return { ...b, refunded }
   })
   if (!b) return
   const owner = (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, b.providerId)))[0]?.id
-  const variant: Record<string, string> = b.status === 'stopped' ? { variant: 'stop' } : {}
+  const variant: Record<string, string> = b.refunded ? { variant: 'stop-refund' } : b.status === 'stopped' ? { variant: 'stop' } : {}
   await notifyBookingEvent('payment-released', b.customerId, { bookingId: b.id, ...variant })
   if (owner) await notifyBookingEvent('payment-released', owner, { bookingId: b.id, role: 'provider', ...variant })
+  if (b.refunded) return
   // the last moment to write one: the reveal (reviews.ts writeReview)
   const reviewBy = new Date(now.getTime() + REVIEW_VISIBLE_DAYS * DAY).toISOString()
   if (!b.parentBookingId) for (const u of [b.customerId, owner]) if (u) await notifyBookingEvent('review-requested', u, { bookingId: b.id, date: reviewBy })

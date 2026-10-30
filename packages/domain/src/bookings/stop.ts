@@ -75,7 +75,7 @@ export async function answerStop(tx: Tx, userId: string, bookingId: string, answ
   if ((await sideOf(tx, userId, bookingId)) !== 'customer') fail(403, { error: 'not-your-turn' })
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
-    if (b.status === 'completed' && b.stoppedAt) return null
+    if ((b.status === 'completed' || b.status === 'refunded') && b.stoppedAt) return null
     if (b.status !== 'stopped' || !b.stopStatedAt) fail(409, { error: 'not-open' })
     if (b.confirmBy) return { b, agree: true } // agreed before; the payment is due (a retry)
     if (answer.agree) return { b: (await o.update(bookings).set({ confirmBy: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning())[0]!, agree: true }

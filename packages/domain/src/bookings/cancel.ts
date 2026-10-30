@@ -210,8 +210,8 @@ export async function providerNoShowRule(o: Exec, b: Pick<Row, 'noShow' | 'paren
   return n < 2
 }
 
-/** The due no-show reports (timers.ts), one at a time; a failure is logged and retried next run. */
-export async function resolveNoShows(exec: Exec, now: Date): Promise<number> {
+/** The due no-show reports (timers.ts), one at a time until `timeUp`; a failure is logged and retried next run. */
+export async function resolveNoShows(exec: Exec, now: Date, timeUp: () => boolean = () => false): Promise<number> {
   const due = (
     await exec.execute<{ id: string }>(sql`
     SELECT id FROM bookings WHERE status = 'confirmed' AND no_show IS NOT NULL
@@ -220,6 +220,7 @@ export async function resolveNoShows(exec: Exec, now: Date): Promise<number> {
   ).rows
   let n = 0
   for (const { id } of due) {
+    if (timeUp()) break // the run's time budget (timers.ts); the rest are due in the next run
     try {
       if (await resolveNoShow(exec, id, now)) n++
     } catch (e) {

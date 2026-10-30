@@ -6,6 +6,7 @@ import {
   cancelBooking,
   clearOutbox,
   confirmJob,
+  createPayLink,
   finishJob,
   handleGatewayEvent,
   objectNoShow,
@@ -60,17 +61,17 @@ afterEach(() => {
 afterAll(cleanupUsers)
 
 /** A paid root booking (as the webhook leaves it), 60 minutes on site, 100 EUR, with its charge row; `finishedAt` makes it finished. */
-async function paidRoot(o: { startAt?: Date; finishedAt?: Date } = {}): Promise<{ id: string; startAt: Date }> {
+async function paidRoot(o: { startAt?: Date; finishedAt?: Date; paymentRef?: string } = {}): Promise<{ id: string; startAt: Date }> {
   const startAt = o.startAt ?? new Date(Date.now() - 2 * HOUR - ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, address_postcode, address_street, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, true, '10115', 'Hauptstr. 1', $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_at', 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
-      [U.cust, providerId, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null],
+       VALUES ($1, $2, $3, 'direct', $4, $5, 60, true, '10115', 'Hauptstr. 1', $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', $7, 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
+      [U.cust, providerId, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null, o.paymentRef ?? 'pi_at'],
     )
   ).rows[0].id as string
-  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, 'pi_at', $3)", [id, providerId, `charge:${id}`])
+  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, $4, $3)", [id, providerId, `charge:${id}`, o.paymentRef ?? 'pi_at'])
   return { id, startAt }
 }
 
@@ -414,4 +415,34 @@ it('a third user gets 404', async () => {
   expect((await accept(q.id, U.third)).status).toBe(404)
   expect((await accept(q.id, U.owner)).status).toBe(404) // the provider cannot accept their own quote
   expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE parent_booking_id = $1', [root.id])).rows[0].n).toBe(0)
+})
+
+it("a chargeback on a root with an open no-show report only flags it: no dispute, and the report and its additional task end normally", async () => {
+  const ref = `pi_${randomUUID()}`
+  const root = await paidRoot({ paymentRef: ref })
+  const now = new Date()
+  const kid = await paidChildOf(root.id, 40, now)
+  await asUser(U.owner, (tx) => reportNoShow(tx, U.owner, root.id, now)) // the provider reports the customer
+  await handleGatewayEvent({ id: `evt_${randomUUID()}`, type: 'charge-disputed', paymentRef: ref }, now)
+  expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'chargeback' AND ref_id = $1 AND resolved_at IS NULL", [root.id])).rows[0].n).toBe(1)
+  expect((await pool.query('SELECT count(*)::int n FROM disputes WHERE booking_id = ANY($1)', [[root.id, kid]])).rows[0].n).toBe(0)
+  expect(await row(root.id)).toMatchObject({ status: 'confirmed', no_show: 'customer' })
+  // 48 hours without objection: both end; the child is paid out on its own, the root's money waits for the chargeback flag
+  await runDueTimers(db, new Date(now.getTime() + 48 * HOUR + MIN))
+  expect(await row(root.id)).toMatchObject({ status: 'cancelled', no_show: 'customer', released_at: null })
+  expect(await row(kid)).toMatchObject({ status: 'cancelled', no_show: 'customer' })
+  expect((await row(kid)).released_at).not.toBeNull()
+  expect(await ledger(root.id)).toEqual([])
+})
+
+it('an unpaid additional task cannot be paid once its root has ended; a payment that still arrives is refunded', async () => {
+  for (const ended of ['refunded', 'completed', 'stopped', 'cancelled']) {
+    const root = await paidRoot()
+    const kid = (await childOf(root.id)).id
+    await pool.query('UPDATE bookings SET status = $2 WHERE id = $1', [root.id, ended])
+    expect(await refusal(createPayLink(db, U.cust, kid))).toEqual({ status: 409, body: { error: 'not-open' } })
+    await handleGatewayEvent(paidEvent(kid, 4000))
+    expect((await row(kid)).status, ended).toBe('awaiting-payment')
+    expect((await pool.query("SELECT amount::float AS a FROM ledger_entries WHERE booking_id = $1 AND kind = 'refund'", [kid])).rows, ended).toEqual([{ a: 40 }])
+  }
 })

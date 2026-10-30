@@ -115,6 +115,20 @@ export async function acceptAdditional(quote: typeof quotes.$inferSelect, req: t
   })
 }
 
+/** The root statuses after which an unpaid additional task can no longer be paid (the job it adds to is over). */
+const ROOT_OVER = ['refunded', 'completed', 'stopped', 'cancelled']
+
+/**
+ * True when `b` is an additional task that may no longer be paid: its root has a reported no-show (the report covers it,
+ * cancel.ts) or has ended (refunded, completed, stopped, cancelled). The pay link refuses it and a payment that still
+ * arrives is refunded in full (webhook.ts, the late-payment path).
+ */
+export async function parentBlocksPayment(o: Exec, b: Pick<Row, 'parentBookingId'>): Promise<boolean> {
+  if (!b.parentBookingId) return false
+  const p = (await o.select({ noShow: bookings.noShow, status: bookings.status }).from(bookings).where(eq(bookings.id, b.parentBookingId)))[0]
+  return !p || !!p.noShow || ROOT_OVER.includes(p.status)
+}
+
 /** True when `b` is an additional task whose root has a reported no-show (the root's report covers it, cancel.ts). */
 export async function parentNoShow(o: Exec, b: Pick<Row, 'parentBookingId'>): Promise<boolean> {
   if (!b.parentBookingId) return false

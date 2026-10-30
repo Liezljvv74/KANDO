@@ -427,7 +427,9 @@ it('the releases run last: the other rules and their emails happen even when the
   const asked = await paidBooking({ startAt: new Date(T.getTime() + 5 * DAY) }) // ends T + 5 d 1 h: asked at T + 7 d
   const released = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 4 * HOUR), finishedAt: T }) // due at T + 7 d
   await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = $1', [released.id])
+  let reads = 0
   const boom = () => {
+    if (reads++ === 0) return 0 // the run's start; then the release loop breaks
     throw new Error('release loop broke')
   }
   await expect(runDueTimers(db, new Date(T.getTime() + 7 * DAY), { clock: boom })).rejects.toThrow('release loop broke')
@@ -438,4 +440,20 @@ it('the releases run last: the other rules and their emails happen even when the
   // a budget used up before the first release: the same, without an error
   expect((await runDueTimers(db, new Date(T.getTime() + 7 * DAY), { budgetMs: 0 })).autoReleased).toBe(0)
   expect((await runDueTimers(db, new Date(T.getTime() + 7 * DAY))).autoReleased).toBe(1)
+})
+
+it('the time budget counts from the start of the run: steps before the releases use it up too', async () => {
+  const T = new Date('2028-05-02T10:00:00Z')
+  const reported = await paidBooking({ startAt: new Date(T.getTime() - 3 * DAY) })
+  await pool.query("UPDATE bookings SET no_show = 'customer', no_show_reported_at = $2 WHERE id = $1", [reported.id, new Date(T.getTime() - 3 * DAY + HOUR)])
+  const due = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 9 * DAY), finishedAt: new Date(T.getTime() - 8 * DAY) })
+  await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = $1', [due.id])
+  // the clock reads 1000 at the start and 2000 before the no-show (1000 used, inside 1500); the release sees 3000: over
+  const report = await runDueTimers(db, T, { budgetMs: 1500, clock: ticking(1000) })
+  expect(report.noShowsResolved).toBeGreaterThanOrEqual(1)
+  expect((await row(reported.id)).status).toBe('cancelled')
+  expect(report.autoReleased).toBe(0)
+  expect((await row(due.id)).status).toBe('finished')
+  await runDueTimers(db, T)
+  expect((await row(due.id)).status).toBe('completed')
 })

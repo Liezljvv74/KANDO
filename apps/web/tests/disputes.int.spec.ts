@@ -460,3 +460,19 @@ it('a suspended customer can still open a dispute', async () => {
   }
   expect((await row(id)).status).toBe('disputed')
 })
+
+it('a stop agreed at 0 is a full refund: refunded, no payout, no review requests', async () => {
+  const { id, startAt } = await paidBooking()
+  const at = new Date(startAt.getTime() + 10 * MIN)
+  await stop(U.cust, id, at)
+  await state(U.owner, id, 0, at)
+  await answer(U.cust, id, true, at)
+  expect(await row(id)).toMatchObject({ status: 'refunded' })
+  expect(await ledger(id)).toEqual([{ kind: 'refund', amount: '100.00' }])
+  expect(await notes(id, 'review-requested')).toEqual([])
+  expect(await notes(id, 'payment-released')).toEqual([U.cust, U.owner].sort())
+  expect(outboxForTests().some((m) => m.to === EMAIL(U.owner) && m.text.includes('nothing is paid out'))).toBe(true)
+  // a second answer changes nothing
+  await answer(U.cust, id, true, at)
+  expect(await ledger(id)).toEqual([{ kind: 'refund', amount: '100.00' }])
+})

@@ -57,7 +57,7 @@ type TimerEvent = { userId: string; kind: BookingKind; payload: Record<string, s
 /** Counts the rows of CTE `from` and returns the notification rows CTE `n` inserted (ids only), so their emails can follow. */
 const result = (from: string) => sql`SELECT (SELECT count(*) FROM ${sql.identifier(from)})::int AS n, (SELECT coalesce(jsonb_agg(jsonb_build_object('userId', user_id, 'kind', kind, 'payload', payload)), '[]'::jsonb) FROM n) AS ev`
 
-async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false): Promise<TimerReport & { events: TimerEvent[] }> {
+async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false, timeUp: () => boolean = () => false): Promise<TimerReport & { events: TimerEvent[] }> {
   const events: TimerEvent[] = []
   const t = now.toISOString()
   const ownedBy = (col: string) => sql`${sql.identifier(col)} IN (SELECT id FROM providers WHERE owner_id = ${userId})`
@@ -84,15 +84,19 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     SELECT count(*)::int AS n FROM e`)
 
   const bookingScope = scoped(sql`customer_id = ${userId}`, ownedBy('provider_id'))
+  // both expiries lock their rows in id order, as lockFamily and account deletion do (two of one root's additional tasks
+  // expiring while the root is cancelled can otherwise deadlock)
+  const lapsed = sql`status = 'proposed' AND answer_by <= ${t}::timestamptz ${bookingScope}`
+  const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope}`
   const proposalsLapsed = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'proposed' AND answer_by <= ${t}::timestamptz ${bookingScope} RETURNING id, customer_id),
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(lapsed)} AND ${lapsed} RETURNING id, customer_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM e RETURNING user_id, kind, payload)
     ${result('e')}`)
 
   // PAY_GRACE_MINUTES after pay_by: a payment made at the deadline may still be on its way (the webhook confirms it if the
   // time is still free). The slot itself stops being held at pay_by (slotIsHeld, busy_times) and no pay link is given after it.
   const unpaidExpired = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope} RETURNING id, customer_id, provider_id),
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(unpaid)} AND ${unpaid} RETURNING id, customer_id, provider_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
       SELECT u, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz
       FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING user_id, kind, payload)
@@ -148,7 +152,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   for (const w of waiting) events.push({ userId: w.userId, kind: 'customers-waiting', payload: { count: String(w.count) } })
   const customersWaiting = waiting.length
 
-  const endings = await endingRules(exec, now, count)
+  const endings = await endingRules(exec, now, count, timeUp)
   return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, events }
 }
 
@@ -169,7 +173,7 @@ const endOrPaid = (b: typeof bookings.$inferSelect) => Math.max(endOf(b).getTime
 const inIdOrder = (pred: SQL) => sql`id IN (SELECT id FROM bookings WHERE ${pred} ORDER BY id FOR UPDATE)`
 
 /** After "Finished" (Task 2 rules), and the provider who never taps it (spec 7a). Cron only; the releases run last (releaseDue). */
-async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<number>) {
+async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<number>, timeUp: () => boolean) {
   const t = now.toISOString()
   // Reminder number sent + 1 once its day mark has passed (dueConfirmReminder): one per booking and run, so a late run
   // sends the oldest unsent one and the next run the next. Never once the release is due or a dispute is open.
@@ -196,6 +200,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
   const sentToStaff = await toStaff(
     exec,
     now,
+    timeUp,
     sql`status = 'confirmed' AND no_show IS NULL AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz
         AND asked_done_at IS NOT NULL AND asked_done_at + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`,
     (b) =>
@@ -207,6 +212,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
   const stopsToStaff = await toStaff(
     exec,
     now,
+    timeUp,
     sql`status = 'stopped' AND confirm_by IS NULL AND coalesce(stop_stated_at, stopped_at) + make_interval(days => ${STOP_ANSWER_DAYS}) <= ${t}::timestamptz`,
     (b) => b.status === 'stopped' && b.confirmBy === null && (b.stopStatedAt ?? b.stoppedAt ?? now).getTime() + STOP_ANSWER_DAYS * DAY <= now.getTime(),
   )
@@ -244,10 +250,11 @@ const DAY = 24 * HOUR
  * Sends the bookings of `pred` to staff as no-response disputes, one at a time in id order (openSystemDispute locks the
  * row and re-checks `still`, the same rule in code); a failure is logged and the next run retries. The number opened.
  */
-async function toStaff(exec: Exec, now: Date, pred: SQL, still: (b: typeof bookings.$inferSelect) => boolean): Promise<number> {
+async function toStaff(exec: Exec, now: Date, timeUp: () => boolean, pred: SQL, still: (b: typeof bookings.$inferSelect) => boolean): Promise<number> {
   const due = (await exec.execute<{ id: string }>(sql`SELECT id FROM bookings WHERE ${pred} ORDER BY id`)).rows
   let n = 0
   for (const { id } of due) {
+    if (timeUp()) break // the run's time budget; the rest go in the next run
     try {
       if (await openSystemDispute(exec, id, 'no-response', now, { when: still })) n++
     } catch (e) {
@@ -258,7 +265,10 @@ async function toStaff(exec: Exec, now: Date, pred: SQL, still: (b: typeof booki
 }
 
 export type ReleaseOptions = {
-  /** Stop STARTING releases once this much time has passed (a started one finishes). Default RELEASE_BUDGET_MS. */
+  /**
+   * Stop STARTING per-booking steps (staff hand-overs, no-show resolutions, releases) once this much time has passed since
+   * the run began (a started one finishes). Default RELEASE_BUDGET_MS. The SQL rules always run.
+   */
   budgetMs?: number
   /** Milliseconds now; injected by tests. */
   clock?: () => number
@@ -274,9 +284,8 @@ export type ReleaseOptions = {
  * staff decided but whose money step failed (admin/bookings.ts) is carried out with the stored share. Bookings whose
  * earlier attempt failed (open flag) come last, so they never hold back the others.
  */
-async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptions): Promise<{ autoReleased: number; cancelsSettled: number; decisionsApplied: number }> {
+async function releaseDue(exec: Exec, now: Date, timeUp: () => boolean): Promise<{ autoReleased: number; cancelsSettled: number; decisionsApplied: number }> {
   const t = now.toISOString()
-  const started = clock()
   const due = (
     await exec.execute<{ id: string; customer_id: string; status: string }>(sql`
     SELECT id, customer_id, status FROM bookings
@@ -291,7 +300,7 @@ async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS,
   ).rows
   const done = { autoReleased: 0, cancelsSettled: 0, decisionsApplied: 0 }
   for (const b of due) {
-    if (clock() - started >= budgetMs) break
+    if (timeUp()) break
     if (b.status === 'disputed') done.decisionsApplied += Number(await tryApplyDecision(exec, b.id, b.customer_id, now))
     else if (b.status !== 'cancelled') done.autoReleased += Number(await tryRelease(exec, b.id, b.customer_id, now))
     else done.cancelsSettled += Number(await trySettleCancelled(b.id, b.customer_id, now))
@@ -314,9 +323,13 @@ async function sendEmails({ events, ...report }: TimerReport & { events: TimerEv
  * emails: a timeout or an error in the release loop can no longer drop the day's reminders, expiries or silent-provider steps.
  */
 export async function runDueTimers(exec: Exec, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
-  const report = await sendEmails(await sweep(exec, now))
-  const noShowsResolved = await resolveNoShows(exec, now)
-  return { ...report, noShowsResolved, ...(await releaseDue(exec, now, release)) }
+  // one budget for the whole run, measured from its start: the loops before the releases count against it too
+  const { budgetMs = RELEASE_BUDGET_MS, clock = Date.now } = release
+  const started = clock()
+  const timeUp = () => clock() - started >= budgetMs
+  const report = await sendEmails(await sweep(exec, now, undefined, false, timeUp))
+  const noShowsResolved = await resolveNoShows(exec, now, timeUp)
+  return { ...report, noShowsResolved, ...(await releaseDue(exec, now, timeUp)) }
 }
 
 /** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */

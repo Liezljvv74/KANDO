@@ -376,6 +376,8 @@ it('bookings and disputes lists put overdue disputes first; details carry no sec
   expect(((await (await getList(U.rev, 'bookings', { status: 'disputed' })).json()).data as { status: string }[]).every((b) => b.status === 'disputed')).toBe(true)
   const disputesList = (await (await getList(U.rev, 'disputes')).json()).data as { id: string }[]
   expect(disputesList[0]!.id).toBe(disputeId)
+  // the list carries no evidence text: that is read on the logged dispute page
+  expect(disputesList.every((d) => !('description' in d))).toBe(true)
 
   const detail = (await (await getOne(U.rev, 'bookings', id)).json()).data
   expect(detail).toMatchObject({ id, status: 'disputed', amount: 100, paid: 100, customerEmail: EMAIL(U.cust), providerName: 'Ab Owner', dispute: { id: disputeId } })

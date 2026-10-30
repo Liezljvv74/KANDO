@@ -346,7 +346,12 @@ async function listDisputes(tx: Tx, q: AdminListQuery) {
     .offset(pageOf(q).offset)
   const now = Date.now()
   return ok(
-    rows.map((r) => ({ ...toAdminDispute(r.d), bookingStatus: r.status, customerEmail: r.customerEmail, providerName: r.providerName, overdue: !r.d.decidedAt && r.d.decideBy.getTime() < now })),
+    // no description: the evidence is read on the dispute page, which logs the read
+    rows.map((r) => {
+      const { description, ...d } = toAdminDispute(r.d)
+      void description
+      return { ...d, bookingStatus: r.status, customerEmail: r.customerEmail, providerName: r.providerName, overdue: !r.d.decidedAt && r.d.decideBy.getTime() < now }
+    }),
     total,
   )
 }

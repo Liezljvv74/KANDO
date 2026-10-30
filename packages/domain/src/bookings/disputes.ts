@@ -6,6 +6,7 @@ import { assertNoContactDetails } from '../chat/flags'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { addWorkingDays, DISPUTE_DECISION_WORKING_DAYS } from './ending-rules'
+import { parentNoShow } from './additional'
 import { lockRow, sideOf } from './finish'
 import { notifyBookingEvent } from './notify'
 
@@ -62,7 +63,8 @@ const SYSTEM_FROM = ['confirmed', 'finished', 'stopped']
  * A dispute raised by the system (`opened_by` null): the provider who never acted (no-response, timers.ts), a stop whose
  * amount stayed unanswered (no-response, timers.ts stopsToStaff), and a card chargeback while the money is not yet released
  * (payments/webhook.ts). Owner connection; locks the booking row and re-checks under the lock: only from an open job
- * (SYSTEM_FROM), money not released, no dispute yet, and `when` (the rule's own condition) still true; otherwise null and
+ * (SYSTEM_FROM), money not released, no no-show report open on it or its root, no dispute yet, and `when` (the rule's
+ * own condition) still true; otherwise null and
  * nothing changes (so a racing confirm, answer or second event finds it moved and nothing doubles). Both sides are told
  * through `afterCommit` (default: at once, for a caller whose `exec` commits here; the webhook passes its own).
  */
@@ -76,6 +78,9 @@ export async function openSystemDispute(
   const r = await exec.transaction(async (o) => {
     const [b] = await o.select().from(bookings).where(eq(bookings.id, bookingId)).for('update')
     if (!b || !SYSTEM_FROM.includes(b.status) || b.releasedAt || (opts.when && !opts.when(b))) return null
+    // a no-show report still open (its own or its root's) ends its own way (48 hours or the objection's decision); a
+    // dispute now would strand it and its covered additional tasks. The caller's staff flag (a chargeback) freezes settle.
+    if (b.noShow || (await parentNoShow(o, b))) return null
     if ((await o.select({ id: disputes.id }).from(disputes).where(eq(disputes.bookingId, b.id))).length) return null
     return { b, d: await openDisputeCore(o, { bookingId: b.id, openedBy: null, reason, description: '', now }) }
   })
