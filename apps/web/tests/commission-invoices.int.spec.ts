@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { CommissionInvoiceListSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, deleteAccount, issueCommissionInvoices, runDueTimers, setGatewayForTests, setStorageForTests, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
+import { cancelBooking, clearOutbox, clearPushOutbox, pushOutboxForTests, deleteAccount, issueCommissionInvoices, runDueTimers, setGatewayForTests, setStorageForTests, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
@@ -68,11 +68,12 @@ it('two commissions in January give one January invoice with their sum', async (
   const p = await provider()
   const a = await settled(p.id, new Date('2031-01-05T10:00:00Z'))
   const b = await settled(p.id, new Date('2031-01-20T10:00:00Z'), 250)
-  await settled(p.id, new Date('2030-12-31T10:00:00Z')) // December: not on it
+  await settled(p.id, new Date('2030-12-31T10:00:00Z')) // December: not on it (its own invoice)
   const now = new Date('2031-02-01T08:00:00Z')
-  expect(await issueCommissionInvoices(db, now, { clock: () => now })).toBe(1) // the number's year is the year of issue
-  const [inv, ...more] = await of(p.id)
+  expect(await issueCommissionInvoices(db, now, { clock: () => now })).toBe(2) // the number's year is the year of issue
+  const [dec, inv, ...more] = await of(p.id)
   expect(more).toEqual([])
+  expect([dec.month, dec.total]).toEqual(['2030-12', '12.00'])
   expect(inv).toMatchObject({ month: '2031-01', total: '42.00', currency: 'EUR', file_key: `commission-invoices/${p.id}/${inv.number}.pdf` })
   expect(inv.number).toMatch(/^K-2031-\d{5}$/)
   const draft = inv.draft as CommissionDraft
@@ -86,7 +87,7 @@ it('two commissions in January give one January invoice with their sum', async (
   const pdf = pdfOf(inv)!
   expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
   expect(store.types.get(`documents/${inv.file_key}`)).toBe('application/pdf')
-  expect(await readyNotices(p.uid)).toHaveLength(1)
+  expect(await readyNotices(p.uid)).toHaveLength(2)
 })
 
 it('a commission at 23:30 UTC on 31 January is on February\'s invoice', async () => {
@@ -104,8 +105,8 @@ it('summer time: 00:30 on 1 April in Berlin (22:30 UTC on 31 March) is April, 23
   const p = await provider()
   const march = await settled(p.id, new Date('2033-03-31T21:30:00Z'))
   const april = await settled(p.id, new Date('2033-03-31T22:30:00Z'))
-  // 1 April 00:10 in Berlin is 22:10 UTC on 31 March: the run already counts as April and invoices March
-  await issueCommissionInvoices(db, new Date('2033-03-31T22:10:00Z'))
+  // 1 April 01:10 in Berlin is 23:10 UTC on 31 March: March ended over an hour ago
+  expect(await issueCommissionInvoices(db, new Date('2033-03-31T23:10:00Z'))).toBe(1)
   await issueCommissionInvoices(db, new Date('2033-05-01T09:00:00Z'))
   expect((await of(p.id)).map((i) => [i.month, (i.draft as CommissionDraft).lines.map((l) => l.bookingId)])).toEqual([
     ['2033-03', [march]],
@@ -117,7 +118,10 @@ it('a second run creates nothing', async () => {
   const p = await provider()
   await settled(p.id, new Date('2034-01-10T10:00:00Z'))
   const now = new Date('2034-02-02T10:00:00Z')
+  await pool.query("INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, 'ExponentPushToken[ci-second]', 'ios')", [p.uid])
+  clearPushOutbox()
   expect(await issueCommissionInvoices(db, now)).toBe(1)
+  expect(pushOutboxForTests().map((m) => m.data)).toEqual([{ url: 'skilled://invoices/commission', kind: 'commission-invoice-ready' }]) // opens the commission list
   const [inv] = await of(p.id)
   expect(await issueCommissionInvoices(db, now)).toBe(0)
   expect(await of(p.id)).toEqual([inv])
@@ -146,10 +150,39 @@ it('concurrent runs create one invoice and leave no gap in the numbers', async (
 
 it('a month without commission creates nothing', async () => {
   const p = await provider()
-  await settled(p.id, new Date('2036-01-10T10:00:00Z'))
-  expect(await issueCommissionInvoices(db, new Date('2036-03-05T10:00:00Z'))).toBe(0) // February: no commission
+  await settled(p.id, new Date('2036-03-02T10:00:00Z')) // March is still running
+  const run = (at: Date) => issueCommissionInvoices(db, at, { clock: () => at })
+  expect(await run(new Date('2036-03-05T10:00:00Z'))).toBe(0) // February: no commission
   expect(await of(p.id)).toEqual([])
-  expect((await pool.query("SELECT 1 FROM invoice_counters WHERE series = 'commission:2036'")).rows).toEqual([])
+  expect((await pool.query("SELECT 1 FROM invoice_counters WHERE series = 'commission:2036'")).rows).toEqual([]) // no number taken
+  expect(await run(new Date('2036-04-05T10:00:00Z'))).toBe(1)
+  expect((await of(p.id)).map((i) => i.month)).toEqual(['2036-03'])
+})
+
+it('a commission stamped 23:59:59 on the last day waits for the hour after the month: a run at 00:30 issues nothing, 01:30 issues it', async () => {
+  const p = await provider()
+  const late = await settled(p.id, new Date('2041-01-31T22:59:59Z')) // 23:59:59 on 31 January in Berlin
+  expect(await issueCommissionInvoices(db, new Date('2041-01-31T23:30:00Z'))).toBe(0) // 00:30 on 1 February: a settle may still commit
+  expect(await of(p.id)).toEqual([])
+  expect(await issueCommissionInvoices(db, new Date('2041-02-01T00:30:00Z'))).toBe(1) // 01:30
+  const [inv] = await of(p.id)
+  expect([inv.month, (inv.draft as CommissionDraft).lines.map((l) => l.bookingId)]).toEqual(['2041-01', [late]])
+})
+
+it('a missed month is caught up, oldest first, within the time budget', async () => {
+  const p = await provider()
+  await settled(p.id, new Date('2042-01-10T10:00:00Z'))
+  await settled(p.id, new Date('2042-03-10T10:00:00Z')) // February: none
+  const now = new Date('2042-05-10T10:00:00Z')
+  let checks = 0
+  // time is up after the first invoice (checks: before the due query, before the first, before the second)
+  expect(await issueCommissionInvoices(db, now, { clock: () => now, timeUp: () => ++checks > 2 })).toBe(1)
+  expect((await of(p.id)).map((i) => i.month)).toEqual(['2042-01'])
+  expect(await issueCommissionInvoices(db, now, { clock: () => now })).toBe(1)
+  const [jan, mar] = await of(p.id)
+  expect(mar.month).toBe('2042-03')
+  expect(seq(mar.number)).toBe(seq(jan.number) + 1)
+  expect(await issueCommissionInvoices(db, now, { timeUp: () => true })).toBe(0)
 })
 
 it('real releases: commission rows from settle are invoiced next month; refunded and provider-cancelled bookings (no commission) give nothing', async () => {
@@ -224,21 +257,42 @@ it('only the provider can download it', async () => {
   await expect(asUser(p.uid, (tx) => tx.execute(sql`DELETE FROM commission_invoices WHERE id = ${inv.id}`))).rejects.toMatchObject(denied)
 })
 
-it('account deletion keeps the commission invoice; a provider deleted before the run gets none and the run goes on', async () => {
+it('account deletion keeps the commission invoice and first issues every month still open, the current one too', async () => {
   const p = await provider()
   const gone = await provider()
   await settled(p.id, new Date('2039-01-10T10:00:00Z'))
-  await settled(gone.id, new Date('2039-02-10T10:00:00Z'))
   await issueCommissionInvoices(db, new Date('2039-02-02T10:00:00Z'))
   const [inv] = await of(p.id)
   await deleteAccount(p.uid, EMAIL(p.uid), () => {})
   expect((await pool.query('SELECT id FROM providers WHERE id = $1', [p.id])).rows).toEqual([])
   expect(await of(p.id)).toEqual([inv])
   expect(pdfOf(inv)).toBeDefined()
-  await deleteAccount(gone.uid, EMAIL(gone.uid), () => {})
-  expect(await issueCommissionInvoices(db, new Date('2039-03-02T10:00:00Z'))).toBe(0)
+  // an earlier month never invoiced, and this month so far
+  const old = await settled(gone.id, new Date('2039-02-10T10:00:00Z'))
+  const today = await settled(gone.id, new Date())
+  const thisMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit' }).format(new Date())
+  // a refused deletion (wrong email) issues nothing early
+  await expect(deleteAccount(gone.uid, 'wrong@test.skilled.invalid', () => {})).rejects.toMatchObject({ status: 400 })
   expect(await of(gone.id)).toEqual([])
-  await pool.query('DELETE FROM commission_invoices WHERE provider_id = $1', [p.id]) // no provider row left for cleanupUsers to find
+  await deleteAccount(gone.uid, EMAIL(gone.uid), () => {})
+  const issued = await of(gone.id)
+  expect(issued.map((i) => [i.month, (i.draft as CommissionDraft).lines.map((l) => l.bookingId), (i.draft as CommissionDraft).recipient.name])).toEqual(
+    [[thisMonth, [today], 'Hans Müller'], ['2039-02', [old], 'Hans Müller']].sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  )
+  for (const i of issued) expect(pdfOf(i)).toBeDefined()
+  expect(await issueCommissionInvoices(db, new Date('2039-03-02T10:00:00Z'))).toBe(0) // nothing left for the deleted provider
+  await pool.query('DELETE FROM commission_invoices WHERE provider_id IN ($1, $2)', [p.id, gone.id]) // no provider row left for cleanupUsers to find
+})
+
+it('an account deletion is refused while a month with commission cannot be invoiced', async () => {
+  const p = await provider()
+  const b = await settled(p.id, new Date('2043-01-10T10:00:00Z'))
+  // a second currency in one month: issuing throws (logged), so the month stays open
+  await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, currency, gateway_ref, idempotency_key, created_at) VALUES ($1, $2, 'commission', 1, 'USD', 'x', $3, '2043-01-11T10:00:00Z')", [b, p.id, `commission-usd:${b}`])
+  const refused = (await deleteAccount(p.uid, EMAIL(p.uid), () => {}).catch((e: unknown) => e)) as Response
+  expect([refused.status, (await refused.json()).error]).toEqual([409, 'OPEN_BOOKINGS'])
+  expect((await pool.query('SELECT id FROM users WHERE id = $1', [p.uid])).rows).toHaveLength(1)
+  expect(await of(p.id)).toEqual([])
 })
 
 it('runs from the timers inside the run budget', async () => {

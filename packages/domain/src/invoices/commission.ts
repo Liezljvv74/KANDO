@@ -27,18 +27,21 @@ export type CommissionLine = { bookingId: string; description: string; date: str
  */
 export type CommissionDraft = { month: string; issuer: Party; recipient: Party; lines: CommissionLine[]; total: number; currency: string; notes: string[] }
 
-/** At most this many providers per run (on top of the time budget). */
+/** At most this many invoices per run (on top of the time budget). */
 const COMMISSION_CAP = 200
+/**
+ * A month is invoiced this long after it ended: a commission row is stamped at its settle transaction's start, which may
+ * commit seconds later (gateway calls), so a row stamped 23:59:59 on the last day is in the ledger before its month is issued.
+ */
+export const COMMISSION_GRACE_MINUTES = 60
+export const COMMISSION_LIST_URL = 'skilled://invoices/commission'
 const LOST = Symbol('lost') // another run issued this invoice first
 
 const ym = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit' })
 const day = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric' })
 
-/** The calendar month before `now` in TIME_ZONE, as YYYY-MM. */
-export function previousMonth(now: Date): string {
-  const [y, m] = ym.format(now).split('-').map(Number) as [number, number]
-  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
-}
+/** The calendar month of an instant in TIME_ZONE, as YYYY-MM. */
+export const monthOf = (d: Date): string => ym.format(d)
 
 /** `l.created_at` falls in the month in TIME_ZONE (midnight to midnight local time, so DST shifts are right). */
 const inMonth = (month: string) => {
@@ -46,14 +49,26 @@ const inMonth = (month: string) => {
   return sql`l.created_at >= ${first}::timestamp AT TIME ZONE ${TIME_ZONE} AND l.created_at < (${first}::timestamp + interval '1 month') AT TIME ZONE ${TIME_ZONE}`
 }
 
-/** Providers (still existing) with commission in the month and no commission invoice for it, oldest id first. */
-async function dueProviders(exec: Exec, month: string): Promise<string[]> {
-  const r = await exec.execute<{ provider_id: string }>(sql`SELECT l.provider_id FROM ledger_entries l
-    WHERE l.kind = 'commission' AND ${inMonth(month)} AND EXISTS (SELECT 1 FROM providers p WHERE p.id = l.provider_id)
-      AND NOT EXISTS (SELECT 1 FROM commission_invoices c WHERE c.provider_id = l.provider_id AND c.month = ${month})
-    GROUP BY l.provider_id HAVING sum(l.amount) > 0 ORDER BY l.provider_id LIMIT ${COMMISSION_CAP}`)
-  return r.rows.map((x) => x.provider_id)
+/**
+ * Every (provider, month) with commission and no commission invoice, oldest month first: months before `before` (YYYY-MM;
+ * a missed month is caught up), or every month of one person's provider (`userId`, account deletion: the current one too).
+ * Only providers that still exist (the recipient's details are needed).
+ * ponytail: scans every commission row each run (no index on created_at); keep a "last month done" mark if that grows slow.
+ */
+async function dueMonths(exec: Exec, o: { before?: string; userId?: string; limit?: number }): Promise<{ provider_id: string; month: string }[]> {
+  const r = await exec.execute<{ provider_id: string; month: string }>(sql`SELECT m.provider_id, m.month FROM (
+      SELECT l.provider_id, to_char(l.created_at AT TIME ZONE ${TIME_ZONE}, 'YYYY-MM') AS month FROM ledger_entries l
+      WHERE l.kind = 'commission'
+        AND EXISTS (SELECT 1 FROM providers p WHERE p.id = l.provider_id ${o.userId ? sql`AND p.owner_id = ${o.userId}` : sql``})
+        ${o.before ? sql`AND l.created_at < ${`${o.before}-01`}::timestamp AT TIME ZONE ${TIME_ZONE}` : sql``}
+      GROUP BY 1, 2 HAVING sum(l.amount) > 0) m
+    WHERE NOT EXISTS (SELECT 1 FROM commission_invoices c WHERE c.provider_id = m.provider_id AND c.month = m.month)
+    ORDER BY m.month, m.provider_id LIMIT ${o.limit ?? COMMISSION_CAP}`)
+  return r.rows
 }
+
+/** The person's provider has commission in some month (the current one included) without its commission invoice. */
+export const hasUninvoicedCommission = async (exec: Exec, userId: string): Promise<boolean> => (await dueMonths(exec, { userId, limit: 1 })).length > 0
 
 /**
  * Issues one provider's commission invoice for the month, or null (provider gone, nothing to invoice, or another run won).
@@ -143,7 +158,8 @@ async function storePdf(inv: typeof commissionInvoices.$inferSelect): Promise<vo
     const [done] = await db.update(commissionInvoices).set({ fileKey: key }).where(and(eq(commissionInvoices.id, inv.id), isNull(commissionInvoices.fileKey))).returning({ id: commissionInvoices.id })
     if (!done) return
     const owner = (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, inv.providerId)))[0]?.id
-    if (owner) await notifyBookingEvent('commission-invoice-ready', owner, {})
+    // the push opens the app's commission invoice list (apps/mobile/src/app/invoices/commission.tsx)
+    if (owner) await notifyBookingEvent('commission-invoice-ready', owner, { url: COMMISSION_LIST_URL })
   } catch (e) {
     console.error(`[commission] PDF of ${inv.number} not stored: ${describeError(e)}`)
   }
@@ -151,22 +167,24 @@ async function storePdf(inv: typeof commissionInvoices.$inferSelect): Promise<vo
 
 /**
  * The monthly commission run (owner connection, each invoice its own transaction): first the PDFs a storage failure left
- * out, then one invoice per provider with commission in the previous month in TIME_ZONE and none for it yet, until
- * `timeUp` or COMMISSION_CAP. Idempotent (unique provider and month); a provider deleted before the run is skipped (no
- * recipient left). Returns how many it issued. Never throws: a failure is logged and the next run retries.
- * ponytail: the due query scans the month's commission rows by created_at without an index; add one on (kind, created_at) if it grows slow.
+ * out, then one invoice per provider and month with commission and none for it yet, for every month that ended at least
+ * COMMISSION_GRACE_MINUTES before `now` in TIME_ZONE (oldest first, so a missed month is caught up), until `timeUp` or
+ * COMMISSION_CAP. Idempotent (unique provider and month). `userId` (account deletion): that person's provider only, every
+ * month including the current, partial one, as the recipient's details are about to go. Returns how many it issued. Never
+ * throws: a failure is logged and the next run retries.
  */
-export async function issueCommissionInvoices(exec: Exec, now: Date, opts: { timeUp?: () => boolean; clock?: () => Date } = {}): Promise<number> {
+export async function issueCommissionInvoices(exec: Exec, now: Date, opts: { timeUp?: () => boolean; clock?: () => Date; userId?: string } = {}): Promise<number> {
   const timeUp = opts.timeUp ?? (() => false)
-  const month = previousMonth(now)
   let issued = 0
   try {
-    const pending = await exec.select().from(commissionInvoices).where(isNull(commissionInvoices.fileKey)).orderBy(asc(commissionInvoices.issuedAt)).limit(COMMISSION_CAP)
+    const pending = await exec.select().from(commissionInvoices).where(and(isNull(commissionInvoices.fileKey), opts.userId ? sql`${commissionInvoices.providerId} IN (SELECT id FROM providers WHERE owner_id = ${opts.userId})` : undefined)).orderBy(asc(commissionInvoices.issuedAt)).limit(COMMISSION_CAP)
     for (const inv of pending) {
       if (timeUp()) return issued
       await storePdf(inv)
     }
-    for (const id of await dueProviders(exec, month)) {
+    if (timeUp()) return issued
+    const due = await dueMonths(exec, opts.userId ? { userId: opts.userId } : { before: monthOf(new Date(now.getTime() - COMMISSION_GRACE_MINUTES * 60_000)) })
+    for (const { provider_id: id, month } of due) {
       if (timeUp()) break
       try {
         const inv = await issueOne(id, month, opts.clock ?? (() => new Date()))

@@ -4,6 +4,7 @@ import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
 import { hasUninvoicedPayout, issueDueInvoices } from './invoices/issue'
+import { hasUninvoicedCommission, issueCommissionInvoices } from './invoices/commission'
 import type { Exec } from './providers/eligibility'
 import { fail } from './providers/http'
 import { documentsBucket, mediaBucket, storage } from './storage'
@@ -76,7 +77,7 @@ export async function flushPendingObjects(ids?: string[]): Promise<number> {
  * Deletes the person and everything of theirs for good (GDPR erasure), in one transaction on the owner connection (app_user
  * may not delete from several of these tables). 400 EMAIL_MISMATCH unless `confirmEmail` is their stored email; 409
  * LAST_ADMIN for the only Administrator; 409 OPEN_BOOKINGS while they are customer or provider on a booking holding money
- * (MONEY_OPEN_STATUSES), or with paid-out money on a booking group that has no invoice yet. The object keys are written to pending_object_deletes in the same transaction; after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
+ * (MONEY_OPEN_STATUSES), or with paid-out money on a booking group that has no invoice yet, or with commission of a month that has no commission invoice yet. The object keys are written to pending_object_deletes in the same transaction; after the commit the objects are deleted and their rows cleared, and the daily job retries what is left, so erasure of
  * the files does not hang on one attempt. Then the confirmation email goes to the address as it was before.
  * The shared translations cache and the rate-limit rows keyed by an ip hash are not the person's data and stay.
  */
@@ -94,7 +95,12 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
   // the root bookings itself), and only when the deletion is not refused anyway (wrong email, money still open), so a
   // refused deletion never invoices a group early. The transaction below refuses if one is still missing.
   const [me] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
-  if (me && confirmEmail.trim().toLowerCase() === me.email.toLowerCase() && !(await moneyOpen(db, userId))) await issueDueInvoices(db, new Date(), { userId, forDeletion: true })
+  // The provider's commission invoices likewise: every month with commission, the current partial one too (the provider's
+  // details are needed as the recipient).
+  if (me && confirmEmail.trim().toLowerCase() === me.email.toLowerCase() && !(await moneyOpen(db, userId))) {
+    await issueDueInvoices(db, new Date(), { userId, forDeletion: true })
+    await issueCommissionInvoices(db, new Date(), { userId })
+  }
   const { email, language, tombstones, keepUntil } = await db.transaction(async (tx) => {
     // Lock order everywhere: the Administrator set (by id) first, then the person's own row.
     const admins = await lockAdmins(tx)
@@ -115,7 +121,8 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
       .for('update')
     if (theirs.some((b) => (b.paidAt && !b.releasedAt) || (MONEY_OPEN_STATUSES as readonly string[]).includes(b.status))) fail(409, { error: 'OPEN_BOOKINGS' })
     // provider money paid out on a group without its invoice (issuing failed just now): the invoice must exist first
-    if (await hasUninvoicedPayout(tx, userId)) fail(409, { error: 'OPEN_BOOKINGS' })
+    // the same for KANDO's commission invoices to the provider
+    if ((await hasUninvoicedPayout(tx, userId)) || (await hasUninvoicedCommission(tx, userId))) fail(409, { error: 'OPEN_BOOKINGS' })
     // Every object key first: after the rows are gone nothing says where the files are.
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))
