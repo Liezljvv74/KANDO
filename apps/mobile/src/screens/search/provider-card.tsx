@@ -4,8 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { SearchItem } from '@kando/contract'
 
 import { Avatar } from '@/components/avatar'
-import { t } from '@/i18n'
-import { formatDistance, formatPrice } from '@/lib/format'
+import { formatDistance, formatPrice, ratingBadge } from '@/lib/format'
 
 export function ProviderCard({ item, names }: { item: SearchItem; names: Map<string, string> }) {
   const meta = [item.fromPrice != null ? formatPrice({ priceType: 'from', price: item.fromPrice, currency: item.currency }) : null, formatDistance(item)]
@@ -21,7 +20,7 @@ export function ProviderCard({ item, names }: { item: SearchItem; names: Map<str
           <Text style={styles.name} numberOfLines={1}>
             {item.publicName}
           </Text>
-          {item.isNew && <Text style={styles.badge}>{t('badge.new')}</Text>}
+          <Text style={styles.badge}>{ratingBadge(item.rating)}</Text>
         </View>
         <Text style={styles.sub} numberOfLines={1}>
           {item.categories.map((s) => names.get(s) ?? s).join(' · ')}

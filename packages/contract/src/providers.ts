@@ -14,6 +14,8 @@ export const SearchItemSchema = z.object({
   currency: CurrencySchema,
   distanceKm: z.number().nullable(),
   worksRemotely: z.boolean(),
+  /** Customers' visible reviews: average stars and count; null when there are none (then isNew). */
+  rating: RatingSchema.nullable(),
   isNew: z.boolean(),
 })
 export type SearchItem = z.infer<typeof SearchItemSchema>

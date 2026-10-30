@@ -50,6 +50,7 @@ export const de = {
   'search.submit': 'Suchen',
   'search.empty': 'Keine Anbieter gefunden. Probiere eine andere Kategorie oder Postleitzahl.',
   'search.more': 'Mehr laden',
+  'search.rating': '{average} ★ ({count})',
   'badge.new': 'Neu',
   'price.from': 'ab',
   'price.perHour': '/Std.',

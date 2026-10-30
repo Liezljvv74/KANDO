@@ -51,6 +51,7 @@ export const en: Record<Key, string> = {
   'search.submit': 'Find',
   'search.empty': 'No providers found. Try another category or postcode.',
   'search.more': 'Load more',
+  'search.rating': '{average} ★ ({count})',
   'badge.new': 'New',
   'price.from': 'from',
   'price.perHour': '/hr',
