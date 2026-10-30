@@ -26,6 +26,8 @@ export type InvoiceDraft = {
   recipient: Party
   lines: InvoiceLine[]
   totals: { net: number; vat: number; gross: number; labour: number; material: number }
+  /** The VAT rate applied to every line (0 unless business); stored so a snapshot prints the rate that was used. */
+  vatRate: number
   currency: string
   notes: string[]
 }
@@ -118,11 +120,10 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
       ? { name: p.fullName, address: [p.basePostcode, p.basePlace].filter(Boolean).join(' ') || null, taxId: null }
       : { name: p.businessName ?? p.fullName, address: p.impressum, taxId: p.vatId ?? p.taxNumber }
 
-  const de = (x: number) => formatMoney(x, input.currency, 'de')
+  // The labour and material totals (section 35a EStG) are printed by invoiceLines in the document language, not stored as a note.
   const notes = [
     ...(legalStatus === 'kleinunternehmer' ? [`${S19_NOTE.de} / ${S19_NOTE.en}`] : []),
     onBehalfNote(issuer.name, t('de', 'brand.name')),
-    `Arbeitskosten / labour: ${de(totals.labour)}, Material: ${de(totals.material)}`,
   ]
 
   return {
@@ -132,6 +133,7 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
     recipient: { name: input.customer.fullName, address: input.customer.jobAddress, taxId: null },
     lines,
     totals,
+    vatRate: lineRate,
     currency: input.currency,
     notes,
   }
@@ -149,7 +151,10 @@ export function invoiceLines(draft: InvoiceDraft, lang: Lang): string[] {
   const m = (x: number) => formatMoney(x, draft.currency, lang)
   const date = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(LOCALE[lang], { timeZone: 'UTC' })
   const vat = draft.legalStatus === 'business'
-  const party = (label: string, x: Party) => [label, x.name, ...(x.address ? [x.address] : []), ...(x.taxId ? [`Steuernummer / USt-IdNr. (Tax number / VAT ID): ${x.taxId}`] : [])]
+  const pct = new Intl.NumberFormat(LOCALE[lang], { style: 'percent', maximumFractionDigits: 2 }).format(draft.vatRate)
+  const ust = `USt. ${pct} (VAT ${pct})`
+  // The Impressum usually starts with the business name: print the name only when it does not.
+  const party = (label: string, x: Party) => [label, ...(x.address?.startsWith(x.name) ? [] : [x.name]), ...(x.address ? [x.address] : []), ...(x.taxId ? [`Steuernummer / USt-IdNr. (Tax number / VAT ID): ${x.taxId}`] : [])]
   const out = [
     draft.kind === 'invoice' ? 'Rechnung (Invoice)' : 'Quittung (Receipt)',
     ...party('Von (From):', draft.issuer),
@@ -158,10 +163,10 @@ export function invoiceLines(draft: InvoiceDraft, lang: Lang): string[] {
   for (const l of draft.lines) {
     out.push(`${KIND_LABEL[l.kind]}: ${l.description}, Leistungsdatum (Service date): ${date(l.serviceDate)}`)
     if (l.labour || l.material) out.push(`  Arbeitskosten (Labour): ${m(l.labour)}, Material (Material): ${m(l.material)}`)
-    out.push(vat ? `  Netto (Net): ${m(l.net)}, USt. (VAT): ${m(l.vat)}, Brutto (Gross): ${m(l.gross)}` : `  Betrag (Amount): ${m(l.gross)}`)
+    out.push(vat ? `  Netto (Net): ${m(l.net)}, ${ust}: ${m(l.vat)}, Brutto (Gross): ${m(l.gross)}` : `  Betrag (Amount): ${m(l.gross)}`)
   }
   const tt = draft.totals
-  out.push(vat ? `Summe netto (Total net): ${m(tt.net)}, USt. (VAT): ${m(tt.vat)}, Summe brutto (Total gross): ${m(tt.gross)}` : `Summe (Total): ${m(tt.gross)}`)
+  out.push(vat ? `Summe netto (Total net): ${m(tt.net)}, ${ust}: ${m(tt.vat)}, Summe brutto (Total gross): ${m(tt.gross)}` : `Summe (Total): ${m(tt.gross)}`)
   out.push(`Arbeitskosten (Labour): ${m(tt.labour)}, Material (Material): ${m(tt.material)}`)
   return [...out, ...draft.notes]
 }

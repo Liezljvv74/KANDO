@@ -51,6 +51,7 @@ describe('buildInvoice', () => {
     expect(d.kind).toBe('invoice')
     expect(d.notes.some((n) => n.includes(S19_NOTE.de) && n.includes(S19_NOTE.en))).toBe(true)
     expect(d.totals).toMatchObject({ net: 100, vat: 0, gross: 100 })
+    expect(d.vatRate).toBe(0)
     expect(d.issuer).toEqual({ name: 'Malerei Pinsel', address: 'Malerei Pinsel, Hauptstr. 1, 10115 Berlin', taxId: 'DE123456789' })
   })
 
@@ -59,6 +60,11 @@ describe('buildInvoice', () => {
     expect(d.kind).toBe('invoice')
     expect(d.lines[0]).toMatchObject({ gross: 119, net: 100, vat: 19 })
     expect(d.totals).toMatchObject({ net: 100, vat: 19, gross: 119 })
+    expect(d.vatRate).toBe(0.19)
+    const de = invoiceLines(d, 'de').join('\n')
+    expect(de).toMatch(/Netto \(Net\): .*, USt\. 19\s%\s\(VAT 19\s%\): /)
+    expect(de).toMatch(/Summe netto \(Total net\): .*, USt\. 19\s%\s\(VAT 19\s%\): /)
+    expect(invoiceLines(d, 'en').join('\n')).toMatch(/USt\. 19% \(VAT 19%\)/)
     expect(d.notes.some((n) => n.includes('§ 19'))).toBe(false)
   })
 
@@ -70,6 +76,7 @@ describe('buildInvoice', () => {
   it('private: a receipt, no VAT, no section 19 note', () => {
     const d = build([booking()], 'private')!
     expect(d.kind).toBe('receipt')
+    expect(d.vatRate).toBe(0)
     expect(d.totals).toMatchObject({ net: 100, vat: 0, gross: 100 })
     expect(d.notes.some((n) => n.includes('§ 19'))).toBe(false)
     expect(d.issuer).toEqual({ name: 'Petra Pinsel', address: '10115 Berlin', taxId: null })
@@ -85,7 +92,14 @@ describe('buildInvoice', () => {
   it('material 20 of 100 with a share of 50 gives material 10 and labour 40', () => {
     const d = build([booking({ materialAmount: 20, providerShare: 50, status: 'stopped' })])!
     expect(d.lines[0]).toMatchObject({ kind: 'job', material: 10, labour: 40, gross: 50 })
-    expect(d.notes).toContain(`Arbeitskosten / labour: ${formatMoney(40, 'EUR', 'de')}, Material: ${formatMoney(10, 'EUR', 'de')}`)
+    const total = (lang: 'de' | 'en') => `Arbeitskosten (Labour): ${formatMoney(40, 'EUR', lang)}, Material (Material): ${formatMoney(10, 'EUR', lang)}`
+    for (const lang of ['de', 'en'] as const) {
+      const text = invoiceLines(d, lang)
+      expect(text).toContain(total(lang))
+      expect(text.join('\n').split('Arbeitskosten').length - 1).toBe(2) // once on the line, once in the totals
+      expect(text.join('\n')).not.toContain(formatMoney(40, 'EUR', lang === 'de' ? 'en' : 'de'))
+    }
+    expect(d.notes.some((n) => n.includes('Arbeitskosten'))).toBe(false)
   })
 
   it('material greater than the share clamps to the share', () => {
@@ -184,11 +198,16 @@ describe('invoiceLines', () => {
       expect(text).toContain('Rechnung (Invoice)')
       expect(text).toContain('Zusatzauftrag (Additional task)')
       expect(text).toContain('Arbeitskosten (Labour)')
-      expect(text).toContain('USt. (VAT)')
+      expect(text).toContain('(VAT 19')
       expect(text).not.toMatch(/undefined|NaN|null/)
     }
     expect(invoiceLines(d, 'de').join('\n')).toContain(formatMoney(130, 'EUR', 'de'))
     expect(invoiceLines(d, 'en').join('\n')).toContain(formatMoney(130, 'EUR', 'en'))
+  })
+
+  it('prints the business name once when the Impressum starts with it', () => {
+    const text = invoiceLines(build([booking()])!, 'de')
+    expect(text.filter((l) => l.includes('Malerei Pinsel'))).toEqual(['Malerei Pinsel, Hauptstr. 1, 10115 Berlin', expect.stringContaining('Ausgestellt')])
   })
 
   it('a receipt says so and shows no VAT', () => {
