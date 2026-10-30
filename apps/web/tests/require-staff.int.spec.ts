@@ -2,9 +2,10 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 
 let sessionId = 'none'
+let authStatus = 200
 vi.mock('../lib/auth/server', () => ({
   getAuth: () => ({
-    getSession: async () => ({ data: { user: { id: sessionId } } }),
+    getSession: async () => (authStatus === 200 ? { data: { user: { id: sessionId } }, error: null } : { data: null, error: { status: authStatus } }),
   }),
 }))
 
@@ -33,3 +34,12 @@ const status = async (id: string, role: 'admin' | 'reviewer' | 'any') => {
 it('an active admin passes', async () => expect(await status('s-admin', 'admin')).toBe(200))
 it('a suspended admin gets 403', async () => expect(await status('s-susp', 'any')).toBe(403))
 it('an expired suspension no longer blocks', async () => expect(await status('s-past', 'reviewer')).toBe(200))
+it('a busy login server is 503 AUTH_BUSY, not a sign-out; a real 401 stays 401', async () => {
+  authStatus = 429
+  const busy = await requireStaff('any').catch((e: Response) => e)
+  expect((busy as Response).status).toBe(503)
+  expect(await (busy as Response).json()).toEqual({ error: 'AUTH_BUSY' })
+  authStatus = 401
+  expect(await status('s-admin', 'any')).toBe(401)
+  authStatus = 200
+})

@@ -7,6 +7,9 @@ import { EmailConflictError, ensureUser, SessionGoneError, type SessionUser } fr
 export type RouteHandler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>
 /** The signed-in account as the auth server knows it; `name` is the account name given at sign-up. */
 export type Session = { id: string; email: string; emailVerified: boolean; name?: string }
+/** The login server could not say who is signed in (a rate limit, 5xx, no answer): not a sign-out. The message holds a status or error name only, never a cookie. */
+export class AuthUnavailableError extends Error {}
+/** null: not signed in. Throws AuthUnavailableError when the login server cannot tell. */
 export type SessionResolver = (request: Request) => Promise<Session | null>
 export type AfterCommit = (fn: () => Promise<void>) => void
 type Opts<P> = {
@@ -71,7 +74,12 @@ export function createAppRequest(getSession: SessionResolver, opts: { schedule?:
       }
       try {
         if (isCrossSiteWrite(request)) return Response.json({ error: 'Forbidden' }, { status: 403 })
-        const found = await getSession(request)
+        // A busy login server is 503 AUTH_BUSY, never a 401 (the phone signs out on 401). Only a public read (optional auth, GET) is still served, as anonymous.
+        const found = await getSession(request).catch((e) => {
+          if (!(e instanceof AuthUnavailableError) || opts.auth !== 'optional' || request.method !== 'GET') throw e
+          console.error(`[app-request ${requestId}] auth busy (${e.message}), served as anonymous`)
+          return null
+        })
         if (!found && opts.auth === 'required') return Response.json({ error: 'Unauthorized' }, { status: 401 })
         if (found && !found.emailVerified && opts.auth === 'required') {
           return Response.json({ error: 'EMAIL_NOT_VERIFIED' }, { status: 403 })
@@ -116,6 +124,10 @@ export function createAppRequest(getSession: SessionResolver, opts: { schedule?:
         // A Response thrown by a handler (parseBody/parseQuery: 400) is the answer, as is.
         if (error instanceof Response) return error
         if (error instanceof SessionGoneError) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        if (error instanceof AuthUnavailableError) {
+          console.error(`[app-request ${requestId}] ${request.method} ${new URL(request.url).pathname} auth busy (${error.message})`)
+          return Response.json({ error: 'AUTH_BUSY' }, { status: 503 })
+        }
         if (error instanceof EmailConflictError) {
           console.error(`[app-request ${requestId}] email conflict`)
           return Response.json({ error: error.message }, { status: 409 })
