@@ -65,6 +65,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       role: roleOf(b.customerId),
       source: b.source,
       quoteId: b.quoteId,
+      parentBookingId: b.parentBookingId,
       status: b.status,
       startAt: b.startAt,
       durationMin: b.durationMin,

@@ -41,10 +41,18 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   proposed: ['awaiting-payment', 'expired', 'declined', 'withdrawn', 'proposed'],
   // -> confirmed only by the payment webhook on the owner connection (trigger bookings_guard_status); plan 2d adds the ways out of confirmed
   'awaiting-payment': ['expired', 'withdrawn', 'confirmed'],
+  // A paid booking and its endings move only on the owner connection (OWNER_ONLY_BOOKING_STATUSES, trigger
+  // bookings_guard_status), after the domain checked the caller; plan 2d's ending rules add those transitions here.
   confirmed: [],
   expired: [],
   declined: [],
   withdrawn: [],
+  finished: [],
+  completed: [],
+  disputed: [],
+  cancelled: [],
+  stopped: [],
+  refunded: [],
 }
 
 export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)

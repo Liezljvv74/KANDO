@@ -57,6 +57,7 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   serviceId: b.serviceId,
   quoteId: b.quoteId,
   requestId: b.requestId,
+  parentBookingId: b.parentBookingId,
   source: b.source as Booking['source'],
   status: b.status as Booking['status'],
   startAt: iso(b.startAt),

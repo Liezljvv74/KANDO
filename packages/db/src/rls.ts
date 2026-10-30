@@ -52,10 +52,10 @@ export const APPEND_ONLY_TABLES: Record<string, { read: string; insert: string }
 
 // Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
 export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
-  requests: ['customer_id', 'provider_id'],
   // A quote is final once sent (the booking's price is copied from it): only status and reminder_sent_at change.
   quotes: ['request_id', 'provider_id', 'amount', 'currency', 'scope', 'start_at', 'duration_min', 'expires_at'],
-  bookings: ['customer_id', 'provider_id', 'request_id'],
+  bookings: ['customer_id', 'provider_id', 'request_id', 'parent_booking_id'],
+  requests: ['customer_id', 'provider_id', 'parent_booking_id'],
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
@@ -68,11 +68,24 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
   // Money and payment: the price comes from the quote or service (bookings_fill_amount), the rest from the payment code.
   // The app role still reads them; no DTO carries commission_rate or the gateway references. App inserts use bookingAppInsert.
-  bookings: ['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at'],
+  // The endings (plan 2d) likewise: finishing, cancelling, stopping and disputing run on the owner connection after the
+  // domain checked the caller.
+  bookings: [
+    'amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at',
+    'parent_booking_id', 'finished_at', 'confirm_by', 'confirm_reminders_sent', 'asked_done_at', 'completed_at', 'cancelled_at',
+    'cancelled_by', 'late_cancel', 'no_show', 'no_show_reported_at', 'stopped_at', 'stopped_by', 'stop_amount', 'stop_note',
+    'stop_stated_at', 'material_amount',
+  ],
 }
 
-/** Booking statuses only the owner connection (the payment code, staff) may set; plan 2d appends. */
-export const OWNER_ONLY_BOOKING_STATUSES = ['confirmed'] as const
+/**
+ * Booking statuses app_user may neither set nor leave: paid (confirmed) and every ending. Each ending is reached from a paid
+ * booking, so the owner connection (the payment code, the endings after the domain checked the caller, staff) moves it.
+ */
+export const OWNER_ONLY_BOOKING_STATUSES = ['confirmed', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
+
+/** Statuses whose booking holds the provider's time (busy_times, slotIsHeld): paid, and every ending where the work was on. */
+export const SLOT_HOLDING_STATUSES = ['confirmed', 'finished', 'disputed', 'stopped', 'completed'] as const
 
 // Suspensions end by their date: a past suspended_until counts as none.
 // The one SQL test for it, for a column of `alias` (e.g. 'p' for providers p); used by every query and policy that hides suspended profiles.
@@ -101,11 +114,15 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
 // Readable by everyone, insertable by any app request, never updated or deleted by app_user.
 export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
 
-// Readable by app_user only where the expression holds (drafts stay hidden), written only by staff (owner connection,
-// which sees everything).
+// Readable by app_user where the expression holds, written only on the owner connection (staff, or the domain after it
+// checked the caller), which sees everything.
 export const PUBLISHED_READ_TABLES: Record<string, string> = {
   pages: 'published',
   page_texts: 'EXISTS (SELECT 1 FROM pages p WHERE p.id = page_id AND p.published)',
+  // The two parties of the booking.
+  disputes: `EXISTS (SELECT 1 FROM bookings b WHERE b.id = booking_id AND (b.customer_id = app_current_user_id() OR EXISTS (SELECT 1 FROM providers p WHERE p.id = b.provider_id AND p.owner_id = app_current_user_id())))`,
+  // Blind until visible (both written, or the time ran out); hidden ones only for their author.
+  reviews: '(NOT hidden AND visible_at IS NOT NULL AND visible_at <= now()) OR author_id = app_current_user_id()',
 }
 
 // Readable by app_user, written only by staff (owner connection).
@@ -289,7 +306,8 @@ const ELIGIBILITY_FUNCTIONS = [
 
 // A provider's calendar for everyone: bookings are private (RLS), so this runs as the table owner and returns only
 // the time range and a state, for a published, non-suspended provider, in a window of at most 62 days.
-// 'pending' = awaiting-payment within its payment window; 'booked' = confirmed (paid).
+// 'pending' = awaiting-payment within its payment window; 'booked' = paid (SLOT_HOLDING_STATUSES).
+const HOLDING = `ARRAY[${SLOT_HOLDING_STATUSES.map((s) => `'${s}'`).join(', ')}]::text[]`
 const BUSY_FUNCTIONS = [
   `CREATE OR REPLACE FUNCTION busy_times(p_provider uuid, p_from timestamptz, p_to timestamptz)
     RETURNS TABLE (start_at timestamptz, end_at timestamptz, state text)
@@ -297,15 +315,27 @@ const BUSY_FUNCTIONS = [
     BEGIN
       IF p_to <= p_from OR p_to - p_from > interval '62 days' THEN RAISE EXCEPTION 'busy_times: range must be 1 to 62 days'; END IF;
       RETURN QUERY
-        SELECT b.start_at, b.start_at + b.duration_min * interval '1 minute', CASE WHEN b.status = 'confirmed' THEN 'booked' ELSE 'pending' END::text
+        SELECT b.start_at, b.start_at + b.duration_min * interval '1 minute', CASE WHEN b.status = ANY (${HOLDING}) THEN 'booked' ELSE 'pending' END::text
         FROM bookings b JOIN providers p ON p.id = b.provider_id
-        WHERE b.provider_id = p_provider AND (b.status = 'confirmed' OR (b.status = 'awaiting-payment' AND b.pay_by > now()))
+        WHERE b.provider_id = p_provider AND (b.status = ANY (${HOLDING}) OR (b.status = 'awaiting-payment' AND b.pay_by > now()))
           AND p.status = 'published' AND ${notSuspended('p')}
           AND b.start_at < p_to AND b.start_at + b.duration_min * interval '1 minute' > p_from
         ORDER BY 1, 2;
     END $$`,
   `REVOKE ALL ON FUNCTION busy_times(uuid, timestamptz, timestamptz) FROM PUBLIC`,
   `GRANT EXECUTE ON FUNCTION busy_times(uuid, timestamptz, timestamptz) TO ${APP_ROLE}`,
+  // The public reliability line: the provider's late cancellations plus no-shows that stood (the booking ended cancelled or
+  // refunded, not while objected) in the last 12 months. A count only, for a published, non-suspended provider or the
+  // caller's own; 0 for anything else.
+  `CREATE OR REPLACE FUNCTION provider_reliability(p_provider uuid) RETURNS int
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+      SELECT count(*)::int FROM bookings b JOIN providers p ON p.id = b.provider_id
+      WHERE b.provider_id = p_provider
+        AND ((p.status = 'published' AND ${notSuspended('p')}) OR p.owner_id = app_current_user_id())
+        AND ((b.cancelled_by = 'provider' AND b.late_cancel AND b.status = 'cancelled' AND b.cancelled_at > now() - interval '12 months')
+          OR (b.no_show = 'provider' AND b.status IN ('cancelled', 'refunded') AND b.no_show_reported_at > now() - interval '12 months')) $$`,
+  `REVOKE ALL ON FUNCTION provider_reliability(uuid) FROM PUBLIC`,
+  `GRANT EXECUTE ON FUNCTION provider_reliability(uuid) TO ${APP_ROLE}`,
 ]
 
 // Booking guards, for every writer (the owner connection included unless said otherwise). Invoker rights: the inserting
@@ -353,6 +383,30 @@ const BOOKING_TRIGGERS = [
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
   `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE OF status ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
+  // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
+  // provider that is paid and not cancelled or refunded. A booking made from an additional task's request names that
+  // request's parent (and an ordinary request makes no additional task). Invoker rights: a parent the inserting customer
+  // cannot see counts as foreign. Runs after bookings_fill_amount (trigger names sort), so request_id is the quote's.
+  // The column never changes after insert (IMMUTABLE_COLUMNS).
+  `CREATE OR REPLACE FUNCTION check_parent_booking() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+    BEGIN
+      IF NEW.parent_booking_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM bookings b WHERE b.id = NEW.parent_booking_id AND b.customer_id = NEW.customer_id AND b.provider_id = NEW.provider_id
+          AND b.parent_booking_id IS NULL AND b.status IN ('confirmed', 'finished', 'disputed', 'stopped', 'completed')
+      ) THEN
+        RAISE EXCEPTION '%: parent booking % does not belong to this customer and provider, or is not paid', TG_TABLE_NAME, NEW.parent_booking_id;
+      END IF;
+      IF TG_TABLE_NAME = 'bookings' THEN
+        IF NEW.request_id IS NOT NULL AND NEW.parent_booking_id IS DISTINCT FROM (SELECT r.parent_booking_id FROM requests r WHERE r.id = NEW.request_id) THEN
+          RAISE EXCEPTION 'bookings: parent booking % is not the parent of request %', NEW.parent_booking_id, NEW.request_id;
+        END IF;
+      END IF;
+      RETURN NEW;
+    END $$`,
+  `DROP TRIGGER IF EXISTS bookings_parent_check ON bookings`,
+  `CREATE TRIGGER bookings_parent_check BEFORE INSERT ON bookings FOR EACH ROW EXECUTE FUNCTION check_parent_booking()`,
+  `DROP TRIGGER IF EXISTS requests_parent_check ON requests`,
+  `CREATE TRIGGER requests_parent_check BEFORE INSERT ON requests FOR EACH ROW EXECUTE FUNCTION check_parent_booking()`,
   // Money rows are never changed or removed (rows or TRUNCATE), not even on the owner connection. The one exception is the
   // test clean-up (cleanupUsers), which sets kando.ledger_cleanup for its own transaction only.
   `CREATE OR REPLACE FUNCTION ledger_append_only() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$

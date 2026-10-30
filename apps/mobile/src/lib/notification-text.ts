@@ -23,6 +23,20 @@ const KEY: Record<Notification['kind'], Key> = {
   'customers-waiting': 'notification.customersWaiting',
   'provider-available': 'notification.providerAvailable',
   'refund-issued': 'notification.refundIssued',
+  'job-finished': 'notification.jobFinished',
+  'confirm-reminder': 'notification.confirmReminder',
+  'payment-released': 'notification.paymentReleased',
+  'was-job-done': 'notification.wasJobDone',
+  'booking-cancelled': 'notification.bookingCancelled',
+  'no-show-reported': 'notification.noShowReported',
+  'dispute-opened': 'notification.disputeOpened',
+  'dispute-decided': 'notification.disputeDecided',
+  'job-stopped': 'notification.jobStopped',
+  'stop-amount-stated': 'notification.stopAmountStated',
+  'additional-task-requested': 'notification.additionalTaskRequested',
+  'review-requested': 'notification.reviewRequested',
+  'review-visible': 'notification.reviewVisible',
+  'provider-warning': 'notification.providerWarning',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */

@@ -5,7 +5,7 @@ import { AmountSchema, CurrencySchema, requiredText, text } from './common'
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
 export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn'] as const
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
-export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn'] as const
+export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
 const IsoSchema = z.string().datetime({ offset: true })
 const DurationSchema = z.number().int().min(15).max(720)
@@ -102,6 +102,8 @@ export const BookingSchema = z.object({
   quoteId: z.string().nullable(),
   /** The request a quote booking came from (its chat is the request's); null for a direct booking. */
   requestId: z.string().nullable(),
+  /** An additional task: the booking it adds to; null for an ordinary booking. */
+  parentBookingId: z.string().nullable(),
   source: z.enum(['quote', 'direct']),
   status: z.enum(BOOKING_STATUSES),
   startAt: z.string(),

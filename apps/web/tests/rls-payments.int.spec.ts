@@ -86,7 +86,7 @@ it('app_user cannot set amount or payment_ref on a booking', async () => {
 it('the app insert shape of bookings is exactly the columns app_user may write', () => {
   const all = Object.values(getTableColumns(bookings)).map((c) => c.name)
   const app = Object.values(getTableColumns(bookingAppInsert)).map((c) => c.name)
-  expect(COLUMN_STAFF_ONLY.bookings!.sort()).toEqual(['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at'].sort())
+  for (const c of ['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at']) expect(COLUMN_STAFF_ONLY.bookings).toContain(c) // plan 2d's ending columns: rls-endings
   expect(app.sort()).toEqual(all.filter((c) => !COLUMN_STAFF_ONLY.bookings!.includes(c)).sort())
 })
 
@@ -133,7 +133,7 @@ it('quote_id, service_id and request_id are frozen after insert, even when repoi
 })
 
 it('app_user cannot set status confirmed; the owner connection can', async () => {
-  expect(OWNER_ONLY_BOOKING_STATUSES).toEqual(['confirmed'])
+  expect(OWNER_ONLY_BOOKING_STATUSES).toContain('confirmed') // and the endings: rls-endings
   for (const uid of [ids.customer, ids.owner]) {
     await expect(run(uid, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly)
   }

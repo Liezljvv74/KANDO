@@ -127,6 +127,13 @@
       "when": 1793307173401,
       "tag": "0017_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793321159334,
+      "tag": "0018_endings",
+      "breakpoints": true
     }
   ]
 }
