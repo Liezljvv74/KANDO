@@ -4,7 +4,7 @@ import { AmountSchema, CurrencySchema, requiredText, text } from './common'
 import { RatingSchema } from './endings'
 
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
-export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn'] as const
+export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn', 'declined'] as const
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
 export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 

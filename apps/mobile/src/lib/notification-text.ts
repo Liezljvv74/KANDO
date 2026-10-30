@@ -41,6 +41,9 @@ const KEY: Record<Notification['kind'], Key> = {
   'provider-warning': 'notification.providerWarning',
   'invoice-ready': 'notification.invoiceReady',
   'commission-invoice-ready': 'notification.commissionInvoiceReady',
+  'request-withdrawn': 'notification.requestWithdrawn',
+  'request-declined': 'notification.requestDeclined',
+  'request-reopened': 'notification.requestReopened',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */

@@ -285,7 +285,7 @@ it('a provider whose names are missing cannot publish: missing lists name', asyn
 })
 
 it("the draft's postcode lookup uses the owner's stored country", async () => {
-  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern) VALUES ('ZZ', 'Testland', 'Testland', '^[0-9]{4}$') ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Testland', 'Testland', '^[0-9]{4}$', 'EUR') ON CONFLICT DO NOTHING")
   await pool.query("INSERT INTO postcodes (country, code, place, state, location) VALUES ('ZZ', '2000', 'Testburg', 'Test', ST_SetSRID(ST_MakePoint(28.0, -26.2), 4326)) ON CONFLICT DO NOTHING")
   try {
     await call(me.GET, 'pp-zz')

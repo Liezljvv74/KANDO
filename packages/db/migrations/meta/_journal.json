@@ -162,6 +162,13 @@
       "when": 1793368500435,
       "tag": "0022_damp_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793374903236,
+      "tag": "0023_fantastic_ogun",
+      "breakpoints": true
     }
   ]
 }

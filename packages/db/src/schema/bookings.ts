@@ -27,7 +27,7 @@ export const requests = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check('requests_status_check', sql`status in ('open','quoted','booked','expired','withdrawn')`),
+    check('requests_status_check', sql`status in ('open','quoted','booked','expired','withdrawn','declined')`),
     index('requests_provider_id_status_idx').on(t.providerId, t.status),
     index('requests_customer_id_idx').on(t.customerId),
     index('requests_service_id_idx').on(t.serviceId),

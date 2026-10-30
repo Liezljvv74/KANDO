@@ -82,6 +82,8 @@ export const services = pgTable(
     price: numeric({ precision: 10, scale: 2 }),
     currency: text().notNull().default('EUR'),
     sort: integer().notNull().default(0),
+    // Kept up to date by triggers (rls.ts): priced and every required document of the category approved. Publish and suspension are checked at read time.
+    offerable: boolean().notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
