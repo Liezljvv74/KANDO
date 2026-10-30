@@ -14,6 +14,7 @@
     "db:import:postcodes": "pnpm --filter @kando/db import:postcodes",
     "db:seed": "pnpm --filter @kando/db seed",
     "db:seed:categories": "pnpm --filter @kando/db seed:categories",
+    "payments:smoke": "pnpm --filter @kando/domain payments:smoke",
     "db:seed:test-users": "pnpm --filter @kando/domain seed:test-users",
     "db:seed:placeholder-photos": "pnpm --filter @kando/domain seed:placeholder-photos"
   },
