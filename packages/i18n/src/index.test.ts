@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { de } from './de'
-import { en } from './en'
-import { DEFAULT_LANG, formatMoney, formatPrice, isLang, LANGS, acceptLang, t, type Key } from './index'
+import { readFileSync } from 'node:fs'
+
+import { de as appDe } from './de'
+import { de as serverDe } from './de-server'
+import { en as serverEn } from './en-server'
+import { de, en, DEFAULT_LANG, formatMoney, formatPrice, isLang, LANGS, acceptLang, t, type Key } from './index'
 
 const FORBIDDEN = [
   'treuhand',
@@ -22,6 +25,21 @@ const FORBIDDEN = [
   'book a tiger',
   'ebay',
 ]
+
+describe('split catalogues', () => {
+  it('server catalogues have the same keys in DE and EN', () => {
+    expect(Object.keys(serverEn).sort()).toEqual(Object.keys(serverDe).sort())
+  })
+
+  it('the app catalogue has no admin. or email. key', () => {
+    expect(Object.keys(appDe).filter((k) => /^(admin|email)\./.test(k))).toEqual([])
+    expect(Object.keys(serverDe).filter((k) => !/^(admin|email)\./.test(k))).toEqual([])
+  })
+
+  it('lang.ts imports no catalogue', () => {
+    expect(readFileSync(new URL('./lang.ts', import.meta.url), 'utf8')).not.toMatch(/from '\.\/(de|en)/)
+  })
+})
 
 describe('catalogue', () => {
   it('de and en have the same keys', () => {

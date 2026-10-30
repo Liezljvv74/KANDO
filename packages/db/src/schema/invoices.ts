@@ -28,6 +28,8 @@ export const invoices = pgTable(
     check('invoices_kind_check', sql`kind in ('invoice','receipt')`),
     uniqueIndex('invoices_provider_id_number_idx').on(t.providerId, t.number),
     index('invoices_customer_id_idx').on(t.customerId),
+    check('invoices_total_check', sql`total >= 0`),
+    check('invoices_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
   ],
 )
 
@@ -58,5 +60,10 @@ export const commissionInvoices = pgTable(
     draft: jsonb().notNull(),
     fileKey: text('file_key'),
   },
-  (t) => [uniqueIndex('commission_invoices_provider_id_month_idx').on(t.providerId, t.month), check('commission_invoices_month_check', sql`month ~ '^[0-9]{4}-[0-9]{2}$'`)],
+  (t) => [
+    uniqueIndex('commission_invoices_provider_id_month_idx').on(t.providerId, t.month),
+    check('commission_invoices_month_check', sql`month ~ '^[0-9]{4}-[0-9]{2}$'`),
+    check('commission_invoices_total_check', sql`total >= 0`),
+    check('commission_invoices_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
+  ],
 )

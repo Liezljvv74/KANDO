@@ -22,11 +22,19 @@ export function call(
   return handler(
     new Request('http://localhost/app-api/v1/x', {
       method,
-      headers: { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' },
+      headers: { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json', origin: 'http://localhost' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
     { params: Promise.resolve(params) },
   )
+}
+
+/** The same request with `content-length` set to its body's byte length (an upload route answers 411 without one, as a phone's fetch sends it). */
+export async function sized(request: Request): Promise<Request> {
+  const body = await request.clone().arrayBuffer()
+  const headers = new Headers(request.headers)
+  headers.set('content-length', String(body.byteLength))
+  return new Request(request, { headers, body })
 }
 
 export async function seedBase(): Promise<{ categoryId: string; docCategoryId: string }> {
@@ -171,6 +179,8 @@ export async function seedProvider(
 export const staff = { id: '' }
 export const mockAuth = async () => ({
   getAuth: () => ({ getSession: async () => ({ data: staff.id ? { user: { id: staff.id } } : null }) }),
+  /** The password check: 'right-password' is right, 'busy' stands for Neon Auth not answering, anything else is wrong. */
+  verifyPassword: async (_r: Request, _e: string, p: string) => (p === 'right-password' ? 'ok' : p === 'busy' ? 'busy' : 'wrong'),
 })
 
 type Route = (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>

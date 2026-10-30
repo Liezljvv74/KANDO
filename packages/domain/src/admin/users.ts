@@ -8,7 +8,7 @@ import type { AfterCommit } from '../app-request'
 import { fail } from '../providers/http'
 import { photoUrl } from '../storage'
 import { addressOf, type StaffUser } from '../users'
-import { filterOf, like, notFound, ok, orderOf, pageOf, textOf } from './common'
+import { filterOf, isUserId, like, notFound, ok, orderOf, pageOf, textOf } from './common'
 
 /** "First Last" for searching in SQL. */
 export const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
@@ -57,7 +57,7 @@ export async function listUsers(tx: Tx, q: AdminListQuery) {
 }
 
 export async function getUser(tx: Tx, id: string) {
-  const row = (await tx.select().from(users).where(eq(users.id, id)))[0]
+  const row = isUserId(id) ? (await tx.select().from(users).where(eq(users.id, id)))[0] : undefined
   if (!row) return notFound()
   return ok((await withPictures(tx, [row]))[0])
 }
@@ -67,6 +67,7 @@ export async function getUser(tx: Tx, id: string) {
  * (search and the public page both check providers.suspended_until, so the hiding ends with the date).
  */
 export async function suspendUser(tx: Tx, staff: StaffUser, id: string, input: { until: string | null; reason: string }, afterCommit: AfterCommit) {
+  if (!isUserId(id)) return notFound()
   const until = input.until ? new Date(input.until) : null
   if (until && until <= new Date()) return fail(400, { error: 'The end must be in the future' })
   if (until && !input.reason) return fail(400, { error: 'A reason is required' })

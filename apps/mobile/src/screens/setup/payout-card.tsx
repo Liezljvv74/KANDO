@@ -11,12 +11,14 @@ import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
+import { useMe } from '@/hooks/use-me'
 import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { payoutState, saveSwitch } from '@/lib/payouts'
 import { isHttps } from '@/lib/safe-url'
 
 /** "Set up payouts": the status and the Stripe link. `useLoad` re-checks the status on focus and when the app returns to the front (no polling). */
 export function PayoutCard() {
+  const me = useMe()
   const fetch = useCallback(() => payoutStatus(), [])
   const { data, error, retry } = useLoad(fetch)
   const [opened, setOpened] = useState(false)
@@ -58,7 +60,7 @@ export function PayoutCard() {
       <Text style={styles.text}>{state === 'ready' ? t('payouts.ready') : state === 'waiting' ? t('payouts.waiting') : t('payouts.intro')}</Text>
       {state !== 'ready' && <Text style={styles.small}>{state === 'waiting' ? t('payouts.pending') : t('payouts.notStarted')}</Text>}
       {state !== 'ready' &&
-        (paymentsOff() ? (
+        (paymentsOff(me) ? (
           <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text>
         ) : (
           <SmallButton label={t(state === 'waiting' ? 'payouts.continue' : 'payouts.setUp')} onPress={open} busy={busy} />

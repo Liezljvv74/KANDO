@@ -1,17 +1,15 @@
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db, notifications, providers, reviews, type Tx } from '@kando/db'
-import type { Rating, Review, ReviewInput } from '@kando/contract'
+import { DAY, type Rating, type Review, type ReviewInput } from '@kando/contract'
 import { isUuid } from './admin/common'
-import { lockRow, sideOf } from './bookings/finish'
+import { lockRow, partyOf } from './bookings/party'
 import { notifyBookingEvent } from './bookings/notify'
 import { canEditReview, REVIEW_VISIBLE_DAYS, reviewFinalAt, reviewVisibleAt } from './bookings/ending-rules'
 import { assertNoContactDetails } from './chat/flags'
 import type { Exec } from './providers/eligibility'
-import { fail } from './providers/http'
+import { fail, notFound } from './providers/http'
 
-const DAY = 86_400_000
 type Row = typeof reviews.$inferSelect
-const notFound = () => fail(404, { error: 'Not found' })
 const textOf = (t: string | undefined) => (t ? t : null)
 
 const toReview = (r: Row, userId: string): Review => {
@@ -39,7 +37,7 @@ const toReview = (r: Row, userId: string): Review => {
  * always reveals both. Blocked while suspended (the route): a suspension is for misbehaviour, and a review is not about money.
  */
 export async function writeReview(tx: Tx, userId: string, bookingId: string, input: ReviewInput, now = new Date()): Promise<Review> {
-  const side = await sideOf(tx, userId, bookingId)
+  const side = (await partyOf(tx, userId, bookingId)).role
   if (input.text) await assertNoContactDetails(userId, input.text)
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
@@ -59,7 +57,7 @@ export async function writeReview(tx: Tx, userId: string, bookingId: string, inp
     }
     return { r, told: other ? [b.customerId, owner] : [] }
   })
-  for (const u of row.told) await notifyBookingEvent('review-visible', u, { bookingId }) // the row is written above: email and push, after commit
+  for (const u of row.told) await notifyBookingEvent('review-visible', u, { bookingId }, { written: true }) // the row is written above: email and push, after commit
   return toReview(row.r, userId)
 }
 

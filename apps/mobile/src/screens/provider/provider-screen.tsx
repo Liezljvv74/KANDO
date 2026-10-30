@@ -11,7 +11,7 @@ import { Avatar } from '@/components/avatar'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { getLang, t, useLang, type Key } from '@/i18n'
-import { formatPrice } from '@/lib/format'
+import { formatPrice, ratingBadge } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
 import { notifyOnly } from '@/lib/request-target'
 import { NotifyMe } from '@/screens/provider/notify-me'
@@ -79,7 +79,7 @@ export default function ProviderScreen() {
         <View style={styles.headerText}>
           <View style={styles.titleRow}>
             <Text style={styles.name}>{p.publicName}</Text>
-            {p.isNew && <Text style={styles.badge}>{t('badge.new')}</Text>}
+            {!p.rating && <Text style={styles.badge}>{ratingBadge(p.rating)}</Text>}
             {!!p.verified && <Text style={styles.badge}>{t('provider.verified')}</Text>}
           </View>
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
@@ -198,7 +198,7 @@ export default function ProviderScreen() {
         </Section>
       )}
 
-      {canRequest && (waitlist ? <NotifyMe slug={slug} /> : <RequestButton provider={p} />)}
+      {canRequest && (waitlist ? <NotifyMe slug={slug} watching={!!p.watching} /> : <RequestButton provider={p} />)}
     </ScrollView>
   )
 }

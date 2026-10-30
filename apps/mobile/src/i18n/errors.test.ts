@@ -21,7 +21,7 @@ test('unmapped codes and server statuses never show raw text or numbers', () => 
 test('the delete and export texts say what happened and have no status numbers', () => {
   for (const lang of ['en', 'de'] as const) {
     setLang(lang)
-    for (const text of [accountError('delete', 'EMAIL_MISMATCH'), accountError('delete', 'LAST_ADMIN'), accountError('delete', 'network'), accountError('delete', 'HTTP 500'), accountError('export', 'network'), accountError('export', 'EMAIL_MISMATCH')]) {
+    for (const text of [accountError('delete', 'WRONG_PASSWORD'), accountError('delete', 'AUTH_BUSY'), accountError('delete', 'LAST_ADMIN'), accountError('delete', 'network'), accountError('delete', 'HTTP 500'), accountError('export', 'network'), accountError('export', 'WRONG_PASSWORD')]) {
       expect(text).not.toMatch(/\b\d{3}\b|HTTP/)
       expect(text.length).toBeGreaterThan(40)
     }
@@ -30,7 +30,7 @@ test('the delete and export texts say what happened and have no status numbers',
   expect(accountError('delete', 'LAST_ADMIN')).toContain('another person Administrator')
   expect(accountError('delete', 'network')).toContain('not deleted')
   expect(accountError('delete', 'network')).toContain('info@skillweb.space') // the {contact} placeholder is filled
-  expect(accountError('export', 'EMAIL_MISMATCH')).toContain('could not be exported') // a delete code never shows on export
+  expect(accountError('export', 'WRONG_PASSWORD')).toContain('could not be exported') // a delete code never shows on export
 })
 
 test('every booking rule code from the server has its own text in both languages', () => {
@@ -51,6 +51,25 @@ test('the chat rejections have their own text in both languages', () => {
     expect(errorText('CONTACT_DETAILS')).toBe(t('chat.contactBlocked'))
     expect(errorText('BLOCKED')).toBe(t('chat.blocked'))
   }
+})
+
+test('LENGTH_REQUIRED has a mapped text', () => {
+  expect(errorKeys.LENGTH_REQUIRED).toBeTruthy()
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(errorText('LENGTH_REQUIRED')).not.toMatch(/LENGTH|411/)
+    expect(errorText('LENGTH_REQUIRED').trim()).not.toBe('')
+  }
+})
+
+test('MESSAGE_LIMIT has its own text', () => {
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(errorText('MESSAGE_LIMIT')).toBe(t('chat.sendLimit'))
+    expect(errorText('MESSAGE_LIMIT')).not.toBe(errorText('unmapped'))
+  }
+  setLang('en')
+  expect(errorText('MESSAGE_LIMIT')).toContain('wait a few minutes')
 })
 
 test('every ending and review code a customer or provider can get has its own text in both languages', () => {

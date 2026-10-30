@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { sql } from 'drizzle-orm'
-import { clearOutbox, clearPushOutbox, outboxForTests, pushOutboxForTests, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, setGatewayForTests, writeReview } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, writeReview } from '@kando/domain'
+import { outboxForTests, pushOutboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
@@ -46,7 +47,7 @@ async function done(o: { completedAt?: Date; status?: string; provider?: string;
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, completed_at, released_at, parent_booking_id)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_rv', 0.12, $5::timestamptz + interval '1 hour',
+       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_rv_' || gen_random_uuid(), 0.12, $5::timestamptz + interval '1 hour',
          CASE WHEN $4 = 'completed' THEN $6::timestamptz END, CASE WHEN $4 = 'completed' THEN $6::timestamptz END, $7) RETURNING id`,
       [o.customer ?? U.cust, p, service, status, startAt, completedAt, o.parent ?? null],
     )
@@ -281,7 +282,7 @@ it('the provider page shows average and count of visible customer reviews only',
   // the provider sees the customer's rating on a request (the provider's visible reviews of them only)
   const req = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Hecke', now() + interval '3 days') RETURNING id", [U.other, ratedProviderId])).rows[0].id
   expect((await asUser(U.rated, (tx) => getRequest(tx, U.rated, req))).customerRating).toEqual({ average: 1, count: 1 })
-  expect((await asUser(U.rated, (tx) => listRequests(tx, U.rated, 'provider'))).find((r) => r.id === req)?.customerRating).toEqual({ average: 1, count: 1 })
+  expect((await asUser(U.rated, (tx) => listRequests(tx, U.rated, 'provider'))).docs.find((r) => r.id === req)?.customerRating).toEqual({ average: 1, count: 1 })
   expect((await asUser(U.other, (tx) => getRequest(tx, U.other, req))).customerRating).toBeUndefined() // not on the customer's own view
   // the author's export lists what they wrote
   const exported = await asUser(U.other, (tx) => exportMyData(tx, U.other))

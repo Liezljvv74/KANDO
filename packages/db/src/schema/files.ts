@@ -25,19 +25,24 @@ export const photos = pgTable(
     check('photos_kind_check', sql`kind in ('profile','portfolio')`),
     check('photos_profile_provider_check', sql`(kind = 'profile') = (provider_id IS NULL)`),
     index('photos_provider_id_idx').on(t.providerId),
+    index('photos_owner_id_idx').on(t.ownerId),
     uniqueIndex('photos_one_profile_idx').on(t.ownerId).where(sql`kind = 'profile'`),
   ],
 )
 
 // A PDF uploaded but not yet submitted for a check (private bucket). Submitting turns it into a documents row.
-export const privateFiles = pgTable('private_files', {
-  id: uuid().primaryKey().defaultRandom(),
-  ownerId: text('owner_id')
-    .notNull()
-    .references(() => users.id),
-  key: text().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const privateFiles = pgTable(
+  'private_files',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id),
+    key: text().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('private_files_owner_id_idx').on(t.ownerId)],
+)
 
 // Uploaded verification files (the key points into the private bucket). Staff review them: owners cannot set the verdict.
 export const documents = pgTable(
@@ -74,11 +79,15 @@ export const pendingObjectDeletes = pgTable('pending_object_deletes', {
 
 // A legal-duty record kept after an account is deleted (the trader's basic details and the metadata of their submitted
 // documents, whose objects stay in storage until delete_after). No foreign keys: the person is gone. app_user has no access.
-export const retainedRecords = pgTable('retained_records', {
-  id: uuid().primaryKey().defaultRandom(),
-  formerUserId: text('former_user_id').notNull(),
-  details: jsonb().notNull(),
-  documents: jsonb().notNull().default(sql`'[]'::jsonb`),
-  deleteAfter: timestamp('delete_after', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const retainedRecords = pgTable(
+  'retained_records',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    formerUserId: text('former_user_id').notNull(),
+    details: jsonb().notNull(),
+    documents: jsonb().notNull().default(sql`'[]'::jsonb`),
+    deleteAfter: timestamp('delete_after', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('retained_records_delete_after_idx').on(t.deleteAfter)],
+)

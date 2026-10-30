@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { ACCOUNT_TABLES, clearOutbox, outboxForTests, setStorageForTests } from '@kando/domain'
+import { ACCOUNT_TABLES, clearOutbox } from '@kando/domain'
+import { outboxForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -46,12 +47,12 @@ afterAll(async () => {
   if (createdNeonAuth) await pool.query('DROP SCHEMA neon_auth CASCADE')
 })
 
-const del = (uid: string, confirmEmail: string = EMAIL(uid), headers?: Record<string, string>) =>
+const del = (uid: string, password = 'right-password', headers?: Record<string, string>) =>
   me.DELETE(
     new Request('http://localhost/app-api/v1/me', {
       method: 'DELETE',
-      headers: headers ?? { cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ confirmEmail }),
+      headers: headers ?? { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ password }),
     }),
     { params: Promise.resolve({}) },
   )
@@ -127,7 +128,7 @@ it('deletes every row, object and Neon Auth record of the person, keeps the othe
   expect(Object.values(before).every((n) => n >= 1)).toBe(true) // the fixture really has every kind of data
   expect(before.authVerification).toBe(4) // the bare address and the three OTP types
 
-  const res = await del('ad1', `  ${EMAIL('ad1').toUpperCase()} `) // case and spaces do not matter
+  const res = await del('ad1')
   expect(res.status).toBe(200)
   expect(await res.json()).toEqual({ ok: true })
 
@@ -156,19 +157,33 @@ it('pending_object_deletes is closed to the app role', async () => {
   expect(rows[0].any_right).toBe(false)
 })
 
-it('a wrong email is 400 EMAIL_MISMATCH and deletes nothing', async () => {
+it('a wrong password is 403 WRONG_PASSWORD, deletes nothing and sets no cookie', async () => {
   const a = await fullPerson('ad3')
-  const res = await del('ad3', 'someone@else.invalid')
-  expect(res.status).toBe(400)
-  expect(await res.json()).toEqual({ error: 'EMAIL_MISMATCH' })
+  const res = await del('ad3', 'wrong-password')
+  expect(res.status).toBe(403)
+  expect(await res.json()).toEqual({ error: 'WRONG_PASSWORD' })
+  expect(res.headers.get('set-cookie')).toBeNull()
   expect((await rowsOf('ad3', a.providerId)).users).toBe(1)
   expect(store.objects.size).toBe(4)
   expect(outboxForTests()).toHaveLength(0)
+  expect(await count('SELECT count(*) n FROM invoices WHERE customer_id = $1 OR provider_id = $2', ['ad3', a.providerId])).toBe(0)
+  expect(await count('SELECT count(*) n FROM commission_invoices WHERE provider_id = $1', [a.providerId])).toBe(0)
 })
 
-it('a body without confirmEmail is 400', async () => {
+it('auth busy is 503 AUTH_BUSY and deletes nothing', async () => {
+  const a = await fullPerson('ad3b')
+  const res = await del('ad3b', 'busy')
+  expect(res.status).toBe(503)
+  expect(await res.json()).toEqual({ error: 'AUTH_BUSY' })
+  expect(res.headers.get('set-cookie')).toBeNull()
+  expect((await rowsOf('ad3b', a.providerId)).users).toBe(1)
+  expect(outboxForTests()).toHaveLength(0)
+})
+
+it('a body without password is 400', async () => {
   await person('ad4')
   expect((await call(me.DELETE, 'ad4', 'DELETE', {})).status).toBe(400)
+  expect((await call(me.DELETE, 'ad4', 'DELETE', { password: '' })).status).toBe(400)
   expect(await count("SELECT count(*) n FROM users WHERE id = 'ad4'")).toBe(1)
 })
 
@@ -186,8 +201,8 @@ it('the only Administrator cannot delete the account (409 LAST_ADMIN); with a se
 
 it('signed out is 401, an unconfirmed email is 403', async () => {
   await person('ad7')
-  expect((await del('ad7', EMAIL('ad7'), { 'content-type': 'application/json' })).status).toBe(401)
-  const unverified = await del('ad7', EMAIL('ad7'), { cookie: `uid=ad7:${EMAIL('ad7')}; verified=0`, 'content-type': 'application/json' })
+  expect((await del('ad7', 'right-password', { 'content-type': 'application/json' })).status).toBe(401)
+  const unverified = await del('ad7', 'right-password', { origin: 'http://localhost', cookie: `uid=ad7:${EMAIL('ad7')}; verified=0`, 'content-type': 'application/json' })
   expect(unverified.status).toBe(403)
   expect(await count("SELECT count(*) n FROM users WHERE id = 'ad7'")).toBe(1)
 })

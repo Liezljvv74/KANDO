@@ -1,6 +1,6 @@
 import { Share } from 'react-native'
 
-import { DEFAULT_LANG, t, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, t, type Lang } from '@kando/i18n/app'
 
 import { API_URL } from '@/api/client'
 

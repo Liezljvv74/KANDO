@@ -77,15 +77,30 @@ async function getProvider(tx: Tx, id: string) {
   if (!p) return notFound()
   // the provider's own photos and the person's picture (it belongs to the person, not the profile)
   const pics = await tx.select().from(photos).where(or(eq(photos.providerId, id), and(eq(photos.ownerId, p.provider.ownerId), eq(photos.kind, 'profile')))).orderBy(asc(photos.sort), asc(photos.createdAt))
-  const { location, ...rest } = p.provider
-  void location
+  const r = p.provider
+  // an explicit list: no Stripe account, tax, VAT, invoice-consent or location field ever reaches the back office
   return ok({
-    ...rest,
-    suspended: await isSuspendedNow(tx, id),
-    suspendedUntil: rest.suspendedUntil?.toISOString() ?? null,
-    createdAt: rest.createdAt.toISOString(),
-    updatedAt: rest.updatedAt.toISOString(),
+    id: r.id,
+    ownerId: r.ownerId,
     ownerEmail: p.ownerEmail,
+    type: r.type,
+    businessName: r.businessName,
+    publicName: r.publicName,
+    slug: r.slug,
+    bio: r.bio,
+    strengths: r.strengths,
+    skills: r.skills,
+    experience: r.experience,
+    country: r.country,
+    basePostcode: r.basePostcode,
+    serviceRadiusKm: r.serviceRadiusKm,
+    worksRemotely: r.worksRemotely,
+    impressum: r.impressum,
+    status: r.status,
+    suspended: await isSuspendedNow(tx, id),
+    suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
     photos: pics.map((x) => ({ id: x.id, kind: x.kind, alt: x.alt, url: photoUrl(x.key) })),
   })
 }

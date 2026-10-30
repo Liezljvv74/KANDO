@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { clearOutbox, notifyDocumentDecision, outboxForTests, sendEmail } from '@kando/domain'
+import { clearOutbox, EMAIL_TIMEOUT_MS, notifyDocumentDecision, sendEmail } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
 import { EMAIL, seedUser } from './helpers'
 
 const send = vi.hoisted(() => vi.fn())
@@ -83,4 +84,25 @@ it('an unexpected stored language falls back to German', async () => {
   await notifyDocumentDecision('em-lang', { id: 'x', requirement: 'permit', status: 'approved', note: null })
   expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('em-lang'), 'Dein Dokument wurde freigegeben']])
   await pool.query("DELETE FROM users WHERE id = 'em-lang'")
+})
+
+it('a Resend call that hangs ends after EMAIL_TIMEOUT_MS', async () => {
+  vi.stubEnv('RESEND_API_KEY', 're_test')
+  vi.useFakeTimers()
+  try {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    send.mockReturnValueOnce(new Promise(() => {}))
+    let done = false
+    const p = sendEmail({ to: 'hang@test.skilled.invalid', lang: 'en', template: 'document-approved', params: { requirement: 'permit' } }).then(() => void (done = true))
+    await vi.advanceTimersByTimeAsync(EMAIL_TIMEOUT_MS - 1)
+    expect(done).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await p
+    expect(err).toHaveBeenCalledTimes(1)
+    const line = err.mock.calls[0]!.join(' ')
+    expect(line).toBe('[email] send failed timeout')
+    expect(line).not.toContain('hang@test.skilled.invalid')
+  } finally {
+    vi.useRealTimers()
+  }
 })

@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { bookings, db, disputes, providers, type Tx } from '@kando/db'
-import type { Booking, NoShowObjection } from '@kando/contract'
+import { HOUR, NO_SHOW_OBJECTION_HOURS, type Booking, type NoShowObjection } from '@kando/contract'
 import { assertNoContactDetails, flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
 import type { Exec } from '../providers/eligibility'
@@ -9,13 +9,13 @@ import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
 import { lockFamily, parentNoShow } from './additional'
 import { openDisputeCore, tellDisputeOpened } from './disputes'
-import { customerCancelShare, isLate, NO_SHOW_OBJECTION_HOURS } from './ending-rules'
-import { attemptMoney, lockRow, reload, sideOf } from './finish'
+import { customerCancelShare, isLate } from './ending-rules'
+import { attemptMoney, reload } from './finish'
 import { notifyBookingEvent } from './notify'
+import { lockRow, partyOf } from './party'
 
 type Row = typeof bookings.$inferSelect
 type Side = 'customer' | 'provider'
-const HOUR = 3_600_000
 const otherSide = (s: Side): Side => (s === 'customer' ? 'provider' : 'customer')
 export const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
 const objectBy = (b: Row) => new Date(b.noShowReportedAt!.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)
@@ -89,7 +89,16 @@ async function tellCancelled(b: Row): Promise<void> {
  *   after settle, before the messages     | settled, messages lost (logged)               | nothing
  */
 export async function cancelBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
-  const side = await sideOf(tx, userId, bookingId)
+  return (await beginCancelBooking(tx, userId, bookingId, now))()
+}
+
+/**
+ * cancelBooking for a route: checks and records step 1 now and returns step 2 (settle each, tell the other side, then the
+ * booking), which the route runs after its request transaction (an AfterTransaction), so no Stripe call holds a request
+ * connection. Step 2 never throws for the money (trySettleCancelled: logged, flagged, retried by the timer).
+ */
+export async function beginCancelBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<() => Promise<Booking>> {
+  const side = (await partyOf(tx, userId, bookingId)).role
   const done = await db.transaction(async (o) => {
     // the booking and its additional tasks, in id order (as account deletion locks), so the two never deadlock
     const [b, kids] = await lockFamily(o, bookingId)
@@ -105,9 +114,11 @@ export async function cancelBooking(tx: Tx, userId: string, bookingId: string, n
     for (const k of kids) if (k.status === 'confirmed') out.push(await cancel(k))
     return out
   })
-  for (const b of done) await trySettleCancelled(b.id, b.customerId, now)
-  for (const b of done) await tellCancelled(b)
-  return reload(bookingId)
+  return async () => {
+    for (const b of done) await trySettleCancelled(b.id, b.customerId, now)
+    for (const b of done) await tellCancelled(b)
+    return reload(bookingId)
+  }
 }
 
 /**
@@ -122,7 +133,7 @@ export async function cancelBooking(tx: Tx, userId: string, bookingId: string, n
  * additional task reported on its own ends on its own.
  */
 export async function reportNoShow(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
-  const them = otherSide(await sideOf(tx, userId, bookingId))
+  const them = otherSide((await partyOf(tx, userId, bookingId)).role)
   const row = await db.transaction(async (o) => {
     const [b, kids] = await lockFamily(o, bookingId)
     if (b.noShow === them) return null
@@ -147,7 +158,7 @@ export async function reportNoShow(tx: Tx, userId: string, bookingId: string, no
  * decide (Task 8). Both sides are told (dispute-opened). A second tap returns the disputed booking.
  */
 export async function objectNoShow(tx: Tx, userId: string, bookingId: string, input: NoShowObjection, now = new Date()): Promise<Booking> {
-  const side = await sideOf(tx, userId, bookingId)
+  const side = (await partyOf(tx, userId, bookingId)).role
   const opened = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (!b.noShow) fail(409, { error: 'not-open' })

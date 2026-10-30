@@ -1,6 +1,6 @@
 import { and, eq, notInArray, or } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
-import type { AdditionalTaskInput, BookingRequest } from '@kando/contract'
+import { DAY, HOUR, type AdditionalTaskInput, type BookingRequest } from '@kando/contract'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
@@ -8,14 +8,12 @@ import { threadForBooking } from '../chat/threads'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { ADDITIONAL_PAY_HOURS } from './ending-rules'
-import { lockRow, sideOf } from './finish'
 import { notifyBookingEvent } from './notify'
+import { lockRow, partyOf } from './party'
 import { liveRequest, toRequest } from './requests'
 import { REQUEST_ANSWER_DAYS } from './rules'
 
 type Row = typeof bookings.$inferSelect
-const HOUR = 3_600_000
-const DAY = 24 * HOUR
 /** A booking takes additional tasks while it is paid and open: `confirmed` or `finished`, a root, no no-show reported. */
 const takesAdditional = (b: Row) => !b.parentBookingId && (b.status === 'confirmed' || b.status === 'finished') && !b.noShow
 
@@ -53,7 +51,7 @@ export async function lockFamily(o: Exec, id: string): Promise<[Row, Row[]]> {
  * with the booking row locked, so a racing cancel or no-show report has exactly one outcome.
  */
 export async function startAdditionalTask(tx: Tx, userId: string, bookingId: string, input: AdditionalTaskInput, now = new Date()): Promise<BookingRequest> {
-  const side = await sideOf(tx, userId, bookingId)
+  const side = (await partyOf(tx, userId, bookingId)).role
   const pair = (await tx.select({ c: bookings.customerId, p: bookings.providerId }).from(bookings).where(eq(bookings.id, bookingId)))[0]!
   if (await blockedWithProvider(tx, pair.c, pair.p)) fail(403, { error: 'BLOCKED' })
   await assertNoContactDetails(userId, input.description)
@@ -70,7 +68,7 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
   await postCard(r.threadId, userId, { type: 'additional-task', refId: r.row.id })
   const to = side === 'customer' ? (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, r.row.providerId)))[0]?.id : r.row.customerId
   if (to) await notifyBookingEvent('additional-task-requested', to, { requestId: r.row.id, ...(side === 'customer' && { role: 'provider' }) }) // the provider is asked to quote
-  return toRequest(r.row)
+  return toRequest(r.row, now)
 }
 
 /**

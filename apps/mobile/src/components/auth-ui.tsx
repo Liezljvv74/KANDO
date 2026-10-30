@@ -46,8 +46,8 @@ export const Button = ({ label, onPress, busy, disabled, danger }: { label: stri
   </Pressable>
 )
 
-export const LinkText = ({ label, onPress }: { label: string; onPress: () => void }) => (
-  <Pressable onPress={onPress} accessibilityRole="link" style={styles.link}>
+export const LinkText = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => (
+  <Pressable onPress={onPress} disabled={disabled} accessibilityRole="link" accessibilityState={{ disabled: !!disabled }} style={[styles.link, disabled && styles.busy]}>
     <Text style={styles.linkLabel}>{label}</Text>
   </Pressable>
 )

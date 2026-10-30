@@ -95,7 +95,7 @@ it('signed out is 401, an unconfirmed email 403, a suspended person cannot save 
   expect((await anon(push.GET, 'GET')).status).toBe(401)
   expect((await anon(push.PATCH, 'PATCH', { chat: false })).status).toBe(401)
   const unverified = await tokens.POST(
-    new Request('http://localhost/x', { method: 'POST', headers: { cookie: `uid=${U.a}:${EMAIL(U.a)}; verified=0`, 'content-type': 'application/json' }, body: JSON.stringify({ token: TOKEN('nv'), platform: 'ios' }) }),
+    new Request('http://localhost/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${U.a}:${EMAIL(U.a)}; verified=0`, 'content-type': 'application/json' }, body: JSON.stringify({ token: TOKEN('nv'), platform: 'ios' }) }),
     { params: Promise.resolve({}) },
   )
   expect(unverified.status).toBe(403)

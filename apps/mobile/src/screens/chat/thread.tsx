@@ -1,11 +1,11 @@
 import { useLocalSearchParams } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { MAX_MESSAGE_CHARS } from '@kando/contract'
 
-import { blockUser, listBlocks, listThreads, unblockUser } from '@/api/chat'
+import { blockUser, getThread, listBlocks, unblockUser } from '@/api/chat'
 import { ApiError } from '@/api/client'
 import { ErrorText, LinkText } from '@/components/auth-ui'
 import { SmallButton } from '@/components/form-ui'
@@ -21,16 +21,15 @@ import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
 import { MessageBubble } from '@/screens/chat/message-bubble'
 
-const load = async () => {
-  const [threads, blocks] = await Promise.all([listThreads(), listBlocks()])
-  return { threads, blocks }
-}
-
 /** One conversation. Deep link `skilled://threads/<id>` (the new-message notice) lands here. */
 export default function ThreadScreen() {
   useLang()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { messages, loaded, send, sendPhoto, refreshLinks, error } = useThreadMessages(id)
+  const load = useCallback(async () => {
+    const [thread, blocks] = await Promise.all([getThread(id), listBlocks()])
+    return { thread, blocks }
+  }, [id])
   const { data, error: loadError, retry } = useLoad(load)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,12 +41,12 @@ export default function ThreadScreen() {
   const [problem, setProblem] = useState<string | null>(null)
   const list = useRef<FlatList>(null)
 
-  const thread = data?.threads.find((x) => x.id === id)
+  const thread = data?.thread
   if (!data || !thread)
     return (
       <SafeAreaView style={styles.root}>
         <LinkText label={t('common.back')} onPress={goBack} />
-        {loadError || data ? <ErrorRetry code={loadError ?? "Not found"} onRetry={retry} /> : <Loading />}
+        {loadError ? <ErrorRetry code={loadError} onRetry={retry} /> : <Loading />}
       </SafeAreaView>
     )
   // GET /blocks lists my own blocks with the threads they cover; a block by the other side is not in it.

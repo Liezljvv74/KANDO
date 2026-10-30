@@ -3,11 +3,13 @@ import sharp from 'sharp'
 import { sql } from 'drizzle-orm'
 import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { sendMessage, setStorageForTests } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser } from './helpers'
+import { sendMessage } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
+import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
+const threadOne = await import('../app/app-api/v1/threads/[id]/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 const requests = await import('../app/app-api/v1/requests/route')
@@ -51,7 +53,7 @@ const png = () => sharp({ create: { width: 20, height: 20, channels: 3, backgrou
 const photoRequest = async (thread: string, as: string) => {
   const form = new FormData()
   form.set('file', new File([new Uint8Array(await png())], 'a.png', { type: 'image/png' }))
-  return photosRoute.POST(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { cookie: `uid=${as}:${EMAIL(as)}` }, body: form }), { params: Promise.resolve({ id: thread }) })
+  return photosRoute.POST(await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form })), { params: Promise.resolve({ id: thread }) })
 }
 
 it('creating a request opens a thread; both parties list it', async () => {
@@ -260,4 +262,14 @@ it('a message from a slow transaction is stamped when inserted, so the other sid
   go()
   await a
   expect((await list(t.id, U.cust, cursor)).docs.map((m) => m.body)).toEqual(['from A'])
+})
+
+it('GET /threads/{id} answers a party, a stranger 404', async () => {
+  const r = await newRequest('Read one thread')
+  const listed = await threadOf(U.cust, r.id)
+  const one = (as: string, id = listed.id) => call(threadOne.GET, as, 'GET', undefined, { id })
+  expect(ThreadSchema.parse(await (await one(U.cust)).json())).toEqual(listed)
+  expect(ThreadSchema.parse(await (await one(U.owner)).json())).toMatchObject({ id: listed.id, requestId: r.id, blocked: false })
+  expect((await one(U.third)).status).toBe(404)
+  expect((await one(U.cust, 'not-a-uuid')).status).toBe(404)
 })

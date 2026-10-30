@@ -1,29 +1,27 @@
-import { desc, eq, getTableColumns } from 'drizzle-orm'
-import { bookingAppInsert, bookings, db, providers, services, type Tx } from '@kando/db'
-import type { Booking, BookingAnswer, DirectBookingInput } from '@kando/contract'
-import { isUuid } from '../admin/common'
+import { and, asc, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm'
+import { bookingAppInsert, bookings, providers, quotes, services, type Tx } from '@kando/db'
+import { HOUR, LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type DirectBookingInput, type Page } from '@kando/contract'
+import { NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
-import { fail } from '../providers/http'
+import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
-import { threadForBooking } from '../chat/threads'
+import { threadForBooking, threadIdOf } from '../chat/threads'
+import { olderThan, pageOf, stampOf } from '../paging'
 import { assertSlotFree, lockProviderSlots } from './busy'
+import { lockRow, partyOf } from './party'
 import { notifyBookingEvent, notifyProposal } from './notify'
-import { runDueTimersFor } from './timers'
 import { assertWithinLimits, toBooking } from './requests'
 import { canTransact } from '../payments/rules'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
-const HOUR = 3_600_000
-const NO_ID = '00000000-0000-0000-0000-000000000000'
-const notFound = () => fail(404, { error: 'Not found' })
 type Row = typeof bookings.$inferSelect
 
 /** The job address stays private to the customer; the provider sees it only once the booking was accepted (payBy is set then). */
-const view = (b: Row, userId: string): Booking => {
-  const dto = toBooking(b)
+const view = (b: Row, userId: string, now = new Date()): Booking => {
+  const dto = toBooking(b, now)
   return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
 }
 
@@ -59,29 +57,32 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
     .returning(getTableColumns(bookings))
   await threadForBooking(tx, row!.id) // a direct booking gets its own chat
   notifyProposal(afterCommit, provider, row!)
-  return view(row!, userId)
+  return view(row!, userId, now)
 }
 
-/** The caller's bookings, newest first, as customer or as provider owner; each booking's additional tasks follow right after it (oldest first). */
-export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<Booking[]> {
-  await runDueTimersFor(db, userId) // the caller's own rows are never stale
+/**
+ * The caller's bookings as customer or as provider owner, a page of root bookings newest first by (created_at, id); each root
+ * is followed by its additional tasks (oldest first), so a task is always on its root's page.
+ */
+export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string): Promise<Page<Booking>> {
   const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const all = (await tx.select().from(bookings).where(mine).orderBy(desc(bookings.createdAt), desc(bookings.id))).map((b) => view(b, userId))
-  const ids = new Set(all.map((b) => b.id))
-  const kids = new Map<string, Booking[]>()
-  for (const b of [...all].reverse()) if (b.parentBookingId && ids.has(b.parentBookingId)) kids.set(b.parentBookingId, [...(kids.get(b.parentBookingId) ?? []), b])
-  return all.filter((b) => !b.parentBookingId || !ids.has(b.parentBookingId)).flatMap((b) => [b, ...(kids.get(b.id) ?? [])])
+  const found = await tx
+    .select({ b: bookings, ts: stampOf(bookings.createdAt), id: bookings.id })
+    .from(bookings)
+    .where(and(mine, isNull(bookings.parentBookingId), olderThan(bookings.createdAt, bookings.id, cursor)))
+    .orderBy(desc(bookings.createdAt), desc(bookings.id))
+    .limit(LIST_PAGE + 1)
+  const { rows, next } = pageOf(found)
+  const kids = rows.length ? await tx.select().from(bookings).where(and(mine, inArray(bookings.parentBookingId, rows.map((r) => r.id)))).orderBy(asc(bookings.createdAt), asc(bookings.id)) : []
+  return { docs: rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), next }
 }
 
-/** Which side the caller is on; 404 for anyone else. */
-async function partyOf(tx: Tx, userId: string, bookingId: string) {
-  const b = isUuid(bookingId) ? (await tx.select().from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
-  if (!b) return notFound()
-  const role = b.customerId === userId ? 'customer' : (await ownProvider(tx, userId))?.id === b.providerId ? 'provider' : null
-  return role ? { role, providerId: b.providerId } : notFound()
+/** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */
+export async function getBooking(tx: Tx, userId: string, id: string): Promise<BookingView> {
+  const { role } = await partyOf(tx, userId, id) // 404 for anyone else
+  const b = (await tx.select().from(bookings).where(eq(bookings.id, id)))[0] ?? notFound()
+  return { booking: view(b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, b) }
 }
-
-const lockRow = async (tx: Tx, id: string) => (await tx.select().from(bookings).where(eq(bookings.id, id)).for('update'))[0] ?? notFound()
 
 /** Answer the other side's last proposal: accept, decline or counter. Works for quote-born and direct bookings alike. */
 export async function answerBooking(tx: Tx, userId: string, bookingId: string, answer: BookingAnswer, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
@@ -95,12 +96,15 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
   const set = async (to: Booking['status'], patch: Partial<Row>) => {
     if (!canTransition(b.status as Booking['status'], to)) fail(409, { error: 'not-open' })
     const [row] = await tx.update(bookings).set({ ...patch, status: to, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
-    return view(row!, userId)
+    return view(row!, userId, now)
   }
-  const tell = (kind: 'booking-declined' | 'booking-accepted', date?: Date) => role === 'provider' && afterCommit(() => notifyBookingEvent(kind, b.customerId, { bookingId: b.id, ...(date && { date: date.toISOString() }) })) // only the provider's answer is told to the customer
+  const tell = (kind: 'booking-declined' | 'booking-accepted' | 'request-reopened', extra: Record<string, string> = {}) => role === 'provider' && afterCommit(() => notifyBookingEvent(kind, b.customerId, { bookingId: b.id, ...extra })) // only the provider's answer is told to the customer
   if (answer.type === 'decline') {
     const done = await set('declined', { answerBy: null, counterBy: null })
-    tell('booking-declined')
+    // a quote-born booking's quote is open again (trigger bookings_reopen_request): the customer may propose another time
+    const reopened = b.quoteId && b.requestId && (await tx.select({ s: quotes.status }).from(quotes).where(eq(quotes.id, b.quoteId)))[0]?.s === 'sent'
+    if (reopened) tell('request-reopened', { requestId: b.requestId! })
+    else tell('booking-declined')
     return done
   }
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return fail(409, { error: 'provider-unavailable' })
@@ -123,7 +127,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
   await assertSlotFree(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)
   const pay = payBy(now, b.startAt)
   const done = await set('awaiting-payment', { payBy: pay, acceptedAt: now, answerBy: null, counterBy: null })
-  tell('booking-accepted', pay)
+  tell('booking-accepted', { date: pay.toISOString() })
   return done
 }
 
@@ -133,5 +137,5 @@ export async function withdrawBooking(tx: Tx, userId: string, bookingId: string,
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
-  return view(row!, userId)
+  return view(row!, userId, now)
 }

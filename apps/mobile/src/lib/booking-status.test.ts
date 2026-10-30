@@ -1,7 +1,6 @@
 import type { Booking } from '@kando/contract'
 
-import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, FREE_CANCEL_HOURS, lateFee, LATE_CANCEL_PERCENT, STOP_ANSWER_DAYS, stopAnswerText } from './booking-status'
-import * as rules from '../../../../packages/domain/src/bookings/ending-rules'
+import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -97,10 +96,25 @@ test('finished: the customer sees the payment date and can confirm or report a p
   expect(bookingStatusText(finished, 'customer', after)).toBe('bookingStatus.finishedCustomer 2027-01-12T11:00:00.000Z')
   expect(bookingStatusText(finished, 'provider', after)).toBe('bookingStatus.finishedProvider 2027-01-12T11:00:00.000Z')
   expect(bookingActions(finished, 'customer', after)).toEqual(['confirm', 'dispute', 'additionalTask'])
-  expect(bookingActions(finished, 'provider', after)).toEqual(['additionalTask'])
+  expect(bookingActions(finished, 'provider', after)).toEqual(['dispute', 'additionalTask'])
   const due = new Date('2027-01-12T11:00:00.000Z')
   for (const viewer of ['customer', 'provider'] as const) expect(bookingStatusText(finished, viewer, due)).toBe('bookingStatus.paymentPending')
   expect(bookingActions(finished, 'customer', due)).toEqual(['additionalTask'])
+})
+
+test('the provider may dispute a finished booking before confirmBy, not after', () => {
+  const finished = b({ status: 'finished', confirmBy: '2027-01-12T11:00:00.000Z' })
+  expect(bookingActions(finished, 'provider', after)).toContain('dispute')
+  expect(bookingActions(finished, 'provider', new Date('2027-01-12T11:00:00.000Z'))).not.toContain('dispute')
+})
+
+test('either side may dispute a stopped booking until an amount is agreed', () => {
+  const stopped = b({ status: 'stopped' })
+  for (const viewer of ['customer', 'provider'] as const) {
+    expect(bookingActions(stopped, viewer, after)).toContain('dispute')
+    expect(bookingActions({ ...stopped, stopAmount: 40, stopStatedAt: '2027-01-05T12:00:00.000Z' }, viewer, after)).toContain('dispute')
+    expect(bookingActions({ ...stopped, confirmBy: '2027-01-05T13:00:00.000Z' }, viewer, after)).not.toContain('dispute')
+  }
 })
 
 test('the 7-day countdown counts whole days left, never below 0', () => {
@@ -113,13 +127,13 @@ test('the 7-day countdown counts whole days left, never below 0', () => {
 
 test('stopped: the provider states the amount, then the customer answers; agreed means the payment is being made', () => {
   const stopped = b({ status: 'stopped', stoppedBy: 'customer' })
-  expect(bookingActions(stopped, 'provider', after)).toEqual(['stateStopAmount'])
-  expect(bookingActions(stopped, 'customer', after)).toEqual([])
+  expect(bookingActions(stopped, 'provider', after)).toEqual(['stateStopAmount', 'dispute'])
+  expect(bookingActions(stopped, 'customer', after)).toEqual(['dispute'])
   expect(bookingStatusText(stopped, 'customer', after)).toBe('bookingStatus.stoppedWaitAmount')
   expect(bookingStatusText(stopped, 'provider', after)).toBe('bookingStatus.stoppedStateAmount')
   const stated = b({ status: 'stopped', stopAmount: 40, stopStatedAt: '2027-01-05T12:00:00.000Z' })
-  expect(bookingActions(stated, 'customer', after)).toEqual(['answerStop'])
-  expect(bookingActions(stated, 'provider', after)).toEqual([])
+  expect(bookingActions(stated, 'customer', after)).toEqual(['answerStop', 'dispute'])
+  expect(bookingActions(stated, 'provider', after)).toEqual(['dispute'])
   expect(bookingStatusText(stated, 'customer', after)).toBe('bookingStatus.stopAnswerBy EUR 40.00 2027-01-12T12:00:00.000Z')
   expect(bookingStatusText(stated, 'provider', after)).toBe('bookingStatus.stopWaitAnswer EUR 40.00')
   const agreed = { ...stated, confirmBy: '2027-01-05T13:00:00.000Z' }
@@ -165,15 +179,6 @@ test('the cancel statement is checked again at the tap: across the 24-hour mark 
   expect(cancelTap(provider, booking, 'provider', justAfter).send).toBe(false) // the late note for the provider is new too
 })
 
-test('the mirrored rules equal the server rules', () => {
-  expect(LATE_CANCEL_PERCENT / 100).toBe(rules.LATE_CANCEL_SHARE)
-  expect(STOP_ANSWER_DAYS).toBe(rules.STOP_ANSWER_DAYS)
-  const start = new Date('2027-01-05T09:00:00.000Z')
-  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000))).toBe(false)
-  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000 + 1))).toBe(true)
-  expect(lateFee(33.33)).toBe(rules.customerCancelShare(33.33, start, new Date(start.getTime() - 1)))
-})
-
 test('the endings say in plain words what happened, for each side', () => {
   const cases: [Partial<Booking>, string, string][] = [
     [{ cancelledBy: 'customer', lateCancel: false }, 'bookingStatus.cancelledByYou', 'bookingStatus.cancelledByCustomer'],
@@ -198,4 +203,16 @@ test('the customer asks for an "Additional task", the provider for a "Scope/quot
   expect(actionLabel('additionalTask', 'customer')).toBe('booking.additionalTask')
   expect(actionLabel('additionalTask', 'provider')).toBe('booking.scopeReview')
   expect(actionLabel('finish', 'provider')).toBe('booking.finish')
+})
+
+test('late fee is rounded from cents: 33.33 -> 16.67', () => {
+  expect(lateFee(33.33)).toBe(16.67)
+  expect(lateFee(100)).toBe(50)
+})
+
+test('the exact 24 h mark is free, one minute inside is late (same numbers as the server)', () => {
+  const booking = b({ startAt: '2027-01-05T12:00:00.000Z', amount: 100 })
+  const mark = new Date('2027-01-04T12:00:00.000Z')
+  expect(cancelStatement(booking, 'customer', mark)).toBe('booking.cancelFree booking.cancelChildren')
+  expect(cancelStatement(booking, 'customer', new Date(mark.getTime() + 60_000))).toContain('booking.cancelLate 50')
 })

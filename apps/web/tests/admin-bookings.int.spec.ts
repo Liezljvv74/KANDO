@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, decideDispute, getPublicProfile, objectNoShow, openDispute, outboxForTests, reportNoShow, runDueTimers, setGatewayForTests, threadForBooking } from '@kando/domain'
+import { clearOutbox, decideDispute, getPublicProfile, objectNoShow, openDispute, reportNoShow, runDueTimers, threadForBooking } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { adminCall, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -58,7 +59,7 @@ async function paidBooking(o: { startAt?: Date; provider?: string; finishedAt?: 
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_ab', 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
+       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_ab_' || gen_random_uuid(), 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
       [U.cust, p, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null],
     )
   ).rows[0].id as string
@@ -73,7 +74,7 @@ async function paidChild(parent: string, startAt: Date, amount: number): Promise
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'quote', 'confirmed', $4, 60, $5, now() + interval '2 days', now(), now() - interval '1 hour', 'pi_ab_child', 0.12) RETURNING id`,
+       VALUES ($1, $2, $3, 'quote', 'confirmed', $4, 60, $5, now() + interval '2 days', now(), now() - interval '1 hour', 'pi_ab_child_' || gen_random_uuid(), 0.12) RETURNING id`,
       [U.cust, providerId, quote, startAt, parent],
     )
   ).rows[0].id as string

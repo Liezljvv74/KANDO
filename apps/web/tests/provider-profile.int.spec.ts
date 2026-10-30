@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { setStorageForTests } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { MeSchema, MyProfileSchema } from '@kando/contract'
 import { call, cleanupUsers, EMAIL, givePhoto, memoryStorage, profile, seedBase } from './helpers'
 
@@ -76,7 +76,7 @@ it('an unconfirmed email gets 403 EMAIL_NOT_VERIFIED from PUT provider-profile a
   const unverified = (method: string, body?: unknown) =>
     new Request('http://localhost/app-api/v1/x', {
       method,
-      headers: { cookie: `uid=pp-unv:${EMAIL('pp-unv')}; verified=0`, 'content-type': 'application/json' },
+      headers: { origin: 'http://localhost', cookie: `uid=pp-unv:${EMAIL('pp-unv')}; verified=0`, 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   const ctx = { params: Promise.resolve({}) }
@@ -285,7 +285,7 @@ it('a provider whose names are missing cannot publish: missing lists name', asyn
 })
 
 it("the draft's postcode lookup uses the owner's stored country", async () => {
-  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern) VALUES ('ZZ', 'Testland', 'Testland', '^[0-9]{4}$') ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Testland', 'Testland', '^[0-9]{4}$', 'EUR') ON CONFLICT DO NOTHING")
   await pool.query("INSERT INTO postcodes (country, code, place, state, location) VALUES ('ZZ', '2000', 'Testburg', 'Test', ST_SetSRID(ST_MakePoint(28.0, -26.2), 4326)) ON CONFLICT DO NOTHING")
   try {
     await call(me.GET, 'pp-zz')

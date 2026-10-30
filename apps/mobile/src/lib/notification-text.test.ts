@@ -1,4 +1,6 @@
-import { notificationTarget, notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
+import { NOTIFICATION_KINDS } from '@kando/contract'
+
+import { isBookingNotice, notificationTarget, notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
 
 jest.mock('@/i18n', () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k} ${JSON.stringify(p)}` : k) }))
 
@@ -53,4 +55,44 @@ test('the booking-ending kinds have a text each', () => {
   for (const kind of ['job-finished', 'confirm-reminder', 'payment-released', 'was-job-done', 'booking-cancelled', 'no-show-reported', 'dispute-opened', 'dispute-decided', 'job-stopped', 'stop-amount-stated', 'additional-task-requested', 'review-requested', 'review-visible', 'provider-warning']) {
     expect(notificationText(kind)).toMatch(/^notification\.[a-zA-Z]+$/)
   }
+})
+
+const at = (kind: string, payload: object) => notificationTarget({ kind, payload } as never)
+const NOT_BOOKING = ['profile-live', 'message-received', 'provider-available', 'customers-waiting', 'commission-invoice-ready']
+
+test('every booking kind with a bookingId opens the booking', () => {
+  for (const kind of NOTIFICATION_KINDS.filter((k) => !NOT_BOOKING.includes(k))) expect([kind, at(kind, { bookingId: 'b-1' })]).toEqual([kind, { path: '/bookings/b-1' }])
+})
+
+test('a requestId alone opens the request', () => {
+  expect(at('request-received', { requestId: 'r-1' })).toEqual({ path: '/bookings/request/r-1' })
+  expect(at('request-withdrawn', { requestId: 'r-1' })).toEqual({ path: '/bookings/request/r-1' })
+  expect(at('request-declined', { requestId: 'r-1' })).toEqual({ path: '/bookings/request/r-1' })
+})
+
+test('request-withdrawn and request-declined also open the request when both ids are named (same list as the server push)', () => {
+  expect(at('request-withdrawn', { requestId: 'r-1', bookingId: 'b-1' })).toEqual({ path: '/bookings/request/r-1' })
+  expect(at('request-declined', { requestId: 'r-1', bookingId: 'b-1' })).toEqual({ path: '/bookings/request/r-1' })
+})
+
+test('request-reopened opens the request, not the ended booking', () => {
+  expect(at('request-reopened', { requestId: 'r-1', bookingId: 'b-1' })).toEqual({ path: '/bookings/request/r-1' })
+})
+
+test('requests-ignored opens the list', () => {
+  expect(at('requests-ignored', {})).toEqual({ path: '/bookings' })
+  expect(at('provider-warning', {})).toEqual({ path: '/bookings' })
+})
+
+test('a malformed id gives no target', () => {
+  expect(at('quote-received', { bookingId: '../x' })).toBeNull()
+  expect(at('quote-received', { requestId: 'x'.repeat(101) })).toBeNull()
+})
+
+test('isBookingNotice is false for profile-live and message-received', () => {
+  const is = (kind: string, payload: object) => isBookingNotice({ kind, payload } as never)
+  expect(is('profile-live', { url: 'https://x.test/p' })).toBe(false)
+  expect(is('message-received', { url: 'skilled://threads/t1', threadId: 't1' })).toBe(false)
+  expect(is('quote-received', { bookingId: 'b-1' })).toBe(true)
+  expect(is('requests-ignored', {})).toBe(true)
 })

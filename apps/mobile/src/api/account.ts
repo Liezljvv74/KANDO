@@ -9,8 +9,8 @@ export async function getExport(format: ExportFormat = 'json') {
   return data
 }
 
-/** Deletes the account for good; the server checks the email again (400 EMAIL_MISMATCH, 409 LAST_ADMIN). Its own long time limit: the server may still be working. */
-export const deleteAccount = (confirmEmail: string) =>
-  api<{ ok: true }>('/app-api/v1/me', { method: 'DELETE', body: { confirmEmail }, timeLimit: DELETE_TIMEOUT_MS })
+/** Deletes the account for good; the server checks the password (403 WRONG_PASSWORD, 503 AUTH_BUSY, 409 LAST_ADMIN). Its own long time limit: the server may still be working. */
+export const deleteAccount = (password: string) =>
+  api<{ ok: true }>('/app-api/v1/me', { method: 'DELETE', body: { password }, timeLimit: DELETE_TIMEOUT_MS })
 
 export const DELETE_TIMEOUT_MS = 60_000

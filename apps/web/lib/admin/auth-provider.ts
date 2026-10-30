@@ -1,20 +1,22 @@
 import type { AccessControlProvider, AuthProvider } from '@refinedev/core'
 import { createAuthClient } from '@neondatabase/auth/next'
 import { t } from '@kando/i18n'
+import { browserAdminLang } from './lang'
 
 export const authClient = createAuthClient()
 
 export type Me = { id: string; email: string; staffRole: 'admin' | 'reviewer' }
+const lang = () => browserAdminLang(document.cookie, navigator.languages)
 const fetchMe = () => fetch('/api/admin/me', { credentials: 'same-origin' })
 
 export const authProvider: AuthProvider = {
   // Signs in with the Neon Auth browser client, then asks the server whether the account has a staff role.
   async login({ email, password }: { email: string; password: string }) {
     const { error } = await authClient.signIn.email({ email, password })
-    if (error) return { success: false, error: { name: 'LoginError', message: t('de', 'admin.signIn.failed') } }
+    if (error) return { success: false, error: { name: 'LoginError', message: t(lang(), 'admin.signIn.failed') } }
     if (!(await fetchMe()).ok) {
       await authClient.signOut()
-      return { success: false, error: { name: 'LoginError', message: t('de', 'admin.signIn.denied') } }
+      return { success: false, error: { name: 'LoginError', message: t(lang(), 'admin.signIn.denied') } }
     }
     return { success: true, redirectTo: '/admin' }
   },

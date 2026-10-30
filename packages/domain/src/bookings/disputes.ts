@@ -7,8 +7,8 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { addWorkingDays, DISPUTE_DECISION_WORKING_DAYS } from './ending-rules'
 import { parentNoShow } from './additional'
-import { lockRow, sideOf } from './finish'
 import { notifyBookingEvent } from './notify'
+import { lockRow, partyOf } from './party'
 
 export type DisputeReason = 'problem' | 'no-show-objection' | 'no-response' | 'stop-disagreed' | 'chargeback'
 type DisputeRow = typeof disputes.$inferSelect
@@ -92,27 +92,30 @@ export async function openSystemDispute(
 }
 
 /**
- * The customer reports a problem: from `finished` until `confirmBy` (after: 409 DISPUTE_CLOSED, the payment is due), or
+ * Either side reports a problem: from `finished` until `confirmBy` (after: 409 DISPUTE_CLOSED, the payment is due); from
+ * `stopped` while no amount is agreed (`confirmBy` null; once agreed the payment is due: 409 not-open); the customer also
  * from `confirmed` once they were asked "Was the job done?" (the provider never tapped Finished; a reported no-show ends
- * its own way). The provider gets 403, a third person 404. The description (no contact details, 422) is shown to the
- * provider. Status `disputed`, `decideBy = now + 14 working days`; the money freezes until staff decide (Task 8). Both
- * sides are told. A second tap returns the open dispute. Owner connection, the row locked and re-checked, so a racing
- * automatic release has exactly one outcome: the release (completed, the dispute 409 not-open) or the dispute (the
- * release refused: not-open / DISPUTE_OPEN, nothing moves). Allowed while suspended (the route): it is about money paid.
+ * its own way). Anything else is 409 not-open, a third person 404. The description (no contact details, 422) is shown to
+ * the other side. Status `disputed`, `decideBy = now + 14 working days`; the money freezes until staff decide. Both sides
+ * are told. On a `disputed` booking the caller's own undecided problem report is returned (a second tap); any other
+ * dispute (the other side's, or another kind) is 409 DISPUTE_EXISTS. Owner connection, the row locked and re-checked, so
+ * a racing automatic release has exactly one outcome: the release (completed, the dispute 409 not-open) or the dispute
+ * (the release refused: not-open / DISPUTE_OPEN, nothing moves). Allowed while suspended (the route): it is about money paid.
  */
 export async function openDispute(tx: Tx, userId: string, bookingId: string, input: DisputeInput, now = new Date()): Promise<Dispute> {
-  if ((await sideOf(tx, userId, bookingId)) !== 'customer') fail(403, { error: 'not-your-turn' })
+  const side = (await partyOf(tx, userId, bookingId)).role
   await assertNoContactDetails(userId, input.description)
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status === 'disputed') {
-      const [own] = await o.select().from(disputes).where(and(eq(disputes.bookingId, b.id), eq(disputes.reason, 'problem'), isNull(disputes.decidedAt)))
-      if (own) return { d: own, b: null }
+      const [own] = await o.select().from(disputes).where(and(eq(disputes.bookingId, b.id), eq(disputes.openedBy, side), eq(disputes.reason, 'problem'), isNull(disputes.decidedAt)))
+      return own ? { d: own, b: null } : fail(409, { error: 'DISPUTE_EXISTS' })
     }
-    const asked = b.status === 'confirmed' && b.askedDoneAt !== null && !b.noShow
-    if (b.status !== 'finished' && !asked) fail(409, { error: 'not-open' })
+    const asked = side === 'customer' && b.status === 'confirmed' && b.askedDoneAt !== null && !b.noShow
+    const stoppedUnagreed = b.status === 'stopped' && b.confirmBy === null
+    if (b.status !== 'finished' && !stoppedUnagreed && !asked) fail(409, { error: 'not-open' })
     if (b.status === 'finished' && b.confirmBy && b.confirmBy <= now) fail(409, { error: 'DISPUTE_CLOSED' })
-    return { d: await openDisputeCore(o, { bookingId: b.id, openedBy: 'customer', reason: 'problem', description: input.description, now }), b }
+    return { d: await openDisputeCore(o, { bookingId: b.id, openedBy: side, reason: 'problem', description: input.description, now }), b }
   })
   if (r.b) await tellDisputeOpened(r.b)
   return toDispute(r.d)
@@ -120,7 +123,7 @@ export async function openDispute(tx: Tx, userId: string, bookingId: string, inp
 
 /** The dispute of a booking, for its two parties (RLS on the request transaction: a third person gets 404, as without one). */
 export async function getDispute(tx: Tx, userId: string, bookingId: string): Promise<Dispute> {
-  await sideOf(tx, userId, bookingId)
+  await partyOf(tx, userId, bookingId)
   const [d] = await tx.select().from(disputes).where(eq(disputes.bookingId, bookingId))
   return d ? toDispute(d) : fail(404, { error: 'Not found' })
 }

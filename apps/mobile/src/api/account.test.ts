@@ -15,9 +15,9 @@ test('the CSV export is read as text from ?format=csv', async () => {
   expect(api).toHaveBeenCalledWith('/app-api/v1/me/export?format=csv', { text: true })
 })
 
-test('the delete sends the typed email as the JSON body of a DELETE /me', async () => {
-  await deleteAccount('a@b.de')
-  expect(api).toHaveBeenCalledWith('/app-api/v1/me', { method: 'DELETE', body: { confirmEmail: 'a@b.de' }, timeLimit: 60_000 })
+test('the delete sends the password as the JSON body of a DELETE /me', async () => {
+  await deleteAccount('secret-pw')
+  expect(api).toHaveBeenCalledWith('/app-api/v1/me', { method: 'DELETE', body: { password: 'secret-pw' }, timeLimit: 60_000 })
 })
 test('an empty export answer is a failed read', async () => {
   ;(api as jest.Mock).mockResolvedValueOnce(null)
@@ -27,6 +27,6 @@ test('an empty export answer is a failed read', async () => {
 })
 
 test('the delete has its own 60 second time limit', async () => {
-  await deleteAccount('a@b.de')
-  expect(api).toHaveBeenCalledWith('/app-api/v1/me', { method: 'DELETE', body: { confirmEmail: 'a@b.de' }, timeLimit: 60_000 })
+  await deleteAccount('secret-pw')
+  expect(api).toHaveBeenCalledWith('/app-api/v1/me', { method: 'DELETE', body: { password: 'secret-pw' }, timeLimit: 60_000 })
 })

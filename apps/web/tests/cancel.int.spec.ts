@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
-import { cancelBooking, clearOutbox, confirmJob, finishJob, getPublicProfile, objectNoShow, outboxForTests, reportNoShow, runDueTimers, setGatewayForTests, slotIsHeld } from '@kando/domain'
+import { cancelBooking, clearOutbox, confirmJob, finishJob, getPublicProfile, objectNoShow, reportNoShow, runDueTimers, slotIsHeld } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
-import { fakeGateway, type FakeGateway } from './fake-gateway'
+import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const cancelRoute = await import('../app/app-api/v1/bookings/[id]/cancel/route')
@@ -53,7 +55,7 @@ async function paidBooking(o: { startAt?: Date; provider?: string } = {}): Promi
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'direct', 'confirmed', $4, 60, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', 'pi_cx', 0.12) RETURNING id`,
+       VALUES ($1, $2, $3, 'direct', 'confirmed', $4, 60, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', 'pi_cx_' || gen_random_uuid(), 0.12) RETURNING id`,
       [U.cust, p, service, startAt],
     )
   ).rows[0].id as string
@@ -69,7 +71,7 @@ async function child(parent: string, startAt: Date, amount: number, paid: boolea
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at, paid_at, payment_ref, commission_rate)
        VALUES ($1, $2, $3, 'quote', $4, $5, 60, $6, now() + interval '2 days', now(), $7, $8, 0.12) RETURNING id`,
-      [U.cust, providerId, quote, paid ? 'confirmed' : 'awaiting-payment', startAt, parent, paid ? new Date() : null, paid ? 'pi_cx_child' : null],
+      [U.cust, providerId, quote, paid ? 'confirmed' : 'awaiting-payment', startAt, parent, paid ? new Date() : null, paid ? `pi_cx_child_${randomUUID()}` : null],
     )
   ).rows[0].id as string
   if (paid) await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', $3, $4)", [id, providerId, amount, `charge:${id}`])
@@ -120,9 +122,11 @@ it('customer cancels 25 hours before: full refund, no commission', async () => {
 it('customer cancels 23 hours before: provider share 50%, commission on that 50% only', async () => {
   const now = new Date()
   const { id } = await paidBooking({ startAt: new Date(now.getTime() + 23 * HOUR) })
+  const open = appConnectionsAtMoneyCalls(g)
   const res = await call(cancelRoute.POST, U.cust, 'POST', undefined, { id })
   expect(res.status).toBe(200)
   expect(await res.json()).toMatchObject({ status: 'cancelled', cancelledBy: 'customer', lateCancel: true })
+  expect(open).toEqual([0, 0]) // refund and transfer, with no request transaction open
   expect(await ledger(id)).toEqual([
     { kind: 'commission', amount: '6.00' },
     { kind: 'refund', amount: '50.00' },

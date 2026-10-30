@@ -41,7 +41,7 @@ it('0008: person fields on users, suspensions by date, drafts allowed, notificat
   expect([services.price_type, services.price]).toEqual([true, true])
   expect((await columns('photos')).provider_id).toBe(true)
   expect(Object.keys(await columns('notifications')).sort()).toEqual(
-    ['created_at', 'dismissed_at', 'id', 'kind', 'payload', 'seen_at', 'user_id'].sort(),
+    ['created_at', 'dismissed_at', 'id', 'kind', 'mailed_at', 'payload', 'seen_at', 'user_id'].sort(),
   )
   await expect(applyRls()).resolves.toBeUndefined() // a function still reading a dropped column fails here
 })
@@ -169,4 +169,35 @@ it('0018 on a database with data: existing bookings keep their status and get sa
   await pool.query("INSERT INTO staff_flags (kind, ref_id) VALUES ('dispute-overdue', $1), ('provider-no-shows', $2), ('ignored-requests', $2)", [paid, p])
   await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now())", [paid])
   await pool.query('DELETE FROM disputes; DELETE FROM staff_flags; DELETE FROM notifications; DELETE FROM bookings; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
+}, 60_000)
+
+it('0022 creates every listed index', async () => {
+  const names = (await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname = $1', ['public'])).rows.map((r) => r.indexname)
+  expect(names).toEqual(expect.arrayContaining(['threads_customer_id_idx', 'threads_provider_id_idx', 'messages_sender_id_idx', 'blocks_blocked_id_idx', 'staff_flags_user_id_idx', 'staff_flags_kind_ref_id_idx', 'contact_attempts_user_id_created_at_idx', 'contact_attempts_thread_id_idx', 'bookings_service_id_idx', 'bookings_quote_id_idx', 'requests_service_id_idx', 'requests_parent_booking_id_idx', 'services_category_id_idx', 'photos_owner_id_idx', 'private_files_owner_id_idx', 'reviews_author_id_idx', 'ledger_entries_provider_id_created_at_idx', 'providers_location_gist', 'requests_open_answer_by_idx', 'quotes_sent_expires_at_idx', 'bookings_proposed_answer_by_idx', 'bookings_awaiting_pay_by_idx', 'bookings_finished_confirm_by_idx', 'disputes_open_decide_by_idx', 'reviews_reveal_pending_idx', 'notifications_requests_ignored_idx', 'users_suspended_until_idx', 'providers_suspended_until_idx', 'retained_records_delete_after_idx', 'bookings_payment_ref_idx']))
+  const def = (await pool.query("SELECT indexdef FROM pg_indexes WHERE indexname = 'providers_location_gist'")).rows[0].indexdef
+  expect(def).toContain('gist')
+  expect(def).toContain('geography')
+})
+
+it('0023: requests accept declined, notifications have mailed_at, services have offerable, every country has a currency', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const upTo22 = mkdtempSync(join(tmpdir(), 'mig22-'))
+  cpSync(join(process.cwd(), '../../packages/db/migrations'), upTo22, { recursive: true })
+  const journalPath = join(upTo22, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0023')
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo22 })
+  await pool.query("INSERT INTO users (id, email) VALUES ('m23-c', 'm23-c@test.skilled.invalid'), ('m23-p', 'm23-p@test.skilled.invalid')")
+  const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m23-p', 'published') RETURNING id")).rows[0].id
+  await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m23-c', 'booking-accepted')")
+  await migrate()
+  await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m23-c', $1, 'x', now(), 'declined')", [p])
+  expect((await pool.query("SELECT currency FROM countries WHERE code = 'DE'")).rows[0].currency).toBe('EUR')
+  expect((await pool.query("SELECT 1 FROM countries WHERE currency IS NULL")).rows).toHaveLength(0)
+  expect((await pool.query("SELECT mailed_at FROM notifications WHERE user_id = 'm23-c'")).rows[0].mailed_at).not.toBeNull()
+  expect((await columns('services')).offerable).toBe(false) // NOT NULL
+  await pool.query('DELETE FROM notifications; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
 }, 60_000)

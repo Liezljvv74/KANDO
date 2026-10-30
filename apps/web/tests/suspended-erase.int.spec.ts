@@ -1,8 +1,8 @@
 import sharp from 'sharp'
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { setStorageForTests } from '@kando/domain'
-import { call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase } from './helpers'
+import { setStorageForTests } from '@kando/domain/src/testing'
+import { call, cleanupUsers, EMAIL, memoryStorage, profile, seedBase, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await (await import('./helpers')).mockAuth()), sessionFromRequest: (await import('./helpers')).fakeSession }))
 const profileRoute = await import('../app/app-api/v1/provider-profile/route')
@@ -23,7 +23,7 @@ const upload = async (handler: typeof photos.POST, bytes: Buffer, fields: Record
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(bytes)]), 'upload.bin')
   for (const [k, v] of Object.entries(fields)) form.append(k, v)
-  return handler(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { cookie: `uid=${U}:${EMAIL(U)}` }, body: form }), { params: Promise.resolve({}) })
+  return handler(await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${U}:${EMAIL(U)}` }, body: form })), { params: Promise.resolve({}) })
 }
 const png = () => sharp({ create: { width: 64, height: 48, channels: 3, background: '#c33' } }).png().toBuffer()
 const count = async (table: string) => Number((await pool.query(`SELECT count(*) FROM ${table} WHERE owner_id = $1`, [U])).rows[0].count)

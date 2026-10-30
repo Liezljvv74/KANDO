@@ -29,7 +29,26 @@ const lazy = <T extends object>(get: () => T): T =>
     getPrototypeOf: () => Object.getPrototypeOf(get()),
   })
 
-// connectionTimeoutMillis: a request that cannot get a connection fails after 10 s instead of waiting forever.
-export const pool: pg.Pool = lazy(() => (_pool ??= new pg.Pool({ connectionString: connectionString(), connectionTimeoutMillis: 10_000 })))
+export const APP_POOL_MAX = 10
+// ponytail: `settle` holds two owner connections at once (settle.ts:33), so more than OWNER_POOL_MAX / 2
+// settlements in parallel on one instance can still wait; the cron settles one at a time.
+export const OWNER_POOL_MAX = 10
+export const POOL_IDLE_MS = 5_000
+
+// max bounds the connections per instance; idleTimeoutMillis returns idle ones early; connectionTimeoutMillis makes a
+// request that cannot get a connection fail after 10 s; the error handler stops an idle client dropped by the server
+// (Neon does this) from emitting an unhandled 'error' that kills the process.
+function makePool(max: number): pg.Pool {
+  const p = new pg.Pool({ connectionString: connectionString(), max, idleTimeoutMillis: POOL_IDLE_MS, connectionTimeoutMillis: 10_000 })
+  p.on('error', (e) => console.error('[db] idle client error', e.message))
+  return p
+}
+
+let _appPool: pg.Pool | undefined
+let _appDb: Db | undefined
+export const pool: pg.Pool = lazy(() => (_pool ??= makePool(OWNER_POOL_MAX)))
 export const db: Db = lazy(() => (_db ??= drizzle(pool, { schema })))
+// Request transactions only (asUser), so owner work inside one never waits for a connection a request holds.
+export const appPool: pg.Pool = lazy(() => (_appPool ??= makePool(APP_POOL_MAX)))
+export const appDb: Db = lazy(() => (_appDb ??= drizzle(appPool, { schema })))
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]

@@ -1,3 +1,4 @@
+import { assertNoContactDetailsIn } from './chat/flags'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import sharp from 'sharp'
@@ -10,16 +11,17 @@ import { mediaBucket, photoUrl, removeObject, storage } from './storage'
 
 export const MAX_PORTFOLIO_PHOTOS = 12
 export const MAX_PHOTO_BYTES = 10_000_000
-const MAX_PIXELS = 40_000_000 // decompression-bomb cap, above any phone camera
+export const MAX_PIXELS = 25_000_000 // decompression-bomb cap; the app sends photos at most 1600 px
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export type PreparedPhoto = { kind: 'profile' | 'portfolio'; alt: string | null; data: Buffer; width: number; height: number }
+export type PreparedPhoto = { kind: 'profile' | 'portfolio'; alt: string | null; data: Buffer; width: number; height: number; key: string }
 
 /**
  * Validates the multipart form and re-encodes the image to JPEG, at most 1600 px (drops EXIF incl. GPS).
+ * Then stores the object (under a random key; `onFailure` removes it if the request does not commit).
  * Runs before the transaction. 400 on anything that is not a decodable jpeg, png or webp.
  */
-export async function preparePhoto(request: Request): Promise<PreparedPhoto> {
+export async function preparePhoto(request: Request, onFailure: AfterCommit): Promise<PreparedPhoto> {
   const form = await request.formData().catch(() => new FormData())
   const file = form.get('file')
   const kind = form.get('kind')
@@ -29,7 +31,15 @@ export async function preparePhoto(request: Request): Promise<PreparedPhoto> {
   if (typeof alt !== 'string' || alt.length > 200) return fail(400, { error: 'Invalid alt' })
   if (file.size > MAX_PHOTO_BYTES) return fail(413, { error: 'File too large' })
   const out = await normalizeImage(Buffer.from(await file.arrayBuffer()))
-  return { kind, alt: alt || null, ...out }
+  return { kind, alt: alt || null, ...out, key: await putPhoto(kind, out.data, onFailure) }
+}
+
+/** Stores a normalized photo and registers its removal for a failed request; returns the key. */
+export async function putPhoto(kind: 'profile' | 'portfolio', data: Buffer, onFailure: AfterCommit): Promise<string> {
+  const key = `${kind === 'profile' ? 'people' : 'portfolio'}/${randomUUID()}/${randomUUID()}.jpg`
+  await storage().put(mediaBucket(), key, data, 'image/jpeg')
+  onFailure(() => removeObject(mediaBucket(), key))
+  return key
 }
 
 export type NormalizedImage = { data: Buffer; width: number; height: number }
@@ -73,8 +83,9 @@ export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
   return rows.map(toPhoto)
 }
 
-/** Stores the photo (object first, then the row; a failed insert removes the object). A profile photo replaces the old one. */
+/** Inserts the row for the photo `preparePhoto` already stored. A profile photo replaces the old one. */
 export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCommit: AfterCommit) {
+  await assertNoContactDetailsIn(userId, [p.alt])
   await lockProfile(tx, userId)
   const profile = await ownProvider(tx, userId)
   if (p.kind === 'portfolio') {
@@ -87,26 +98,19 @@ export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCo
     )[0]!.n
     if (n >= MAX_PORTFOLIO_PHOTOS) return fail(409, { error: 'Photo limit reached' })
   }
-  const key = p.kind === 'profile' ? `people/${randomUUID()}/${randomUUID()}.jpg` : `providers/${profile!.id}/${randomUUID()}.jpg`
-  await storage().put(mediaBucket(), key, p.data, 'image/jpeg')
-  try {
-    if (p.kind === 'profile') {
-      // One picture per person (unique index): the old one goes first, its object only once the new photo is committed.
-      const old = await tx
-        .delete(photos)
-        .where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile')))
-        .returning({ key: photos.key })
-      for (const o of old) afterCommit(() => removeObject(mediaBucket(), o.key))
-    }
-    const [row] = await tx
-      .insert(photos)
-      .values({ ownerId: userId, providerId: p.kind === 'profile' ? null : profile!.id, kind: p.kind, key, width: p.width, height: p.height, alt: p.alt })
-      .returning()
-    return toPhoto(row!)
-  } catch (e) {
-    await removeObject(mediaBucket(), key)
-    throw e
+  if (p.kind === 'profile') {
+    // One picture per person (unique index): the old one goes first, its object only once the new photo is committed.
+    const old = await tx
+      .delete(photos)
+      .where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile')))
+      .returning({ key: photos.key })
+    for (const o of old) afterCommit(() => removeObject(mediaBucket(), o.key))
   }
+  const [row] = await tx
+    .insert(photos)
+    .values({ ownerId: userId, providerId: p.kind === 'profile' ? null : profile!.id, kind: p.kind, key: p.key, width: p.width, height: p.height, alt: p.alt })
+    .returning()
+  return toPhoto(row!)
 }
 
 /** Deletes one of the caller's photos; false when it is not theirs. The picture is optional: a live profile may drop it. */

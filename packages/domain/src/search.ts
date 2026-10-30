@@ -1,30 +1,29 @@
 import { sql } from 'drizzle-orm'
-import { distanceKm, lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
+import { lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
 import type { SearchItem, SearchResult } from '@kando/contract'
 import { fail } from './providers/http'
+import { ratingsOf } from './reviews'
 import { photoUrl } from './storage'
 
 export const PAGE_SIZE = 20
-export const MAX_CANDIDATES = 500
 export const MAX_DISTANCE_M = 200_000
 
-type Candidate = {
+type Row = {
   id: string
+  owner_id: string
   slug: string
   public_name: string
   photo_key: string | null
-  lat: number | null
-  lng: number | null
-  service_radius_km: number
   works_remotely: boolean
+  km: number | null
 }
 
 const like = (q: string) => `%${q.replace(/[\\%_]/g, '\\$&')}%`
 
 /**
- * Visible providers: published, not suspended, with at least one offerable service, all decided in the candidate SQL.
- * Everything runs in the request's `tx`: eligibility is the SECURITY DEFINER function `offerable_service_ids`
- * (documents are private), and postcodes are public reference data.
+ * Visible providers (published, not suspended, at least one offerable service), the radius rule and the order all run in
+ * SQL, one page at a time. Everything runs in the request's `tx`: `services.offerable` is the triggers' cached eligibility
+ * (rls.ts), readable under RLS; postcodes and visible reviews are public.
  */
 export async function search(
   tx: Tx,
@@ -33,20 +32,18 @@ export async function search(
     postcode,
     q,
     page = 1,
-    lang,
-    country = 'DE',
+    country,
   }: {
     category?: string
     postcode?: string
     q?: string
     page?: number
-    lang: string
     country?: string
   },
 ): Promise<SearchResult> {
-  const known =
-    (await tx.execute(sql`SELECT 1 FROM countries WHERE code = ${country}`)).rows.length > 0
-  if (!known) return fail(400, { error: 'Unknown country' })
+  country ??= await marketCountry(tx)
+  const market = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${country}`)).rows[0]
+  if (!market) return fail(400, { error: 'Unknown country' })
   const cat = category
     ? (await tx.execute<{ id: string }>(sql`SELECT id FROM categories WHERE slug = ${category}`))
         .rows[0]
@@ -56,47 +53,32 @@ export async function search(
   if (postcode && !origin) return fail(400, { error: 'Unknown postcode' })
   const term = q?.trim()
 
-  const here = origin
-    ? sql`ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography`
-    : sql``
-  // On-site providers must be within their own radius (plus 1 % for sphere vs spheroid; the exact check is haversine below),
-  // so the 500 cap applies after the radius. Remote providers are always in.
+  // The distance within the provider's own radius (1 mm of float slack at exactly the radius), else NULL: outside the
+  // radius (a remote match) the distance stays hidden, since exact distances from many postcodes would reveal the base.
+  // Haversine, R = 6371 km: the same formula and operation order as distanceKm (packages/db/src/postcodes.ts).
+  const km = origin
+    ? sql`(SELECT CASE WHEN h.d <= p.service_radius_km + 1e-6 THEN h.d END FROM (SELECT 2 * 6371 * asin(sqrt(
+        power(sin(radians(ST_Y(p.location) - ${origin.lat}::float8) / 2), 2)
+        + cos(radians(${origin.lat}::float8)) * cos(radians(ST_Y(p.location))) * power(sin(radians(ST_X(p.location) - ${origin.lng}::float8) / 2), 2)
+      )) AS d) h)`
+    : sql`NULL::float8`
+  // On-site work only within the provider's own radius; remote providers are always in. The ST_DWithin prefilter (sphere
+  // vs spheroid: plus 1 %) keeps the expression of the providers_location_gist index; the exact check is the haversine.
   const near = origin
-    ? sql`AND (p.works_remotely OR ST_DWithin(p.location::geography, ${here}, LEAST(p.service_radius_km * 1010, ${MAX_DISTANCE_M})))`
+    ? sql`AND (p.works_remotely OR (ST_DWithin(p.location::geography, ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}), 4326)::geography, LEAST(p.service_radius_km * 1010, ${MAX_DISTANCE_M})) AND d.km IS NOT NULL))`
     : sql``
-  const offerable = cat
-    ? sql`EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.category_id = ${cat.id} AND s.id IN (SELECT offerable_service_ids(p.id)))`
-    : sql`EXISTS (SELECT 1 FROM offerable_service_ids(p.id))`
-  const { rows } = await tx.execute<Candidate>(sql`
-    SELECT p.id, p.slug, p.public_name, ph.key AS photo_key, ST_Y(p.location) AS lat, ST_X(p.location) AS lng,
-           p.service_radius_km, p.works_remotely
+  const { rows } = await tx.execute<Row>(sql`
+    SELECT p.id, p.owner_id, p.slug, p.public_name, ph.key AS photo_key, p.works_remotely, d.km
     FROM providers p
     LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
+    CROSS JOIN LATERAL (SELECT ${km} AS km) d
     WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.country = ${country} AND p.slug IS NOT NULL
-      AND ${offerable}
+      AND EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.offerable ${cat ? sql`AND s.category_id = ${cat.id}` : sql``})
       ${near}
       ${term ? sql`AND (p.public_name ILIKE ${like(term)} OR EXISTS (SELECT 1 FROM unnest(p.skills) k WHERE k ILIKE ${like(term)}))` : sql``}
-    ORDER BY ${origin ? sql`ST_Distance(p.location::geography, ${here}),` : sql``} p.public_name, p.id
-    LIMIT ${MAX_CANDIDATES}`)
-
-  const ranked = rows
-    .flatMap((p) => {
-      const d =
-        origin && p.lat != null && p.lng != null
-          ? distanceKm(origin, { lat: p.lat, lng: p.lng })
-          : null
-      const inRadius = d != null && d <= p.service_radius_km + 1e-6 // 1 mm of float slack at exactly the radius
-      if (origin && !p.works_remotely && !inRadius) return [] // on-site work only within the provider's own radius
-      // Outside the radius (a remote match) the distance stays hidden: exact distances from many postcodes would reveal the base.
-      return [{ p, distance: inRadius ? d : null }]
-    })
-    .sort(
-      (a, b) =>
-        (a.distance ?? Infinity) - (b.distance ?? Infinity) ||
-        a.p.public_name.localeCompare(b.p.public_name, lang) ||
-        a.p.id.localeCompare(b.p.id),
-    )
-  const pageRows = ranked.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    ORDER BY d.km NULLS LAST, lower(p.public_name), p.id
+    LIMIT ${PAGE_SIZE + 1} OFFSET ${(page - 1) * PAGE_SIZE}`)
+  const pageRows = rows.slice(0, PAGE_SIZE)
 
   // One query for the page: each provider's offerable services (price, category slug).
   const svc = pageRows.length
@@ -109,18 +91,19 @@ export async function search(
           category_id: string
         }>(sql`
           SELECT s.provider_id, s.price, s.currency, c.slug, c.id AS category_id FROM services s JOIN categories c ON c.id = s.category_id
-          WHERE s.provider_id IN (${sql.join(
-            pageRows.map(({ p }) => sql`${p.id}::uuid`),
+          WHERE s.offerable AND s.provider_id IN (${sql.join(
+            pageRows.map((p) => sql`${p.id}::uuid`),
             sql`, `,
-          )})
-            AND s.id IN (SELECT offerable_service_ids(s.provider_id))`)
+          )})`)
       ).rows
     : []
+  const ratings = await ratingsOf(tx, pageRows.map((p) => p.owner_id), 'customer') // shown reviews only
 
-  const items: SearchItem[] = pageRows.map(({ p, distance }) => {
+  const items: SearchItem[] = pageRows.map((p) => {
     const own = svc.filter((s) => s.provider_id === p.id)
     const counted = cat ? own.filter((s) => s.category_id === cat.id) : own
     const priced = counted.filter((s) => s.price !== null).sort((a, b) => Number(a.price) - Number(b.price))
+    const rating = ratings.get(p.owner_id) ?? null
     return {
       slug: p.slug,
       publicName: p.public_name,
@@ -128,25 +111,32 @@ export async function search(
       categories: [...new Set(own.map((s) => s.slug))],
       fromPrice: priced.length ? Number(priced[0]!.price) : null,
       // Whole km, at least 1: coarse enough not to pinpoint the base postcode.
-      distanceKm: distance == null ? null : Math.max(1, Math.round(distance)),
+      distanceKm: p.km == null ? null : Math.max(1, Math.round(Number(p.km))),
       worksRemotely: p.works_remotely,
-      // The currency of the cheapest service, else of any shown one ('EUR' only if they vanished between the two queries).
-      currency: ((priced[0] ?? own[0])?.currency ?? 'EUR') as SearchItem['currency'],
-      isNew: true, // Until ratings exist (Stage 6).
+      // The currency of the cheapest service, else of any shown one (the country's if they vanished between the two queries).
+      currency: ((priced[0] ?? own[0])?.currency ?? market.currency) as SearchItem['currency'],
+      rating,
+      isNew: rating === null,
     }
   })
-  return { items, page, hasMore: ranked.length > page * PAGE_SIZE }
+  return { items, page, hasMore: rows.length > PAGE_SIZE }
 }
 
-/** Slugs (and last change) of the providers the search shows: the same visibility rule, for the sitemap. */
+/** The only market, when there is exactly one; with several the caller must name one. */
+export async function marketCountry(tx: Tx): Promise<string> {
+  const { rows } = await tx.execute<{ code: string }>(sql`SELECT code FROM countries LIMIT 2`)
+  if (rows.length !== 1) return fail(400, { error: 'country-required' })
+  return rows[0]!.code
+}
+
+/** Slugs (and last change) of the providers the search shows, in every market: the same visibility rule, for the sitemap. */
 export async function visibleProviderSlugs(
   tx: Tx,
-  country = 'DE',
 ): Promise<{ slug: string; updatedAt: Date }[]> {
   const { rows } = await tx.execute<{ slug: string; updated_at: Date | string }>(sql`
     SELECT p.slug, p.updated_at FROM providers p
-    WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.country = ${country} AND p.slug IS NOT NULL
-      AND EXISTS (SELECT 1 FROM offerable_service_ids(p.id))
+    WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.slug IS NOT NULL
+      AND EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.offerable)
     ORDER BY p.slug LIMIT ${MAX_SITEMAP_PROVIDERS}`)
   return rows.map((r) => ({ slug: r.slug, updatedAt: new Date(r.updated_at) }))
 }

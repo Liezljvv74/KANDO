@@ -118,6 +118,17 @@ test('a network error on load sets offline (not signed out); retry recovers', as
   expect(getSession()).toEqual({ user, loading: false, offline: false })
 })
 
+test('a busy login server (429, 5xx) on load is offline with the Retry screen, never the login form; a 401 is signed out', async () => {
+  for (const status of [429, 503]) {
+    a.session.mockRejectedValueOnce(new client.ApiError(status, 'AUTH_BUSY'))
+    await loadSession()
+    expect(getSession()).toEqual({ user: null, loading: false, offline: true })
+  }
+  a.session.mockRejectedValueOnce(new client.ApiError(401, 'UNAUTHORIZED'))
+  await loadSession()
+  expect(getSession()).toEqual({ user: null, loading: false, offline: false })
+})
+
 test('onUnauthorized from the API client signs the user out', async () => {
   a.signIn.mockResolvedValueOnce(user)
   await signIn('a@b.de', 'secret123')
@@ -209,6 +220,20 @@ test('after the PATCH succeeded, a failed upload keeps only email, tick and pict
   expect(api.updateMe).toHaveBeenCalledTimes(1)
   expect(photos.add).toHaveBeenCalledTimes(2)
   expect(await loadPending()).toBeNull()
+})
+
+test('a sign-up name the server refuses as contact details is dropped, the picture still uploads and nothing is retried', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  api.updateMe.mockRejectedValueOnce(new client.ApiError(422, 'CONTACT_DETAILS'))
+  await verify('a@b.de', '123456')
+  expect(photos.add).toHaveBeenCalledTimes(1)
+  expect(await loadPending()).toBeNull()
+  a.session.mockResolvedValueOnce(user)
+  await loadSession()
+  await new Promise((r) => setTimeout(r, 0))
+  expect(api.updateMe).toHaveBeenCalledTimes(1)
+  expect(photos.add).toHaveBeenCalledTimes(1)
 })
 
 test('a picture whose cached file is gone is dropped and the record cleared', async () => {

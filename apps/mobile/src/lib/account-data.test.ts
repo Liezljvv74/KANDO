@@ -1,12 +1,6 @@
 import { ApiError } from '@/api/client'
-import { afterDeleteFailure, emailMatches, exportText } from './account-data'
-
-test('the typed email must equal the account email, ignoring case and outer spaces', () => {
-  expect(emailMatches('Anna@Example.com ', 'anna@example.com')).toBe(true)
-  expect(emailMatches('anna@example.co', 'anna@example.com')).toBe(false)
-  expect(emailMatches('', 'anna@example.com')).toBe(false)
-  expect(emailMatches('anna@example.com', '')).toBe(false) // no email known yet: never enabled
-})
+import { setLang } from '@/i18n'
+import { accountError, afterDeleteFailure, exportText } from './account-data'
 
 test('the export text is readable JSON of the whole document', () => {
   const text = exportText({ user: { email: 'a@b.de' } })
@@ -31,7 +25,7 @@ const down = async () => {
 test('a refused delete (400, 409) says it was not deleted and does not ask the server again', async () => {
   const check = jest.fn(ok)
   expect(await afterDeleteFailure(new ApiError(409, 'LAST_ADMIN'), check)).toMatchObject({ deleted: false })
-  expect(await afterDeleteFailure(new ApiError(400, 'EMAIL_MISMATCH'), check)).toMatchObject({ deleted: false })
+  expect(await afterDeleteFailure(new ApiError(403, 'WRONG_PASSWORD'), check)).toMatchObject({ deleted: false })
   expect(check).not.toHaveBeenCalled()
 })
 
@@ -53,3 +47,25 @@ test('a 401 on the delete itself means the account is already gone', async () =>
   expect(await afterDeleteFailure(new ApiError(401, 'Unauthorized'), ok)).toEqual({ deleted: true })
 })
 
+test('a 503 AUTH_BUSY shows the busy text, not "unconfirmed", and does not ask the server again', async () => {
+  setLang('en')
+  const check = jest.fn(ok)
+  expect(await afterDeleteFailure(new ApiError(503, 'AUTH_BUSY'), check)).toEqual({ deleted: false, text: 'The login service is busy for a moment. Please try again in a minute.' })
+  expect(check).not.toHaveBeenCalled()
+})
+
+test('a wrong password shows the wrong-password text', () => {
+  setLang('en')
+  expect(accountError('delete', 'WRONG_PASSWORD')).toBe('The password is not correct. Nothing was deleted.')
+})
+
+test('AUTH_BUSY shows the busy text', () => {
+  setLang('en')
+  expect(accountError('delete', 'AUTH_BUSY')).toBe('The login service is busy for a moment. Please try again in a minute.')
+})
+
+test('a 403 WRONG_PASSWORD means not deleted', async () => {
+  const check = jest.fn(ok)
+  expect(await afterDeleteFailure(new ApiError(403, 'WRONG_PASSWORD'), check)).toEqual({ deleted: false, text: 'The password is not correct. Nothing was deleted.' })
+  expect(check).not.toHaveBeenCalled()
+})

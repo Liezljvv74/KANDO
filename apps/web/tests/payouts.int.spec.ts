@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
-import { db, pool } from '@kando/db'
+import { asUser, db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, notifyBookingEvent, outboxForTests, refreshAccount, runDueTimers, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, getPublicProfile, notifyBookingEvent, payoutStatus, refreshAccount, runDueTimers } from '@kando/domain'
+import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -108,6 +110,18 @@ it('set-up creates one account and returns a link; a second call reuses the acco
   expect(g.calls.filter((c) => c.method === 'onboardingLink')).toHaveLength(2) // a fresh link every time
 })
 
+it('onboardingLink and accountReady run with no request transaction open', async () => {
+  const p = await provider()
+  const open: Record<string, number> = {}
+  const link = g.onboardingLink
+  const readyFn = g.accountReady
+  g.onboardingLink = async (a) => ((open.onboardingLink = appPool.totalCount - appPool.idleCount), link(a))
+  g.accountReady = async (a) => ((open.accountReady = appPool.totalCount - appPool.idleCount), readyFn(a))
+  expect((await startSetup(p.uid)).status).toBe(200)
+  expect((await getStatus(p.uid)).status).toBe(200)
+  expect(open).toEqual({ onboardingLink: 0, accountReady: 0 })
+})
+
 it('two parallel set-ups create one account', async () => {
   const p = await provider()
   const [a, b] = await Promise.all([startSetup(p.uid), startSetup(p.uid)])
@@ -115,6 +129,18 @@ it('two parallel set-ups create one account', async () => {
   expect((await a.json()).url).toBe((await b.json()).url)
   expect(g.calls.filter((c) => c.method === 'createAccount')).toHaveLength(1)
   expect(g.attempts.createAccount).toBe(1) // the second waited and found the stored account
+})
+
+it('payoutStatus says whether this call changed the stored readiness (the route refreshes public pages only then)', async () => {
+  const p = await provider()
+  await startSetup(p.uid)
+  const acct = (await prow(p.id)).stripe_account_id as string
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: false, changed: false })
+  g.ready.add(acct)
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: true, changed: true })
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: true, changed: false })
+  g.ready.delete(acct)
+  expect(await payoutStatus(db, p.uid)).toEqual({ ready: false, changed: true })
 })
 
 it('status turns ready and the public profile shows verified', async () => {
@@ -195,6 +221,22 @@ it('a customer cannot request or book an unready provider (409) but can watch it
   expect((await bookable.json()).error).toBe('ALREADY_BOOKABLE')
 })
 
+it('the provider page says watching after notify-me, not after the undo, and never to an anonymous caller', async () => {
+  const p = await provider()
+  const as = async (uid: string) => ProviderDetailSchema.parse(await (await call(profileRoute.GET, uid, 'GET', undefined, { slug: p.slug })).json())
+  expect((await as(U.c1)).watching).toBe(false)
+  await watch(p.slug, U.c1)
+  expect((await as(U.c1)).watching).toBe(true)
+  expect((await as(U.c2)).watching).toBe(false) // another customer's watch is not mine
+  expect((await asUser(null, (tx) => getPublicProfile(tx, p.slug, 'de')))?.watching).toBeFalsy() // the cached website page
+  await pool.query('UPDATE availability_watches SET notified_at = now() WHERE provider_id = $1', [p.id])
+  expect((await as(U.c1)).watching).toBe(false) // already answered
+  await watch(p.slug, U.c1) // re-armed
+  expect((await as(U.c1)).watching).toBe(true)
+  await unwatch(p.slug, U.c1)
+  expect((await as(U.c1)).watching).toBe(false)
+})
+
 it('three watches send the provider one customers-waiting notice with count 3 within 24 hours: the first tap at once, the cron a summary', async () => {
   const p = await provider()
   expect((await watch(p.slug, U.c1)).status).toBe(204)
@@ -241,8 +283,8 @@ it('no notice and no email when nobody is waiting (count 0), nor for an unpublis
   await runDueTimers(db, new Date(Date.now() + HOUR))
   expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
   clearOutbox()
-  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' })
-  await notifyBookingEvent('customers-waiting', p.uid, {})
+  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' }, { written: true })
+  await notifyBookingEvent('customers-waiting', p.uid, {}, { written: true })
   expect(outboxForTests()).toHaveLength(0)
   for (const hide of ["status = 'draft'", "suspended_until = now() + interval '1 day'"]) {
     const q = await provider()

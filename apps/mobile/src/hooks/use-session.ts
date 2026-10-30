@@ -15,6 +15,9 @@ type State = { user: User | null; loading: boolean; offline: boolean }
 
 let state: State = { user: null, loading: true, offline: false }
 let started = false
+let authBusy = false
+/** True when the last load failed because the login server was busy (429/5xx), not because the phone is offline: the Retry screen says so. */
+export const isAuthBusy = () => authBusy
 const listeners = new Set<() => void>()
 
 function set(next: State) {
@@ -37,7 +40,9 @@ export async function loadSession() {
     signedIn(user)
     if (user?.emailVerified) completeSignup(user).catch(() => {}) // a sign-up the last launch could not finish
   } catch (e) {
-    set({ user: null, loading: false, offline: e instanceof ApiError && e.status === 0 })
+    // A busy login server (429/5xx) is not a sign-out either: the cookie stays, the Retry screen shows. Only 401 clears it (client.ts).
+    authBusy = e instanceof ApiError && (e.status === 429 || e.status >= 500)
+    set({ user: null, loading: false, offline: authBusy || (e instanceof ApiError && e.status === 0) })
   }
 }
 
@@ -95,10 +100,15 @@ async function finish(p: PendingSignup) {
     if (p.firstName && p.lastName) {
       const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
       // A postcode the server refuses must not block the names for good (the form cannot show it any more): saved without the address.
-      await updateMe({ ...names, ...(p.address && { address: p.address }) }).catch((e) => {
-        if (e instanceof ApiError && e.code === 'Invalid postcode') return updateMe(names)
-        throw e
-      })
+      try {
+        await updateMe({ ...names, ...(p.address && { address: p.address }) }).catch((e) => {
+          if (e instanceof ApiError && e.code === 'Invalid postcode') return updateMe(names)
+          throw e
+        })
+      } catch (e) {
+        // A name the server refuses as contact details never passes: dropped, not retried; the account screen shows the refusal later.
+        if (!(e instanceof ApiError && e.code === 'CONTACT_DETAILS')) throw e
+      }
       // Saved: a retry only repeats the picture, so later edits are never overwritten.
       await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri })
     }

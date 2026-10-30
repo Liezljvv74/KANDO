@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertFuture, canTransition, overlaps, payBy } from './rules'
+import { assertFuture, bookingShownStatus, canTransition, overlaps, payBy } from './rules'
+import { PAY_GRACE_MINUTES } from '../payments/rules'
 
 const d = (s: string) => new Date(`2026-11-${s}:00.000Z`)
+
+describe('bookingShownStatus', () => {
+  const now = d('10T12:00')
+  const min = (m: number) => new Date(now.getTime() + m * 60_000)
+  it('proposed past answerBy', () => {
+    expect(bookingShownStatus({ status: 'proposed', answerBy: now, payBy: null }, now)).toBe('expired')
+    expect(bookingShownStatus({ status: 'proposed', answerBy: min(1), payBy: null }, now)).toBe('proposed')
+  })
+  it('awaiting-payment past payBy plus grace', () => {
+    expect(bookingShownStatus({ status: 'awaiting-payment', answerBy: null, payBy: min(-PAY_GRACE_MINUTES) }, now)).toBe('expired')
+  })
+  it('inside the grace', () => {
+    expect(bookingShownStatus({ status: 'awaiting-payment', answerBy: null, payBy: min(-PAY_GRACE_MINUTES + 1) }, now)).toBe('awaiting-payment')
+  })
+  it('other statuses unchanged', () => {
+    for (const status of ['confirmed', 'declined', 'withdrawn', 'expired']) expect(bookingShownStatus({ status, answerBy: min(-60), payBy: min(-60) }, now)).toBe(status)
+  })
+})
 
 describe('payBy', () => {
   it('is 48h after acceptance when start is far away', () => {

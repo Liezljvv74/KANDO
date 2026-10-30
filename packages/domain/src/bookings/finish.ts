@@ -1,33 +1,22 @@
 import { and, eq, isNull, like } from 'drizzle-orm'
 import { bookings, db, providers, staffFlags, type Tx } from '@kando/db'
-import type { Booking, FinishInput } from '@kando/contract'
-import { isUuid } from '../admin/common'
+import { DAY, type Booking, type FinishInput } from '@kando/contract'
 import { flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
 import { issueInvoiceFor } from '../invoices/issue'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
-import { ownProvider } from '../providers/profile'
 import { paidAmount } from '../payments/ledger'
 import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
 import { CONFIRM_DAYS, REVIEW_VISIBLE_DAYS } from './ending-rules'
 import { notifyBookingEvent } from './notify'
+import { lockRow, partyOf } from './party'
 import { toBooking } from './requests'
 
-const DAY = 86_400_000
 /** The note prefix of a staff flag for a failed release (timers.ts orders those bookings last). */
 export const RELEASE_FAILED = 'release failed: '
-const notFound = () => fail(404, { error: 'Not found' })
 
-/** Which side the caller is on, read on the request transaction (RLS proves they are a party); 404 for anyone else. */
-export async function sideOf(tx: Tx, userId: string, bookingId: string): Promise<'customer' | 'provider'> {
-  const b = isUuid(bookingId) ? (await tx.select({ customerId: bookings.customerId, providerId: bookings.providerId }).from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
-  if (!b) return notFound()
-  if (b.customerId === userId) return 'customer'
-  return (await ownProvider(tx, userId))?.id === b.providerId ? 'provider' : notFound()
-}
-export const lockRow = async (o: Exec, id: string) => (await o.select().from(bookings).where(eq(bookings.id, id)).for('update'))[0] ?? notFound()
 export const reload = async (id: string) => toBooking((await db.select().from(bookings).where(eq(bookings.id, id)))[0]!)
 
 /**
@@ -36,7 +25,7 @@ export const reload = async (id: string) => toBooking((await db.select().from(bo
  * INVALID_MATERIAL_AMOUNT). Owner connection (finished is an owner-only status), the row locked and re-checked.
  */
 export async function finishJob(tx: Tx, userId: string, bookingId: string, input: FinishInput, now = new Date()): Promise<Booking> {
-  if ((await sideOf(tx, userId, bookingId)) !== 'provider') fail(403, { error: 'not-your-turn' })
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'not-your-turn' })
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
@@ -60,7 +49,16 @@ export async function finishJob(tx: Tx, userId: string, bookingId: string, input
  * completed booking returns it unchanged (200).
  */
 export async function confirmJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
-  if ((await sideOf(tx, userId, bookingId)) !== 'customer') fail(403, { error: 'not-your-turn' })
+  return (await beginConfirmJob(tx, userId, bookingId, now))()
+}
+
+/**
+ * confirmJob for a route: checks and records step 1 now and returns step 2 (the release, then the booking), which the route
+ * runs after its request transaction (an AfterTransaction), so no Stripe call holds a request connection. Step 2 never throws
+ * for the money (tryRelease: logged, flagged, retried by the timer).
+ */
+export async function beginConfirmJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<() => Promise<Booking>> {
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'customer') fail(403, { error: 'not-your-turn' })
   const b = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status === 'completed') return b
@@ -71,8 +69,10 @@ export async function confirmJob(tx: Tx, userId: string, bookingId: string, now 
     const [r] = await o.update(bookings).set({ ...(asked && { status: 'finished', finishedAt: now }), confirmBy: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
     return r!
   })
-  if (b.status !== 'completed') await tryRelease(db, b.id, b.customerId, now)
-  return reload(b.id)
+  return async () => {
+    if (b.status !== 'completed') await tryRelease(db, b.id, b.customerId, now)
+    return reload(b.id)
+  }
 }
 
 /**

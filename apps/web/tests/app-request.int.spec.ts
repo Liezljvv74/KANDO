@@ -1,8 +1,12 @@
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
-import { pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
-import { createAppRequest } from '@kando/domain'
+import { AuthUnavailableError, clearOutbox, createAppRequest, finishJob, sendEmail } from '@kando/domain'
+import { outboxForTests } from '@kando/domain/src/testing'
+import { t } from '@kando/i18n'
+import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 // Fake session source: cookie "uid=<id>:<email>" is a (confirmed) session, anything else is not.
 const appRequest = createAppRequest(async (request) => {
@@ -27,7 +31,7 @@ beforeAll(async () => {
 })
 afterAll(async () => {
   await pool.query('DROP TABLE IF EXISTS wrap_probe')
-  await pool.query("DELETE FROM users WHERE email LIKE '%@test.skilled.invalid'")
+  await cleanupUsers()
 })
 
 it('first contact creates the users row', async () => {
@@ -83,6 +87,29 @@ it('an unconfirmed email: 403 where auth is required, signed out where optional;
   expect((await pool.query("SELECT 1 FROM users WHERE id = 'u-unv'")).rows).toHaveLength(0)
 })
 
+it('a 429 from the session lookup is 503 AUTH_BUSY', async () => {
+  const busy = createAppRequest(async () => {
+    throw new AuthUnavailableError('auth status 429')
+  })
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const ran: string[] = []
+  const run = async () => (ran.push('handler'), Response.json({ ran: true }))
+  const req = (method: string) => new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: 'session_token=secret-token-value' } })
+  for (const [auth, method] of [['required', 'GET'], ['required', 'POST'], ['optional', 'POST']] as const) {
+    const res = await busy({ auth }, run)(req(method), ctx)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'AUTH_BUSY' })
+  }
+  expect(ran).toEqual([])
+  // An optional public read is still served, as anonymous.
+  const read = await busy({ auth: 'optional' }, async ({ user }) => Response.json({ user }))(req('GET'), ctx)
+  expect(await read.json()).toEqual({ user: null })
+  const lines = spy.mock.calls.map((c) => c.join(' '))
+  expect(lines.some((l) => l.includes('429'))).toBe(true)
+  expect(lines.join('\n')).not.toContain('secret-token-value')
+  vi.restoreAllMocks()
+})
+
 it('a handler error rolls back and returns 500', async () => {
   const h = appRequest({ auth: 'required' }, async ({ tx }) => {
     await tx.execute(sql`INSERT INTO wrap_probe (note) VALUES ('x')`)
@@ -102,12 +129,59 @@ it('a body over maxBodyBytes is 413 before the handler runs', async () => {
     new Request('http://localhost/x', {
       method: 'POST',
       body: 'x'.repeat(50),
-      headers: { cookie: 'uid=u1:u1@test.skilled.invalid' },
+      headers: { origin: 'http://localhost', cookie: 'uid=u1:u1@test.skilled.invalid' },
     }),
     ctx,
   )
   expect(res.status).toBe(413)
 })
+
+it('an upload route without Content-Length is 411 before the handler runs', async () => {
+  const ran: string[] = []
+  const h = appRequest(
+    { auth: 'required', maxBodyBytes: 100, prepare: async () => void ran.push('prepare') },
+    async () => {
+      ran.push('handler')
+      return Response.json({ ok: true })
+    },
+  )
+  const res = await h(
+    new Request('http://localhost/x', { method: 'POST', body: 'small', headers: { origin: 'http://localhost', cookie: 'uid=u1:u1@test.skilled.invalid' } }),
+    ctx,
+  )
+  expect(res.status).toBe(411)
+  expect(await res.json()).toEqual({ error: 'LENGTH_REQUIRED' })
+  expect(ran).toEqual([])
+})
+
+it('a body larger than declared is cut at the cap: 413', async () => {
+  const max = 10
+  let pulled = 0
+  // Declares 5 bytes, then never ends: reading it to the end would hang the test.
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) {
+      pulled++
+      c.enqueue(new Uint8Array([120]))
+    },
+  })
+  const ran: string[] = []
+  const h = appRequest({ auth: 'required', maxBodyBytes: max }, async () => {
+    ran.push('handler')
+    return Response.json({ ok: true })
+  })
+  const res = await h(
+    new Request('http://localhost/x', {
+      method: 'POST',
+      body,
+      duplex: 'half',
+      headers: { origin: 'http://localhost', cookie: 'uid=u1:u1@test.skilled.invalid', 'content-length': '5' },
+    } as RequestInit),
+    ctx,
+  )
+  expect(res.status).toBe(413)
+  expect(ran).toEqual([])
+  expect(pulled).toBeLessThan(max + 10) // stopped near max + 1, not read on
+}, 10_000)
 
 it('user A cannot read user B through the wrapper', async () => {
   await me(as('ua'), ctx)
@@ -152,6 +226,15 @@ it('a second id with the same email gets 409 and no row is written', async () =>
   expect(await count()).toBe(before)
 })
 
+it('an answer is private, no-store unless the handler set Cache-Control', async () => {
+  const plain = appRequest({ auth: 'optional' }, async () => Response.json({ ok: true }))
+  expect((await plain(new Request('http://localhost/x'), ctx)).headers.get('cache-control')).toBe('private, no-store')
+  const own = appRequest({ auth: 'optional' }, async () => Response.json({ ok: true }, { headers: { 'Cache-Control': 'public, max-age=60' } }))
+  expect((await own(new Request('http://localhost/x'), ctx)).headers.get('cache-control')).toBe('public, max-age=60')
+  const later = appRequest({ auth: 'optional' }, async () => async () => Response.json({ ok: true }))
+  expect((await later(new Request('http://localhost/x'), ctx)).headers.get('cache-control')).toBe('private, no-store')
+})
+
 it('a thrown 400 Response is returned unchanged', async () => {
   const h = appRequest({ auth: 'required' }, async ({ request }) => {
     await parseBody(ServiceInputSchema, request)
@@ -161,7 +244,7 @@ it('a thrown 400 Response is returned unchanged', async () => {
     new Request('http://localhost/x', {
       method: 'POST',
       body: '{"title":""}',
-      headers: { cookie: 'uid=u9:u9@test.skilled.invalid' },
+      headers: { origin: 'http://localhost', cookie: 'uid=u9:u9@test.skilled.invalid' },
     }),
     ctx,
   )
@@ -173,7 +256,7 @@ it('a thrown 400 Response is returned unchanged', async () => {
 
 it('a suspended person: writes are 403 SUSPENDED, reads work, an expired date is not suspended', async () => {
   const write = appRequest({ auth: 'required' }, async () => Response.json({ ran: true }))
-  const req = (id: string, method: string) => new Request('http://localhost/x', { method, headers: { cookie: `uid=${id}:${id}@test.skilled.invalid` } })
+  const req = (id: string, method: string) => new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: `uid=${id}:${id}@test.skilled.invalid` } })
   await me(as('usus'), ctx)
   await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usus'")
   const blocked = await write(req('usus', 'POST'), ctx)
@@ -188,10 +271,131 @@ it('a suspended person can still erase their own data (DELETE) and use a route m
   const run = async () => Response.json({ ran: true })
   const plain = appRequest({ auth: 'required' }, run)
   const open = appRequest({ auth: 'required', allowWhenSuspended: true }, run)
-  const req = (method: string) => new Request('http://localhost/x', { method, headers: { cookie: 'uid=usdel:usdel@test.skilled.invalid' } })
+  const req = (method: string) => new Request('http://localhost/x', { method, headers: { origin: 'http://localhost', cookie: 'uid=usdel:usdel@test.skilled.invalid' } })
   await me(as('usdel'), ctx)
   await pool.query("UPDATE users SET suspended_until = now() + interval '1 day' WHERE id = 'usdel'")
   expect((await plain(req('DELETE'), ctx)).status).toBe(200)
   for (const m of ['POST', 'PUT', 'PATCH']) expect((await plain(req(m), ctx)).status).toBe(403)
   expect((await open(req('POST'), ctx)).status).toBe(200)
+})
+
+const xmin = async (id: string) => (await pool.query('SELECT xmin::text AS x FROM users WHERE id = $1', [id])).rows[0].x
+const asEmail = (id: string, email: string) => new Request('http://localhost/x', { headers: { cookie: `uid=${id}:${email}` } })
+
+it('a known user with an unchanged email is not rewritten', async () => {
+  await me(as('ux1'), ctx)
+  const before = await xmin('ux1')
+  expect((await me(as('ux1'), ctx)).status).toBe(200)
+  expect(await xmin('ux1')).toBe(before)
+})
+
+it('an email changed in Neon Auth is synced', async () => {
+  await me(as('ux2'), ctx)
+  const res = await me(asEmail('ux2', 'ux2-new@test.skilled.invalid'), ctx)
+  expect((await res.json()).user.email).toBe('ux2-new@test.skilled.invalid')
+  expect((await pool.query("SELECT email FROM users WHERE id='ux2'")).rows[0].email).toBe('ux2-new@test.skilled.invalid')
+})
+
+const busy = () => appPool.totalCount - appPool.idleCount
+
+it('an after-transaction answer runs once the transaction committed', async () => {
+  const after = appRequest({ auth: 'required' }, async ({ tx }) => {
+    await tx.execute(sql`INSERT INTO wrap_probe (note) VALUES ('after-answer')`)
+    return async () => {
+      const seen = await db.execute(sql`SELECT 1 FROM wrap_probe WHERE note = 'after-answer'`)
+      return Response.json({ seen: seen.rows.length, busy: busy() })
+    }
+  })
+  const res = await after(as('u-after'), ctx)
+  expect(await res.json()).toEqual({ seen: 1, busy: 0 })
+})
+
+it('a Response thrown by an after-transaction answer is the answer', async () => {
+  const after = appRequest({ auth: 'required' }, async () => async () => {
+    throw Response.json({ error: 'x' }, { status: 409 })
+  })
+  const res = await after(as('u-after'), ctx)
+  expect(res.status).toBe(409)
+  expect(await res.json()).toEqual({ error: 'x' })
+})
+
+/** A request wrapper whose scheduler only stores the job (as Next's after() would run it once the answer is sent). */
+function scheduled() {
+  const jobs: (() => Promise<void>)[] = []
+  const wrap = createAppRequest(
+    async (request) => {
+      const m = /uid=([^:;]+):([^;]+)/.exec(request.headers.get('cookie') ?? '')
+      return m ? { id: m[1]!, email: m[2]!, emailVerified: true } : null
+    },
+    { schedule: (w) => void jobs.push(w) },
+  )
+  return { wrap, jobs }
+}
+
+it('the response is returned before after-commit work and sends run', async () => {
+  vi.stubEnv('RESEND_API_KEY', '')
+  clearOutbox()
+  const { wrap, jobs } = scheduled()
+  const ran: string[] = []
+  const h = wrap({ auth: 'required' }, async ({ afterCommit }) => {
+    await sendEmail({ to: 'in-tx@test.skilled.invalid', lang: 'en', template: 'document-approved', params: { requirement: 'permit' } })
+    afterCommit(async () => void ran.push('after-commit'))
+    return Response.json({ ok: true })
+  })
+  const res = await h(as('u-sched'), ctx)
+  expect(res.status).toBe(200)
+  expect(outboxForTests()).toHaveLength(0)
+  expect(ran).toEqual([])
+  expect(jobs).toHaveLength(1)
+  await jobs[0]!()
+  expect(ran).toEqual(['after-commit'])
+  expect(outboxForTests().map((m) => m.to)).toEqual(['in-tx@test.skilled.invalid'])
+  vi.unstubAllEnvs()
+})
+
+it('notices of a committed owner step go out when the request then fails', async () => {
+  vi.stubEnv('RESEND_API_KEY', '')
+  clearOutbox()
+  const { categoryId } = await seedBase()
+  await seedUser('aq-cust')
+  const providerId = await seedProvider('aq-owner', { name: 'Aq Owner', categoryId, price: 100 })
+  const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id
+  const startAt = new Date(Date.now() - 2 * 3_600_000)
+  const id = (
+    await pool.query(
+      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
+       VALUES ('aq-cust', $1, $2, 'direct', 'confirmed', $3, 60, $3::timestamptz - interval '2 days', $3::timestamptz - interval '2 days', 'pi_aq_' || gen_random_uuid(), 0.12) RETURNING id`,
+      [providerId, service, startAt],
+    )
+  ).rows[0].id as string
+  const { wrap, jobs } = scheduled()
+  const h = wrap({ auth: 'required' }, async ({ tx, user }) => {
+    await finishJob(tx, user!.id, id, {})
+    throw new Error('after the finish')
+  })
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const res = await h(as('aq-owner'), ctx)
+  expect(res.status).toBe(500)
+  expect((await pool.query('SELECT status FROM bookings WHERE id = $1', [id])).rows[0].status).toBe('finished')
+  expect(outboxForTests()).toHaveLength(0)
+  for (const job of jobs) await job()
+  const mail = outboxForTests().find((m) => m.to === EMAIL('aq-cust'))
+  expect(mail?.subject).toBe(t('de', 'email.jobFinished.subject'))
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
+
+it('thrown, busy and early answers carry no-store; a handler header is kept; an immutable Response is not turned into a 500', async () => {
+  const NO_STORE = 'private, no-store'
+  const thrown = appRequest({ auth: 'required' }, async () => { throw Response.json({ error: 'nope' }, { status: 404 }) })
+  expect((await thrown(as('nstore'), ctx)).headers.get('cache-control')).toBe(NO_STORE)
+  const own = appRequest({ auth: 'required' }, async () => { throw Response.json({}, { status: 400, headers: { 'Cache-Control': 'public, max-age=60' } }) })
+  expect((await own(as('nstore'), ctx)).headers.get('cache-control')).toBe('public, max-age=60')
+  const busy = createAppRequest(async () => { throw new AuthUnavailableError('503') })({ auth: 'required' }, async () => Response.json({}))
+  const busyRes = await busy(as('nstore'), ctx)
+  expect([busyRes.status, busyRes.headers.get('cache-control')]).toEqual([503, NO_STORE])
+  const unauth = await me(new Request('http://localhost/x'), ctx)
+  expect([unauth.status, unauth.headers.get('cache-control')]).toEqual([401, NO_STORE])
+  const redirect = appRequest({ auth: 'required' }, async () => { throw Response.redirect('http://localhost/y', 302) })
+  expect((await redirect(as('nstore'), ctx)).status).toBe(302)
 })

@@ -1,10 +1,10 @@
-import { and, count, eq, gte } from 'drizzle-orm'
+import { and, count, eq, gte, sql } from 'drizzle-orm'
 import { contactAttempts, db, staffFlags } from '@kando/db'
 import { describeError } from '../log-error'
 import { fail } from '../providers/http'
 import type { Exec } from '../providers/eligibility'
 import { checkContactDetails } from './contact-check'
-import { CONTACT_ATTEMPTS_LIMIT, CONTACT_ATTEMPTS_WINDOW_HOURS } from './rules'
+import { CONTACT_ATTEMPTS_KEEP_DAYS, CONTACT_ATTEMPTS_LIMIT, CONTACT_ATTEMPTS_WINDOW_HOURS } from './rules'
 
 /** The `staff_flags.kind` values; later plans widen this with the table's check. */
 export type StaffFlagKind = 'contact-attempts' | 'message-reported' | 'chargeback' | 'refund-failed' | 'payment-unprocessed' | 'provider-no-shows' | 'ignored-requests' | 'dispute-overdue'
@@ -27,9 +27,21 @@ async function recordAttempt(userId: string, text: string, hit: string, threadId
 }
 
 /** 422 CONTACT_DETAILS when the text holds a phone number, email or link. The text is kept for staff only, never shown to the other party. */
-export async function assertNoContactDetails(userId: string, text: string, threadId?: string): Promise<void> {
+export async function assertNoContactDetails(userId: string, text: string, threadId?: string, record = true): Promise<void> {
   const hit = await checkContactDetails(text)
   if (!hit) return
-  await recordAttempt(userId, text, hit, threadId)
+  if (record) await recordAttempt(userId, text, hit, threadId)
   fail(422, { error: 'CONTACT_DETAILS' })
+}
+
+/** The same check for public profile texts: refused with 422 but never recorded and never flagged (the digit rule can refuse harmless texts such as opening hours; the flag is for chat circumvention). */
+export async function assertNoContactDetailsIn(userId: string, texts: (string | null | undefined)[]): Promise<void> {
+  const joined = texts.filter((t): t is string => !!t?.trim()).join('\n') // the digit rule never crosses a line break
+  if (joined) await assertNoContactDetails(userId, joined, undefined, false)
+}
+
+/** The daily clean-up: deletes blocked contact texts older than CONTACT_ATTEMPTS_KEEP_DAYS, except those of a user with an open contact-attempts flag (staff still need them). Owner connection. The count removed. */
+export async function purgeContactAttempts(exec: typeof db, now = new Date()): Promise<number> {
+  const r = await exec.execute(sql`DELETE FROM contact_attempts c WHERE c.created_at < ${now.toISOString()}::timestamptz - make_interval(days => ${CONTACT_ATTEMPTS_KEEP_DAYS}) AND NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'contact-attempts' AND f.user_id = c.user_id AND f.resolved_at IS NULL)`)
+  return r.rowCount ?? 0
 }

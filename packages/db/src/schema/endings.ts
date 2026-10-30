@@ -30,7 +30,8 @@ export const disputes = pgTable(
     decidedBy: text('decided_by'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
   },
-  () => [
+  (t) => [
+    index('disputes_open_decide_by_idx').on(t.decideBy).where(sql`decided_at IS NULL`),
     check('disputes_opened_by_check', sql`opened_by in ('customer','provider')`),
     check('disputes_reason_check', sql`reason in ('problem','no-show-objection','no-response','stop-disagreed','chargeback')`),
     check('disputes_decision_check', sql`decision in ('full-payout','partial','full-refund')`),
@@ -74,5 +75,7 @@ export const reviews = pgTable(
     check('reviews_stars_check', sql`stars between 1 and 5`),
     uniqueIndex('reviews_booking_id_author_id_idx').on(t.bookingId, t.authorId),
     index('reviews_subject_id_idx').on(t.subjectId),
+    index('reviews_author_id_idx').on(t.authorId),
+    index('reviews_reveal_pending_idx').on(t.visibleAt).where(sql`reveal_told_at IS NULL`),
   ],
 )

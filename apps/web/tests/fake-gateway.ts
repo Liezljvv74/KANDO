@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { appPool } from '@kando/db/src/client'
 
 import { BadSignatureError, type GatewayEvent, type PaymentsGateway } from '@kando/domain'
 
@@ -85,4 +86,13 @@ export function fakeGateway(): FakeGateway {
     },
   }
   return g
+}
+
+/** Wraps `g.transfer` and `g.refund`: the number of request (app pool) connections in use at each call, in call order. */
+export function appConnectionsAtMoneyCalls(g: FakeGateway): number[] {
+  const open: number[] = []
+  const { transfer, refund } = g
+  g.transfer = async (a) => (open.push(appPool.totalCount - appPool.idleCount), transfer(a))
+  g.refund = async (a) => (open.push(appPool.totalCount - appPool.idleCount), refund(a))
+  return open
 }

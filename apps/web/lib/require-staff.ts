@@ -4,7 +4,12 @@ import { getAuth } from './auth/server'
 
 /** For /api/admin/*: the signed-in staff user, or throws a 401/403 Response. Runs on the owner connection. */
 export async function requireStaff(role: StaffRole | 'any'): Promise<StaffUser> {
-  const { data: session } = await getAuth().getSession()
+  const { data: session, error } = await getAuth().getSession()
+  // A busy login server (429, 5xx, no answer) is not a sign-out: the admin's onError logs out only on 401.
+  if (error && error.status !== 401) {
+    console.error(`[requireStaff] auth busy: auth status ${error.status}`)
+    throw Response.json({ error: 'AUTH_BUSY' }, { status: 503 })
+  }
   if (!session?.user) throw Response.json({ error: 'Unauthorized' }, { status: 401 })
   const row = await db.query.users.findFirst({ where: (u, { eq }) => eq(u.id, session.user.id) })
   const suspended = !!row?.suspendedUntil && row.suspendedUntil > new Date()

@@ -32,6 +32,14 @@ it('public reference tables are readable by app_user and not writable', async ()
   ).rejects.toMatchObject({ cause: { message: expect.stringContaining("permission denied") } })
 })
 
+it('app_user can neither read nor write translation_requests and cannot insert translations', async () => {
+  const denied = (q: ReturnType<typeof sql>) => expect(asUser('x', (tx) => tx.execute(q))).rejects.toMatchObject({ cause: { message: expect.stringContaining('permission denied') } })
+  await denied(sql`SELECT * FROM translation_requests`)
+  await denied(sql`INSERT INTO translation_requests (client_key) VALUES ('x')`)
+  await denied(sql`INSERT INTO translations (key, lang, text) VALUES ('k', 'de', 't')`)
+  await asUser('x', (tx) => tx.execute(sql`SELECT * FROM translations LIMIT 1`))
+})
+
 const ids = ['rl-cust', 'rl-other', 'rl-na', 'rl-nb']
 const cleanupPeople = async () => {
   await pool.query('DELETE FROM notifications WHERE user_id = ANY($1)', [ids])
@@ -90,4 +98,10 @@ it('notifications: the owner reads and marks own rows; another user sees none, c
   } finally {
     await cleanupPeople()
   }
+})
+
+it('applyRls is all or nothing', async () => {
+  await expect(applyRls([`DROP POLICY owner_only ON "users"`, 'SELECT no_such_function()'])).rejects.toThrow()
+  const r = await pool.query("SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'owner_only'")
+  expect(r.rowCount).toBe(1)
 })

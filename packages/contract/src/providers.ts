@@ -1,4 +1,4 @@
-import { DEFAULT_LANG } from '@kando/i18n'
+import { DEFAULT_LANG } from '@kando/i18n/lang'
 import { z } from 'zod'
 
 import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
@@ -14,6 +14,8 @@ export const SearchItemSchema = z.object({
   currency: CurrencySchema,
   distanceKm: z.number().nullable(),
   worksRemotely: z.boolean(),
+  /** Customers' visible reviews: average stars and count; null when there are none (then isNew). */
+  rating: RatingSchema.nullable(),
   isNew: z.boolean(),
 })
 export type SearchItem = z.infer<typeof SearchItemSchema>
@@ -31,7 +33,7 @@ export const SearchQuerySchema = z.object({
   q: z.string().max(100).optional(),
   page: z.coerce.number().int().min(1).max(1000).default(1),
   lang: LangSchema.default(DEFAULT_LANG),
-  country: z.string().default('DE'),
+  country: z.string().optional(),
 })
 
 export const LangQuerySchema = z.object({ lang: LangSchema.default(DEFAULT_LANG) })
@@ -88,6 +90,8 @@ export const ProviderDetailSchema = z.object({
   verified: z.boolean().nullish(),
   /** False: requests and bookings are refused (PROVIDER_NOT_READY) and the app offers "Notify me when available". Nullish: an older response lacks it; read as true. */
   canBook: z.boolean().nullish(),
+  /** The signed-in caller has an open "notify me" for this provider. False when signed out (so never in a cached site page). Nullish: an older response lacks it. */
+  watching: z.boolean().nullish(),
   /** True when the page texts are not in the reader's language, so the translate button shows. */
   translatable: z.boolean(),
 })

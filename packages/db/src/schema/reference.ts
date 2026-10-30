@@ -1,4 +1,4 @@
-import { customType, index, integer, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, customType, index, integer, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const point = customType<{ data: { lng: number; lat: number }; driverData: string }>({
@@ -10,6 +10,7 @@ export const countries = pgTable('countries', {
   nameDe: text('name_de').notNull(),
   nameEn: text('name_en').notNull(),
   postcodePattern: text('postcode_pattern').notNull(),
+  currency: text().notNull().references((): AnyPgColumn => currencies.code),
 })
 
 export const currencies = pgTable('currencies', {

@@ -2,12 +2,11 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { blocks, db, messages, providers, threads, users, type Tx } from '@kando/db'
 import type { BlockedUser, ReportInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
-import { fail } from '../providers/http'
+import { fail, notFound } from '../providers/http'
 import { publicNameFor } from '../providers/public-name'
 import { flagForStaff } from './flags'
 import { ownThread } from './threads'
 
-const notFound = () => fail(404, { error: 'Not found' })
 
 /** Report a message of a thread the caller is a party of (RLS hides any other: 404), not their own. Staff-only flag, one open per reporter and message. */
 export async function reportMessage(tx: Tx, userId: string, messageId: string, input: ReportInput): Promise<void> {

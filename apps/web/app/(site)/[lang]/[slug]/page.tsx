@@ -4,17 +4,23 @@ import { cache } from 'react'
 import { asUser } from '@kando/db'
 import { getPage } from '@kando/domain'
 import type { Lang } from '@kando/i18n'
-import { LangSwitch } from '../../../components/lang-switch'
-import { renderMarkdown } from '../../../lib/markdown'
-import { alternates, siteLang } from '../../../lib/site'
+import { LangSwitch } from '../../../../components/lang-switch'
+import { renderMarkdown } from '../../../../lib/markdown'
+import { alternates, pageLang } from '../../../../lib/site'
 
-type Args = { params: Promise<{ slug: string }>; searchParams: Promise<{ lang?: string }> }
+type Args = { params: Promise<{ lang: string; slug: string }> }
+
+// Cached; a staff edit refreshes it at once (public-cache.ts).
+export const revalidate = 3600
+export async function generateStaticParams() {
+  return []
+}
 
 const load = cache((slug: string, lang: Lang) => asUser(null, (tx) => getPage(tx, slug, lang)))
 
-export default async function Page({ params, searchParams }: Args) {
+export default async function Page({ params }: Args) {
   const { slug } = await params
-  const lang = siteLang((await searchParams).lang)
+  const lang = await pageLang(params)
   const page = await load(slug, lang)
   if (!page) notFound()
   return (
@@ -30,9 +36,9 @@ export default async function Page({ params, searchParams }: Args) {
   )
 }
 
-export async function generateMetadata({ params, searchParams }: Args): Promise<Metadata> {
+export async function generateMetadata({ params }: Args): Promise<Metadata> {
   const { slug } = await params
-  const lang = siteLang((await searchParams).lang)
+  const lang = await pageLang(params)
   const page = await load(slug, lang)
   return page ? { title: page.title, alternates: alternates(`/${slug}`, lang) } : {}
 }

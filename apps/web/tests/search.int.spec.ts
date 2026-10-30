@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { asUser, distanceKm, pool } from '@kando/db'
 import { SearchResultSchema } from '@kando/contract'
-import { getPublicProfile, setStorageForTests } from '@kando/domain'
+import { getPublicProfile } from '@kando/domain'
+import { setStorageForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -117,6 +118,19 @@ it('bad input is 400: unknown postcode, bad format, unknown country, unknown lan
   }
 })
 
+it('search without a country uses the only market; with two markets it is 400 country-required', async () => {
+  expect((await search('')).status).toBe(200)
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\\d+$', 'EUR')")
+  try {
+    const res = await search('')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'country-required' })
+    expect((await search('country=DE')).status).toBe(200)
+  } finally {
+    await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
+  }
+})
+
 it('paging: 20 per page and hasMore', async () => {
   for (let i = 0; i < 21; i++) {
     const n = String(i).padStart(2, '0')
@@ -129,6 +143,55 @@ it('paging: 20 per page and hasMore', async () => {
   expect(p2).toMatchObject({ page: 2, hasMore: false })
   expect(p2.items).toHaveLength(1)
   expect(new Set([...p1.items, ...p2.items].map((i) => i.slug)).size).toBe(21)
+})
+
+it('providers beyond the old 500 are found on later pages', async () => {
+  // 501 offerable providers in one statement: users, providers and their priced services (the trigger sets offerable)
+  await pool.query(
+    `WITH u AS (
+       INSERT INTO users (id, email) SELECT 'sxb-' || lpad(n::text, 3, '0'), 'sxb-' || lpad(n::text, 3, '0') || '@test.skilled.invalid'
+       FROM generate_series(1, 501) n RETURNING id),
+     p AS (
+       INSERT INTO providers (owner_id, type, public_name, slug, skills, status)
+       SELECT id, 'private', 'Bulk ' || substr(id, 5), id || '-slug', ARRAY['bulktest'], 'published' FROM u RETURNING id)
+     INSERT INTO services (provider_id, category_id, title, price_type, price) SELECT id, $1, 'Bulk service', 'fixed', 10 FROM p`,
+    [categoryId],
+  )
+  const p25 = await result('q=bulktest&page=25')
+  expect(p25).toMatchObject({ page: 25, hasMore: true })
+  expect(p25.items).toHaveLength(20)
+  const p26 = await result('q=bulktest&page=26')
+  expect(p26).toMatchObject({ page: 26, hasMore: false })
+  expect(p26.items.map((i) => i.slug)).toEqual(['sxb-501-slug']) // by name: Bulk 001 .. Bulk 501
+})
+
+it('a rated provider shows its rating and is not new', async () => {
+  const pid = await seedProvider('sx-rated', { name: 'Rated Rob', categoryId, skills: ['ratedtest'] })
+  await pool.query("INSERT INTO users (id, email) VALUES ('sx-rater', $1) ON CONFLICT DO NOTHING", [EMAIL('sx-rater')])
+  const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pid])).rows[0].id
+  for (const stars of [4, 5]) {
+    const b = (
+      await pool.query(
+        "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ('sx-rater', $1, $2, 'direct', 'proposed', now() + interval '3 days', 60) RETURNING id",
+        [pid, service],
+      )
+    ).rows[0].id
+    await pool.query(
+      "INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars, visible_at) VALUES ($1, 'sx-rater', 'sx-rated', 'customer', $2, now() - interval '1 day')",
+      [b, stars],
+    )
+  }
+  const [rated] = (await result('q=ratedtest')).items
+  expect(rated).toMatchObject({ slug: 'sx-rated-slug', rating: { average: 4.5, count: 2 }, isNew: false })
+  const [unrated] = (await result('q=ANNA')).items
+  expect(unrated).toMatchObject({ rating: null, isNew: true })
+  setStorageForTests(memoryStorage())
+  try {
+    expect(await asUser(null, (tx) => getPublicProfile(tx, 'sx-rated-slug', 'de'))).toMatchObject({ rating: { average: 4.5, count: 2 }, isNew: false })
+    expect(await asUser(null, (tx) => getPublicProfile(tx, 'sx-near-slug', 'de'))).toMatchObject({ rating: null, isNew: true })
+  } finally {
+    setStorageForTests(undefined)
+  }
 })
 
 it("anonymous: the card carries the owner's profile photo and the public name, no display name", async () => {

@@ -10,8 +10,9 @@ vi.mock('next/headers', () => ({
 }))
 process.env.NEON_AUTH_COOKIE_SECRET ||= 'test-secret-not-real'
 
-const { default: ProviderPage, generateMetadata } =
-  await import('../app/(site)/providers/[slug]/page')
+// The proxy puts the language in the path and sends ?translate=1 to the translated page.
+const page = await import('../app/(site)/[lang]/providers/[slug]/page')
+const translated = await import('../app/(site)/[lang]/providers/[slug]/translated/page')
 
 const stamp = Date.now()
 const BIO_DE = `Ich bin selbstständige Fotografin und fotografiere Hochzeiten und Familien in der ganzen Region (${stamp}).`
@@ -65,12 +66,11 @@ afterAll(async () => {
 })
 
 type Q = { lang?: string; translate?: string }
-const args = (slug: string, q: Q = {}) => ({
-  params: Promise.resolve({ slug }),
-  searchParams: Promise.resolve(q),
-})
-const render = async (slug: string, q?: Q) =>
-  renderToStaticMarkup(await ProviderPage(args(slug, q)))
+const args = (slug: string, q: Q) => ({ params: Promise.resolve({ slug, lang: q.lang ?? 'de' }) })
+const pageFor = (q: Q) => (q.translate === '1' ? translated : page)
+const render = async (slug: string, q: Q = {}) =>
+  renderToStaticMarkup(await pageFor(q).default(args(slug, q)))
+const generateMetadata = (slug: string, q: Q = {}) => pageFor(q).generateMetadata(args(slug, q))
 
 describe('public provider page', () => {
   it('German default: public name heading, category, price "ab 80,00 €", on request, place', async () => {
@@ -104,14 +104,16 @@ describe('public provider page', () => {
     }
   })
 
-  it('404 for a hidden provider (draft) and an unknown slug', async () => {
+  it('404 for a hidden provider (draft), an unknown slug and an unknown language', async () => {
+    await expect(render(deSlug, { lang: 'fr' })).rejects.toThrow()
+    await expect(render(deSlug, { lang: 'fr', translate: '1' })).rejects.toThrow()
     await expect(render(draftSlug)).rejects.toThrow()
     await expect(render('nope')).rejects.toThrow()
-    expect(await generateMetadata(args(draftSlug))).toEqual({})
+    expect(await generateMetadata(draftSlug)).toEqual({})
   })
 
   it('metadata: title, description, canonical and hreflang for every language', async () => {
-    const m = await generateMetadata(args(deSlug, { lang: 'en' }))
+    const m = await generateMetadata(deSlug, { lang: 'en' })
     expect(m.title).toBe(`Anna Hübsch | ${t('de', 'brand.name')}`)
     expect(m.description).toBe(BIO_DE.slice(0, 155))
     expect(m.alternates?.canonical).toBe(`/providers/${deSlug}?lang=en`)
@@ -121,7 +123,7 @@ describe('public provider page', () => {
       'x-default': `/providers/${deSlug}`,
     })
     expect(m.robots).toBeUndefined()
-    expect((await generateMetadata(args(deSlug))).alternates?.canonical).toBe(
+    expect((await generateMetadata(deSlug)).alternates?.canonical).toBe(
       `/providers/${deSlug}`,
     )
   })
@@ -173,7 +175,7 @@ describe('translate link', () => {
       'Automatisch übersetzt (KI) · Original anzeigen',
     )
     expect(html).not.toContain(t('en', 'web.translate'))
-    const m = await generateMetadata(args(deSlug, { lang: 'en', translate: '1' }))
+    const m = await generateMetadata(deSlug, { lang: 'en', translate: '1' })
     expect(m.robots).toEqual({ index: false })
     expect(m.alternates?.canonical).toBe(`/providers/${deSlug}?lang=en`)
   })

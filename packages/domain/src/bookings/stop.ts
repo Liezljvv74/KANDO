@@ -1,15 +1,14 @@
 import { eq } from 'drizzle-orm'
 import { bookings, db, providers, type Tx } from '@kando/db'
-import type { Booking, StopAmountInput, StopAnswer } from '@kando/contract'
+import { DAY, STOP_ANSWER_DAYS, type Booking, type StopAmountInput, type StopAnswer } from '@kando/contract'
 import { assertNoContactDetails } from '../chat/flags'
 import { fail } from '../providers/http'
 import { toCents } from '../payments/rules'
 import { openDisputeCore, tellDisputeOpened } from './disputes'
-import { STOP_ANSWER_DAYS } from './ending-rules'
-import { lockRow, reload, sideOf, tryRelease } from './finish'
+import { reload, tryRelease } from './finish'
 import { notifyBookingEvent } from './notify'
+import { lockRow, partyOf } from './party'
 
-const DAY = 86_400_000
 const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
 
 /**
@@ -20,7 +19,7 @@ const ownerOf = async (providerId: string) => (await db.select({ id: providers.o
  * Its additional tasks keep their own clock (each is stopped on its own).
  */
 export async function stopJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
-  const side = await sideOf(tx, userId, bookingId)
+  const side = (await partyOf(tx, userId, bookingId)).role
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status === 'stopped') return null
@@ -44,7 +43,7 @@ export async function stopJob(tx: Tx, userId: string, bookingId: string, now = n
  * one is 409 ALREADY_STATED). The customer is told, with the date their answer is due (STOP_ANSWER_DAYS, then staff).
  */
 export async function stateStopAmount(tx: Tx, userId: string, bookingId: string, input: StopAmountInput, now = new Date()): Promise<Booking> {
-  if ((await sideOf(tx, userId, bookingId)) !== 'provider') fail(403, { error: 'not-your-turn' })
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'not-your-turn' })
   const note = input.note?.trim() || null
   if (note) await assertNoContactDetails(userId, note)
   const row = await db.transaction(async (o) => {
@@ -72,7 +71,16 @@ export async function stateStopAmount(tx: Tx, userId: string, bookingId: string,
  * returns the booking unchanged. Owner connection, the row locked and re-checked against the 7-day timer (one outcome).
  */
 export async function answerStop(tx: Tx, userId: string, bookingId: string, answer: StopAnswer, now = new Date()): Promise<Booking> {
-  if ((await sideOf(tx, userId, bookingId)) !== 'customer') fail(403, { error: 'not-your-turn' })
+  return (await beginAnswerStop(tx, userId, bookingId, answer, now))()
+}
+
+/**
+ * answerStop for a route: checks and records step 1 now and returns step 2 (the payment or the dispute notices, then the
+ * booking), which the route runs after its request transaction (an AfterTransaction), so no Stripe call holds a request
+ * connection. Step 2 never throws for the money (tryRelease: logged, flagged, retried by the timer).
+ */
+export async function beginAnswerStop(tx: Tx, userId: string, bookingId: string, answer: StopAnswer, now = new Date()): Promise<() => Promise<Booking>> {
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'customer') fail(403, { error: 'not-your-turn' })
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if ((b.status === 'completed' || b.status === 'refunded') && b.stoppedAt) return null
@@ -82,7 +90,9 @@ export async function answerStop(tx: Tx, userId: string, bookingId: string, answ
     await openDisputeCore(o, { bookingId: b.id, openedBy: 'customer', reason: 'stop-disagreed', description: '', now })
     return { b, agree: false }
   })
-  if (r?.agree) await tryRelease(db, r.b.id, r.b.customerId, now)
-  else if (r) await tellDisputeOpened(r.b)
-  return reload(bookingId)
+  return async () => {
+    if (r?.agree) await tryRelease(db, r.b.id, r.b.customerId, now)
+    else if (r) await tellDisputeOpened(r.b)
+    return reload(bookingId)
+  }
 }

@@ -27,7 +27,7 @@ export async function watchProvider(tx: Tx, userId: string, slug: string, afterC
     .values({ customerId: userId, providerId: p.id })
     .onConflictDoUpdate({ target: [availabilityWatches.customerId, availabilityWatches.providerId], set: { notifiedAt: null, createdAt: sql`now()` }, setWhere: isNotNull(availabilityWatches.notifiedAt) })
   afterCommit(async () => {
-    for (const e of await noticeCustomersWaiting(db, new Date(), CUSTOMERS_WAITING_NOTICE_HOURS, p.id)) await notifyBookingEvent('customers-waiting', e.userId, { count: String(e.count) })
+    for (const e of await noticeCustomersWaiting(db, new Date(), CUSTOMERS_WAITING_NOTICE_HOURS, p.id)) await notifyBookingEvent('customers-waiting', e.userId, { count: String(e.count) }, { written: true })
   })
 }
 
@@ -42,9 +42,10 @@ export async function unwatchProvider(tx: Tx, userId: string, slug: string): Pro
  * not suspended provider without payout set-up that has a waiting watch newer than its last such notice, the last one
  * at least `hours` ago; `providerId` narrows it to one provider. One statement under a constant-key lock (owner
  * connection, held to the commit): two taps or runs at the same instant take turns, and the second finds the first's row.
- * Returns the rows written, for their emails (sent by the caller after this commit).
+ * Returns the rows written, for their emails (sent by the caller after this commit); `queued` (the timers) leaves the rows
+ * unsent for the outbox (bookings/outbox.ts) instead.
  */
-export async function noticeCustomersWaiting(exec: Exec, now: Date, hours: number, providerId?: string): Promise<{ userId: string; count: number }[]> {
+export async function noticeCustomersWaiting(exec: Exec, now: Date, hours: number, providerId?: string, queued = false): Promise<{ userId: string; count: number }[]> {
   const t = now.toISOString()
   return (exec as typeof db).transaction(async (o) => {
     await o.execute(sql`SELECT pg_advisory_xact_lock(hashtext('customers_waiting'))`)
@@ -55,8 +56,8 @@ export async function noticeCustomersWaiting(exec: Exec, now: Date, hours: numbe
         WHERE p.payouts_ready_at IS NULL AND p.status = 'published' AND ${notSuspendedSql('p')} ${providerId ? sql`AND p.id = ${providerId}` : sql``}
           AND coalesce(l.at, '-infinity') <= ${t}::timestamptz - make_interval(hours => ${hours})
           AND EXISTS (SELECT 1 FROM availability_watches w WHERE w.provider_id = p.id AND w.notified_at IS NULL AND w.created_at > coalesce(l.at, '-infinity')))
-      INSERT INTO notifications (user_id, kind, payload, created_at)
-      SELECT owner_id, 'customers-waiting', jsonb_build_object('count', c), ${t}::timestamptz FROM d WHERE c > 0
+      INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
+      SELECT owner_id, 'customers-waiting', jsonb_build_object('count', c), ${t}::timestamptz, ${queued ? null : t}::timestamptz FROM d WHERE c > 0
       RETURNING user_id, (payload->>'count')::int AS count`)
     return rows.map((r) => ({ userId: r.user_id, count: Number(r.count) }))
   })

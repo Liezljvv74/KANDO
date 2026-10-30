@@ -8,9 +8,11 @@ const requests = await import('../app/app-api/v1/requests/route')
 const requestOne = await import('../app/app-api/v1/requests/[id]/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
+const withdraw = await import('../app/app-api/v1/requests/[id]/withdraw/route')
+const decline = await import('../app/app-api/v1/requests/[id]/decline/route')
 
-const U = { cust: 'rq-cust', owner: 'rq-owner', remote: 'rq-remote', susp: 'rq-susp', draft: 'rq-draft', third: 'rq-third' }
-let pOwner: string, pRemote: string, pSusp: string, pDraft: string
+const U = { cust: 'rq-cust', owner: 'rq-owner', remote: 'rq-remote', susp: 'rq-susp', draft: 'rq-draft', third: 'rq-third', quiet: 'rq-quiet', silent: 'rq-silent' }
+let pOwner: string, pRemote: string, pSusp: string, pDraft: string, pQuiet: string, pSilent: string
 
 beforeAll(async () => {
   await cleanupUsers()
@@ -20,6 +22,8 @@ beforeAll(async () => {
   pRemote = await seedProvider(U.remote, { name: 'Rq Remote', categoryId, remote: true })
   pSusp = await seedProvider(U.susp, { name: 'Rq Susp', categoryId, suspended: true })
   pDraft = await seedProvider(U.draft, { name: 'Rq Draft', categoryId, status: 'draft' })
+  pQuiet = await seedProvider(U.quiet, { name: 'Rq Quiet', categoryId })
+  pSilent = await seedProvider(U.silent, { name: 'Rq Silent', categoryId })
 })
 afterAll(cleanupUsers)
 
@@ -205,4 +209,134 @@ it('a provider suspended or unpublished after the request cannot quote, and the 
   }
   expect(await gone(`UPDATE providers SET suspended_until = now() + interval '1 day' WHERE id = '${pRemote}'`)).toEqual([409, 409])
   expect(await gone(`UPDATE providers SET status = 'draft' WHERE id = '${pRemote}'`)).toEqual([409, 409])
+})
+
+const closing = (route: typeof withdraw, reqId: string, as: string) => call(route.POST, as, 'POST', undefined, { id: reqId })
+const statusOf = async (table: 'requests' | 'quotes', id: string) => (await pool.query(`SELECT status FROM ${table} WHERE id = $1`, [id])).rows[0].status
+const told = async (uid: string, kind: string, requestId: string) =>
+  (await pool.query('SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = $2 AND payload->>$4 = $3', [uid, kind, requestId, 'requestId'])).rows[0].n
+
+it('the customer withdraws an open and a quoted request; the provider is told', async () => {
+  const open = await newRequest()
+  const res = await closing(withdraw, open.id, U.cust)
+  expect(res.status).toBe(200)
+  expect(RequestSchema.parse(await res.json())).toMatchObject({ id: open.id, status: 'withdrawn' })
+  expect(await told(U.owner, 'request-withdrawn', open.id)).toBe(1)
+  const quoted = await newRequest()
+  const q = QuoteSchema.parse(await (await quote(quoted.id, U.owner)).json())
+  expect((await closing(withdraw, quoted.id, U.cust)).status).toBe(200)
+  expect([await statusOf('requests', quoted.id), await statusOf('quotes', q.id)]).toEqual(['withdrawn', 'declined'])
+  expect(await told(U.owner, 'request-withdrawn', quoted.id)).toBe(1)
+  expect((await accepting(q.id, U.cust)).status).toBe(409) // nothing left to accept
+  expect((await quote(quoted.id, U.owner)).status).toBe(409) // nor to quote
+})
+
+it('the provider declines; the customer is told; the request leaves the pair limit', async () => {
+  const r = await newRequest()
+  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again' })).status).toBe(409) // one live request per pair
+  const res = await closing(decline, r.id, U.owner)
+  expect(res.status).toBe(200)
+  expect(RequestSchema.parse(await res.json())).toMatchObject({ id: r.id, status: 'declined' })
+  expect(await told(U.cust, 'request-declined', r.id)).toBe(1)
+  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again' })).status).toBe(201)
+})
+
+it('the other side gets 403, a stranger 404, a booked request 409', async () => {
+  const r = await newRequest()
+  for (const [route, wrong] of [[withdraw, U.owner], [decline, U.cust]] as const) {
+    const res = await closing(route, r.id, wrong)
+    expect([res.status, (await res.json()).error]).toEqual([403, 'not-your-turn'])
+    expect((await closing(route, r.id, U.third)).status).toBe(404)
+    expect((await closing(route, 'not-a-uuid', U.cust)).status).toBe(404)
+  }
+  expect(await statusOf('requests', r.id)).toBe('open')
+  const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
+  expect((await accepting(q.id, U.cust)).status).toBe(200)
+  for (const [route, as] of [[withdraw, U.cust], [decline, U.owner]] as const) {
+    const res = await closing(route, r.id, as)
+    expect([res.status, (await res.json()).error]).toEqual([409, 'request-closed'])
+  }
+  expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
+})
+
+it('withdraw racing sendQuote leaves no sent quote', async () => {
+  const r = await newRequest()
+  // hold the request's lock so both start waiting on it, then let them go together
+  const holder = await pool.connect()
+  let both: Promise<[Response, Response]>
+  try {
+    await holder.query('BEGIN')
+    await holder.query("SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext($1))", [r.id])
+    both = Promise.all([closing(withdraw, r.id, U.cust), quote(r.id, U.owner)])
+    await new Promise((ok) => setTimeout(ok, 500))
+    await holder.query('COMMIT')
+  } finally {
+    holder.release()
+  }
+  const [w, s] = await both
+  expect(w.status).toBe(200)
+  expect(await statusOf('requests', r.id)).toBe('withdrawn')
+  if (s.status === 201) expect(await statusOf('quotes', QuoteSchema.parse(await s.json()).id)).toBe('declined')
+  else expect([s.status, (await s.json()).error]).toEqual([409, 'request-closed'])
+  expect((await pool.query("SELECT count(*)::int n FROM quotes WHERE request_id = $1 AND status = 'sent'", [r.id])).rows[0].n).toBe(0)
+})
+
+it('a request expiring between the read and the withdraw answers 409, not 500', async () => {
+  const r = await newRequest()
+  // the timers' expiry (which takes no request lock) is uncommitted when the withdraw reads 'open', committed before its UPDATE
+  const holder = await pool.connect()
+  let res: Promise<Response>
+  try {
+    await holder.query('BEGIN')
+    await holder.query("UPDATE requests SET status = 'expired' WHERE id = $1", [r.id])
+    res = closing(withdraw, r.id, U.cust)
+    while (!(await pool.query("SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE 'update \"requests\"%'")).rowCount)
+      await new Promise((ok) => setTimeout(ok, 10))
+    await holder.query('COMMIT')
+  } finally {
+    holder.release()
+  }
+  const w = await res
+  expect([w.status, (await w.json()).error]).toEqual([409, 'request-closed'])
+  expect(await statusOf('requests', r.id)).toBe('expired')
+})
+
+it('a declined request stops the requests-ignored flag', async () => {
+  const { runDueTimers } = await import('@kando/domain')
+  const { db } = await import('@kando/db')
+  const before = new Date(Date.now() - 15 * 86_400_000)
+  for (const u of [U.quiet, U.silent]) await pool.query("INSERT INTO notifications (user_id, kind, payload, created_at) VALUES ($1, 'requests-ignored', '{}', $2)", [u, before])
+  const r = await newRequest(pQuiet)
+  expect((await closing(decline, r.id, U.quiet)).status).toBe(200) // the quiet provider answers by declining
+  await runDueTimers(db, new Date())
+  const flagged = async (p: string) => (await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'ignored-requests' AND ref_id = $1", [p])).rows[0].n
+  expect([await flagged(pQuiet), await flagged(pSilent)]).toEqual([0, 1])
+})
+
+it('GET /requests/{id} carries the thread id', async () => {
+  const r = await newRequest()
+  expect(r.threadId ?? null).toBeNull() // set by the read-one route only
+  const threadId = (await pool.query('SELECT id FROM threads WHERE request_id = $1', [r.id])).rows[0].id
+  for (const as of [U.cust, U.owner]) {
+    const res = await call(requestOne.GET, as, 'GET', undefined, { id: r.id })
+    expect(RequestSchema.parse(await res.json()).threadId).toBe(threadId)
+  }
+  expect((await call(requestOne.GET, U.third, 'GET', undefined, { id: r.id })).status).toBe(404)
+})
+
+it("a quote takes the currency of the provider's country", async () => {
+  await pool.query("INSERT INTO currencies (code, minor_units) VALUES ('ZAR', 2) ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\\d+$', 'ZAR')")
+  try {
+    const r = await newRequest(pRemote)
+    await pool.query("UPDATE providers SET country = 'ZZ' WHERE id = $1", [pRemote])
+    const res = await quote(r.id, U.remote)
+    expect(res.status).toBe(201)
+    const { id } = (await res.json()) as { id: string }
+    expect((await pool.query('SELECT currency FROM quotes WHERE id = $1', [id])).rows[0].currency).toBe('ZAR')
+  } finally {
+    await pool.query("UPDATE providers SET country = 'DE' WHERE id = $1", [pRemote])
+    await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
+    await pool.query("DELETE FROM currencies WHERE code = 'ZAR'")
+  }
 })

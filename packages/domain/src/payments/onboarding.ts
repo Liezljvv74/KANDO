@@ -1,5 +1,5 @@
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
-import { availabilityWatches, db, providers, users, type Tx } from '@kando/db'
+import { availabilityWatches, db, providers, users } from '@kando/db'
 import { DEFAULT_LANG, isLang } from '@kando/i18n'
 import { notifyBookingEvent } from '../bookings/notify'
 import { siteBase } from '../notifications'
@@ -15,9 +15,9 @@ const noProfile = () => fail(409, { error: 'Create your profile first' })
  * is created once (key `account:<providerId>`) and its id stored on the owner connection (staff-only column); every call
  * returns a fresh onboarding link. Return and refresh lead to /payout-done, which carries nothing but the language.
  */
-export async function startPayoutSetup(tx: Tx, userId: string): Promise<{ url: string }> {
-  const own = (await ownProvider(tx, userId)) ?? noProfile()
-  const [user] = await tx.select({ email: users.email, language: users.language }).from(users).where(eq(users.id, userId))
+export async function startPayoutSetup(exec: Exec, userId: string): Promise<{ url: string }> {
+  const own = (await ownProvider(exec, userId)) ?? noProfile()
+  const [user] = await exec.select({ email: users.email, language: users.language }).from(users).where(eq(users.id, userId))
   const lang = isLang(user?.language) ? user.language : DEFAULT_LANG
   const accountId = own.stripeAccountId ?? (await createAccountOnce(own.id, own.country, user!.email))
   const back = `${siteBase()}/payout-done${lang === DEFAULT_LANG ? '' : `?lang=${lang}`}`
@@ -38,12 +38,11 @@ async function createAccountOnce(providerId: string, country: string, email: str
 }
 
 /** Asks the gateway whether the caller's payouts are ready and records it, so the app is right before the webhook arrives. */
-export async function payoutStatus(tx: Tx, userId: string): Promise<{ ready: boolean }> {
-  const own = (await ownProvider(tx, userId)) ?? noProfile()
-  if (!own.stripeAccountId) return { ready: false }
+export async function payoutStatus(exec: Exec, userId: string): Promise<{ ready: boolean; changed: boolean }> {
+  const own = (await ownProvider(exec, userId)) ?? noProfile()
+  if (!own.stripeAccountId) return { ready: false, changed: false }
   const ready = await gateway().accountReady(own.stripeAccountId)
-  await recordReady(db, own.stripeAccountId, ready)
-  return { ready }
+  return { ready, changed: await recordReady(db, own.stripeAccountId, ready) }
 }
 
 /** The `account-updated` event: re-reads the account's state from the gateway. An account no provider holds is ignored. */
@@ -57,17 +56,15 @@ export async function refreshAccount(exec: Exec, accountId: string): Promise<voi
  * Sets or clears payouts_ready_at (owner connection). Only the change to ready tells anyone: the provider
  * (payout-setup-complete), then every watcher not told yet (provider-available). Both UPDATEs are conditional, so with
  * concurrent calls (status, webhook) exactly one sees the change and each watcher is told once. Messages after the commit.
+ * Whether this call changed payouts_ready_at (set or cleared).
  */
-async function recordReady(exec: Exec, accountId: string, ready: boolean, now = new Date()): Promise<void> {
+async function recordReady(exec: Exec, accountId: string, ready: boolean, now = new Date()): Promise<boolean> {
   const after: (() => Promise<void>)[] = []
-  await (exec as typeof db).transaction(async (o) => {
+  const changed = await (exec as typeof db).transaction(async (o) => {
     const byAccount = eq(providers.stripeAccountId, accountId)
-    if (!ready) {
-      await o.update(providers).set({ payoutsReadyAt: null }).where(and(byAccount, isNotNull(providers.payoutsReadyAt)))
-      return
-    }
+    if (!ready) return (await o.update(providers).set({ payoutsReadyAt: null }).where(and(byAccount, isNotNull(providers.payoutsReadyAt))).returning({ id: providers.id })).length > 0
     const [p] = await o.update(providers).set({ payoutsReadyAt: now }).where(and(byAccount, isNull(providers.payoutsReadyAt))).returning({ id: providers.id, ownerId: providers.ownerId, slug: providers.slug })
-    if (!p) return
+    if (!p) return false
     const watchers = await o
       .update(availabilityWatches)
       .set({ notifiedAt: now })
@@ -75,6 +72,8 @@ async function recordReady(exec: Exec, accountId: string, ready: boolean, now = 
       .returning({ customerId: availabilityWatches.customerId })
     after.push(() => notifyBookingEvent('payout-setup-complete', p.ownerId, {}))
     for (const w of watchers) after.push(() => notifyBookingEvent('provider-available', w.customerId, p.slug ? { slug: p.slug } : {}))
+    return true
   })
   for (const fn of after) await fn() // notifyBookingEvent never throws
+  return changed
 }

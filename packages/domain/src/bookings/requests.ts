@@ -1,60 +1,76 @@
-import { and, desc, eq, getTableColumns, gt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
-import type { AcceptQuoteInput, Booking, BookingRequest, Quote, QuoteInput, RequestInput } from '@kando/contract'
+import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
-import { threadForRequest } from '../chat/threads'
+import { threadForRequest, threadIdOf } from '../chat/threads'
+import { olderThan, pageOf, stampOf } from '../paging'
 import { notifyBookingEvent, notifyProposal } from './notify'
-import { runDueTimersFor } from './timers'
-import { isUuid } from '../admin/common'
+import { isUuid, NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
-import { fail } from '../providers/http'
+import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { canTransact } from '../payments/rules'
-import { assertFuture, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
-import { NO_SHOW_OBJECTION_HOURS } from './ending-rules'
+import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
+import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
 
-const DAY = 86_400_000
-const HOUR = 3_600_000
-const NO_ID = '00000000-0000-0000-0000-000000000000'
-const notFound = () => fail(404, { error: 'Not found' })
 const iso = (d: Date) => d.toISOString()
 
-export const toRequest = (r: typeof requests.$inferSelect): BookingRequest => ({
-  id: r.id,
-  customerId: r.customerId,
-  providerId: r.providerId,
-  serviceId: r.serviceId,
-  description: r.description,
-  preferredDate: r.preferredDate,
-  parentBookingId: r.parentBookingId,
-  status: r.status as BookingRequest['status'],
-  answerBy: iso(r.answerBy),
-  createdAt: iso(r.createdAt),
-  updatedAt: iso(r.updatedAt),
-})
+/**
+ * The mappers show a lapsed row as expired (reads never write; the daily cron does): see bookingShownStatus. `reopened`: the
+ * request's root booking lapsed (lapsedRoots), so the rows read as trigger bookings_reopen_request will write them.
+ */
+export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), reopened = false): BookingRequest => {
+  const status = reopened && r.status === 'booked' ? 'quoted' : r.status
+  return {
+    id: r.id,
+    customerId: r.customerId,
+    providerId: r.providerId,
+    serviceId: r.serviceId,
+    description: r.description,
+    preferredDate: r.preferredDate,
+    parentBookingId: r.parentBookingId,
+    status: (status === 'open' && r.answerBy <= now ? 'expired' : status) as BookingRequest['status'],
+    answerBy: iso(r.answerBy),
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  }
+}
 
-export const toQuote = (q: typeof quotes.$inferSelect): Quote => ({
-  id: q.id,
-  requestId: q.requestId,
-  providerId: q.providerId,
-  version: q.version,
-  amount: Number(q.amount),
-  currency: q.currency as Quote['currency'],
-  scope: q.scope,
-  startAt: q.startAt ? iso(q.startAt) : null,
-  durationMin: q.durationMin,
-  status: q.status as Quote['status'],
-  expiresAt: iso(q.expiresAt),
-  createdAt: iso(q.createdAt),
-})
+export const toQuote = (q: typeof quotes.$inferSelect, now = new Date(), reopened = false): Quote => {
+  const status = reopened && q.status === 'accepted' ? 'sent' : q.status
+  return {
+    id: q.id,
+    requestId: q.requestId,
+    providerId: q.providerId,
+    version: q.version,
+    amount: Number(q.amount),
+    currency: q.currency as Quote['currency'],
+    scope: q.scope,
+    startAt: q.startAt ? iso(q.startAt) : null,
+    durationMin: q.durationMin,
+    status: (status === 'sent' && q.expiresAt <= now ? 'expired' : status) as Quote['status'],
+    expiresAt: iso(q.expiresAt),
+    createdAt: iso(q.createdAt),
+  }
+}
+
+/** Request id > quote id, for each request whose live root booking reads expired: the job reads open again (no write). */
+async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, string | null>> {
+  if (!requestIds.length) return new Map()
+  const roots = await tx
+    .select({ requestId: bookings.requestId, quoteId: bookings.quoteId, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
+    .from(bookings)
+    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['proposed', 'awaiting-payment'])))
+  return new Map(roots.filter((b) => bookingShownStatus(b, now) === 'expired').map((b) => [b.requestId!, b.quoteId]))
+}
 
 /** Null address parts are left out, as the contract has them optional. */
-export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
+export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Booking => ({
   id: b.id,
   customerId: b.customerId,
   providerId: b.providerId,
@@ -63,7 +79,7 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   requestId: b.requestId,
   parentBookingId: b.parentBookingId,
   source: b.source as Booking['source'],
-  status: b.status as Booking['status'],
+  status: bookingShownStatus(b, now) as Booking['status'],
   startAt: iso(b.startAt),
   durationMin: b.durationMin,
   amount: Number(b.amount),
@@ -84,7 +100,7 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   lateCancel: b.lateCancel,
   noShow: b.noShow as Booking['noShow'],
   noShowReportedAt: b.noShowReportedAt ? iso(b.noShowReportedAt) : null,
-  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * 3_600_000)) : null,
+  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)) : null,
   stoppedAt: b.stoppedAt ? iso(b.stoppedAt) : null,
   stoppedBy: b.stoppedBy as Booking['stoppedBy'],
   stopAmount: b.stopAmount === null ? null : Number(b.stopAmount),
@@ -145,15 +161,22 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
     .returning()
   await threadForRequest(tx, row!.id) // the chat opens with the request
   afterCommit(() => notifyBookingEvent('request-received', provider.ownerId, { requestId: row!.id }))
-  return toRequest(row!)
+  return toRequest(row!, now)
 }
 
-/** The caller's requests, newest first: those they sent (customer) or those addressed to their provider profile. */
-export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<BookingRequest[]> {
-  await runDueTimersFor(db, userId) // the caller's own rows are never stale
+/** The caller's requests, a page newest first by (created_at, id): those they sent (customer) or those addressed to their provider profile. */
+export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string, now = new Date()): Promise<Page<BookingRequest>> {
   const mine = role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const list = (await tx.select().from(requests).where(mine).orderBy(desc(requests.createdAt), desc(requests.id))).map(toRequest)
-  return role === 'provider' ? withCustomerRatings(tx, list) : list
+  const found = await tx
+    .select({ r: requests, ts: stampOf(requests.createdAt), id: requests.id })
+    .from(requests)
+    .where(and(mine, olderThan(requests.createdAt, requests.id, cursor)))
+    .orderBy(desc(requests.createdAt), desc(requests.id))
+    .limit(LIST_PAGE + 1)
+  const { rows, next } = pageOf(found)
+  const lapsed = await lapsedRoots(tx, rows.map(({ r }) => r.id), now)
+  const list = rows.map(({ r }) => toRequest(r, now, lapsed.has(r.id)))
+  return { docs: role === 'provider' ? await withCustomerRatings(tx, list) : list, next }
 }
 
 /** The provider's view adds what providers' shown reviews say about each customer. */
@@ -162,19 +185,29 @@ async function withCustomerRatings(tx: Tx, list: BookingRequest[]): Promise<Book
   return list.map((r) => ({ ...r, customerRating: ratings.get(r.customerId) ?? null }))
 }
 
-/** One request; 404 unless the caller is its customer or the provider owner. */
-export async function getRequest(tx: Tx, userId: string, id: string): Promise<BookingRequest> {
+/** The request row for one of its parties; 404 for anyone else. */
+async function ownRequest(tx: Tx, userId: string, id: string) {
   const row = isUuid(id) ? (await tx.select().from(requests).where(eq(requests.id, id)))[0] : undefined
   if (!row) return notFound()
-  if (row.customerId === userId) return toRequest(row)
-  if ((await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
-  return (await withCustomerRatings(tx, [toRequest(row)]))[0]!
+  if (row.customerId !== userId && (await ownProvider(tx, userId))?.id !== row.providerId) return notFound()
+  return row
+}
+
+/** One request with its chat, for one of its parties. Reads only: no thread is created. */
+export async function getRequest(tx: Tx, userId: string, id: string, now = new Date()): Promise<BookingRequest> {
+  const row = await ownRequest(tx, userId, id)
+  // an additional task talks in its booking's thread
+  const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
+  const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
+  const dto = { ...toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).has(row.id)), threadId }
+  return row.customerId === userId ? dto : (await withCustomerRatings(tx, [dto]))[0]!
 }
 
 /** Quotes of a request, newest version first, for either party. */
-export async function listQuotes(tx: Tx, userId: string, requestId: string): Promise<Quote[]> {
-  await getRequest(tx, userId, requestId)
-  return (await tx.select().from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version))).map(toQuote)
+export async function listQuotes(tx: Tx, userId: string, requestId: string, now = new Date()): Promise<Quote[]> {
+  await ownRequest(tx, userId, requestId)
+  const reopened = (await lapsedRoots(tx, [requestId], now)).get(requestId)
+  return (await tx.select().from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version))).map((q) => toQuote(q, now, q.id === reopened))
 }
 
 const unavailable = () => fail(409, { error: 'provider-unavailable' })
@@ -188,6 +221,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   if (await blockedWithProvider(tx, first.customerId, provider.id)) fail(403, { error: 'BLOCKED' }) // either side blocked the other
   await assertNoContactDetails(userId, input.scope)
   await lockRequest(tx, requestId)
+  if (first.status === 'booked') await expireLapsedRoot(requestId, now) // a lapsed proposal gives the job back first
   const req = (await own())[0]! // read again after the lock
   if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
   if (!canTransact(provider)) fail(409, { error: 'PAYOUT_SETUP_FIRST' })
@@ -197,6 +231,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed' })
   if (input.startAt) assertFuture(new Date(input.startAt), now)
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
+  const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${provider.country}`)).rows[0]!.currency
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
   const [row] = await tx
     .insert(quotes)
@@ -205,7 +240,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
       providerId: provider.id,
       version: (prev?.v ?? 0) + 1,
       amount: input.amount.toFixed(2),
-      currency: 'EUR', // ponytail: EUR only in v1, as services
+      currency,
       scope: input.scope,
       startAt: input.startAt ? new Date(input.startAt) : null,
       durationMin: input.durationMin ?? null,
@@ -216,10 +251,47 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
   const threadId = await threadForRequest(tx, requestId)
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
-  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
+  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
-  return toQuote(row!)
+  return toQuote(row!, now)
 }
+
+/**
+ * Closes an open or quoted request: the customer withdraws it, the provider's owner declines it, and the other side is told.
+ * The other party gets 403, anyone else 404. Its sent quote is declined by the trigger requests_close_quotes; the request lock
+ * makes a parallel sendQuote either see the closed request (409) or have its new quote declined.
+ */
+async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'customer' | 'provider', now: Date, afterCommit: AfterCommit): Promise<BookingRequest> {
+  const read = async () => (isUuid(requestId) ? (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] : undefined) ?? notFound()
+  const first = await read() // party check before the lock: a stranger cannot make anyone wait
+  const side = first.customerId === userId ? 'customer' : (await ownProvider(tx, userId))?.id === first.providerId ? 'provider' : notFound()
+  if (side !== by) fail(403, { error: 'not-your-turn' })
+  await lockRequest(tx, requestId)
+  if (first.status === 'booked') await expireLapsedRoot(requestId, now) // a lapsed proposal gives the job back first
+  const req = await read() // read again after the lock
+  // a lapsed open request is the cron's to expire (it counts toward requests-ignored), never withdrawn or declined
+  if (!['open', 'quoted'].includes(req.status) || (req.status === 'open' && req.answerBy <= now)) fail(409, { error: 'request-closed' })
+  // the timers' expiry takes no request lock: it may commit after the read, so the UPDATE re-checks the status
+  const [row] = await tx
+    .update(requests)
+    .set({ status: by === 'customer' ? 'withdrawn' : 'declined', updatedAt: now })
+    .where(and(eq(requests.id, requestId), inArray(requests.status, ['open', 'quoted'])))
+    .returning()
+  if (!row) fail(409, { error: 'request-closed' })
+  afterCommit(async () => {
+    if (by === 'provider') return notifyBookingEvent('request-declined', req.customerId, { requestId })
+    // the owner connection: RLS may hide a suspended provider's row from its customer
+    const owner = (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, req.providerId)))[0]
+    if (owner) await notifyBookingEvent('request-withdrawn', owner.id, { requestId })
+  })
+  return toRequest(row!, now)
+}
+
+export const withdrawRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>
+  closeRequest(tx, userId, requestId, 'customer', now, afterCommit)
+
+export const declineRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>
+  closeRequest(tx, userId, requestId, 'provider', now, afterCommit)
 
 export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input: AcceptQuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   const find = async () => {
@@ -231,7 +303,9 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   if (await blockedWithProvider(tx, userId, pre.req.providerId)) fail(403, { error: 'BLOCKED' })
   if (input.note) await assertNoContactDetails(userId, input.note)
   await lockRequest(tx, pre.req.id)
+  if (pre.req.status === 'booked') await expireLapsedRoot(pre.req.id, now) // a lapsed proposal gives the job back first
   const { quote, req } = (await find()) ?? notFound() // read again after the lock: a concurrent accept has committed by now
+  if (quote.status === 'expired') fail(409, { error: 'quote-expired' }) // e.g. reopened at its expiry (trigger bookings_reopen_request)
   if (quote.status !== 'sent' || req.status !== 'quoted') fail(409, { error: 'quote-not-open' })
   if (quote.expiresAt <= now) fail(409, { error: 'quote-expired' })
   const provider = (await tx.select().from(providers).where(eq(providers.id, req.providerId)))[0]
@@ -244,7 +318,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
     const child = await acceptAdditional(quote, req, input.note ?? null, now)
     const threadId = await threadForRequest(tx, req.id) // the parent's thread
     afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
-    return toBooking(child)
+    return toBooking(child, now)
   }
   if (!('startAt' in input)) return fail(400, { error: 'time-required' })
   const startAt = new Date(input.startAt)
@@ -274,5 +348,5 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   const threadId = await threadForRequest(tx, req.id)
   afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: row!.currency as 'EUR' }))
   notifyProposal(afterCommit, provider, row!)
-  return toBooking(row!)
+  return toBooking(row!, now)
 }

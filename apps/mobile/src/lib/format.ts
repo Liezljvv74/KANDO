@@ -1,4 +1,5 @@
-import { formatPrice as priceLabel, type PriceType } from '@kando/i18n'
+import type { Rating } from '@kando/contract'
+import { formatPrice as priceLabel, type PriceType } from '@kando/i18n/app'
 
 import { getLang, t } from '@/i18n'
 
@@ -11,6 +12,10 @@ export function formatDistance(p: { distanceKm: number | null; worksRemotely: bo
   if (p.distanceKm != null) return `≈ ${p.distanceKm} km`
   return p.worksRemotely ? t('distance.remote') : null
 }
+
+/** The badge on a card and the profile: "4,5 ★ (2)" once rated, else "New". */
+export const ratingBadge = (rating: Rating | null | undefined): string =>
+  rating ? t('search.rating', { average: rating.average.toLocaleString(getLang()), count: rating.count }) : t('badge.new')
 
 export const initials = (name: string) =>
   name
