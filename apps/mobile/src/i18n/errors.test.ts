@@ -52,3 +52,18 @@ test('the chat rejections have their own text in both languages', () => {
     expect(errorText('BLOCKED')).toBe(t('chat.blocked'))
   }
 })
+
+test('every ending and review code a customer or provider can get has its own text in both languages', () => {
+  // From the stage 2d routes (finish, confirm, cancel, no-show, dispute, stop, additional task, reviews); the staff-only codes
+  // (DECISION_PENDING, SETTLEMENT_STARTED, ALREADY_DECIDED, CHARGEBACK_OPEN, INVALID_SHARE, DISPUTE_OPEN ...) never reach the app.
+  const codes = ['TOO_EARLY', 'INVALID_MATERIAL_AMOUNT', 'NO_SHOW_REPORTED', 'STARTED', 'OBJECTION_CLOSED', 'DISPUTE_CLOSED', 'DISPUTE_EXISTS', 'NOT_STARTED', 'ALREADY_STATED', 'INVALID_STOP_AMOUNT', 'time-required', 'REVIEW_EXISTS', 'REVIEW_CLOSED', 'REVIEW_FINAL']
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    const texts = codes.map(errorText)
+    for (const text of texts) expect(text).not.toBe(errorText('unmapped'))
+    expect(new Set(texts).size).toBe(codes.length)
+  }
+  setLang('en')
+  expect(errorText('NOT_STARTED')).toContain('cancel')
+  expect(errorText('REVIEW_FINAL')).not.toMatch(/\b\d{3}\b/)
+})

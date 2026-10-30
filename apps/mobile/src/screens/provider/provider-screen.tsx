@@ -85,6 +85,8 @@ export default function ProviderScreen() {
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
           {!!p.rating && <Text style={styles.small}>{t('provider.rating', { average: p.rating.average.toLocaleString(getLang()), count: p.rating.count })}</Text>}
+          {/* Late cancellations and no-shows in the last 12 months; nothing is shown while there are none. */}
+          {!!p.reliability && <Text style={styles.small}>{p.reliability === 1 ? t('provider.reliability.one') : t('provider.reliability.other', { n: p.reliability })}</Text>}
           {!!p.worksRemotely && <Text style={styles.small}>{t('provider.remote')}</Text>}
           {(p.checkedDocuments?.length ?? 0) > 0 && <Text style={styles.small}>{checkedLine}</Text>}
         </View>

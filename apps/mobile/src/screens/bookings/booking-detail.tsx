@@ -5,20 +5,25 @@ import { StyleSheet, Text } from 'react-native'
 import type { Booking } from '@kando/contract'
 
 import { threadIdForBooking } from '@/api/chat'
-import { answerBooking, listBookings, withdrawBooking } from '@/api/bookings'
-import { ApiError } from '@/api/client'
-import { Button, ErrorText } from '@/components/auth-ui'
+import { answerBooking, confirmJob, listBookings, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
+import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
-import { PayPanel } from '@/screens/bookings/pay-card'
-import { OpenChat } from '@/screens/chat/open-chat'
 import { useLoad } from '@/hooks/use-load'
-import { errorText, t, useLang, type Key } from '@/i18n'
-import { bookingActions, bookingStatusText, type BookingAction, type Viewer } from '@/lib/booking-status'
+import { useSubmit } from '@/hooks/use-submit'
+import { t, useLang, type Key } from '@/i18n'
+import { actionLabel, bookingActions, bookingStatusText, daysLeft, type BookingAction, type Viewer } from '@/lib/booking-status'
 import { confirmDanger } from '@/lib/confirm'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 import { go } from '@/lib/go'
+import { CancelSheet } from '@/screens/bookings/cancel-sheet'
+import { DescriptionForm, DisputeInfo } from '@/screens/bookings/dispute-form'
+import { FinishSheet } from '@/screens/bookings/finish-sheet'
+import { PayPanel } from '@/screens/bookings/pay-card'
+import { StopSheet } from '@/screens/bookings/stop-sheet'
+import { OpenChat } from '@/screens/chat/open-chat'
+import { ReviewPanel } from '@/screens/reviews/review-form'
 
 type Found = { booking: Booking; viewer: Viewer } | null
 
@@ -36,14 +41,20 @@ const placeOf = (b: Booking) => {
   return a ? t('booking.onSiteAt', { address: [a.street, [a.postcode, a.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') }) : t('booking.onSiteShort')
 }
 
+/** Actions that open a form or statement below the booking before anything is sent. */
+type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
+const SHEETS: readonly BookingAction[] = ['finish', 'cancel', 'dispute', 'objectNoShow', 'additionalTask', 'stateStopAmount', 'answerStop']
+const DANGER: readonly BookingAction[] = ['decline', 'withdraw', 'cancel']
+
 /** A booking: plain-words status, the proposed time and the actions allowed now. */
 export default function BookingDetail() {
   useLang()
   const { id } = useLocalSearchParams<{ id: string }>()
   const fetch = useCallback(() => find(id), [id])
   const { data, done, error, retry } = useLoad(fetch)
-  const [busy, setBusy] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
+  const { busy, problem, submit } = useSubmit()
+  const [sheet, setSheet] = useState<Sheet | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const title = t('booking.bookings')
   if (!done || !data)
     return (
@@ -52,36 +63,70 @@ export default function BookingDetail() {
       </FormScreen>
     )
   const { booking: b, viewer } = data
+  const now = new Date()
+  const closeAndReload = () => {
+    setSheet(null)
+    retry()
+  }
+
+  /** Steps without a form ask first (they cannot be undone), then call the server. */
+  const ASK: Partial<Record<BookingAction, [Key, Key, () => Promise<unknown>]>> = {
+    decline: ['booking.confirmDecline', 'booking.decline', () => answerBooking(b.id, { type: 'decline' })],
+    withdraw: ['booking.confirmWithdraw', 'booking.withdraw', () => withdrawBooking(b.id)],
+    confirm: ['booking.confirmAsk', 'booking.confirmYes', () => confirmJob(b.id)],
+    stop: ['booking.stopAsk', 'booking.stopYes', () => stopJob(b.id)],
+    reportNoShow: [viewer === 'customer' ? 'booking.noShowAskCustomer' : 'booking.noShowAskProvider', 'booking.noShowYes', () => reportNoShow(b.id)],
+  }
 
   async function act(action: BookingAction) {
+    setNotice(null)
     if (action === 'counter') return go('/bookings/counter', { id: b.id })
-    if ((action === 'decline' || action === 'withdraw') && !(await confirmDanger(t(action === 'decline' ? 'booking.confirmDecline' : 'booking.confirmWithdraw'), t(`booking.${action}` as Key)))) return
-    setBusy(true)
-    setProblem(null)
-    try {
-      await (action === 'withdraw' ? withdrawBooking(b.id) : answerBooking(b.id, { type: action }))
-      retry()
-    } catch (e) {
-      setProblem(errorText(e instanceof ApiError ? e.code : ''))
-    }
-    setBusy(false)
+    if (SHEETS.includes(action)) return setSheet(sheet === action ? null : (action as Sheet))
+    const ask = ASK[action]
+    if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return
+    submit(ask ? ask[2] : () => answerBooking(b.id, { type: 'accept' }), retry)
   }
+
+  const descriptionSheet = (label: Key, hint: Key | undefined, submitLabel: Key, call: (text: string) => Promise<unknown>, after = closeAndReload) => (
+    <DescriptionForm label={t(label)} hint={hint && t(hint)} submitLabel={t(submitLabel)} onSubmit={call} onDone={after} />
+  )
+  const showDays = viewer === 'customer' && b.status === 'finished' && !!b.confirmBy && daysLeft(b.confirmBy, now) > 0
+  const days = b.confirmBy ? daysLeft(b.confirmBy, now) : 0
 
   return (
     <FormScreen title={title}>
       <Card>
-        <Text style={styles.status}>{bookingStatusText(b, viewer)}</Text>
+        {!!b.parentBookingId && <Text style={styles.small}>{t('booking.additionalTask')}</Text>}
+        <Text style={styles.status} accessibilityRole="header">
+          {bookingStatusText(b, viewer, now)}
+        </Text>
+        {showDays && <Text style={styles.text}>{days === 1 ? t('booking.daysLeft.one') : t('booking.daysLeft.other', { n: days })}</Text>}
         <Text style={styles.text}>{`${t('booking.when')}: ${formatWhen(b.startAt)} (${b.durationMin} min)`}</Text>
         <Text style={styles.text}>{`${t('booking.amount')}: ${formatPrice({ priceType: 'fixed', price: b.amount, currency: b.currency })}`}</Text>
         <Text style={styles.text}>{`${t('booking.mode')}: ${placeOf(b)}`}</Text>
         {!!b.note && <Text style={styles.small}>{b.note}</Text>}
+        {!!b.parentBookingId && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
       </Card>
       <PayPanel booking={b} viewer={viewer} onRefresh={retry} />
+      {b.status === 'disputed' && <DisputeInfo booking={b} />}
+      {b.status === 'completed' && !b.parentBookingId && <ReviewPanel booking={b} />}
       <OpenChat find={() => threadIdForBooking(b)} />
+      {!!notice && <Info text={notice} />}
       <ErrorText text={problem} />
-      {bookingActions(b, viewer).map((a) => (
-        <Button key={a} label={t(`booking.${a}` as Key)} onPress={() => act(a)} busy={busy} danger={a === 'decline' || a === 'withdraw'} />
+      {bookingActions(b, viewer, now).map((a) => (
+        <Button key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={sheet !== null && sheet !== a} danger={DANGER.includes(a)} />
       ))}
+      {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
+      {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
+      {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
+      {sheet === 'dispute' && descriptionSheet('booking.disputeField', 'booking.disputeHint', 'booking.disputeSend', (text) => openDispute(b.id, text))}
+      {sheet === 'objectNoShow' && descriptionSheet('booking.objectField', 'booking.objectHint', 'booking.objectSend', (text) => objectNoShow(b.id, text))}
+      {sheet === 'additionalTask' &&
+        descriptionSheet('booking.additionalTaskField', 'additionalTask.explainer', 'booking.additionalTaskSend', (text) => startAdditionalTask(b.id, text), () => {
+          setSheet(null)
+          setNotice(t('booking.additionalTaskSent'))
+        })}
+      {sheet !== null && <LinkText label={t('common.close')} onPress={() => setSheet(null)} />}
     </FormScreen>
   )
 }
