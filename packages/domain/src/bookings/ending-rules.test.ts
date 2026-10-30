@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { LATE_CANCEL_SHARE, NO_SHOW_OBJECTION_HOURS, STOP_ANSWER_DAYS } from '@kando/contract'
 import {
   ADDITIONAL_PAY_HOURS,
   addWorkingDays,
@@ -12,13 +13,10 @@ import {
   dueConfirmReminder,
   endOf,
   isLate,
-  LATE_CANCEL_SHARE,
   NO_ACTION_STAFF_DAYS,
-  NO_SHOW_OBJECTION_HOURS,
   REVIEW_EDIT_DAYS,
   REVIEW_VISIBLE_DAYS,
   reviewVisibleAt,
-  STOP_ANSWER_DAYS,
 } from './ending-rules'
 
 const H = 3_600_000

@@ -1,6 +1,6 @@
 import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
-import { LIST_PAGE, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput } from '@kando/contract'
+import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
@@ -8,21 +8,16 @@ import { postCard } from '../chat/messages'
 import { threadForRequest, threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { notifyBookingEvent, notifyProposal } from './notify'
-import { isUuid } from '../admin/common'
+import { isUuid, NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
-import { fail } from '../providers/http'
+import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { canTransact } from '../payments/rules'
 import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
-import { NO_SHOW_OBJECTION_HOURS } from './ending-rules'
 import { acceptAdditional } from './additional'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
 
-const DAY = 86_400_000
-const HOUR = 3_600_000
-const NO_ID = '00000000-0000-0000-0000-000000000000'
-const notFound = () => fail(404, { error: 'Not found' })
 const iso = (d: Date) => d.toISOString()
 
 /**
@@ -105,7 +100,7 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   lateCancel: b.lateCancel,
   noShow: b.noShow as Booking['noShow'],
   noShowReportedAt: b.noShowReportedAt ? iso(b.noShowReportedAt) : null,
-  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * 3_600_000)) : null,
+  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)) : null,
   stoppedAt: b.stoppedAt ? iso(b.stoppedAt) : null,
   stoppedBy: b.stoppedBy as Booking['stoppedBy'],
   stopAmount: b.stopAmount === null ? null : Number(b.stopAmount),

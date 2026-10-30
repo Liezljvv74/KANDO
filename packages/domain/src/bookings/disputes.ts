@@ -7,8 +7,8 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { addWorkingDays, DISPUTE_DECISION_WORKING_DAYS } from './ending-rules'
 import { parentNoShow } from './additional'
-import { lockRow, sideOf } from './finish'
 import { notifyBookingEvent } from './notify'
+import { lockRow, partyOf } from './party'
 
 export type DisputeReason = 'problem' | 'no-show-objection' | 'no-response' | 'stop-disagreed' | 'chargeback'
 type DisputeRow = typeof disputes.$inferSelect
@@ -103,7 +103,7 @@ export async function openSystemDispute(
  * (the release refused: not-open / DISPUTE_OPEN, nothing moves). Allowed while suspended (the route): it is about money paid.
  */
 export async function openDispute(tx: Tx, userId: string, bookingId: string, input: DisputeInput, now = new Date()): Promise<Dispute> {
-  const side = await sideOf(tx, userId, bookingId)
+  const side = (await partyOf(tx, userId, bookingId)).role
   await assertNoContactDetails(userId, input.description)
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
@@ -123,7 +123,7 @@ export async function openDispute(tx: Tx, userId: string, bookingId: string, inp
 
 /** The dispute of a booking, for its two parties (RLS on the request transaction: a third person gets 404, as without one). */
 export async function getDispute(tx: Tx, userId: string, bookingId: string): Promise<Dispute> {
-  await sideOf(tx, userId, bookingId)
+  await partyOf(tx, userId, bookingId)
   const [d] = await tx.select().from(disputes).where(eq(disputes.bookingId, bookingId))
   return d ? toDispute(d) : fail(404, { error: 'Not found' })
 }

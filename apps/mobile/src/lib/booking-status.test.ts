@@ -1,7 +1,6 @@
 import type { Booking } from '@kando/contract'
 
-import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, FREE_CANCEL_HOURS, lateFee, LATE_CANCEL_PERCENT, STOP_ANSWER_DAYS, stopAnswerText } from './booking-status'
-import * as rules from '../../../../packages/domain/src/bookings/ending-rules'
+import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -178,15 +177,6 @@ test('the cancel statement is checked again at the tap: across the 24-hour mark 
   expect(cancelTap(changed.statement, booking, 'customer', new Date(justAfter.getTime() + 5_000))).toEqual({ send: true, statement: changed.statement }) // the second tap sends
   const provider = cancelStatement(booking, 'provider', justBefore)
   expect(cancelTap(provider, booking, 'provider', justAfter).send).toBe(false) // the late note for the provider is new too
-})
-
-test('the mirrored rules equal the server rules', () => {
-  expect(LATE_CANCEL_PERCENT / 100).toBe(rules.LATE_CANCEL_SHARE)
-  expect(STOP_ANSWER_DAYS).toBe(rules.STOP_ANSWER_DAYS)
-  const start = new Date('2027-01-05T09:00:00.000Z')
-  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000))).toBe(false)
-  expect(rules.isLate(start, new Date(start.getTime() - FREE_CANCEL_HOURS * 3_600_000 + 1))).toBe(true)
-  expect(lateFee(33.33)).toBe(rules.customerCancelShare(33.33, start, new Date(start.getTime() - 1)))
 })
 
 test('the endings say in plain words what happened, for each side', () => {

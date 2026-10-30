@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 import { deferSend } from './deferred-sends'
 import { describeError } from './log-error'
-import { LATE_CANCEL_SHARE } from './bookings/ending-rules'
+import { LATE_CANCEL_SHARE } from '@kando/contract'
 import { t, type Lang } from '@kando/i18n'
 
 const FROM = 'SkillWeb <noreply@skillweb.space>'

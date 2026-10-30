@@ -1,4 +1,4 @@
-import type { Booking } from '@kando/contract'
+import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type Booking } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
@@ -21,14 +21,6 @@ export type BookingAction =
   | 'stateStopAmount'
   | 'answerStop'
 
-// The same rules as the server (packages/domain/src/bookings/ending-rules.ts; a test checks they are equal); the app only
-// uses them to choose what to show, the server decides.
-export const LATE_CANCEL_PERCENT = 50
-export const FREE_CANCEL_HOURS = 24
-export const STOP_ANSWER_DAYS = 7
-const HOUR = 3_600_000
-const DAY = 24 * HOUR
-
 const ms = (iso: string | null) => (iso ? new Date(iso).getTime() : NaN)
 const money = (b: Pick<Booking, 'currency'>, cents: number) => formatPrice({ priceType: 'fixed', price: cents / 100, currency: b.currency })
 const cents = (x: number) => Math.round(x * 100)
@@ -40,7 +32,7 @@ export const waitingFor = (b: Pick<Booking, 'counterBy'>): Viewer => (b.counterB
 export const daysLeft = (iso: string, now = new Date()): number => Math.max(0, Math.ceil((ms(iso) - now.getTime()) / DAY))
 
 /** What a late customer cancellation costs: half the price in whole cents, half up (the server's Math.round). */
-export const lateFee = (amount: number): number => Math.round((cents(amount) * LATE_CANCEL_PERCENT) / 100) / 100
+export const lateFee = (amount: number): number => Math.round(cents(amount) * LATE_CANCEL_SHARE) / 100
 
 /** The status in plain words for the viewer. */
 export function bookingStatusText(b: Booking, viewer: Viewer, now = new Date()): string {
@@ -119,7 +111,7 @@ export function cancelStatement(b: Booking, viewer: Viewer, now = new Date()): s
   if (viewer === 'provider') return t(late ? 'booking.cancelByProviderLate' : 'booking.cancelByProvider') + kids
   if (!late) return t('booking.cancelFree') + kids
   const fee = cents(lateFee(b.amount))
-  return t('booking.cancelLate', { percent: LATE_CANCEL_PERCENT, fee: money(b, fee), back: money(b, cents(b.amount) - fee) }) + kids
+  return t('booking.cancelLate', { percent: LATE_CANCEL_SHARE * 100, fee: money(b, fee), back: money(b, cents(b.amount) - fee) }) + kids
 }
 
 /**

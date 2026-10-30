@@ -1,4 +1,4 @@
-import type { BOOKING_STATUSES } from '@kando/contract'
+import { HOUR, type BOOKING_STATUSES } from '@kando/contract'
 
 import { MAX_PAY_AHEAD_DAYS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { fail } from '../providers/http'
@@ -22,7 +22,6 @@ export const MAX_REQUESTS_PER_DAY = 10
 
 export type Span = { start: Date; end: Date }
 
-const HOUR = 3_600_000
 const MAX_AHEAD_DAYS = 365
 
 /** Payment deadline: 48h after acceptance but at least 24h before the start; 24h or less to go, 6h. */

@@ -1,11 +1,12 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { db, type bookings } from '@kando/db'
+import { DAY, HOUR, STOP_ANSWER_DAYS } from '@kando/contract'
 import type { Exec } from '../providers/eligibility'
 import { drainOutbox } from './outbox'
 import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
 import { IGNORED_FLAG_DAYS, IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
-import { ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, endOf, NO_ACTION_STAFF_DAYS, REVIEW_VISIBLE_DAYS, STOP_ANSWER_DAYS } from './ending-rules'
+import { ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, endOf, NO_ACTION_STAFF_DAYS, REVIEW_VISIBLE_DAYS } from './ending-rules'
 import { RELEASE_FAILED, tryRelease } from './finish'
 import { resolveNoShows, trySettleCancelled } from './cancel'
 import { openSystemDispute } from './disputes'
@@ -268,8 +269,6 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
   return { confirmReminders, askedDone, sentToStaff, stopsToStaff, overdueDisputes, ignoredNoticeFlags }
 }
 
-const HOUR = 3_600_000
-const DAY = 24 * HOUR
 /**
  * Sends the bookings of `pred` to staff as no-response disputes, one at a time in id order (openSystemDispute locks the
  * row and re-checks `still`, the same rule in code); a failure is logged and the next run retries. The number opened.
