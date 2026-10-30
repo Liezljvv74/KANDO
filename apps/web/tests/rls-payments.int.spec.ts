@@ -18,7 +18,8 @@ const rls = { cause: { message: expect.stringContaining('row-level security') } 
 const denied = { cause: { message: expect.stringContaining('permission denied') } }
 const run = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, (tx) => tx.execute(q))
 const future = sql`now() + interval '3 days'`
-const paymentCodeOnly = { cause: { message: expect.stringMatching(/confirmed.*payment code only/) } }
+// a status move is stopped first by app_status_guard (rls.ts APP_STATUS_MOVES), anything else by bookings_guard_status
+const paymentCodeOnly = { cause: { message: expect.stringMatching(/confirmed.*payment code only|not a move the app makes/) } }
 const unchangeable = { cause: { message: expect.stringContaining('cannot be changed') } }
 
 beforeAll(async () => {
@@ -166,7 +167,7 @@ it("a quote's price, scope and dates cannot be changed once written; its status 
     }
   }
   await expect(pool.query('UPDATE quotes SET amount = 1 WHERE id = $1', [quoteId])).rejects.toThrow(/cannot be changed/) // the owner connection too
-  expect((await run(ids.customer, sql`UPDATE quotes SET status = 'declined', reminder_sent_at = now() WHERE id = ${quoteId}`)).rowCount).toBe(1)
+  expect((await run(ids.customer, sql`UPDATE quotes SET status = 'accepted', reminder_sent_at = now() WHERE id = ${quoteId}`)).rowCount).toBe(1) // a move the domain makes (rls.ts APP_STATUS_MOVES)
   await pool.query("UPDATE quotes SET status = 'sent', reminder_sent_at = NULL WHERE id = $1", [quoteId])
 })
 

@@ -94,9 +94,59 @@ it('neither party can reassign customer_id or provider_id, request_id on a quote
     await expect(run(uid, sql`UPDATE quotes SET provider_id = ${other}`)).rejects.toThrow()
     await expect(run(uid, sql`UPDATE quotes SET request_id = ${requestId}`)).resolves.toBeTruthy() // unchanged value is fine
   }
-  // a status change by a party still works
-  expect((await run(ids.customer, sql`UPDATE requests SET status = 'withdrawn' WHERE id = ${requestId}`)).rowCount).toBe(1)
+  // a status move the domain makes still works (rls.ts APP_STATUS_MOVES)
+  expect((await run(ids.owner, sql`UPDATE requests SET status = 'quoted' WHERE id = ${requestId}`)).rowCount).toBe(1)
   await pool.query("UPDATE requests SET status = 'open' WHERE id = $1", [requestId])
+})
+
+// Fresh rows on the owner connection, one per check, so no check sees another's state.
+const one = async (text: string, params: unknown[]) => (await pool.query(text, params)).rows[0].id as string
+const newRequest = (status = 'open') =>
+  one("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', $3, now() + interval '7 days') RETURNING id", [ids.customer, providerId, status])
+const newQuote = async () =>
+  one("INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, expires_at) VALUES ($1, $2, 1, 100, 'EUR', 's', now() + interval '14 days') RETURNING id", [await newRequest('quoted'), providerId])
+const newBooking = (status: 'proposed' | 'awaiting-payment') =>
+  one(
+    `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, answer_by, pay_by, accepted_at)
+     VALUES ($1, $2, $3, 'direct', $4, now() + interval '3 days', 60, false, now() + interval '1 day',
+       ${status === 'proposed' ? 'NULL, NULL' : "now() + interval '1 day', now()"}) RETURNING id`,
+    [ids.customer, providerId, serviceId, status],
+  )
+const notAppMove = { cause: { message: expect.stringContaining('not a move the app makes') } }
+
+it('app_user cannot make a status move the domain does not make', async () => {
+  // the listed moves pass, by the listed side
+  const open = await newRequest()
+  expect((await run(ids.owner, sql`UPDATE requests SET status = 'quoted' WHERE id = ${open}`)).rowCount).toBe(1)
+  await expect(run(ids.owner, sql`UPDATE requests SET status = 'booked' WHERE id = ${await newRequest('quoted')}`)).rejects.toMatchObject(notAppMove)
+  await expect(run(ids.customer, sql`UPDATE requests SET status = 'quoted' WHERE id = ${await newRequest()}`)).rejects.toMatchObject(notAppMove)
+  await expect(run(ids.customer, sql`UPDATE quotes SET status = 'superseded' WHERE id = ${await newQuote()}`)).rejects.toMatchObject(notAppMove)
+  await expect(run(ids.owner, sql`UPDATE quotes SET status = 'accepted' WHERE id = ${await newQuote()}`)).rejects.toMatchObject(notAppMove)
+  await expect(run(ids.owner, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${await newBooking('proposed')}`)).rejects.toMatchObject(notAppMove)
+  for (const uid of [ids.customer, ids.owner])
+    await expect(run(uid, sql`UPDATE bookings SET status = 'proposed' WHERE id = ${await newBooking('awaiting-payment')}`)).rejects.toMatchObject(notAppMove)
+  expect((await run(ids.customer, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${await newBooking('awaiting-payment')}`)).rowCount).toBe(1)
+  // inserts start at the first status only
+  await expect(run(ids.customer, sql`INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES (${ids.customer}, ${providerId}, 'x', 'booked', ${future})`)).rejects.toMatchObject(rls)
+  await expect(run(ids.owner, sql`INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, status, expires_at) VALUES (${open}, ${providerId}, 1, 1, 'EUR', 's', 'accepted', ${future})`)).rejects.toMatchObject(rls)
+  const book = (cols: ReturnType<typeof sql>) =>
+    run(ids.customer, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, start_at, duration_min, on_site, status, pay_by, accepted_at)
+      VALUES (${ids.customer}, ${providerId}, ${serviceId}, 'direct', ${future}, 60, false, ${cols})`)
+  await expect(book(sql`'awaiting-payment', now() + interval '1 day', now()`)).rejects.toMatchObject(rls)
+  await expect(book(sql`'proposed', now() + interval '1 day', NULL`)).rejects.toMatchObject(rls)
+})
+
+it('pay_by and the proposal columns move only with their transition', async () => {
+  const proposed = await newBooking('proposed')
+  await expect(run(ids.customer, sql`UPDATE bookings SET pay_by = start_at - interval '1 hour' WHERE id = ${proposed}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('pay_by') } })
+  const accept = (payBy: ReturnType<typeof sql>) =>
+    run(ids.owner, sql`UPDATE bookings SET status = 'awaiting-payment', pay_by = ${payBy}, accepted_at = now(), answer_by = NULL WHERE id = ${proposed}`)
+  await expect(accept(sql`start_at + interval '1 day'`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('pay_by') } })
+  expect((await accept(sql`start_at - interval '1 hour'`)).rowCount).toBe(1) // the domain's accept passes
+  for (const uid of [ids.customer, ids.owner]) {
+    await expect(run(uid, sql`UPDATE bookings SET start_at = start_at + interval '1 day' WHERE id = ${proposed}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('start_at') } })
+    await expect(run(uid, sql`UPDATE requests SET answer_by = answer_by + interval '30 days' WHERE id = ${requestId}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('answer_by') } })
+  }
 })
 
 it('a third user cannot update or delete any of the three', async () => {

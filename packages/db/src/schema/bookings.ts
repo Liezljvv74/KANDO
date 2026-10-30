@@ -3,7 +3,7 @@ import { boolean, check, index, uniqueIndex, integer, numeric, date, pgTable, te
 import { providers, services } from './providers'
 import { users } from './users'
 
-// Private to the two parties (rls.ts). Status columns stay writable by them: transitions are enforced in the domain.
+// Private to the two parties (rls.ts). Status moves: rls.ts APP_STATUS_MOVES (the app role makes only those, from the listed side).
 // Money columns are staff-only (rls.ts COLUMN_STAFF_ONLY).
 export const requests = pgTable(
   'requests',
