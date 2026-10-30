@@ -372,11 +372,11 @@ it('GET /bookings/{id} answers each party with viewer and threadId, a stranger 4
   await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [b.id])
   const kid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, parent_booking_id) SELECT customer_id, provider_id, service_id, 'direct', 'declined', start_at, 60, 5, id FROM bookings WHERE id = $1 RETURNING id", [b.id])).rows[0].id
   expect((await one(U.owner, kid)).body).toMatchObject({ viewer: 'provider', threadId, booking: { parentBookingId: b.id } })
-  // no writes: a lapsed proposal stays as it is and a missing thread is not created
+  // no writes: a lapsed proposal reads expired but stays proposed in the row, and a missing thread is not created
   const late = await direct()
   await pool.query("UPDATE bookings SET answer_by = now() - interval '1 hour' WHERE id = $1", [late.id])
   await pool.query('DELETE FROM threads WHERE booking_id = $1', [late.id])
-  expect((await one(U.cust, late.id)).body).toMatchObject({ viewer: 'customer', threadId: null, booking: { status: 'proposed' } })
+  expect((await one(U.cust, late.id)).body).toMatchObject({ viewer: 'customer', threadId: null, booking: { status: 'expired' } })
   expect((await row(late.id)).status).toBe('proposed')
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE booking_id = $1', [late.id])).rows[0].n).toBe(0)
 })

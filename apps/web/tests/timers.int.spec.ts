@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { acceptQuote, clearOutbox, createRequest, drainOutbox, listBookings, listRequests, outboxForTests, runDueTimers, runExpiryAndReminders } from '@kando/domain'
+import { acceptQuote, clearOutbox, createRequest, drainOutbox, getBooking, getRequest, listBookings, listRequests, outboxForTests, runDueTimers, runExpiryAndReminders } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 'tm-cust', cust2: 'tm-cust2', owner: 'tm-owner', owner2: 'tm-owner2' }
@@ -158,30 +158,38 @@ it('two overlapping runs create exactly one requests-ignored notice (the lock se
   expect((await notes('requests-ignored')).map((n) => n.user_id)).toEqual([U.owner])
 })
 
-it('listRequests and listBookings show a just-due row as expired and leave other users rows alone', async () => {
+it('a lapsed request reads expired in the list and alone, the row is untouched, and a new request to the provider is accepted', async () => {
   await clean()
   const past = () => new Date(Date.now() - 60_000).toISOString()
   const mine = await request(prov, past())
-  const theirs = await request(prov, past(), 'open', U.cust2)
   const b = await booking('proposed', { answerBy: past() })
-  const reqs = (await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))).docs
-  expect(reqs.find((r) => r.id === mine)?.status).toBe('expired')
-  expect(await status('requests', theirs)).toBe('open') // another customer's due row is untouched
+  const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // after PAY_GRACE_MINUTES
+  expect((await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))).docs.find((r) => r.id === mine)?.status).toBe('expired')
+  expect((await asUser(U.owner, (tx) => listRequests(tx, U.owner, 'provider'))).docs.find((r) => r.id === mine)?.status).toBe('expired')
+  expect((await asUser(U.cust, (tx) => getRequest(tx, U.cust, mine))).status).toBe('expired')
   expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).docs.find((x) => x.id === b)?.status).toBe('expired')
-  const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // the provider side is lazy too (after PAY_GRACE_MINUTES)
   expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).docs.find((x) => x.id === b2)?.status).toBe('expired')
+  expect((await asUser(U.cust, (tx) => getBooking(tx, U.cust, b))).booking.status).toBe('expired')
+  expect([await status('requests', mine), await status('bookings', b), await status('bookings', b2)]).toEqual(['open', 'proposed', 'awaiting-payment']) // shown, not written
+  expect(await notes('request-expired')).toHaveLength(0)
+  const again = await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId: prov, description: 'second try' }))
+  expect(again.status).toBe('open')
 })
 
-it('the lazy path sends no reminders and no ignored notice, but does write expiry notices', async () => {
+it('a list read writes nothing', async () => {
   await clean()
-  const soon = await booking('awaiting-payment', { acceptedAt: new Date(Date.now() - 20 * 3_600_000).toISOString(), payBy: new Date(Date.now() + 3_600_000).toISOString() }) // inside the last 3 hours
+  await booking('awaiting-payment', { acceptedAt: new Date(Date.now() - 20 * 3_600_000).toISOString(), payBy: new Date(Date.now() + 3_600_000).toISOString() }) // a reminder is due
+  await booking('proposed', { answerBy: new Date(Date.now() - 60_000).toISOString() })
   for (let i = 0; i < 3; i++) await request(prov, new Date(Date.now() - 60_000 * (i + 1)).toISOString())
+  const snapshot = async () => (await pool.query("SELECT (SELECT json_agg(r ORDER BY id) FROM requests r WHERE customer_id LIKE 'tm-%') r, (SELECT json_agg(b ORDER BY id) FROM bookings b WHERE customer_id LIKE 'tm-%') b, (SELECT count(*) FROM notifications WHERE user_id LIKE 'tm-%') n")).rows[0]
+  const before = await snapshot()
+  clearOutbox()
   await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))
+  await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))
+  await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))
   await asUser(U.owner, (tx) => listRequests(tx, U.owner, 'provider'))
-  expect(await status('bookings', soon)).toBe('awaiting-payment')
-  expect(await notes('payment-reminder')).toHaveLength(0)
-  expect(await notes('requests-ignored')).toHaveLength(0)
-  expect(await notes('request-expired')).toHaveLength(3)
+  expect(await snapshot()).toEqual(before)
+  expect(outboxForTests()).toEqual([])
 })
 
 const unmailed = async () => (await pool.query("SELECT payload FROM notifications WHERE user_id LIKE 'tm-%' AND mailed_at IS NULL")).rows
@@ -234,17 +242,6 @@ it('outbox: a reminder whose deadline has passed or whose item is closed is clai
   expect(mailsTo(U.cust)).toHaveLength(2)
   expect(await unmailed()).toHaveLength(0) // the stale ones are claimed too: never retried
   await pool.query('DELETE FROM quotes WHERE request_id = $1', [r])
-  await clean()
-})
-
-it('the lazy path sends the emails of its own rows only', async () => {
-  await clean()
-  await pool.query("INSERT INTO notifications (user_id, kind, payload, mailed_at) VALUES ($1, 'requests-ignored', '{}', NULL)", [U.owner2]) // someone else's waiting row
-  await request(prov, new Date(Date.now() - 60_000).toISOString())
-  clearOutbox()
-  await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))
-  expect(outboxForTests().map((m) => m.to)).toEqual([EMAIL(U.cust)])
-  expect(await unmailed()).toHaveLength(1)
   await clean()
 })
 

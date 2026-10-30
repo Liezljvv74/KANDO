@@ -1,6 +1,6 @@
 import type { BOOKING_STATUSES } from '@kando/contract'
 
-import { MAX_PAY_AHEAD_DAYS, paymentsEnabled } from '../payments/rules'
+import { MAX_PAY_AHEAD_DAYS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { fail } from '../providers/http'
 
 type BookingStatus = (typeof BOOKING_STATUSES)[number]
@@ -59,7 +59,17 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   refunded: [],
 }
 
-export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)
+/**
+ * The status a read shows: a lapsed proposal or unpaid booking (the same deadlines as the cron's expiry, timers.ts) shows
+ * `expired` before the daily cron writes it. Reads never write; the stored row changes in the cron and the write paths.
+ */
+export const bookingShownStatus = (b: { status: string; answerBy: Date | null; payBy: Date | null }, now: Date): string => {
+  if (b.status === 'proposed' && b.answerBy && b.answerBy <= now) return 'expired'
+  if (b.status === 'awaiting-payment' && b.payBy && b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 <= now.getTime()) return 'expired'
+  return b.status
+}
+
+export const canTransition =(from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)
 
 export const assertFuture = (startAt: Date, now: Date): void => {
   const t = startAt.getTime()

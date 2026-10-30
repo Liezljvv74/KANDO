@@ -58,11 +58,12 @@ export type TimerReport = {
 /**
  * Every rule is ONE statement (UPDATE .. RETURNING feeding the notification INSERT), so a concurrent run cannot
  * process a row twice and a second run finds nothing. Deadlines are the stored columns, so a late run is still right.
- * Notification payloads carry ids only. userId narrows every rule to rows of that user (customer or provider owner).
+ * Notification payloads carry ids only. Reads never run these rules: they only show a lapsed row as expired (bookingShownStatus,
+ * the mappers in requests.ts), so expiry notices and their emails come with the cron run.
  * The rows are written unsent (`mailed_at` NULL): the outbox drain (outbox.ts) sends their emails and pushes.
  */
-/** Counts the rows of CTE `from` and returns the ids of the notification rows CTE `n` inserted, for the outbox drain. */
-const result = (from: string) => sql`SELECT (SELECT count(*) FROM ${sql.identifier(from)})::int AS n, (SELECT coalesce(jsonb_agg(id), '[]'::jsonb) FROM n) AS ids`
+/** Counts the rows of CTE `from` (a data-modifying CTE such as the notification INSERT `n` runs whether read or not). */
+const result = (from: string) => sql`SELECT count(*)::int AS n FROM ${sql.identifier(from)}`
 
 /**
  * The customer of an expired quote-born root booking hears that the job is open again (request-reopened) when its quote
@@ -74,21 +75,14 @@ const reopenedJoin = sql`LEFT JOIN quotes q ON q.id = e.quote_id AND q.status = 
 const customerNotice = (t: string) => sql`CASE WHEN q.expires_at > ${t}::timestamptz THEN 'request-reopened' ELSE 'booking-expired' END,
       CASE WHEN q.expires_at > ${t}::timestamptz THEN jsonb_build_object('requestId', e.request_id, 'bookingId', e.id) ELSE jsonb_build_object('bookingId', e.id) END`
 
-async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false, timeUp: () => boolean = () => false): Promise<TimerReport & { ids: string[] }> {
-  const ids: string[] = []
+async function sweep(exec: Exec, now: Date, timeUp: () => boolean): Promise<TimerReport> {
   const t = now.toISOString()
-  const ownedBy = (col: string) => sql`${sql.identifier(col)} IN (SELECT id FROM providers WHERE owner_id = ${userId})`
-  const scoped = (...cols: SQL[]): SQL => (userId ? sql` AND (${sql.join(cols, sql` OR `)})` : sql``)
-  const countOn = async (e: Exec, q: SQL) => {
-    const row = (await e.execute<{ n: number; ids?: string[] }>(q)).rows[0]!
-    ids.push(...(row.ids ?? []))
-    return Number(row.n)
-  }
+  const countOn = async (e: Exec, q: SQL) => Number((await e.execute<{ n: number }>(q)).rows[0]!.n)
   const count = (q: SQL) => countOn(exec, q)
 
   const requestsExpired = await count(sql`
     WITH e AS (UPDATE requests SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'open' AND answer_by <= ${t}::timestamptz
-        ${scoped(sql`customer_id = ${userId}`, ownedBy('provider_id'))} RETURNING id, customer_id, parent_booking_id),
+        RETURNING id, customer_id, parent_booking_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'request-expired', jsonb_build_object('requestId', id), ${t}::timestamptz, NULL FROM e WHERE parent_booking_id IS NULL RETURNING id)
     ${result('e')}`)
 
@@ -96,15 +90,13 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   // count toward the provider's requests-ignored notice.
   // The request stays 'quoted'; it simply has no live quote any more.
   const quotesExpired = await count(sql`
-    WITH e AS (UPDATE quotes SET status = 'expired' WHERE status = 'sent' AND expires_at <= ${t}::timestamptz
-        ${scoped(ownedBy('provider_id'), sql`request_id IN (SELECT id FROM requests WHERE customer_id = ${userId})`)} RETURNING id)
+    WITH e AS (UPDATE quotes SET status = 'expired' WHERE status = 'sent' AND expires_at <= ${t}::timestamptz RETURNING id)
     SELECT count(*)::int AS n FROM e`)
 
-  const bookingScope = scoped(sql`customer_id = ${userId}`, ownedBy('provider_id'))
   // both expiries lock their rows in id order, as lockFamily and account deletion do (two of one root's additional tasks
   // expiring while the root is cancelled can otherwise deadlock)
-  const lapsed = sql`status = 'proposed' AND answer_by <= ${t}::timestamptz ${bookingScope}`
-  const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope}`
+  const lapsed = sql`status = 'proposed' AND answer_by <= ${t}::timestamptz`
+  const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz`
   const proposalsLapsed = await count(sql`
     WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(lapsed)} AND ${lapsed} RETURNING ${EXPIRED_COLS}),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL FROM e ${reopenedJoin} RETURNING id)
@@ -119,20 +111,17 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
       UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
     ${result('e')}`)
 
-  // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, ids }
-
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
   const quoteReminders = await count(sql`
     WITH r AS (UPDATE quotes SET reminder_sent_at = ${t}::timestamptz WHERE status = 'sent' AND reminder_sent_at IS NULL AND expires_at > ${t}::timestamptz
-        AND expires_at - interval '1 day' <= ${t}::timestamptz ${scoped(ownedBy('provider_id'), sql`request_id IN (SELECT id FROM requests WHERE customer_id = ${userId})`)} RETURNING id, request_id),
+        AND expires_at - interval '1 day' <= ${t}::timestamptz RETURNING id, request_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
       SELECT q.customer_id, 'quote-expiring', jsonb_build_object('quoteId', r.id, 'requestId', r.request_id), ${t}::timestamptz, NULL FROM r JOIN requests q ON q.id = r.request_id RETURNING id)
     ${result('r')}`)
   const payReminder = (col: string, due: SQL) =>
     count(sql`
-    WITH r AS (UPDATE bookings SET ${sql.identifier(col)} = ${t}::timestamptz WHERE status = 'awaiting-payment' AND ${sql.identifier(col)} IS NULL AND pay_by > ${t}::timestamptz AND ${due} ${bookingScope} RETURNING id, customer_id),
+    WITH r AS (UPDATE bookings SET ${sql.identifier(col)} = ${t}::timestamptz WHERE status = 'awaiting-payment' AND ${sql.identifier(col)} IS NULL AND pay_by > ${t}::timestamptz AND ${due} RETURNING id, customer_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'payment-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL FROM r RETURNING id)
     ${result('r')}`)
   // halfway: only when 6h+ were given, and not when the last reminder is due as well (one message is enough)
@@ -168,7 +157,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   const customersWaiting = paymentsEnabled() ? (await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, undefined, true)).length : 0
 
   const endings = await endingRules(exec, now, count, timeUp)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, ids }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }
 }
 
 // The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
@@ -342,7 +331,7 @@ function budget({ budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptio
 export function runExpiryAndReminders(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<TimerReport> {
   const timeUp = budget(opts)
   return withPushBatch(async () => {
-    const { ids: _, ...report } = await sweep(exec, now, undefined, false, timeUp)
+    const report = await sweep(exec, now, timeUp)
     await drainOutbox(exec, now, { timeUp })
     return report
   })
@@ -381,11 +370,4 @@ export async function runDueTimers(exec: typeof db, now: Date, opts: ReleaseOpti
   const report = await runExpiryAndReminders(exec, now, opts)
   const money = await runMoneySteps(exec, now, opts)
   return { ...report, ...money, ...(await runDocuments(exec, now, opts)) }
-}
-
-/** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications); sends the emails of its own rows only. */
-export async function runDueTimersFor(exec: typeof db, userId: string, now = new Date()): Promise<TimerReport> {
-  const { ids, ...report } = await sweep(exec, now, userId, true)
-  await drainOutbox(exec, now, { ids })
-  return report
 }
