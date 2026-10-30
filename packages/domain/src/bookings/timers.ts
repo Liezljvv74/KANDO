@@ -1,7 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm'
 import type { bookings, db } from '@kando/db'
 import type { Exec } from '../providers/eligibility'
-import { notifyBookingEvent, type BookingKind } from './notify'
+import { drainOutbox } from './outbox'
 import { CUSTOMERS_WAITING_NOTICE_HOURS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, noticeCustomersWaiting } from '../payments/watches'
 import { IGNORED_FLAG_DAYS, IGNORED_LIMIT, IGNORED_WINDOW_DAYS } from './rules'
@@ -59,19 +59,19 @@ export type TimerReport = {
  * Every rule is ONE statement (UPDATE .. RETURNING feeding the notification INSERT), so a concurrent run cannot
  * process a row twice and a second run finds nothing. Deadlines are the stored columns, so a late run is still right.
  * Notification payloads carry ids only. userId narrows every rule to rows of that user (customer or provider owner).
+ * The rows are written unsent (`mailed_at` NULL): the outbox drain (outbox.ts) sends their emails and pushes.
  */
-type TimerEvent = { userId: string; kind: BookingKind; payload: Record<string, string> }
-/** Counts the rows of CTE `from` and returns the notification rows CTE `n` inserted (ids only), so their emails can follow. */
-const result = (from: string) => sql`SELECT (SELECT count(*) FROM ${sql.identifier(from)})::int AS n, (SELECT coalesce(jsonb_agg(jsonb_build_object('userId', user_id, 'kind', kind, 'payload', payload)), '[]'::jsonb) FROM n) AS ev`
+/** Counts the rows of CTE `from` and returns the ids of the notification rows CTE `n` inserted, for the outbox drain. */
+const result = (from: string) => sql`SELECT (SELECT count(*) FROM ${sql.identifier(from)})::int AS n, (SELECT coalesce(jsonb_agg(id), '[]'::jsonb) FROM n) AS ids`
 
-async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false, timeUp: () => boolean = () => false): Promise<TimerReport & { events: TimerEvent[] }> {
-  const events: TimerEvent[] = []
+async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false, timeUp: () => boolean = () => false): Promise<TimerReport & { ids: string[] }> {
+  const ids: string[] = []
   const t = now.toISOString()
   const ownedBy = (col: string) => sql`${sql.identifier(col)} IN (SELECT id FROM providers WHERE owner_id = ${userId})`
   const scoped = (...cols: SQL[]): SQL => (userId ? sql` AND (${sql.join(cols, sql` OR `)})` : sql``)
   const countOn = async (e: Exec, q: SQL) => {
-    const row = (await e.execute<{ n: number; ev?: TimerEvent[] }>(q)).rows[0]!
-    events.push(...(row.ev ?? []))
+    const row = (await e.execute<{ n: number; ids?: string[] }>(q)).rows[0]!
+    ids.push(...(row.ids ?? []))
     return Number(row.n)
   }
   const count = (q: SQL) => countOn(exec, q)
@@ -79,7 +79,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   const requestsExpired = await count(sql`
     WITH e AS (UPDATE requests SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'open' AND answer_by <= ${t}::timestamptz
         ${scoped(sql`customer_id = ${userId}`, ownedBy('provider_id'))} RETURNING id, customer_id, parent_booking_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'request-expired', jsonb_build_object('requestId', id), ${t}::timestamptz FROM e WHERE parent_booking_id IS NULL RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'request-expired', jsonb_build_object('requestId', id), ${t}::timestamptz, NULL FROM e WHERE parent_booking_id IS NULL RETURNING id)
     ${result('e')}`)
 
   // An expired additional task's request tells nobody (no "try a different provider" while the booking runs) and does not
@@ -97,33 +97,33 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
   const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz ${bookingScope}`
   const proposalsLapsed = await count(sql`
     WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(lapsed)} AND ${lapsed} RETURNING id, customer_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM e RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL FROM e RETURNING id)
     ${result('e')}`)
 
   // PAY_GRACE_MINUTES after pay_by: a payment made at the deadline may still be on its way (the webhook confirms it if the
   // time is still free). The slot itself stops being held at pay_by (slotIsHeld, busy_times) and no pay link is given after it.
   const unpaidExpired = await count(sql`
     WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(unpaid)} AND ${unpaid} RETURNING id, customer_id, provider_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
-      SELECT u, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz
-      FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
+      SELECT u, 'booking-expired', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL
+      FROM (SELECT id, customer_id AS u FROM e UNION ALL SELECT e.id, p.owner_id FROM e JOIN providers p ON p.id = e.provider_id) x RETURNING id)
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, ids }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
   const quoteReminders = await count(sql`
     WITH r AS (UPDATE quotes SET reminder_sent_at = ${t}::timestamptz WHERE status = 'sent' AND reminder_sent_at IS NULL AND expires_at > ${t}::timestamptz
         AND expires_at - interval '1 day' <= ${t}::timestamptz ${scoped(ownedBy('provider_id'), sql`request_id IN (SELECT id FROM requests WHERE customer_id = ${userId})`)} RETURNING id, request_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
-      SELECT q.customer_id, 'quote-expiring', jsonb_build_object('quoteId', r.id, 'requestId', r.request_id), ${t}::timestamptz FROM r JOIN requests q ON q.id = r.request_id RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
+      SELECT q.customer_id, 'quote-expiring', jsonb_build_object('quoteId', r.id, 'requestId', r.request_id), ${t}::timestamptz, NULL FROM r JOIN requests q ON q.id = r.request_id RETURNING id)
     ${result('r')}`)
   const payReminder = (col: string, due: SQL) =>
     count(sql`
     WITH r AS (UPDATE bookings SET ${sql.identifier(col)} = ${t}::timestamptz WHERE status = 'awaiting-payment' AND ${sql.identifier(col)} IS NULL AND pay_by > ${t}::timestamptz AND ${due} ${bookingScope} RETURNING id, customer_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'payment-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'payment-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL FROM r RETURNING id)
     ${result('r')}`)
   // halfway: only when 6h+ were given, and not when the last reminder is due as well (one message is enough)
   const half = await payReminder('reminded_half_at', sql`pay_by - accepted_at >= interval '6 hours' AND accepted_at + (pay_by - accepted_at) / 2 <= ${t}::timestamptz AND pay_by - interval '3 hours' > ${t}::timestamptz`)
@@ -137,8 +137,8 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
       SELECT p.owner_id FROM providers p JOIN requests r ON r.provider_id = p.id
       WHERE r.status = 'expired' AND r.parent_booking_id IS NULL AND r.updated_at > ${t}::timestamptz - make_interval(days => ${IGNORED_WINDOW_DAYS})
       GROUP BY p.owner_id HAVING count(*) >= ${IGNORED_LIMIT}),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT owner_id, 'requests-ignored', '{}'::jsonb, ${t}::timestamptz FROM i
-      WHERE NOT EXISTS (SELECT 1 FROM notifications x WHERE x.user_id = i.owner_id AND x.kind = 'requests-ignored' AND x.created_at > ${t}::timestamptz - make_interval(days => ${IGNORED_WINDOW_DAYS})) RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT owner_id, 'requests-ignored', '{}'::jsonb, ${t}::timestamptz, NULL FROM i
+      WHERE NOT EXISTS (SELECT 1 FROM notifications x WHERE x.user_id = i.owner_id AND x.kind = 'requests-ignored' AND x.created_at > ${t}::timestamptz - make_interval(days => ${IGNORED_WINDOW_DAYS})) RETURNING id)
     ${result('n')}`)
   })
 
@@ -149,18 +149,16 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
     WITH s AS (UPDATE reviews SET reveal_told_at = ${t}::timestamptz
       WHERE reveal_told_at IS NULL AND NOT hidden AND visible_at <= ${t}::timestamptz AND visible_at > ${t}::timestamptz - make_interval(days => ${REVIEW_VISIBLE_DAYS})
       RETURNING booking_id, author_id, subject_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
-      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
+      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz, NULL FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING id)
     ${result('s')}`)
 
   // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
   // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.
-  const waiting = paymentsEnabled() ? await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS) : []
-  for (const w of waiting) events.push({ userId: w.userId, kind: 'customers-waiting', payload: { count: String(w.count) } })
-  const customersWaiting = waiting.length
+  const customersWaiting = paymentsEnabled() ? (await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, undefined, true)).length : 0
 
   const endings = await endingRules(exec, now, count, timeUp)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, events }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0, ids }
 }
 
 // The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
@@ -189,7 +187,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
         AND finished_at + make_interval(days => ${days}) <= ${t}::timestamptz AND ${noOpenDispute}`
   const confirmReminders = await count(sql`
     WITH r AS (UPDATE bookings SET confirm_reminders_sent = confirm_reminders_sent + 1, updated_at = ${t}::timestamptz WHERE ${inIdOrder(remind)} AND ${remind} RETURNING id, customer_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'confirm-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'confirm-reminder', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL FROM r RETURNING id)
     ${result('r')}`)
 
   // The provider never tapped "Finished": 24 hours after the end the customer is asked once (they may then confirm).
@@ -197,7 +195,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
   const ask = sql`status = 'confirmed' AND no_show IS NULL AND asked_done_at IS NULL AND ${endAt} + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`
   const askedDone = await count(sql`
     WITH r AS (UPDATE bookings SET asked_done_at = ${t}::timestamptz, updated_at = ${t}::timestamptz WHERE ${inIdOrder(ask)} AND ${ask} RETURNING id, customer_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'was-job-done', jsonb_build_object('bookingId', id), ${t}::timestamptz FROM r RETURNING user_id, kind, payload)
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT customer_id, 'was-job-done', jsonb_build_object('bookingId', id), ${t}::timestamptz, NULL FROM r RETURNING id)
     ${result('r')}`)
 
   // Nobody acted within 7 days after the end: the booking goes to staff as a system dispute (no-response), the money
@@ -315,44 +313,68 @@ async function releaseDue(exec: Exec, now: Date, timeUp: () => boolean): Promise
   return done
 }
 
-/**
- * Sends the emails and pushes of the in-app rows a sweep just wrote (the SQL writes the row, notifyBookingEvent sends only
- * the email and push for these kinds, so there is one row, one email and one push per event). Never throws. The sweep has
- * committed before this runs: the runners take the pool only (each statement and step commits on its own), never an open
- * transaction, so no email or push can go out for a write that is later rolled back.
- */
-async function sendEmails({ events, ...report }: TimerReport & { events: TimerEvent[] }): Promise<TimerReport> {
-  for (const e of events) await notifyBookingEvent(e.kind, e.userId, e.payload)
-  return report
+/** The time budget of one cron step, measured from its start: true once it is used up. */
+function budget({ budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptions): () => boolean {
+  const started = clock()
+  return () => clock() - started >= budgetMs
 }
 
 /**
- * The scheduled sweep (the pool, never an open transaction: see sendEmails), in one time budget measured from its start.
- * Order: the SQL rules (each one statement: their in-app rows are written, their emails wait), then the money (no-show
- * resolutions and releases, invoicing deferred), then the waiting emails (also when the money loop throws), then the documents (invoices, commission
- * invoices) with whatever budget is left. Every push of the run is held back and sent at the very end in requests of 100
- * (withPushBatch), so a slow push service never eats the budget of the releases. A release whose invoice the budget did not
- * reach leaves its group due: the next run issues it (and tells both, in-app row and PDF key in one transaction).
+ * The three cron steps below run as three routes (vercel.json), each in its own time budget and its own push batch
+ * (withPushBatch: every push of the step goes out at its very end in requests of 100, so a slow push service never eats
+ * the budget). Each takes the pool only, never an open transaction (each statement and step commits on its own), so no
+ * email or push goes out for a write that is later rolled back. Each ends with the outbox drain (outbox.ts) in what is
+ * left of its budget: the rows a step could not send wait for the next step's drain.
  */
-export async function runDueTimers(exec: typeof db, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
-  const { budgetMs = RELEASE_BUDGET_MS, clock = Date.now } = release
-  const started = clock()
-  const timeUp = () => clock() - started >= budgetMs
+
+/** Step 1 (the bookings route): the SQL rules (each one statement) and the ending rules, then the drain. */
+export function runExpiryAndReminders(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<TimerReport> {
+  const timeUp = budget(opts)
   return withPushBatch(async () => {
-    const swept = await sweep(exec, now, undefined, false, timeUp)
-    let money: { noShowsResolved: number } & Awaited<ReturnType<typeof releaseDue>>
-    let report: TimerReport
-    try {
-      const noShowsResolved = await resolveNoShows(exec, now, timeUp)
-      money = { noShowsResolved, ...(await withDeferredInvoices(() => releaseDue(exec, now, timeUp))) }
-    } finally {
-      report = await sendEmails(swept) // the rules' emails go out even when the money loop fails (their rows are written)
-    }
-    // the groups the releases made final, a group ended by an expiry, a PDF a storage failure left out: all due here
-    const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
-    return { ...report, ...money, invoicesIssued, commissionInvoices: await issueCommissionInvoices(exec, now, { timeUp }) }
+    const { ids: _, ...report } = await sweep(exec, now, undefined, false, timeUp)
+    await drainOutbox(exec, now, { timeUp })
+    return report
   })
 }
 
-/** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */
-export const runDueTimersFor = async (exec: typeof db, userId: string, now = new Date()): Promise<TimerReport> => sendEmails(await sweep(exec, now, userId, true))
+/**
+ * Step 2 (the money route): no-show resolutions and releases, invoicing deferred (a release whose invoice was not issued
+ * leaves its group due for step 3), then the drain.
+ */
+export function runMoneySteps(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<{ noShowsResolved: number; autoReleased: number; cancelsSettled: number; decisionsApplied: number }> {
+  const timeUp = budget(opts)
+  return withPushBatch(async () => {
+    const noShowsResolved = await resolveNoShows(exec, now, timeUp)
+    const money = { noShowsResolved, ...(await withDeferredInvoices(() => releaseDue(exec, now, timeUp))) }
+    await drainOutbox(exec, now, { timeUp })
+    return money
+  })
+}
+
+/**
+ * Step 3 (the invoices route): the groups the releases made final, a group ended by an expiry, a PDF a storage failure
+ * left out (each issued invoice tells both, in-app row and PDF key in one transaction), the commission invoices, then the drain.
+ */
+export function runDocuments(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<{ invoicesIssued: number; commissionInvoices: number }> {
+  const timeUp = budget(opts)
+  return withPushBatch(async () => {
+    const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
+    const commissionInvoices = await issueCommissionInvoices(exec, now, { timeUp })
+    await drainOutbox(exec, now, { timeUp })
+    return { invoicesIssued, commissionInvoices }
+  })
+}
+
+/** The three steps in order, as the cron runs them (tests). */
+export async function runDueTimers(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<TimerReport> {
+  const report = await runExpiryAndReminders(exec, now, opts)
+  const money = await runMoneySteps(exec, now, opts)
+  return { ...report, ...money, ...(await runDocuments(exec, now, opts)) }
+}
+
+/** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications); sends the emails of its own rows only. */
+export async function runDueTimersFor(exec: typeof db, userId: string, now = new Date()): Promise<TimerReport> {
+  const { ids, ...report } = await sweep(exec, now, userId, true)
+  await drainOutbox(exec, now, { ids })
+  return report
+}

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runDueTimersFor, setGatewayForTests } from '@kando/domain'
+import { clearOutbox, confirmJob, finishJob, outboxForTests, releaseBooking, runDueTimers, runDueTimersFor, runExpiryAndReminders, runMoneySteps, setGatewayForTests } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -421,7 +421,7 @@ it('a booking with an open chargeback flag is not picked by the release', async 
   expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [id])).rows[0].n).toBe(0) // not tried, so not flagged
 })
 
-it('the other rules and their emails happen even when the release loop fails (the releases run before the emails)', async () => {
+it('the other rules and their emails happen even when the release loop fails (the rules and their emails run in their own step, before the money)', async () => {
   const T = new Date('2028-04-03T10:00:00Z')
   const reminded = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: new Date(T.getTime() + 6 * DAY) }) // reminder 1 due at T + 7 d
   const asked = await paidBooking({ startAt: new Date(T.getTime() + 5 * DAY) }) // ends T + 5 d 1 h: asked at T + 7 d
@@ -432,7 +432,8 @@ it('the other rules and their emails happen even when the release loop fails (th
     if (reads++ === 0) return 0 // the run's start; then the release loop breaks
     throw new Error('release loop broke')
   }
-  await expect(runDueTimers(db, new Date(T.getTime() + 7 * DAY), { clock: boom })).rejects.toThrow('release loop broke')
+  await runExpiryAndReminders(db, new Date(T.getTime() + 7 * DAY))
+  await expect(runMoneySteps(db, new Date(T.getTime() + 7 * DAY), { clock: boom })).rejects.toThrow('release loop broke')
   expect((await row(reminded.id)).confirm_reminders_sent).toBe(1)
   expect((await row(asked.id)).asked_done_at).not.toBeNull()
   expect((await row(released.id)).status).toBe('finished')

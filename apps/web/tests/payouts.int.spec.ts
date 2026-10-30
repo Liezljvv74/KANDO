@@ -254,8 +254,8 @@ it('no notice and no email when nobody is waiting (count 0), nor for an unpublis
   await runDueTimers(db, new Date(Date.now() + HOUR))
   expect(await kindsFor(p.uid, 'customers-waiting')).toHaveLength(1)
   clearOutbox()
-  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' })
-  await notifyBookingEvent('customers-waiting', p.uid, {})
+  await notifyBookingEvent('customers-waiting', p.uid, { count: '0' }, { written: true })
+  await notifyBookingEvent('customers-waiting', p.uid, {}, { written: true })
   expect(outboxForTests()).toHaveLength(0)
   for (const hide of ["status = 'draft'", "suspended_until = now() + interval '1 day'"]) {
     const q = await provider()

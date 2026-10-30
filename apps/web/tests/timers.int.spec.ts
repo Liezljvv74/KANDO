@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { createRequest, listBookings, listRequests, runDueTimers } from '@kando/domain'
-import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { clearOutbox, createRequest, drainOutbox, listBookings, listRequests, outboxForTests, runDueTimers, runExpiryAndReminders } from '@kando/domain'
+import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 'tm-cust', cust2: 'tm-cust2', owner: 'tm-owner', owner2: 'tm-owner2' }
 let prov: string, prov2: string, service: string
@@ -182,4 +182,46 @@ it('the lazy path sends no reminders and no ignored notice, but does write expir
   expect(await notes('payment-reminder')).toHaveLength(0)
   expect(await notes('requests-ignored')).toHaveLength(0)
   expect(await notes('request-expired')).toHaveLength(3)
+})
+
+const unmailed = async () => (await pool.query("SELECT payload FROM notifications WHERE user_id LIKE 'tm-%' AND mailed_at IS NULL")).rows
+const mailsTo = (id: string) => outboxForTests().filter((m) => m.to === EMAIL(id))
+
+it('outbox: a run that stops halfway leaves the rest for the next run', async () => {
+  await clean()
+  for (let i = 0; i < 3; i++) await booking('awaiting-payment', { acceptedAt: at(-10), payBy: at(2) }) // the last reminder is due
+  await runExpiryAndReminders(db, new Date(NOW), { budgetMs: 0 }) // the rules always run; no time left to send
+  expect(await notes('payment-reminder')).toHaveLength(3)
+  expect(await unmailed()).toHaveLength(3)
+  clearOutbox()
+  expect(await drainOutbox(db, new Date(NOW), { timeUp: () => outboxForTests().length >= 1 })).toBe(1)
+  expect(mailsTo(U.cust)).toHaveLength(1)
+  expect(await unmailed()).toHaveLength(2)
+  expect(await drainOutbox(db, new Date(NOW))).toBe(2)
+  expect(mailsTo(U.cust)).toHaveLength(3)
+  expect(await unmailed()).toHaveLength(0)
+})
+
+it('a notice older than 48 hours is not emailed', async () => {
+  await clean()
+  const b = await booking('awaiting-payment', { acceptedAt: at(-10), payBy: at(2) })
+  const row = (hours: number) => pool.query("INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) VALUES ($1, 'payment-reminder', $2, $3, NULL)", [U.cust, { bookingId: b }, at(-hours)])
+  await row(49)
+  await row(47)
+  clearOutbox()
+  expect(await drainOutbox(db, new Date(NOW))).toBe(1)
+  expect(mailsTo(U.cust)).toHaveLength(1)
+  expect(await unmailed()).toHaveLength(1) // the late one stays unsent
+  await clean()
+})
+
+it('the lazy path sends the emails of its own rows only', async () => {
+  await clean()
+  await pool.query("INSERT INTO notifications (user_id, kind, payload, mailed_at) VALUES ($1, 'requests-ignored', '{}', NULL)", [U.owner2]) // someone else's waiting row
+  await request(prov, new Date(Date.now() - 60_000).toISOString())
+  clearOutbox()
+  await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))
+  expect(outboxForTests().map((m) => m.to)).toEqual([EMAIL(U.cust)])
+  expect(await unmailed()).toHaveLength(1)
+  await clean()
 })

@@ -80,13 +80,13 @@ it('chat switch off: no push for messages (the email goes instead), still for bo
 
 it('reminders switch off: no payment-reminder push', async () => {
   await giveTokens(U.cust)
-  await notifyBookingEvent('payment-reminder', U.cust, {})
+  await notifyBookingEvent('payment-reminder', U.cust, {}, { written: true })
   expect(pushes(U.cust).map((m) => m.data.kind)).toEqual(['payment-reminder'])
   clearPushOutbox()
   await pool.query('UPDATE users SET push_reminders = false WHERE id = $1', [U.cust])
-  await notifyBookingEvent('payment-reminder', U.cust, {})
-  await notifyBookingEvent('confirm-reminder', U.cust, {})
-  await notifyBookingEvent('quote-expiring', U.cust, {})
+  await notifyBookingEvent('payment-reminder', U.cust, {}, { written: true })
+  await notifyBookingEvent('confirm-reminder', U.cust, {}, { written: true })
+  await notifyBookingEvent('quote-expiring', U.cust, {}, { written: true })
   expect(pushes(U.cust)).toEqual([])
   expect(mails(U.cust)).toHaveLength(4) // the emails still go out
   await notifyBookingEvent('booking-accepted', U.cust, { bookingId: crypto.randomUUID() })
