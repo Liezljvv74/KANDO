@@ -3,7 +3,7 @@ import { bookings, db, providers, quotes, requests, threads, users, type Tx } fr
 import { LIST_PAGE, type Page, type Thread } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
-import { fail, notFound } from '../providers/http'
+import { notFound } from '../providers/http'
 import { publicNameFor } from '../providers/public-name'
 import { olderThan, pageOf, stampOf } from '../paging'
 
