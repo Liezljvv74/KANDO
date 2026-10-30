@@ -214,3 +214,10 @@ it('inside a push batch (the cron) pushes are held back and sent together at its
   })
   expect(pushes(U.cust).map((m) => m.title)).toEqual(['T', 'T', 'T2', 'T2'])
 })
+
+it('the push of request-reopened opens the request (the booking it names has ended); a booking kind still opens the booking', async () => {
+  await giveTokens(U.cust)
+  await notifyBookingEvent('request-reopened', U.cust, { requestId: '0b6e2c1a-0000-4000-8000-000000000001', bookingId: '0b6e2c1a-0000-4000-8000-000000000002' })
+  await notifyBookingEvent('booking-accepted', U.cust, { requestId: '0b6e2c1a-0000-4000-8000-000000000001', bookingId: '0b6e2c1a-0000-4000-8000-000000000002' })
+  expect(pushes(U.cust).map((m) => [m.data.kind, m.data.url])).toEqual([['request-reopened', 'skilled://bookings/request/0b6e2c1a-0000-4000-8000-000000000001'], ['booking-accepted', 'skilled://bookings/0b6e2c1a-0000-4000-8000-000000000002']])
+})
