@@ -122,9 +122,6 @@ export const PUBLIC_OWNED_TABLES: Record<string, { owner: string; publicRead: st
   },
 }
 
-// Readable by everyone, insertable by any app request, never updated or deleted by app_user.
-export const INSERT_ONLY_TABLES: string[] = ['translations', 'translation_requests']
-
 // Readable by app_user where the expression holds, written only on the owner connection (staff, or the domain after it
 // checked the caller), which sees everything.
 export const PUBLISHED_READ_TABLES: Record<string, string> = {
@@ -141,10 +138,10 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 }
 
 // Readable by app_user, written only by staff (owner connection).
-export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts']
+export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'translations']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters']
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters', 'translation_requests']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']
@@ -157,7 +154,6 @@ export function classifyTables(): { unclassified: string[]; duplicated: string[]
   const maps = [
     Object.keys(PRIVATE_TABLES),
     Object.keys(PUBLIC_OWNED_TABLES),
-    INSERT_ONLY_TABLES,
     Object.keys(APPEND_ONLY_TABLES),
     Object.keys(PUBLISHED_READ_TABLES),
     PUBLIC_REFERENCE_TABLES,
@@ -233,15 +229,7 @@ function policyStatements(table: string): string[] {
       `CREATE POLICY party_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (${append.insert})`,
     ]
   }
-  if (INSERT_ONLY_TABLES.includes(table)) {
-    return [
-      `GRANT INSERT ON ${t} TO ${APP_ROLE}`,
-      ...head,
-      `CREATE POLICY public_read ON ${t} FOR SELECT TO ${APP_ROLE} USING (true)`,
-      `CREATE POLICY app_insert ON ${t} FOR INSERT TO ${APP_ROLE} WITH CHECK (true)`,
-    ]
-  }
-  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES, INSERT_ONLY_TABLES or APPEND_ONLY_TABLES`)
+  throw new Error(`rlsStatements: "${table}" is not in PRIVATE_TABLES, PUBLIC_OWNED_TABLES, PUBLISHED_READ_TABLES or APPEND_ONLY_TABLES`)
 }
 
 // The only write path to a provider's domain-only columns. SECURITY DEFINER (runs as the table owner, past RLS) but
@@ -445,14 +433,8 @@ const BOOKING_TRIGGERS = [
   `CREATE TRIGGER ledger_no_truncate BEFORE TRUNCATE ON ledger_entries FOR EACH STATEMENT EXECUTE FUNCTION ledger_append_only()`,
 ]
 
-// app_user has no DELETE on the rate-limit log, so the 24-hour clean-up runs as the table owner through this function.
-const TRANSLATION_FUNCTIONS = [
-  `CREATE OR REPLACE FUNCTION prune_translation_requests() RETURNS void
-    LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
-      DELETE FROM translation_requests WHERE created_at < now() - interval '24 hours' $$`,
-  `REVOKE ALL ON FUNCTION prune_translation_requests() FROM PUBLIC`,
-  `GRANT EXECUTE ON FUNCTION prune_translation_requests() TO ${APP_ROLE}`,
-]
+// The rate-limit log is owner-only now; the definer function that pruned it for app_user is gone.
+const TRANSLATION_FUNCTIONS = ['DROP FUNCTION IF EXISTS prune_translation_requests()']
 
 // Blocks are private to the blocker, so the check that must see both directions runs as the table owner. Returns a boolean only,
 // and only answers for a caller who is one of the two (anyone else, and the owner connection without app.user_id, gets false).
@@ -470,7 +452,7 @@ const BLOCK_FUNCTIONS = [
 
 /** Idempotent SQL: app role, grants, and the policies of the given tables (default: every policy-bearing table). */
 export function rlsStatements(
-  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...INSERT_ONLY_TABLES, ...Object.keys(APPEND_ONLY_TABLES)],
+  tables: string[] = [...Object.keys(PRIVATE_TABLES), ...Object.keys(PUBLIC_OWNED_TABLES), ...Object.keys(PUBLISHED_READ_TABLES), ...Object.keys(APPEND_ONLY_TABLES)],
 ): string[] {
   const dup = classifyTables().duplicated
   if (dup.length) throw new Error(`rlsStatements: ${dup.join(', ')} in more than one map`)
