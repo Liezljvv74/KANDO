@@ -6,7 +6,7 @@ import { sendEmail, type BookingTemplate, type Template } from '../email'
 import { describeError } from '../log-error'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime, providerUrl } from '../notifications'
-import { hasPushToken, sendPush } from '../push'
+import { pushReaches, sendPush } from '../push'
 import { slotIsHeld } from './busy'
 
 /** The notification kinds that have an email template (a kind without one cannot be sent from here). */
@@ -40,8 +40,8 @@ async function dateOf(kind: BookingKind, params: Record<string, string>): Promis
  * `params.variant = 'stop'` its text for an agreed stop (the rest is refunded);
  * `params.variant` picks the `booking-cancelled` text (cancel.ts); `params.reason` is staff's written reason (dispute-decided,
  * refund-issued: in the email only, never in the in-app row; `role = 'provider'` gives refund-issued the provider's text). Then the
- * push (generic text per kind, no params: never chat text, contact data or amounts). A new message is emailed only to someone
- * with no push token. Runs after commit, on the owner connection; never throws.
+ * push (generic text per kind, no params: never chat text, contact data or amounts). A new message is emailed only when no push
+ * reaches the person (no token, or the chat switch off). Runs after commit, on the owner connection; never throws.
  */
 export async function notifyBookingEvent(kind: BookingKind, userId: string, params: Record<string, string>): Promise<void> {
   try {
@@ -65,7 +65,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
       : kind === 'booking-cancelled' && params.variant ? (`booking-cancelled-${params.variant}` as Template)
       : kind === 'refund-issued' && params.role === 'provider' ? 'refund-issued-provider'
       : kind
-    if (kind !== 'message-received' || !(await hasPushToken(userId))) {
+    if (kind !== 'message-received' || !(await pushReaches(userId, kind))) {
       await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason } })
     }
     await sendPush(userId, { kind, title: t(lang, `push.${kind}.title` as Key), body: t(lang, `push.${kind}.body` as Key), url: appUrl(params) })

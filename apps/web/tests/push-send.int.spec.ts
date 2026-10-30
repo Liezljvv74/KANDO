@@ -63,16 +63,19 @@ it('one event: one in-app row, one email, one push to each device', async () => 
   expect(pushes(U.owner)[0]!.title).toBe('New request')
 })
 
-it('chat switch off: no push for messages, still for bookings', async () => {
+it('chat switch off: no push for messages (the email goes instead), still for bookings', async () => {
   await giveTokens(U.owner)
   await pool.query('UPDATE users SET push_chat = false WHERE id = $1', [U.owner])
   const r = await newRequest()
   expect(pushes(U.owner).map((m) => m.data.kind)).toEqual(['request-received'])
   clearPushOutbox()
+  clearOutbox()
   const t = await threadOf(U.cust, r.id)
   expect((await call(messagesRoute.POST, U.cust, 'POST', { body: 'Hallo' }, { id: t.id })).status).toBe(201)
   expect(await rows(U.owner)).toContain('message-received')
   expect(pushes(U.owner)).toEqual([])
+  // a token alone is not a reason to stay silent: no push reaches them, so the email does
+  expect(mails(U.owner).map((m) => m.subject)).toEqual(['Du hast eine neue Nachricht'])
 })
 
 it('reminders switch off: no payment-reminder push', async () => {
@@ -127,6 +130,23 @@ it('DeviceNotRegistered removes the token; 101 devices go in chunks of 100 with 
   expect(left).toHaveLength(100)
   expect(left).not.toContain(dead)
   expect(pushOutboxForTests()).toEqual([]) // the network path, not the test outbox
+})
+
+it('a malformed answer for one chunk does not stop the next chunk', async () => {
+  vi.stubEnv('VITEST', '')
+  vi.stubEnv('NODE_ENV', 'production')
+  await giveTokens(U.cust, 101)
+  let n = 0
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    if (n++ === 0) return new Response('not json', { status: 200 })
+    const sent = JSON.parse(String(init.body)) as unknown[]
+    return Response.json({ data: sent.map(() => ({ status: 'error', details: { error: 'DeviceNotRegistered' } })) })
+  })
+  vi.stubGlobal('fetch', fetch)
+  await expect(sendPush(U.cust, { kind: 'booking-paid', title: 'T', body: 'B', url: 'x' })).resolves.toBeUndefined()
+  expect(fetch).toHaveBeenCalledTimes(2)
+  // the second chunk's one dead device was removed; the first chunk's tokens stay
+  expect((await pool.query('SELECT count(*)::int n FROM push_tokens WHERE user_id = $1', [U.cust])).rows[0].n).toBe(100)
 })
 
 it('a failing push never fails the event: the row is stored and nothing throws', async () => {

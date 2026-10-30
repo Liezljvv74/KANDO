@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MeSchema } from '@kando/contract'
-import { clearOutbox, notifyDocumentDecision, outboxForTests } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, notifyDocumentDecision, outboxForTests, pushOutboxForTests } from '@kando/domain'
 import { TIME_ZONE } from '@kando/i18n'
 import { call, cleanupUsers, seedBase, seedProvider } from './helpers'
 
@@ -41,8 +41,12 @@ async function decide(uid: string, o: { status?: string; suspended?: boolean; la
 }
 const rows = async (uid: string) => (await pool.query('SELECT kind, payload FROM notifications WHERE user_id = $1', [uid])).rows
 
-it('live and nothing else pending: "profile is live" email with the link, and one notification', async () => {
+it('live and nothing else pending: "profile is live" email with the link, one notification and one push', async () => {
+  clearPushOutbox()
+  await pool.query("INSERT INTO users (id, email) VALUES ('nt-live', 'nt-live@test.skilled.invalid') ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO push_tokens (user_id, token, platform) VALUES ('nt-live', 'ExponentPushToken[nt-live]', 'ios')")
   expect(await decide('nt-live', { lang: 'en' })).toEqual(['Your profile is live'])
+  expect(pushOutboxForTests()).toEqual([{ to: 'ExponentPushToken[nt-live]', title: 'Your profile is live', body: 'Customers can now find you.', sound: 'default', data: { url: 'skilled://my-profile', kind: 'profile-live' } }])
   expect(outboxForTests()[0]!.text).toContain('https://kando.example/providers/nt-live-slug?lang=en')
   expect(await rows('nt-live')).toEqual([{ kind: 'profile-live', payload: { url: 'https://kando.example/providers/nt-live-slug?lang=en' } }])
 })
