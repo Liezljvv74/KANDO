@@ -170,3 +170,11 @@ it('0018 on a database with data: existing bookings keep their status and get sa
   await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now())", [paid])
   await pool.query('DELETE FROM disputes; DELETE FROM staff_flags; DELETE FROM notifications; DELETE FROM bookings; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
 }, 60_000)
+
+it('0022 creates every listed index', async () => {
+  const names = (await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname = $1', ['public'])).rows.map((r) => r.indexname)
+  expect(names).toEqual(expect.arrayContaining(['threads_customer_id_idx', 'threads_provider_id_idx', 'messages_sender_id_idx', 'blocks_blocked_id_idx', 'staff_flags_user_id_idx', 'staff_flags_kind_ref_id_idx', 'contact_attempts_user_id_created_at_idx', 'contact_attempts_thread_id_idx', 'bookings_service_id_idx', 'bookings_quote_id_idx', 'requests_service_id_idx', 'requests_parent_booking_id_idx', 'services_category_id_idx', 'photos_owner_id_idx', 'private_files_owner_id_idx', 'reviews_author_id_idx', 'ledger_entries_provider_id_created_at_idx', 'providers_location_gist', 'requests_open_answer_by_idx', 'quotes_sent_expires_at_idx', 'bookings_proposed_answer_by_idx', 'bookings_awaiting_pay_by_idx', 'bookings_finished_confirm_by_idx', 'disputes_open_decide_by_idx', 'reviews_reveal_pending_idx', 'notifications_requests_ignored_idx', 'users_suspended_until_idx', 'providers_suspended_until_idx', 'retained_records_delete_after_idx', 'bookings_payment_ref_idx']))
+  const def = (await pool.query("SELECT indexdef FROM pg_indexes WHERE indexname = 'providers_location_gist'")).rows[0].indexdef
+  expect(def).toContain('gist')
+  expect(def).toContain('geography')
+})

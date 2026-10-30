@@ -190,8 +190,40 @@ it('a customer sees only their own watches', async () => {
   expect((await pool.query('SELECT customer_id FROM availability_watches WHERE provider_id = $1', [providerId])).rows).toEqual([{ customer_id: ids.other }])
 })
 
+it('two bookings cannot share a payment_ref', async () => {
+  const other = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ($1, $2, $3, 'direct', 'proposed', now() + interval '6 days', 60) RETURNING id", [ids.customer, providerId, serviceId])).rows[0].id
+  await pool.query("UPDATE bookings SET payment_ref = 'pi_rp_dup' WHERE id = $1", [bookingId])
+  await expect(pool.query("UPDATE bookings SET payment_ref = 'pi_rp_dup' WHERE id = $1", [other])).rejects.toMatchObject({ code: '23505' })
+  await pool.query('UPDATE bookings SET payment_ref = NULL WHERE id = $1', [bookingId])
+})
+
+it("a currency 'eur' or 'EURO' is refused", async () => {
+  for (const bad of ['eur', 'EURO']) {
+    await expect(pool.query('UPDATE bookings SET currency = $2 WHERE id = $1', [bookingId, bad])).rejects.toMatchObject({ code: '23514' })
+    await expect(pool.query("INSERT INTO quotes (request_id, provider_id, amount, currency, scope, expires_at) VALUES ($1, $2, 5, $3, 'x', now() + interval '1 day')", [requestId, providerId, bad])).rejects.toMatchObject({ code: '23514' })
+    await expect(pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, currency, idempotency_key) VALUES ($1, $2, 'charge', 1, $3, $4)", [bookingId, providerId, bad, `rp-cur-${bad}`])).rejects.toMatchObject({ code: '23514' })
+  }
+})
+
+it('a stop amount above the amount is refused', async () => {
+  await expect(pool.query('UPDATE bookings SET stop_amount = amount + 1 WHERE id = $1', [bookingId])).rejects.toMatchObject({ code: '23514' })
+})
+
+it('a material amount above the amount is refused', async () => {
+  await expect(pool.query('UPDATE bookings SET material_amount = amount + 1 WHERE id = $1', [bookingId])).rejects.toMatchObject({ code: '23514' })
+})
+
+it('a commission rate of 1 is refused', async () => {
+  await expect(pool.query('UPDATE bookings SET commission_rate = 1 WHERE id = $1', [bookingId])).rejects.toMatchObject({ code: '23514' })
+})
+
+it('a zero duration is refused', async () => {
+  await expect(pool.query('UPDATE bookings SET duration_min = 0 WHERE id = $1', [bookingId])).rejects.toMatchObject({ code: '23514' })
+})
+
 it('cleanupUsers removes the test ledger rows (its own transaction-local switch), nothing else can', async () => {
   await cleanupUsers()
   expect((await pool.query("SELECT 1 FROM ledger_entries WHERE idempotency_key = 'rp-charge-1'")).rows).toHaveLength(0)
   expect((await pool.query("SELECT current_setting('kando.ledger_cleanup', true) AS s")).rows[0].s ?? '').not.toBe('on')
 })
+

@@ -24,6 +24,8 @@ export const ledgerEntries = pgTable(
   },
   (t) => [
     index('ledger_entries_booking_id_idx').on(t.bookingId),
+    index('ledger_entries_provider_id_created_at_idx').on(t.providerId, t.createdAt),
+    check('ledger_entries_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
     check('ledger_entries_kind_check', sql`kind in ('charge','refund','transfer','commission')`),
     check('ledger_entries_amount_check', sql`amount > 0`),
   ],
