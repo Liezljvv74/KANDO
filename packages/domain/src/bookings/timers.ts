@@ -135,7 +135,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
     ${result('n')}`)
   })
 
-  // A review shown by its 7 days (the other side wrote none) tells both sides once (`review-visible`, in-app only; a second
+  // A review shown by its 7 days (the other side wrote none) tells both sides once (`review-visible`; a second
   // review shows both at once and writeReview tells them). One statement marking reveal_told_at, so a concurrent run
   // cannot tell twice. Looks back REVIEW_VISIBLE_DAYS only, so a long-past reveal is never told late.
   const reviewsShown = await count(sql`
@@ -143,8 +143,8 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false,
       WHERE reveal_told_at IS NULL AND NOT hidden AND visible_at <= ${t}::timestamptz AND visible_at > ${t}::timestamptz - make_interval(days => ${REVIEW_VISIBLE_DAYS})
       RETURNING booking_id, author_id, subject_id),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at)
-      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING 1)
-    SELECT count(*)::int AS n FROM s`)
+      SELECT v.u, 'review-visible', jsonb_build_object('bookingId', s.booking_id), ${t}::timestamptz FROM s CROSS JOIN LATERAL (VALUES (s.author_id), (s.subject_id)) v(u) RETURNING user_id, kind, payload)
+    ${result('s')}`)
 
   // "Customers want to book you" (payments on only): the summary for watchers who joined after the provider's last notice
   // (the first tap is told at once, watches.ts). The gate tolerates the cron starting a little early on the next day.
@@ -309,9 +309,10 @@ async function releaseDue(exec: Exec, now: Date, timeUp: () => boolean): Promise
 }
 
 /**
- * Sends the emails of the in-app rows a sweep just wrote (the SQL writes the row, notifyBookingEvent sends only the email
- * for these kinds, so there is one row and one email per event). Never throws; the sweep is committed before this runs
- * (unless the caller passed an open transaction).
+ * Sends the emails and pushes of the in-app rows a sweep just wrote (the SQL writes the row, notifyBookingEvent sends only
+ * the email and push for these kinds, so there is one row, one email and one push per event). Never throws. The sweep has
+ * committed before this runs: the runners take the pool only (each statement and step commits on its own), never an open
+ * transaction, so no email or push can go out for a write that is later rolled back.
  */
 async function sendEmails({ events, ...report }: TimerReport & { events: TimerEvent[] }): Promise<TimerReport> {
   for (const e of events) await notifyBookingEvent(e.kind, e.userId, e.payload)
@@ -319,10 +320,10 @@ async function sendEmails({ events, ...report }: TimerReport & { events: TimerEv
 }
 
 /**
- * The scheduled sweep (owner connection or a transaction). The money releases run LAST, after every other rule and its
+ * The scheduled sweep (the pool, never an open transaction: see sendEmails). The money releases run LAST, after every other rule and its
  * emails: a timeout or an error in the release loop can no longer drop the day's reminders, expiries or silent-provider steps.
  */
-export async function runDueTimers(exec: Exec, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
+export async function runDueTimers(exec: typeof db, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
   // one budget for the whole run, measured from its start: the loops before the releases count against it too
   const { budgetMs = RELEASE_BUDGET_MS, clock = Date.now } = release
   const started = clock()
@@ -333,4 +334,4 @@ export async function runDueTimers(exec: Exec, now: Date, release: ReleaseOption
 }
 
 /** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */
-export const runDueTimersFor = async (exec: Exec, userId: string, now = new Date()): Promise<TimerReport> => sendEmails(await sweep(exec, now, userId, true))
+export const runDueTimersFor = async (exec: typeof db, userId: string, now = new Date()): Promise<TimerReport> => sendEmails(await sweep(exec, now, userId, true))

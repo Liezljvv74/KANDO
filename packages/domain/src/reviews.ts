@@ -3,6 +3,7 @@ import { db, notifications, providers, reviews, type Tx } from '@kando/db'
 import type { Rating, Review, ReviewInput } from '@kando/contract'
 import { isUuid } from './admin/common'
 import { lockRow, sideOf } from './bookings/finish'
+import { notifyBookingEvent } from './bookings/notify'
 import { canEditReview, REVIEW_VISIBLE_DAYS, reviewFinalAt, reviewVisibleAt } from './bookings/ending-rules'
 import { assertNoContactDetails } from './chat/flags'
 import type { Exec } from './providers/eligibility'
@@ -34,7 +35,7 @@ const toReview = (r: Row, userId: string): Review => {
  * job), by either party (a third person 404), once (409 REVIEW_EXISTS), before the reveal 7 days after completion (409
  * REVIEW_CLOSED; any other status or a child booking 409 not-open). No contact details in the text (422). The first review
  * waits hidden until `completedAt + 7 days`; the second shows both at once (`visibleAt = now`) and tells both sides
- * (`review-visible`, in-app). Owner connection with the booking row locked, so two racing writes see each other: the second
+ * (`review-visible`: in-app row here, email and push after commit). Owner connection with the booking row locked, so two racing writes see each other: the second
  * always reveals both. Blocked while suspended (the route): a suspension is for misbehaviour, and a review is not about money.
  */
 export async function writeReview(tx: Tx, userId: string, bookingId: string, input: ReviewInput, now = new Date()): Promise<Review> {
@@ -56,9 +57,10 @@ export async function writeReview(tx: Tx, userId: string, bookingId: string, inp
       await o.update(reviews).set({ visibleAt: now, revealToldAt: now }).where(inArray(reviews.id, [other.id, r.id]))
       await o.insert(notifications).values([b.customerId, owner].map((u) => ({ userId: u, kind: 'review-visible', payload: { bookingId: b.id }, createdAt: now })))
     }
-    return r
+    return { r, told: other ? [b.customerId, owner] : [] }
   })
-  return toReview(row, userId)
+  for (const u of row.told) await notifyBookingEvent('review-visible', u, { bookingId }) // the row is written above: email and push, after commit
+  return toReview(row.r, userId)
 }
 
 /**

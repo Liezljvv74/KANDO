@@ -1,20 +1,29 @@
 import { eq } from 'drizzle-orm'
 import { bookings, db, quotes, users } from '@kando/db'
-import { DEFAULT_LANG, isLang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, t, type Key } from '@kando/i18n'
 import type { AfterCommit } from '../app-request'
 import { sendEmail, type BookingTemplate, type Template } from '../email'
 import { describeError } from '../log-error'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime, providerUrl } from '../notifications'
+import { hasPushToken, sendPush } from '../push'
 import { slotIsHeld } from './busy'
 
 /** The notification kinds that have an email template (a kind without one cannot be sent from here). */
 export type BookingKind = Extract<NotificationKind, BookingTemplate>
-/** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write (customers-waiting: payments/watches.ts): here they only get the email. */
-const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored', 'customers-waiting', 'confirm-reminder', 'was-job-done']
+/** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write (customers-waiting: payments/watches.ts; review-visible: also reviews.ts): here they only get the email and the push. */
+const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored', 'customers-waiting', 'confirm-reminder', 'was-job-done', 'review-visible']
 /** Kinds whose in-app row carries a link (`params.url`, or the provider page of `params.slug`) instead of ids. */
 const WITH_URL: NotificationKind[] = ['message-received', 'provider-available']
 
+
+/** The app screen a push opens: the booking, the request, the provider, the thread (`params.url`), else the profile tab. */
+const appUrl = (p: Record<string, string>): string =>
+  p.bookingId ? `skilled://bookings/${p.bookingId}`
+  : p.requestId ? `skilled://bookings/request/${p.requestId}`
+  : p.slug ? `skilled://provider/${p.slug}`
+  : p.url?.startsWith('skilled://') ? p.url
+  : 'skilled://my-profile'
 
 /** The date an email names, when the caller did not pass one (`params.date`, ISO): the timers pass ids only. */
 async function dateOf(kind: BookingKind, params: Record<string, string>): Promise<string | undefined> {
@@ -30,7 +39,9 @@ async function dateOf(kind: BookingKind, params: Record<string, string>): Promis
  * user's language. `params.role = 'provider'` gives `payment-released` the provider's text (the payout is on its way),
  * `params.variant = 'stop'` its text for an agreed stop (the rest is refunded);
  * `params.variant` picks the `booking-cancelled` text (cancel.ts); `params.reason` is staff's written reason (dispute-decided,
- * refund-issued: in the email only, never in the in-app row; `role = 'provider'` gives refund-issued the provider's text). Runs after commit, on the owner connection; never throws.
+ * refund-issued: in the email only, never in the in-app row; `role = 'provider'` gives refund-issued the provider's text). Then the
+ * push (generic text per kind, no params: never chat text, contact data or amounts). A new message is emailed only to someone
+ * with no push token. Runs after commit, on the owner connection; never throws.
  */
 export async function notifyBookingEvent(kind: BookingKind, userId: string, params: Record<string, string>): Promise<void> {
   try {
@@ -54,7 +65,10 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
       : kind === 'booking-cancelled' && params.variant ? (`booking-cancelled-${params.variant}` as Template)
       : kind === 'refund-issued' && params.role === 'provider' ? 'refund-issued-provider'
       : kind
-    await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason } })
+    if (kind !== 'message-received' || !(await hasPushToken(userId))) {
+      await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason } })
+    }
+    await sendPush(userId, { kind, title: t(lang, `push.${kind}.title` as Key), body: t(lang, `push.${kind}.body` as Key), url: appUrl(params) })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

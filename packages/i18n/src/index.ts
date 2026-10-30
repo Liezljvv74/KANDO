@@ -16,6 +16,8 @@ export function acceptLang(header: string | null | undefined): Lang | undefined 
 }
 
 export type Key = keyof typeof de
+/** The raw catalogues (parity tests walk every key). */
+export { de, en }
 
 const catalogue: Record<Lang, Record<Key, string>> = { de, en }
 

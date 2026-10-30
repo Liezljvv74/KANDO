@@ -1,11 +1,12 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { categories, categoryTexts, db, documents, providers, services, users } from '@kando/db'
-import { DEFAULT_LANG, isLang, LOCALE, TIME_ZONE, type Lang } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, LOCALE, t, TIME_ZONE, type Lang } from '@kando/i18n'
 import { sendEmail, type Template } from './email'
 import { describeError } from './log-error'
 import { createNotification } from './notifications-store'
 import { offerableServiceIds } from './providers/eligibility'
 import { isSuspendedNow } from './providers/profile'
+import { sendPush } from './push'
 
 export const emailDate = (d: Date, lang: Lang) => d.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE })
 
@@ -91,6 +92,7 @@ export async function notifyDocumentDecision(userId: string, document: DocumentD
         ? await decideApprovalEmail(userId, document.requirement, lang)
         : { template: 'document-rejected' as const, params: { requirement: document.requirement, note: document.note } }
     await sendEmail({ to: user.email, lang, template, params })
+    if (template === 'profile-live') await sendPush(userId, { kind: 'profile-live', title: t(lang, 'push.profile-live.title'), body: t(lang, 'push.profile-live.body'), url: 'skilled://my-profile' })
   } catch (e) {
     // After commit: a failure here must never reach the request.
     console.error('[notify] document decision email failed', describeError(e))
