@@ -8,7 +8,7 @@ import { Card, SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
-import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
+import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { payoutState } from '@/lib/payouts'
 import { isHttps } from '@/lib/safe-url'
 
@@ -20,6 +20,7 @@ export function PayoutCard() {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const state = payoutState(data?.ready, opened)
+  if (error && noteIfOff(error)) return null // payments are off: nothing to set up, and a Retry could never succeed
 
   async function open() {
     setBusy(true)

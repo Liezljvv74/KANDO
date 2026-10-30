@@ -24,6 +24,13 @@ export const MAX_HOLD_DAYS = 90
  */
 export const MAX_PAY_AHEAD_DAYS = 60
 
+/**
+ * The smallest amount Stripe charges, in cents, by currency. Stripe documents a minimum charge amount per currency
+ * (https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts): EUR 0.50.
+ */
+export const MIN_CHARGE_CENTS: Record<string, number> = { EUR: 50 }
+export const belowMinCharge = (cents: number, currency: string): boolean => cents < (MIN_CHARGE_CENTS[currency.toUpperCase()] ?? 0)
+
 /** A payment that arrives up to this many minutes after payBy still confirms the booking (in-flight at the deadline), if the booking is still awaiting payment and the time still free. */
 export const PAY_GRACE_MINUTES = 10
 

@@ -278,6 +278,8 @@ Needed before payments can be tried; the code does nothing with Stripe while `PA
 7. Vercel **Deployment Protection** blocks Stripe's calls to preview URLs: let the path `/api/stripe/webhook` through (protection bypass).
 8. Run `pnpm payments:smoke` (the test key must be in `.env`): it creates a test account, an onboarding link and an unpaid Checkout session of 12.34 EUR and prints PASS, FAIL or SKIPPED per step. No money moves; transfers and refunds are not tried.
 9. Rules of operation: never switch `PAYMENTS_ENABLED` off within 24 hours of the last pay link (an open session could still be paid); resend a failed webhook event from the Dashboard within 3 days (Stripe stops retrying after that); a payment that could not be processed raises a staff flag.
+    - If the webhook endpoint is unreachable for more than 10 minutes (Deployment Protection set wrongly, an outage), a payment made just before the pay-by time can be refunded and the booking expires, because the app judges lateness by processing time, not by the time of payment. After any such period check the Stripe Dashboard (Developers, Webhooks) for failed deliveries and resend them.
+    - Open Stripe findings to check after turning on Accounts v2: `accountReady` may not see the payouts capability on recipient accounts; `account.updated` for v2 accounts may need a different event (v2 accounts may send their own event types); rerun `pnpm payments:smoke` and look at the result of each step.
 10. Run `pnpm install` once: `node_modules` still records the old `Skilled` folder, so `pnpm add` needed a workaround when Stripe was added.
 
 **Decide the commission percentage: `COMMISSION_RATE` is a placeholder (12%).**

@@ -629,6 +629,7 @@ export const en: Record<Key, string> = {
   'error.booking.start-too-far': 'The time is too far ahead. Please choose an earlier time.',
   'error.booking.too-far-ahead': 'A booking with payment can be at most 60 days ahead. Please choose an earlier time.',
   'error.booking.pay-window-too-short': 'The payment deadline is too close to pay now. The booking expires at the deadline.',
+  'error.booking.amount-too-small': 'The amount is too small to pay online (minimum EUR 0.50).',
   'payments.off': 'Payments are not switched on yet',
   'payments.providerNotReady': 'This provider cannot be booked yet. Tap "Notify me when available" and we will tell you.',
   'payments.payoutSetupFirst': 'Set up your payouts first, then you can send quotes and accept bookings.',

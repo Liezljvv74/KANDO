@@ -7,8 +7,8 @@ import { emailDateTime, siteBase } from '../notifications'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow } from '../providers/profile'
-import { gateway } from './gateway'
-import { checkoutExpiry, MAX_PAY_AHEAD_DAYS, toCents } from './rules'
+import { AmountTooSmallError, gateway } from './gateway'
+import { belowMinCharge, checkoutExpiry, MAX_PAY_AHEAD_DAYS, toCents } from './rules'
 
 const DAY = 86_400_000
 /** A stored session is reused only while it has more than this left: the customer needs time to pay. */
@@ -56,6 +56,9 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
   const expiresAt = checkoutExpiry(b.payBy, now)
   if (!expiresAt) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' })
 
+  const amountCents = toCents(Number(b.amount))
+  if (belowMinCharge(amountCents, b.currency)) return fail(409, { error: 'AMOUNT_TOO_SMALL' })
+
   const done = `${siteBase()}/payment-done${lang === DEFAULT_LANG ? '' : `?lang=${lang}`}` // nothing of the booking in the address
   let session: { sessionId: string; url: string }
   try {
@@ -63,7 +66,7 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
       bookingId: b.id,
       providerId: b.providerId,
       customerId: b.customerId,
-      amountCents: toCents(Number(b.amount)), // the booking's amount, never the client's
+      amountCents, // the booking's amount, never the client's
       currency: b.currency,
       description: t(lang, 'payment.lineItem', { date: emailDateTime(b.startAt, lang) }),
       successUrl: done,
@@ -72,6 +75,7 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
       idempotencyKey: `checkout:${b.id}:${expiresAt.toISOString()}:${lang}`,
     })
   } catch (e) {
+    if (e instanceof AmountTooSmallError) return fail(409, { error: 'AMOUNT_TOO_SMALL' })
     if (e instanceof RangeError) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' }) // the clock moved past the 31-minute edge
     throw e
   }

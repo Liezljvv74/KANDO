@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateway, setGatewayForTests, type PaymentsGateway } from './gateway'
-import { canTransact, checkoutExpiry, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, toCents } from './rules'
+import { belowMinCharge, canTransact, checkoutExpiry, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, toCents } from './rules'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -42,6 +42,14 @@ describe('toCents', () => {
     expect(() => toCents(-0.01)).toThrow()
     expect(() => toCents(Number.NaN)).toThrow()
     expect(() => toCents(Number.POSITIVE_INFINITY)).toThrow()
+  })
+})
+
+describe('belowMinCharge', () => {
+  it('EUR 0.49 is below, EUR 0.50 is not; an unknown currency has no minimum here', () => {
+    expect(belowMinCharge(49, 'EUR')).toBe(true)
+    expect(belowMinCharge(50, 'eur')).toBe(false)
+    expect(belowMinCharge(1, 'ZAR')).toBe(false)
   })
 })
 

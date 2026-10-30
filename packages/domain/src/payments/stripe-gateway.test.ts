@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { BadSignatureError } from './gateway'
+import { AmountTooSmallError, BadSignatureError } from './gateway'
 import { STRIPE_API_VERSION, stripeClient, stripeGateway } from './stripe-gateway'
 
 const SECRET = 'whsec_test_fake'
@@ -127,6 +127,15 @@ describe('stripeGateway: calls', () => {
       expires_at: Math.floor(expiresAt.getTime() / 1000),
     })
     expect(params).not.toHaveProperty('payment_method_types')
+  })
+
+  it('createCheckout maps a Stripe amount-too-small error to AmountTooSmallError and passes others on', async () => {
+    const { m, g } = mockClient()
+    const input = { bookingId: 'b-1', amountCents: 20, currency: 'EUR', description: 'x', successUrl: 'https://k/d', cancelUrl: 'https://k/d', expiresAt: new Date(Date.now() + 3 * 3_600_000), idempotencyKey: 'k', providerId: 'p', customerId: 'u' }
+    m.sessionsCreate.mockRejectedValueOnce(Object.assign(new Error('The Checkout total amount due must add up to at least 50 cents'), { code: 'amount_too_small' }))
+    await expect(g.createCheckout(input)).rejects.toBeInstanceOf(AmountTooSmallError)
+    m.sessionsCreate.mockRejectedValueOnce(new Error('boom'))
+    await expect(g.createCheckout(input)).rejects.toThrow('boom')
   })
 
   it('createCheckout never changes expiresAt: the same input gives the same parameters (idempotent retry)', async () => {

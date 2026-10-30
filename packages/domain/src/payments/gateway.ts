@@ -41,6 +41,9 @@ export interface PaymentsGateway {
   verifyEvent(rawBody: string, signature: string): GatewayEvent
 }
 
+/** The amount is below what the payment provider charges (Stripe: amount_too_small). */
+export class AmountTooSmallError extends Error {}
+
 /** The webhook body is not signed by the payment provider (the route answers 400). */
 export class BadSignatureError extends Error {
   override name = 'BadSignatureError'

@@ -36,7 +36,7 @@
  */
 import Stripe from 'stripe'
 
-import { BadSignatureError, type GatewayEvent, type PaymentsGateway } from './gateway'
+import { AmountTooSmallError, BadSignatureError, type GatewayEvent, type PaymentsGateway } from './gateway'
 import { LIVE_PAYMENTS_ALLOWED } from './rules'
 
 export const STRIPE_API_VERSION = '2026-09-30.endive'
@@ -91,7 +91,8 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
     async createCheckout(i) {
       const ahead = i.expiresAt.getTime() - Date.now()
       if (!(ahead >= MIN_EXPIRY_MS && ahead <= MAX_EXPIRY_MS)) throw new RangeError('Checkout expiresAt must be 30 minutes to 24 hours from now')
-      const session = await client.checkout.sessions.create(
+      const session = await client.checkout.sessions
+        .create(
         {
           mode: 'payment',
           line_items: [{ quantity: 1, price_data: { currency: i.currency.toLowerCase(), unit_amount: i.amountCents, product_data: { name: i.description } } }],
@@ -104,7 +105,13 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
           integration_identifier: INTEGRATION_ID,
         },
         { idempotencyKey: i.idempotencyKey },
-      )
+        )
+        .catch((e: unknown) => {
+          const err = e as { code?: string; message?: string }
+          // defensive: createPayLink checks MIN_CHARGE_CENTS first, but Stripe's own limit is the final word
+          if (err?.code === 'amount_too_small' || /must (add up to|convert to) at least/i.test(err?.message ?? '')) throw new AmountTooSmallError(err.message)
+          throw e
+        })
       if (!session.url) throw new Error(`Checkout Session ${session.id} has no URL`)
       return { sessionId: session.id, url: session.url }
     },

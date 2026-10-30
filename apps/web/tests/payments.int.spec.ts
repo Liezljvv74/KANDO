@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { PayLinkSchema } from '@kando/contract'
-import { clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, outboxForTests, runDueTimers, setGatewayForTests, type GatewayEvent } from '@kando/domain'
+import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, outboxForTests, runDueTimers, setGatewayForTests, type GatewayEvent } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
@@ -140,6 +140,22 @@ it('the session expiry is computed once, lies 30 minutes to 24 hours ahead and n
   const res = await payLink(tight.id)
   expect(res.status).toBe(409)
   expect((await res.json()).error).toBe('PAY_WINDOW_TOO_SHORT')
+})
+
+it('an amount under the Stripe minimum is 409 AMOUNT_TOO_SMALL without a gateway call; a gateway amount-too-small gives the same', async () => {
+  const tiny = await awaiting()
+  await pool.query('UPDATE bookings SET amount = 0.40 WHERE id = $1', [tiny.id])
+  const res = await payLink(tiny.id)
+  expect(res.status).toBe(409)
+  expect((await res.json()).error).toBe('AMOUNT_TOO_SMALL')
+  expect(g.attempts.createCheckout ?? 0).toBe(0)
+  const other = await awaiting()
+  g.createCheckout = async () => {
+    throw new AmountTooSmallError('amount_too_small')
+  }
+  const res2 = await payLink(other.id)
+  expect(res2.status).toBe(409)
+  expect((await res2.json()).error).toBe('AMOUNT_TOO_SMALL')
 })
 
 it('a booking further ahead than the hold limit cannot be paid', async () => {
