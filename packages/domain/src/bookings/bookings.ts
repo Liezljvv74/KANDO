@@ -149,5 +149,5 @@ export async function withdrawBooking(tx: Tx, userId: string, bookingId: string,
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
-  return view(row!, userId)
+  return view(row!, userId, now)
 }

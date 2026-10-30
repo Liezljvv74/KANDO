@@ -69,7 +69,7 @@ export const bookingShownStatus = (b: { status: string; answerBy: Date | null; p
   return b.status
 }
 
-export const canTransition =(from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)
+export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)
 
 export const assertFuture = (startAt: Date, now: Date): void => {
   const t = startAt.getTime()
