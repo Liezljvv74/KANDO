@@ -6,6 +6,16 @@ import { requireStaff } from './require-staff'
 type Role = StaffRole | 'any'
 type Handler = (ctx: { tx: Tx; staff: StaffUser; request: Request; params: Record<string, string>; afterCommit: AfterCommit }) => Promise<Response>
 
+/** Personal answers are never cached. Sets the header only when the handler set none; a Response with immutable headers (a redirect, a proxied fetch) stays as it is, never a 500. */
+const noStore = (r: Response): Response => {
+  try {
+    if (!r.headers.has('cache-control')) r.headers.set('Cache-Control', 'private, no-store')
+  } catch {
+    // immutable headers
+  }
+  return r
+}
+
 /**
  * Wrapper for every /api/admin route: staff check first (401/403, nothing runs without it), then the handler in one
  * transaction on the owner connection (staff-only columns are written here, not as app_user). `role` may depend on
@@ -20,7 +30,7 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
       for (const fn of sends) await fn().catch((e) => console.error(`[admin-request ${requestId}] send failed ${describeError(e)}`))
     }
     try {
-      if (isCrossSiteWrite(request)) return Response.json({ error: 'Forbidden' }, { status: 403 }) // a write from another site
+      if (isCrossSiteWrite(request)) return noStore(Response.json({ error: 'Forbidden' }, { status: 403 })) // a write from another site
       const params = await ctx.params
       const staff = await requireStaff(typeof role === 'function' ? role(params, request.method) : role)
       const queue: (() => Promise<void>)[] = []
@@ -33,14 +43,13 @@ export function adminRequest(role: Role | ((params: Record<string, string>, meth
         for (const fn of queue) await Promise.resolve().then(fn).catch((e) => console.error(`[admin-request ${requestId}] after-commit task failed ${describeError(e)}`))
         await runSends()
       })
-      if (!response.headers.has('cache-control')) response.headers.set('Cache-Control', 'private, no-store')
-      return response
+      return noStore(response)
     } catch (error) {
       if (sends.length) await afterResponse(runSends) // as before this change, a send made before the failure still goes
       // A thrown Response (401/403 from requireStaff, 400/409 from the domain) is the answer, as is; the transaction rolled back.
-      if (error instanceof Response) return error
+      if (error instanceof Response) return noStore(error)
       console.error(`[admin-request ${requestId}] ${request.method} ${new URL(request.url).pathname} ${describeError(error)}`)
-      return Response.json({ error: 'Server error' }, { status: 500 })
+      return noStore(Response.json({ error: 'Server error' }, { status: 500 }))
     }
   }
 }

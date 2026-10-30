@@ -384,3 +384,18 @@ it('notices of a committed owner step go out when the request then fails', async
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
 })
+
+it('thrown, busy and early answers carry no-store; a handler header is kept; an immutable Response is not turned into a 500', async () => {
+  const NO_STORE = 'private, no-store'
+  const thrown = appRequest({ auth: 'required' }, async () => { throw Response.json({ error: 'nope' }, { status: 404 }) })
+  expect((await thrown(as('nstore'), ctx)).headers.get('cache-control')).toBe(NO_STORE)
+  const own = appRequest({ auth: 'required' }, async () => { throw Response.json({}, { status: 400, headers: { 'Cache-Control': 'public, max-age=60' } }) })
+  expect((await own(as('nstore'), ctx)).headers.get('cache-control')).toBe('public, max-age=60')
+  const busy = createAppRequest(async () => { throw new AuthUnavailableError('503') })({ auth: 'required' }, async () => Response.json({}))
+  const busyRes = await busy(as('nstore'), ctx)
+  expect([busyRes.status, busyRes.headers.get('cache-control')]).toEqual([503, NO_STORE])
+  const unauth = await me(new Request('http://localhost/x'), ctx)
+  expect([unauth.status, unauth.headers.get('cache-control')]).toEqual([401, NO_STORE])
+  const redirect = appRequest({ auth: 'required' }, async () => { throw Response.redirect('http://localhost/y', 302) })
+  expect((await redirect(as('nstore'), ctx)).status).toBe(302)
+})
