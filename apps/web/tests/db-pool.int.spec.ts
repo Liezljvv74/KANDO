@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
-import { APP_POOL_MAX, OWNER_POOL_MAX, POOL_IDLE_MS, appPool, asUser, db, pool } from '@kando/db'
+import { APP_POOL_MAX, OWNER_POOL_MAX, POOL_IDLE_MS, asUser, db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { sql } from 'drizzle-orm'
 
 it('an idle-client error is logged, not thrown', () => {

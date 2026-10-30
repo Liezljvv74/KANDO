@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Carried over from Stage A review
+
+- Endings (confirm, cancel, stop, dispute) return an after-transaction answer (the `AfterTransaction` type from Stage A Task 3) for settlement and notifications, so no Stripe call or email/push runs while the request transaction is open.
+- After-commit notification work (`notifyBookingEvent`) moves after the response where it is network I/O.
+- `APP_STATUS_MOVES` must use side `'answerer'` semantics (only the answering side accepts or declines a proposal).
+
 **Goal:** No quote-born job is lost when its time is not agreed, customers can withdraw and providers can decline a request, either side can open a dispute after Finished or Stop, emails and pushes go out after the answer and are never lost by a cut-off cron run, lists are paged with read-one routes, search pages in SQL and shows ratings, the public site is cached, the daily cron is split, and currency and search country come from the country.
 
 **Architecture:** Two SECURITY DEFINER triggers in `packages/db/src/rls.ts` carry the request and quote side effects of every path at once (a request closed by its customer or provider closes its sent quote; a quote-born root booking that ends `declined|expired|withdrawn` reopens its request and quote), so the domain, the timers and account code need no copies. Network sends (Resend, Expo) are collected in an `AsyncLocalStorage` scope during a request and handed to an injected scheduler, which the web app sets to Next's `after()`; the timers write their in-app rows with `mailed_at` NULL and a drain step sends them, so a cut-off run leaves the rest for the next run. One migration, `0023`, carries all of this stage's schema.

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
-import { appPool, db, pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
 import { createAppRequest } from '@kando/domain'
 

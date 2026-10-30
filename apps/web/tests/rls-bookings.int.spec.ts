@@ -136,6 +136,18 @@ it('app_user cannot make a status move the domain does not make', async () => {
   await expect(book(sql`'proposed', now() + interval '1 day', NULL`)).rejects.toMatchObject(rls)
 })
 
+it('accepted_at must be about now, and the address is frozen once the booking is no longer proposed', async () => {
+  const back = await newBooking('proposed')
+  const acceptAt = (id: string, at: string) =>
+    run(ids.owner, sql.raw(`UPDATE bookings SET status = 'awaiting-payment', pay_by = start_at - interval '1 hour', accepted_at = ${at}, answer_by = NULL WHERE id = '${id}'`))
+  await expect(acceptAt(back, "now() - interval '1 day'")).rejects.toMatchObject({ cause: { message: expect.stringContaining('accepted_at') } })
+  expect((await acceptAt(back, 'now()')).rowCount).toBe(1)
+  const addr = sql`UPDATE bookings SET address_city = 'Elsewhere' WHERE id = ${back}`
+  await expect(run(ids.customer, addr)).rejects.toMatchObject({ cause: { message: expect.stringContaining('address') } })
+  const open = await newBooking('proposed')
+  expect((await run(ids.customer, sql`UPDATE bookings SET address_city = 'Elsewhere' WHERE id = ${open}`)).rowCount).toBe(1)
+})
+
 it('pay_by and the proposal columns move only with their transition', async () => {
   const proposed = await newBooking('proposed')
   await expect(run(ids.customer, sql`UPDATE bookings SET pay_by = start_at - interval '1 hour' WHERE id = ${proposed}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('pay_by') } })

@@ -415,16 +415,16 @@ const BOOKING_TRIGGERS = [
         END IF;
         -- accepting sets pay_by and accepted_at, once, inside the time: payment due by the start, not before the acceptance
         IF TG_OP = 'UPDATE' AND OLD.status = 'proposed' AND NEW.status = 'awaiting-payment' THEN
-          IF NOT coalesce(NEW.pay_by <= NEW.start_at AND NEW.accepted_at <= NEW.pay_by, false) THEN
-            RAISE EXCEPTION 'bookings: pay_by must lie between accepted_at and start_at';
+          IF NOT coalesce(NEW.pay_by <= NEW.start_at AND NEW.accepted_at <= NEW.pay_by AND abs(extract(epoch FROM (NEW.accepted_at - now()))) <= 300, false) THEN
+            RAISE EXCEPTION 'bookings: pay_by must lie between accepted_at and start_at, and accepted_at within 5 minutes of now';
           END IF;
         ELSIF TG_OP = 'UPDATE' AND (NEW.pay_by IS DISTINCT FROM OLD.pay_by OR NEW.accepted_at IS DISTINCT FROM OLD.accepted_at) THEN
           RAISE EXCEPTION 'bookings: pay_by and accepted_at are set by accepting only';
         END IF;
         -- the proposal (time, place, who answers by when) changes only while it is a proposal: the counter and the answer
-        IF TG_OP = 'UPDATE' AND OLD.status <> 'proposed' AND (NEW.answer_by, NEW.counter_by, NEW.start_at, NEW.duration_min, NEW.on_site)
-            IS DISTINCT FROM (OLD.answer_by, OLD.counter_by, OLD.start_at, OLD.duration_min, OLD.on_site) THEN
-          RAISE EXCEPTION 'bookings: answer_by, counter_by, start_at, duration_min and on_site change only while proposed';
+        IF TG_OP = 'UPDATE' AND OLD.status <> 'proposed' AND (NEW.answer_by, NEW.counter_by, NEW.start_at, NEW.duration_min, NEW.on_site, NEW.address_street, NEW.address_postcode, NEW.address_city)
+            IS DISTINCT FROM (OLD.answer_by, OLD.counter_by, OLD.start_at, OLD.duration_min, OLD.on_site, OLD.address_street, OLD.address_postcode, OLD.address_city) THEN
+          RAISE EXCEPTION 'bookings: answer_by, counter_by, start_at, duration_min, on_site and the address change only while proposed';
         END IF;
       END IF;
       RETURN NEW;

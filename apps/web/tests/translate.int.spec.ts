@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { appPool, db, pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import type { ProviderDetail } from '@kando/contract'
 import {
   clientKeyOf,

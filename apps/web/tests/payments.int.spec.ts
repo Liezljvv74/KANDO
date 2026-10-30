@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
-import { appPool, db, pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { appPool } from '@kando/db/src/client'
 import { PayLinkSchema } from '@kando/contract'
 import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, outboxForTests, runDueTimers, setGatewayForTests, type GatewayEvent } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'

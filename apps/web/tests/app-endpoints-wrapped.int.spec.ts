@@ -2,15 +2,17 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 
-// A route must not reach the owner connection: no db or pool from @kando/db (RLS would be bypassed).
+// A route must not reach the owner connection: no db, pool, appDb or appPool from @kando/db (RLS would be bypassed).
 export const importsOwnerConnection = (src: string) =>
   [...src.matchAll(/import\s+(type\s+)?\{([^}]*)\}\s+from\s+['"]@kando\/db['"]/g)].some(
-    (m) => !m[1] && m[2]!.split(',').some((n) => ['db', 'pool'].includes(n.trim().split(/\s+as\s+/)[0]!.replace(/^type\s+/, '').trim()) && !/^\s*type\s/.test(n)),
+    (m) => !m[1] && m[2]!.split(',').some((n) => ['db', 'pool', 'appDb', 'appPool'].includes(n.trim().split(/\s+as\s+/)[0]!.replace(/^type\s+/, '').trim()) && !/^\s*type\s/.test(n)),
   ) || /import\s+[^;{]*\*\s+as\s+\w+\s+from\s+['"]@kando\/db['"]/.test(src)
 
 it('the owner-connection check catches a bypass (negative fixture)', () => {
   expect(importsOwnerConnection("import { db } from '@kando/db'")).toBe(true)
   expect(importsOwnerConnection("import { users, pool as p } from '@kando/db'")).toBe(true)
+  expect(importsOwnerConnection("import { appPool } from '@kando/db'")).toBe(true)
+  expect(importsOwnerConnection("import { appDb as a } from '@kando/db'")).toBe(true)
   expect(importsOwnerConnection("import * as d from '@kando/db'")).toBe(true)
   expect(importsOwnerConnection("import { users } from '@kando/db'")).toBe(false)
   expect(importsOwnerConnection("import type { Tx } from '@kando/db'")).toBe(false)

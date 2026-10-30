@@ -70,6 +70,7 @@ export function createAppRequest(getSession: SessionResolver) {
         const queue: (() => Promise<void>)[] = []
         const afterCommit: AfterCommit = (fn) => void queue.push(fn)
         const answer = await asUser(user?.id ?? null, (tx) => handler({ tx, user, request, params, prepared, afterCommit, onFailure }))
+        // Known gap: a COMMIT that fails on the network after the server committed throws above and runs the failure queue, deleting an object a committed row points to. Accepted as rare.
         failQueue.length = 0 // committed: nothing to undo
         const response = typeof answer === 'function' ? await answer() : answer // outside any transaction
         // The transaction has committed: only now touch storage. A failing task is logged, never turns the answer into a 500.
