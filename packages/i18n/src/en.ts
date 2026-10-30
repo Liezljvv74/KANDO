@@ -37,6 +37,7 @@ export const en: Record<Key, string> = {
   'error.invalidLogin': 'Email or password is incorrect. Check for typos, or use "Forgot password" to set a new one.',
   'error.locked': 'Too many failed attempts, so your account is locked for 10 minutes. Wait a little, then try again.',
   'error.authBusy': 'The login service is busy for a moment. Please try again in a minute.',
+  'error.offerNotSaved': 'Your provider profile could not be set up. Please try again.',
   'error.network': 'Cannot reach the server. Your phone may be offline or the connection weak: please check it and try again.',
   'error.generic': 'Something went wrong on our side or on the way, and nothing was lost. Please try again; write to {contact} if it keeps happening.',
   'tab.search': 'Search',

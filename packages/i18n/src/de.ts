@@ -36,6 +36,7 @@ export const de = {
   'error.invalidLogin': 'E-Mail oder Passwort ist falsch. Prüfe auf Tippfehler oder setze mit „Passwort vergessen“ ein neues.',
   'error.locked': 'Zu viele Fehlversuche, deshalb ist dein Konto 10 Minuten gesperrt. Warte kurz und versuche es dann noch einmal.',
   'error.authBusy': 'Der Anmeldedienst ist gerade ausgelastet. Bitte versuche es in einer Minute noch einmal.',
+  'error.offerNotSaved': 'Dein Anbieterprofil konnte nicht eingerichtet werden. Bitte versuche es noch einmal.',
   'error.network': 'Keine Verbindung zum Server. Vielleicht ist dein Handy offline oder die Verbindung schwach: Bitte prüfe sie und versuche es noch einmal.',
   'error.generic': 'Bei uns oder auf dem Weg ist etwas schiefgelaufen, es ging nichts verloren. Bitte versuche es noch einmal; schreib an {contact}, wenn es immer wieder passiert.',
   'tab.search': 'Suche',
