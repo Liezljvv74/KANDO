@@ -1,5 +1,5 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { availabilityWatches, blocks, bookings, contactAttempts, db, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
+import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
@@ -8,7 +8,7 @@ import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -38,8 +38,8 @@ async function deleteAuthRecords(tx: Tx, id: string, email: string) {
 
 const BATCH = 200
 
-/** Booking statuses that hold the customer's money: the account cannot be deleted until they are settled (plan 2d adds its own). */
-export const MONEY_OPEN_STATUSES = ['confirmed'] as const
+/** Booking statuses that hold the customer's money: the account cannot be deleted until they are settled. */
+export const MONEY_OPEN_STATUSES = ['confirmed', 'finished', 'disputed', 'stopped'] as const
 
 /**
  * How many months the verification documents and basic trader details of a deleted provider are kept (a legal duty under
@@ -145,6 +145,11 @@ export async function deleteAccount(userId: string, confirmEmail: string, afterC
     await tx.delete(threads).where(sql`${threads.customerId} = ${userId} OR ${threads.providerId} IN ${own}`)
     await tx.delete(blocks).where(sql`${blocks.blockerId} = ${userId} OR ${blocks.blockedId} = ${userId}`)
     await tx.delete(availabilityWatches).where(sql`${availabilityWatches.customerId} = ${userId} OR ${availabilityWatches.providerId} IN ${own}`)
+    // Disputes and reviews of their bookings go with them (the money record stays in the ledger, which has no foreign keys);
+    // so do reviews they wrote or received on anyone's booking.
+    const ownBookings = tx.select({ id: bookings.id }).from(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
+    await tx.delete(disputes).where(sql`${disputes.bookingId} IN ${ownBookings}`)
+    await tx.delete(reviews).where(sql`${reviews.bookingId} IN ${ownBookings} OR ${reviews.authorId} = ${userId} OR ${reviews.subjectId} = ${userId}`)
     await tx.delete(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
     await tx.delete(quotes).where(sql`${quotes.providerId} IN ${own}`)
     await tx.delete(requests).where(sql`${requests.customerId} = ${userId} OR ${requests.providerId} IN ${own}`)

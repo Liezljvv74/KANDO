@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { describeError } from './log-error'
+import { LATE_CANCEL_SHARE } from './bookings/ending-rules'
 import { t, type Lang } from '@kando/i18n'
 
 const FROM = 'SkillWeb <noreply@skillweb.space>'
@@ -7,8 +8,10 @@ const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
 /** One email per booking event kind (see bookings/notify.ts). */
-export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available'
-export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | BookingTemplate
+export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning' | 'dispute-opened' | 'job-stopped' | 'stop-amount-stated' | 'additional-task-requested' | 'dispute-decided' | 'refund-issued'
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | 'additional-task-requested-provider' | 'payment-released-stop' | 'payment-released-stop-provider' | 'payment-released-stop-refund' | 'payment-released-stop-refund-provider' | 'refund-issued-provider' | CancelTemplate | BookingTemplate
+/** booking-cancelled variants (bookings/cancel.ts: who cancelled, what happens to the money). */
+export type CancelTemplate = 'booking-cancelled-late' | 'booking-cancelled-by-provider' | 'booking-cancelled-no-show-customer' | 'booking-cancelled-no-show-provider'
 type Params = Record<string, string | null | undefined>
 export type Mail = { to: string; from: string; replyTo: string; subject: string; text: string; html: string }
 
@@ -49,12 +52,37 @@ const KEY: Record<Template, string> = {
   'payout-setup-complete': 'email.payoutSetupComplete',
   'customers-waiting': 'email.customersWaiting',
   'provider-available': 'email.providerAvailable',
+  'job-finished': 'email.jobFinished',
+  'confirm-reminder': 'email.confirmReminder',
+  'payment-released': 'email.paymentReleased',
+  'payment-released-provider': 'email.paymentReleased.provider',
+  'was-job-done': 'email.wasJobDone',
+  'review-requested': 'email.reviewRequested',
+  'booking-cancelled': 'email.bookingCancelled',
+  'booking-cancelled-late': 'email.bookingCancelled.late',
+  'booking-cancelled-by-provider': 'email.bookingCancelled.byProvider',
+  'booking-cancelled-no-show-customer': 'email.bookingCancelled.noShowCustomer',
+  'booking-cancelled-no-show-provider': 'email.bookingCancelled.noShowProvider',
+  'no-show-reported': 'email.noShowReported',
+  'provider-warning': 'email.providerWarning',
+  'payment-released-stop': 'email.paymentReleased.stop',
+  'payment-released-stop-provider': 'email.paymentReleased.stop.provider',
+  'payment-released-stop-refund': 'email.paymentReleased.stopRefund',
+  'payment-released-stop-refund-provider': 'email.paymentReleased.stopRefund.provider',
+  'dispute-opened': 'email.disputeOpened',
+  'job-stopped': 'email.jobStopped',
+  'stop-amount-stated': 'email.stopAmountStated',
+  'additional-task-requested': 'email.additionalTaskRequested',
+  'additional-task-requested-provider': 'email.additionalTaskRequested.provider',
+  'dispute-decided': 'email.disputeDecided',
+  'refund-issued': 'email.refundIssued',
+  'refund-issued-provider': 'email.refundIssued.provider',
 }
 
 function compose(lang: Lang, template: Template, params: Params) {
   const key = KEY[template]
   const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
-  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', contact: REPLY_TO })}${template.startsWith('account-deleted') ? '' : `\n\n${APP_LINK}`}`
+  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', percent: String(Math.round(LATE_CANCEL_SHARE * 100)), contact: REPLY_TO })}${template.startsWith('account-deleted') ? '' : `\n\n${APP_LINK}`}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   return { subject: t(lang, `${key}.subject` as Parameters<typeof t>[1]), text, html }
 }

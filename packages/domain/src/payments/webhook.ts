@@ -1,6 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 import { bookings, db, ledgerEntries, providers, stripeEvents, type Tx } from '@kando/db'
 import { lockProviderSlots, slotIsHeld } from '../bookings/busy'
+import { parentBlocksPayment } from '../bookings/additional'
+import { openSystemDispute } from '../bookings/disputes'
 import { notifyBookingEvent } from '../bookings/notify'
 import { flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
@@ -46,6 +48,9 @@ export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Pro
     const customerId = bookingId ? (await tx.select({ c: bookings.customerId }).from(bookings).where(eq(bookings.id, bookingId)))[0]?.c : undefined
     const note = e.type === 'charge-disputed' ? `dispute on payment ${e.paymentRef}` : `refund ${e.refundId} of payment ${e.paymentRef} failed`
     await flagForStaff(tx, { kind: e.type === 'charge-disputed' ? 'chargeback' : 'refund-failed', refId: bookingId ?? e.paymentRef, ...(customerId && { userId: customerId }), note })
+    // a chargeback on money not yet released: also a system dispute, so the job is frozen and in the staff queue (once: a
+    // second event finds the dispute; released or ended bookings keep the flag only)
+    if (e.type === 'charge-disputed' && bookingId) await openSystemDispute(tx, bookingId, 'chargeback', now, { afterCommit: (fn) => after.push(fn) })
   })
   for (const fn of after) await fn().catch((err) => console.error(`[payments] message after ${e.type} failed ${describeError(err)}`))
 }
@@ -68,7 +73,8 @@ async function paid(tx: Tx, e: Paid, now: Date, after: After): Promise<void> {
     now.getTime() <= b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 &&
     toCents(Number(b.amount)) === e.amountCents &&
     b.currency === e.currency &&
-    !(await slotIsHeld(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) // owner connection sees every booking; other slot writers wait on our lock
+    // an additional task has its parent's time (no slot check) and is refunded once the parent has a reported no-show or has ended
+    (b.parentBookingId ? !(await parentBlocksPayment(tx, b)) : !(await slotIsHeld(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id))) // owner connection sees every booking; other slot writers wait on our lock
 
   if (confirmable) {
     // booking first, then its charge row: both or neither

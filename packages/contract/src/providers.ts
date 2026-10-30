@@ -2,6 +2,7 @@ import { DEFAULT_LANG } from '@kando/i18n'
 import { z } from 'zod'
 
 import { CurrencySchema, LangSchema, PriceTypeSchema } from './common'
+import { RatingSchema } from './endings'
 
 export const SearchItemSchema = z.object({
   slug: z.string(),
@@ -77,6 +78,12 @@ export const ProviderDetailSchema = z.object({
   /** Document type keys that staff approved (DOCUMENT_TYPES order); names only, never files or dates. */
   checkedDocuments: z.array(z.string()).default([]),
   isNew: z.boolean(),
+  /** Late cancellations plus no-shows by the provider in the last 12 months (a count only). Nullish: an older cached response lacks it. */
+  reliability: z.number().int().nullish(),
+  /** Customers' visible reviews: average stars and count; null when there are none. Nullish: an older cached response lacks it. */
+  rating: RatingSchema.nullish(),
+  /** The latest visible customer reviews (stars, text, the date shown); never the author or the booking. */
+  reviews: z.array(z.object({ stars: z.number().int(), text: z.string().nullable(), date: z.string() })).nullish(),
   /** Payout set-up complete (payments on). Nullish: an older cached response lacks it; read as false. */
   verified: z.boolean().nullish(),
   /** False: requests and bookings are refused (PROVIDER_NOT_READY) and the app offers "Notify me when available". Nullish: an older response lacks it; read as true. */

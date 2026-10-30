@@ -16,7 +16,8 @@ export type MessageInput = z.infer<typeof MessageInputSchema>
 export const CardSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('quote'), refId: z.string(), amount: AmountSchema, currency: CurrencySchema, version: z.number().int() }),
   z.object({ type: z.literal('acceptance'), refId: z.string(), amount: AmountSchema, currency: CurrencySchema }),
-  z.object({ type: z.literal('additional-task'), refId: z.string(), amount: AmountSchema, currency: CurrencySchema }),
+  // an additional task: requested (refId = its request, no amount yet), then quoted (refId = the quote, with its amount)
+  z.object({ type: z.literal('additional-task'), refId: z.string(), amount: AmountSchema.optional(), currency: CurrencySchema.optional() }),
 ])
 export type Card = z.infer<typeof CardSchema>
 

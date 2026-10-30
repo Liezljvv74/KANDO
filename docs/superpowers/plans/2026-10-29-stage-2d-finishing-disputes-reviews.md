@@ -21,7 +21,7 @@
 - Additional task: a separate booking linked to the original (`parentBookingId`), started by the customer's "Additional task" or the provider's "Scope/quote review" button, using the normal quote, accept and pay flow, labelled "Additional task", with its own payment, "Finished" clock, payout and dispute; refunded and paid out independently; work on it starts only after it is accepted and paid; a short explanation is shown during negotiation.
 - Reviews: after a job is confirmed (root booking `completed`), both sides write one review (1 to 5 stars, text up to 2000 characters) before seeing the other's; both appear together once both are in, or after 7 days (`REVIEW_VISIBLE_DAYS = 7`); the author may edit for 14 days (`REVIEW_EDIT_DAYS = 14`), then it is final; staff can hide one that breaks the rules, with a reason.
 - Commission only on the amount actually paid out; percentage from `bookings.commission_rate` (plan 2c). All free text (dispute descriptions, stop notes, review text) runs plan 2b's `assertNoContactDetails`.
-- German and English everywhere, back office included; no competitor names; never "Treuhand", "Escrow" or "Garantie". Enums `text` plus `check`. Migration `0016`. Every new table in exactly one `rls.ts` map, isolation test, `cleanupUsers()`. Owner merges; report in `Reports/`; no AI co-author lines.
+- German and English everywhere, back office included; no competitor names; never "Treuhand", "Escrow" or "Garantie". Enums `text` plus `check`. Migration `0018` (0016 and 0017 were used by plans 2b and 2c). Every new table in exactly one `rls.ts` map, isolation test, `cleanupUsers()`. Owner merges; report in `Reports/`; no AI co-author lines.
 
 ## Review Focus
 
@@ -33,7 +33,7 @@
 
 ## File structure
 
-- `packages/db/src/schema/endings.ts` (new): `disputes`, `reviews`. Modify plan 2a's `schema/bookings.ts` (statuses, columns, `parentBookingId`) and `requests` (`parentBookingId`), `schema/notifications.ts`, plan 2b's `staff_flags` kinds. Migration `0016_endings.sql` (generated).
+- `packages/db/src/schema/endings.ts` (new): `disputes`, `reviews`. Modify plan 2a's `schema/bookings.ts` (statuses, columns, `parentBookingId`) and `requests` (`parentBookingId`), `schema/notifications.ts`, plan 2b's `staff_flags` kinds. Migration `0018_endings.sql` (generated).
 - `packages/db/src/rls.ts`: classify the tables; append to plan 2c's `OWNER_ONLY_BOOKING_STATUSES`; definer function `provider_reliability`.
 - `packages/contract/src/endings.ts` (new): finish, cancel, no-show, dispute, stop, review and staff-decision schemas.
 - `packages/domain/src/bookings/ending-rules.ts`, `finish.ts`, `cancel.ts`, `disputes.ts`, `stop.ts`, `additional.ts` (new); `packages/domain/src/reviews.ts` (new); `packages/domain/src/admin/bookings.ts` (new); modify plan 2a's `bookings/timers.ts`, `bookings/rules.ts` (`canTransition`), `bookings/requests.ts` (`acceptQuote`), `bookings/notify.ts`; plan 2b's `staffMayReadThread`, `threadForBooking`; plan 2c's account-deletion refusal list.
@@ -42,7 +42,7 @@
 
 ### Task 1: Tables, statuses and row-level security
 
-**Files:** Create `packages/db/src/schema/endings.ts`, migration `0016_endings.sql`; modify the schema files above, `rls.ts`, `apps/web/tests/helpers.ts`; test `apps/web/tests/rls-endings.int.spec.ts`.
+**Files:** Create `packages/db/src/schema/endings.ts`, migration `0018_endings.sql`; modify the schema files above, `rls.ts`, `apps/web/tests/helpers.ts`; test `apps/web/tests/rls-endings.int.spec.ts`.
 
 **Interfaces:**
 - Changes to plan 2a's tables (on top of plan 2c's):

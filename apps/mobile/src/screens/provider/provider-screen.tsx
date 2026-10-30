@@ -84,6 +84,9 @@ export default function ProviderScreen() {
           </View>
           {!!p.place && <Text style={styles.text}>{p.place}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
+          {!!p.rating && <Text style={styles.small}>{t('provider.rating', { average: p.rating.average.toLocaleString(getLang()), count: p.rating.count })}</Text>}
+          {/* Late cancellations and no-shows in the last 12 months; nothing is shown while there are none. */}
+          {!!p.reliability && <Text style={styles.small}>{p.reliability === 1 ? t('provider.reliability.one') : t('provider.reliability.other', { n: p.reliability })}</Text>}
           {!!p.worksRemotely && <Text style={styles.small}>{t('provider.remote')}</Text>}
           {(p.checkedDocuments?.length ?? 0) > 0 && <Text style={styles.small}>{checkedLine}</Text>}
         </View>
@@ -161,6 +164,19 @@ export default function ProviderScreen() {
             <View key={r.id} style={styles.reference}>
               <Text style={styles.serviceTitle}>{r.year ? `${r.clientName} (${r.year})` : r.clientName}</Text>
               <Text style={styles.small}>{r.description}</Text>
+            </View>
+          ))}
+        </Section>
+      )}
+
+      {(p.reviews?.length ?? 0) > 0 && (
+        <Section title={t('provider.reviews')}>
+          {p.reviews!.map((r, i) => (
+            <View key={i} style={styles.reference}>
+              <Text style={styles.serviceTitle} accessibilityLabel={`${r.stars} / 5`}>
+                {`${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)} · ${new Date(r.date).toLocaleDateString(getLang())}`}
+              </Text>
+              {!!r.text && <Text style={styles.small}>{r.text}</Text>}
             </View>
           ))}
         </Section>

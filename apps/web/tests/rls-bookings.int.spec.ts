@@ -102,6 +102,7 @@ it('neither party can reassign customer_id or provider_id, request_id on a quote
 it('a third user cannot update or delete any of the three', async () => {
   for (const t of ['requests', 'quotes', 'bookings']) {
     expect((await run(ids.other, sql.raw(`UPDATE ${t} SET created_at = now()`))).rowCount).toBe(0)
-    expect((await run(ids.other, sql.raw(`DELETE FROM ${t}`))).rowCount).toBe(0)
+    if (t === 'bookings') await expect(run(ids.other, sql.raw(`DELETE FROM ${t}`))).rejects.toMatchObject({ cause: { message: expect.stringContaining('permission denied') } }) // nobody deletes bookings as app_user (rls.ts NO_APP_DELETE)
+    else expect((await run(ids.other, sql.raw(`DELETE FROM ${t}`))).rowCount).toBe(0)
   }
 })

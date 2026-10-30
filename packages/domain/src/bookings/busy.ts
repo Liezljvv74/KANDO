@@ -1,5 +1,5 @@
-import { and, eq, gt, ne, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, type Tx } from '@kando/db'
+import { and, eq, gt, inArray, ne, or, sql } from 'drizzle-orm'
+import { bookings, db, providers, SLOT_HOLDING_STATUSES, type Tx } from '@kando/db'
 import type { BusyTime } from '@kando/contract'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
@@ -19,7 +19,7 @@ export const lockProviderSlots = (tx: Tx, providerId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('booking_slot'), hashtext(${providerId}))`)
 
 /**
- * True when a confirmed (paid) or awaiting-payment booking of the provider overlaps the span (assertSlotFree turns that into 409 slot-pending); with
+ * True when a paid booking (SLOT_HOLDING_STATUSES: confirmed, or ended with the work on) or an awaiting-payment booking of the provider overlaps the span (assertSlotFree turns that into 409 slot-pending); with
  * `pendingOnly` only awaiting-payment ones count. The 30-minute buffer applies only when both bookings are on site. Proposed bookings never block,
  * and neither does a booking whose payment window has passed (pay_by), even before a sweep marks it.
  */
@@ -28,7 +28,7 @@ export async function slotIsHeld(tx: Exec, providerId: string, startAt: Date, du
   const held = await tx
     .select()
     .from(bookings)
-    .where(and(eq(bookings.providerId, providerId), pendingOnly ? pending : or(pending, eq(bookings.status, 'confirmed')), ...(ignoreBookingId ? [ne(bookings.id, ignoreBookingId)] : [])))
+    .where(and(eq(bookings.providerId, providerId), pendingOnly ? pending : or(pending, inArray(bookings.status, [...SLOT_HOLDING_STATUSES])), ...(ignoreBookingId ? [ne(bookings.id, ignoreBookingId)] : [])))
   const span = { start: startAt, end: new Date(startAt.getTime() + durationMin * 60_000) }
   // ponytail: scans all of the provider's awaiting-payment and confirmed bookings; add a time-window filter if that list grows large
   return held.some((b) => overlaps(span, { start: b.startAt, end: new Date(b.startAt.getTime() + b.durationMin * 60_000) }, onSite && b.onSite ? BUFFER_MINUTES : 0))

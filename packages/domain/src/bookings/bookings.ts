@@ -62,11 +62,15 @@ export async function createDirectBooking(tx: Tx, userId: string, input: DirectB
   return view(row!, userId)
 }
 
-/** The caller's bookings, newest first, as customer or as provider owner. */
+/** The caller's bookings, newest first, as customer or as provider owner; each booking's additional tasks follow right after it (oldest first). */
 export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider'): Promise<Booking[]> {
   await runDueTimersFor(db, userId) // the caller's own rows are never stale
   const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  return (await tx.select().from(bookings).where(mine).orderBy(desc(bookings.createdAt), desc(bookings.id))).map((b) => view(b, userId))
+  const all = (await tx.select().from(bookings).where(mine).orderBy(desc(bookings.createdAt), desc(bookings.id))).map((b) => view(b, userId))
+  const ids = new Set(all.map((b) => b.id))
+  const kids = new Map<string, Booking[]>()
+  for (const b of [...all].reverse()) if (b.parentBookingId && ids.has(b.parentBookingId)) kids.set(b.parentBookingId, [...(kids.get(b.parentBookingId) ?? []), b])
+  return all.filter((b) => !b.parentBookingId || !ids.has(b.parentBookingId)).flatMap((b) => [b, ...(kids.get(b.id) ?? [])])
 }
 
 /** Which side the caller is on; 404 for anyone else. */

@@ -86,7 +86,7 @@ it('app_user cannot set amount or payment_ref on a booking', async () => {
 it('the app insert shape of bookings is exactly the columns app_user may write', () => {
   const all = Object.values(getTableColumns(bookings)).map((c) => c.name)
   const app = Object.values(getTableColumns(bookingAppInsert)).map((c) => c.name)
-  expect(COLUMN_STAFF_ONLY.bookings!.sort()).toEqual(['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at'].sort())
+  for (const c of ['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at']) expect(COLUMN_STAFF_ONLY.bookings).toContain(c) // plan 2d's ending columns: rls-endings
   expect(app.sort()).toEqual(all.filter((c) => !COLUMN_STAFF_ONLY.bookings!.includes(c)).sort())
 })
 
@@ -133,7 +133,7 @@ it('quote_id, service_id and request_id are frozen after insert, even when repoi
 })
 
 it('app_user cannot set status confirmed; the owner connection can', async () => {
-  expect(OWNER_ONLY_BOOKING_STATUSES).toEqual(['confirmed'])
+  expect(OWNER_ONLY_BOOKING_STATUSES).toContain('confirmed') // and the endings: rls-endings
   for (const uid of [ids.customer, ids.owner]) {
     await expect(run(uid, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly)
   }
@@ -141,7 +141,7 @@ it('app_user cannot set status confirmed; the owner connection can', async () =>
   // other changes by the parties still work
   expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist blau' WHERE id = ${bookingId}`)).rowCount).toBe(1)
   await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [bookingId])
-  expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist rot' WHERE id = ${bookingId}`)).rowCount).toBe(1) // a confirmed row stays writable for other columns
+  await expect(run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist rot' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly) // a paid row is frozen for the parties (rls-endings)
   // a paid booking cannot be moved away by a party (that would dodge settlement); the owner connection can
   for (const uid of [ids.customer, ids.owner]) {
     for (const to of ['withdrawn', 'expired', 'declined', 'proposed']) {

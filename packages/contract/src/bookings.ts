@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
 import { AmountSchema, CurrencySchema, requiredText, text } from './common'
+import { RatingSchema } from './endings'
 
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
 export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn'] as const
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
-export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn'] as const
+export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
 const IsoSchema = z.string().datetime({ offset: true })
 const DurationSchema = z.number().int().min(15).max(720)
@@ -32,10 +33,14 @@ export const RequestSchema = z.object({
   serviceId: z.string().nullable(),
   description: z.string(),
   preferredDate: z.string().nullable(),
+  /** Set for an additional task: the booking it adds work to. */
+  parentBookingId: z.string().nullable(),
   status: z.enum(REQUEST_STATUSES),
   answerBy: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** On the provider's view only: what providers' visible reviews say about this customer (null: none yet). */
+  customerRating: RatingSchema.nullish(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
@@ -78,8 +83,11 @@ export const TimeProposalSchema = z
   .refine((v) => !v.onSite || v.address !== undefined, { message: 'Address required when on site', path: ['address'] })
 export type TimeProposal = z.infer<typeof TimeProposalSchema>
 
-/** POST /quotes/[id]/accept: the customer's proposed time. */
-export const AcceptQuoteInputSchema = TimeProposalSchema
+/**
+ * POST /quotes/[id]/accept: the customer's proposed time. An additional task's quote takes no time (an empty body, or a
+ * note only): it gets the time, duration, place and address of the booking it adds to.
+ */
+export const AcceptQuoteInputSchema = z.union([TimeProposalSchema, z.object({ note: text(1000).optional() }).strict()])
 export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
 
 /** POST /bookings: a booking without a prior request. */
@@ -102,6 +110,8 @@ export const BookingSchema = z.object({
   quoteId: z.string().nullable(),
   /** The request a quote booking came from (its chat is the request's); null for a direct booking. */
   requestId: z.string().nullable(),
+  /** An additional task: the booking it adds to; null for an ordinary booking. */
+  parentBookingId: z.string().nullable(),
   source: z.enum(['quote', 'direct']),
   status: z.enum(BOOKING_STATUSES),
   startAt: z.string(),
@@ -114,6 +124,27 @@ export const BookingSchema = z.object({
   answerBy: z.string().nullable(),
   payBy: z.string().nullable(),
   counterBy: z.enum(['provider', 'customer']).nullable(),
+  /** When the provider tapped "Finished" (or the customer said it was done). */
+  finishedAt: z.string().nullable(),
+  /** When the payment to the provider is made unless the customer confirms earlier or reports a problem. */
+  confirmBy: z.string().nullable(),
+  /** When the customer was asked "Was the job done?" (the provider never tapped "Finished"); from then on they can confirm. */
+  askedDoneAt: z.string().nullable(),
+  /** A cancellation: when, by which side, and whether it came less than 24 hours before the start. */
+  cancelledAt: z.string().nullable(),
+  cancelledBy: z.enum(['customer', 'provider']).nullable(),
+  lateCancel: z.boolean(),
+  /** The side reported as not turning up (the booking stays confirmed until the objection window ends or staff decide). */
+  noShow: z.enum(['customer', 'provider']).nullable(),
+  noShowReportedAt: z.string().nullable(),
+  /** Until when the reported side may object (noShowReportedAt + 48 hours). */
+  noShowObjectBy: z.string().nullable(),
+  /** A stopped job: when and by which side; the amount the provider stated as earned (with an optional note) and when. */
+  stoppedAt: z.string().nullable(),
+  stoppedBy: z.enum(['customer', 'provider']).nullable(),
+  stopAmount: AmountSchema.nullable(),
+  stopNote: z.string().nullable(),
+  stopStatedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

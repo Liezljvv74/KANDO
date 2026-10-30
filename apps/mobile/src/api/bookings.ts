@@ -5,9 +5,12 @@ import type {
   BookingRequest,
   BusyTime,
   DirectBookingInput,
+  Dispute,
+  FinishInput,
   Quote,
   QuoteInput,
   RequestInput,
+  StopAmountInput,
 } from '@kando/contract'
 
 import { api } from '@/api/client'
@@ -28,3 +31,18 @@ export const answerBooking = (id: string, answer: BookingAnswer) => api<Booking>
 export const withdrawBooking = (id: string) => api<Booking>(`${BASE}/bookings/${id}/withdraw`, json('POST'))
 export const getBusyTimes = async (slug: string, from: Date, to: Date) =>
   (await api<{ docs: BusyTime[] }>(`${BASE}/providers/${encodeURIComponent(slug)}/busy?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)).docs
+
+// The endings of a paid booking (plan 2d). Each returns the booking as the server now has it.
+const bk = (id: string, path = '') => `${BASE}/bookings/${encodeURIComponent(id)}${path}`
+/** The route needs a JSON body: `{}` when no material amount is given. */
+export const finishJob = (id: string, input: FinishInput) => api<Booking>(bk(id, '/finish'), json('POST', input))
+export const confirmJob = (id: string) => api<Booking>(bk(id, '/confirm'), json('POST'))
+export const cancelBooking = (id: string) => api<Booking>(bk(id, '/cancel'), json('POST'))
+export const reportNoShow = (id: string) => api<Booking>(bk(id, '/no-show'), json('POST'))
+export const objectNoShow = (id: string, description: string) => api<Booking>(bk(id, '/no-show/object'), json('POST', { description }))
+export const openDispute = (id: string, description: string) => api<Dispute>(bk(id, '/dispute'), json('POST', { description }))
+export const getDispute = (id: string) => api<Dispute>(bk(id, '/dispute'))
+export const stopJob = (id: string) => api<Booking>(bk(id, '/stop'), json('POST'))
+export const stateStopAmount = (id: string, input: StopAmountInput) => api<Booking>(bk(id, '/stop/amount'), json('POST', input))
+export const answerStop = (id: string, agree: boolean) => api<Booking>(bk(id, '/stop/answer'), json('POST', { agree }))
+export const startAdditionalTask = (id: string, description: string) => api<BookingRequest>(bk(id, '/additional-task'), json('POST', { description }))

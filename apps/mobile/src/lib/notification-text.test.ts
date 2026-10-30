@@ -47,3 +47,9 @@ test('where a notice leads: provider-available to the provider page, customers-w
   expect(at('customers-waiting', { count: 2 })).toEqual({ path: '/my-profile' })
   expect(at('payout-setup-complete', {})).toBeNull()
 })
+
+test('the booking-ending kinds have a text each', () => {
+  for (const kind of ['job-finished', 'confirm-reminder', 'payment-released', 'was-job-done', 'booking-cancelled', 'no-show-reported', 'dispute-opened', 'dispute-decided', 'job-stopped', 'stop-amount-stated', 'additional-task-requested', 'review-requested', 'review-visible', 'provider-warning']) {
+    expect(notificationText(kind)).toMatch(/^notification\.[a-zA-Z]+$/)
+  }
+})

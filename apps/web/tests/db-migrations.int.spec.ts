@@ -143,3 +143,30 @@ it('0017 on a database with data: accepted_at and request_id backfilled, an awai
   await pool.query("INSERT INTO staff_flags (kind, ref_id) VALUES ('chargeback', $1)", [paying])
   await pool.query('DELETE FROM staff_flags; DELETE FROM notifications; DELETE FROM bookings; DELETE FROM quotes; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
 }, 60_000)
+
+it('0018 on a database with data: existing bookings keep their status and get safe defaults; the new statuses and kinds are accepted', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const upTo17 = mkdtempSync(join(tmpdir(), 'mig17-'))
+  cpSync(join(process.cwd(), '../../packages/db/migrations'), upTo17, { recursive: true })
+  const journalPath = join(upTo17, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0018')
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo17 })
+  await pool.query("INSERT INTO users (id, email) VALUES ('m18-c', 'm18-c@test.skilled.invalid'), ('m18-p', 'm18-p@test.skilled.invalid')")
+  const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m18-p', 'published') RETURNING id")).rows[0].id
+  const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('m18-c', $1, 'x', now()) RETURNING id", [p])).rows[0].id
+  const paid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, paid_at) VALUES ('m18-c', $1, 'direct', 'confirmed', now() + interval '9 days', 60, 80, now()) RETURNING id", [p])).rows[0].id
+  await migrate()
+  expect((await pool.query('SELECT status, parent_booking_id, confirm_reminders_sent, late_cancel, material_amount, finished_at, cancelled_by FROM bookings WHERE id = $1', [paid])).rows).toEqual([
+    { status: 'confirmed', parent_booking_id: null, confirm_reminders_sent: 0, late_cancel: false, material_amount: '0.00', finished_at: null, cancelled_by: null },
+  ])
+  expect((await pool.query('SELECT parent_booking_id FROM requests WHERE id = $1', [r])).rows).toEqual([{ parent_booking_id: null }])
+  await pool.query("UPDATE bookings SET status = 'finished', finished_at = now() WHERE id = $1", [paid])
+  await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m18-c', 'job-finished'), ('m18-p', 'provider-warning')")
+  await pool.query("INSERT INTO staff_flags (kind, ref_id) VALUES ('dispute-overdue', $1), ('provider-no-shows', $2), ('ignored-requests', $2)", [paid, p])
+  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now())", [paid])
+  await pool.query('DELETE FROM disputes; DELETE FROM staff_flags; DELETE FROM notifications; DELETE FROM bookings; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
+}, 60_000)

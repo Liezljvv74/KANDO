@@ -92,6 +92,20 @@ export default function AdminShell({ lang, children }: { lang: Lang; children: R
       show: '/admin/flags/show/:id',
       meta: { label: at('admin.resource.flags') },
     },
+    {
+      name: 'bookings',
+      list: '/admin/bookings',
+      show: '/admin/bookings/show/:id',
+      meta: { label: at('admin.resource.bookings') },
+    },
+    {
+      name: 'disputes',
+      list: '/admin/disputes',
+      show: '/admin/disputes/show/:id',
+      meta: { label: at('admin.resource.disputes') },
+    },
+    { name: 'refunds', list: '/admin/refunds', meta: { label: at('admin.resource.refunds') } },
+    { name: 'reviews', list: '/admin/reviews', meta: { label: at('admin.resource.reviews') } },
     { name: 'staff', list: '/admin/staff', meta: { label: at('admin.resource.staff') } },
   ]
   const signIn = usePathname() === '/admin/sign-in'

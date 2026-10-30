@@ -2,6 +2,8 @@ import type { Notification } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 
+// The in-app payload carries ids only (and the customers-waiting count), so the ending texts name their periods
+// (7 days, 48 hours, 12 months, 30 days) in the catalogue; change them there together with the domain rules.
 const KEY: Record<Notification['kind'], Key> = {
   'profile-live': 'notification.profileLive',
   'request-received': 'notification.requestReceived',
@@ -23,6 +25,20 @@ const KEY: Record<Notification['kind'], Key> = {
   'customers-waiting': 'notification.customersWaiting',
   'provider-available': 'notification.providerAvailable',
   'refund-issued': 'notification.refundIssued',
+  'job-finished': 'notification.jobFinished',
+  'confirm-reminder': 'notification.confirmReminder',
+  'payment-released': 'notification.paymentReleased',
+  'was-job-done': 'notification.wasJobDone',
+  'booking-cancelled': 'notification.bookingCancelled',
+  'no-show-reported': 'notification.noShowReported',
+  'dispute-opened': 'notification.disputeOpened',
+  'dispute-decided': 'notification.disputeDecided',
+  'job-stopped': 'notification.jobStopped',
+  'stop-amount-stated': 'notification.stopAmountStated',
+  'additional-task-requested': 'notification.additionalTaskRequested',
+  'review-requested': 'notification.reviewRequested',
+  'review-visible': 'notification.reviewVisible',
+  'provider-warning': 'notification.providerWarning',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */

@@ -141,6 +141,11 @@ export default async function ProviderPage({ params, searchParams }: Args) {
           <h1 className="text-3xl font-bold">{p.publicName}</h1>
           {p.place && <p className="opacity-70">{p.place}</p>}
           <p className="opacity-70">{categoryNames.join(' · ')}</p>
+          {p.rating && (
+            <p className="text-sm">
+              {t(lang, 'provider.rating', { average: p.rating.average.toLocaleString(lang), count: p.rating.count })}
+            </p>
+          )}
           {p.worksRemotely && <p className="text-sm">{tt('provider.remote')}</p>}
           {p.checkedDocuments.length > 0 && (
             <p className="text-sm">
@@ -216,6 +221,23 @@ export default async function ProviderPage({ params, searchParams }: Args) {
                   {r.year ? ` (${r.year})` : ''}
                 </p>
                 <p className="whitespace-pre-line text-sm">{r.description}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {(p.reviews?.length ?? 0) > 0 && (
+        <section>
+          <h2 className={h2}>{tt('provider.reviews')}</h2>
+          <ul className="space-y-2">
+            {p.reviews!.map((r, i) => (
+              <li key={i}>
+                <p className="font-medium">
+                  {'★'.repeat(r.stars)}
+                  {'☆'.repeat(5 - r.stars)} · {new Date(r.date).toLocaleDateString(lang)}
+                </p>
+                {r.text && <p className="whitespace-pre-line text-sm">{r.text}</p>}
               </li>
             ))}
           </ul>

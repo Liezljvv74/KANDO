@@ -6,9 +6,11 @@ import { canTransact, paymentsEnabled } from './payments/rules'
 import type { Lang } from '@kando/i18n'
 import { photoUrl } from './storage'
 import { needsTranslation, textsOf } from './translate'
+import { latestReviews, ratingsOf } from './reviews'
 
 type Row = {
   id: string
+  owner_id: string
   slug: string
   public_name: string
   type: string
@@ -32,7 +34,7 @@ type Row = {
  */
 export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promise<ProviderDetail | null> {
   const { rows } = await tx.execute<Row>(sql`
-    SELECT p.id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
+    SELECT p.id, p.owner_id, p.slug, p.public_name, p.type, p.business_name, p.impressum, p.bio, p.strengths, p.skills,
            p.experience, p.works_remotely, p.country, p.base_postcode, ph.key AS photo_key, p.payouts_ready_at
     FROM providers p LEFT JOIN photos ph ON ph.owner_id = p.owner_id AND ph.kind = 'profile' -- the person's picture
     WHERE p.slug = ${slug} AND p.status = 'published' AND ${notSuspendedSql('p')}`)
@@ -41,19 +43,21 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   const ids = await offerableServiceIds(tx, p.id)
   if (!ids.length) return null // same rule as search: no page until a service may be offered
 
-  const [services, references, photos, place, checked] = await Promise.all([
-    tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
-      SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
-      WHERE s.provider_id = ${p.id} AND s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
-      ORDER BY s.sort, s.created_at, s.id`),
-    tx.execute<{ id: string; client_name: string; description: string; year: number | null }>(sql`
-      SELECT id, client_name, description, year FROM provider_references WHERE provider_id = ${p.id}
-      ORDER BY year DESC NULLS LAST, created_at DESC, id`),
-    tx.execute<{ id: string; key: string; alt: string | null }>(sql`
-      SELECT id, key, alt FROM photos WHERE provider_id = ${p.id} AND kind = 'portfolio' ORDER BY sort, created_at, id`),
-    p.base_postcode ? lookupPostcode(p.country, p.base_postcode, tx) : null,
-    tx.execute<{ docs: string[] }>(sql`SELECT public_checked_documents(${p.id}) AS docs`), // SECURITY DEFINER: type keys only
-  ])
+  // one after another: one request transaction is one connection, and pg queues (and pg 9 refuses) parallel queries on it
+  const services = await tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
+    SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
+    WHERE s.provider_id = ${p.id} AND s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
+    ORDER BY s.sort, s.created_at, s.id`)
+  const references = await tx.execute<{ id: string; client_name: string; description: string; year: number | null }>(sql`
+    SELECT id, client_name, description, year FROM provider_references WHERE provider_id = ${p.id}
+    ORDER BY year DESC NULLS LAST, created_at DESC, id`)
+  const photos = await tx.execute<{ id: string; key: string; alt: string | null }>(sql`
+    SELECT id, key, alt FROM photos WHERE provider_id = ${p.id} AND kind = 'portfolio' ORDER BY sort, created_at, id`)
+  const place = p.base_postcode ? await lookupPostcode(p.country, p.base_postcode, tx) : null
+  const checked = await tx.execute<{ docs: string[] }>(sql`SELECT public_checked_documents(${p.id}) AS docs`) // SECURITY DEFINER: type keys only
+  const reliability = await tx.execute<{ n: number }>(sql`SELECT provider_reliability(${p.id}) AS n`) // SECURITY DEFINER: a count only
+  const ratings = await ratingsOf(tx, [p.owner_id], 'customer') // shown reviews only (RLS and the filter agree)
+  const reviews = await latestReviews(tx, p.owner_id)
   const approved = new Set(checked.rows[0]?.docs ?? [])
 
   const detail: ProviderDetail = {
@@ -85,6 +89,9 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     photos: photos.rows.map((ph) => ({ id: ph.id, url: photoUrl(ph.key), alt: ph.alt || p.public_name })),
     checkedDocuments: DOCUMENT_TYPES.filter((d) => approved.has(d)),
     isNew: true, // Until ratings exist (Stage 6).
+    reliability: Number(reliability.rows[0]?.n ?? 0),
+    rating: ratings.get(p.owner_id) ?? null,
+    reviews,
     verified: paymentsEnabled() && p.payouts_ready_at !== null, // payout set-up done (Stripe checked identity); means nothing while payments are off
     canBook: canTransact({ payoutsReadyAt: p.payouts_ready_at === null ? null : new Date(p.payouts_ready_at) }),
     translatable: false,

@@ -83,6 +83,9 @@ export async function cleanupUsers(): Promise<void> {
     await q("SELECT set_config('kando.ledger_cleanup', 'on', true)")
     await q(`DELETE FROM ledger_entries WHERE provider_id IN ${myProviders} OR booking_id IN (SELECT id FROM bookings WHERE customer_id IN ${mine})`)
   })
+  const myBookings = `(SELECT id FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`
+  await pool.query(`DELETE FROM disputes WHERE booking_id IN ${myBookings}`)
+  await pool.query(`DELETE FROM reviews WHERE booking_id IN ${myBookings} OR author_id IN ${mine} OR subject_id IN ${mine}`)
   await pool.query(`DELETE FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM quotes WHERE provider_id IN ${myProviders}`)
   await pool.query(`DELETE FROM requests WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)

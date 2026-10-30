@@ -79,7 +79,7 @@ export const staffFlags = pgTable(
     resolvedBy: text('resolved_by'),
   },
   (t) => [
-    check('staff_flags_kind_check', sql`kind in ('contact-attempts','message-reported','chargeback','refund-failed','payment-unprocessed')`),
+    check('staff_flags_kind_check', sql`kind in ('contact-attempts','message-reported','chargeback','refund-failed','payment-unprocessed','ignored-requests','provider-no-shows','dispute-overdue')`),
     uniqueIndex('staff_flags_open_idx').on(t.kind, t.refId, sql`coalesce(${t.userId}, '')`).where(sql`resolved_at IS NULL`),
   ],
 )

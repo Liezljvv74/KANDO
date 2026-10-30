@@ -11,6 +11,8 @@ export const PROPOSAL_ANSWER_HOURS = 24
 export const BUFFER_MINUTES = 30
 export const IGNORED_LIMIT = 3
 export const IGNORED_WINDOW_DAYS = 30
+/** Days after a requests-ignored notice until a provider still silent is flagged to staff (timers.ts). */
+export const IGNORED_FLAG_DAYS = 14
 export const PAY_WINDOW_HOURS = 48
 export const PAY_BEFORE_START_HOURS = 24
 export const SHORT_NOTICE_PAY_HOURS = 6
@@ -41,10 +43,20 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   proposed: ['awaiting-payment', 'expired', 'declined', 'withdrawn', 'proposed'],
   // -> confirmed only by the payment webhook on the owner connection (trigger bookings_guard_status); plan 2d adds the ways out of confirmed
   'awaiting-payment': ['expired', 'withdrawn', 'confirmed'],
-  confirmed: [],
+  // A paid booking and its endings move only on the owner connection (OWNER_ONLY_BOOKING_STATUSES, trigger
+  // bookings_guard_status), after the domain checked the caller. The transitions below are owner-connection
+  // only: the database trigger stops app_user from making them, and no app route calls canTransition with them.
+  // -> refunded: a staff refund of the whole amount (admin/bookings.ts staffRefund)
+  confirmed: ['finished', 'cancelled', 'stopped', 'disputed', 'completed', 'refunded'],
   expired: [],
   declined: [],
   withdrawn: [],
+  finished: ['completed', 'disputed', 'refunded'],
+  completed: [],
+  disputed: ['completed', 'refunded', 'cancelled'],
+  cancelled: [],
+  stopped: ['completed', 'disputed', 'refunded'],
+  refunded: [],
 }
 
 export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)
