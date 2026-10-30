@@ -105,12 +105,12 @@ const newRequest = (status = 'open') =>
   one("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', $3, now() + interval '7 days') RETURNING id", [ids.customer, providerId, status])
 const newQuote = async () =>
   one("INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, expires_at) VALUES ($1, $2, 1, 100, 'EUR', 's', now() + interval '14 days') RETURNING id", [await newRequest('quoted'), providerId])
-const newBooking = (status: 'proposed' | 'awaiting-payment') =>
+const newBooking = (status: 'proposed' | 'awaiting-payment', counterBy: 'provider' | 'customer' | null = null) =>
   one(
-    `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, answer_by, pay_by, accepted_at)
+    `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, answer_by, pay_by, accepted_at, counter_by)
      VALUES ($1, $2, $3, 'direct', $4, now() + interval '3 days', 60, false, now() + interval '1 day',
-       ${status === 'proposed' ? 'NULL, NULL' : "now() + interval '1 day', now()"}) RETURNING id`,
-    [ids.customer, providerId, serviceId, status],
+       ${status === 'proposed' ? 'NULL, NULL' : "now() + interval '1 day', now()"}, $5) RETURNING id`,
+    [ids.customer, providerId, serviceId, status, counterBy],
   )
 const notAppMove = { cause: { message: expect.stringContaining('not a move the app makes') } }
 
@@ -147,6 +147,43 @@ it('pay_by and the proposal columns move only with their transition', async () =
     await expect(run(uid, sql`UPDATE bookings SET start_at = start_at + interval '1 day' WHERE id = ${proposed}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('start_at') } })
     await expect(run(uid, sql`UPDATE requests SET answer_by = answer_by + interval '30 days' WHERE id = ${requestId}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('answer_by') } })
   }
+})
+
+// Whose turn it is comes from counter_by, as in answerBooking: NULL = the customer proposed, so the provider answers.
+const acceptSql = (id: string) => sql`UPDATE bookings SET status = 'awaiting-payment', pay_by = start_at - interval '1 hour', accepted_at = now(), answer_by = NULL, counter_by = NULL WHERE id = ${id}`
+const declineSql = (id: string) => sql`UPDATE bookings SET status = 'declined', answer_by = NULL, counter_by = NULL WHERE id = ${id}`
+
+it('only the answering side accepts or declines a proposal', async () => {
+  // the customer's own fresh proposal: the customer cannot answer it, the provider can
+  await expect(run(ids.customer, acceptSql(await newBooking('proposed')))).rejects.toMatchObject(notAppMove)
+  await expect(run(ids.customer, declineSql(await newBooking('proposed')))).rejects.toMatchObject(notAppMove)
+  expect((await run(ids.owner, acceptSql(await newBooking('proposed')))).rowCount).toBe(1)
+  expect((await run(ids.owner, declineSql(await newBooking('proposed')))).rowCount).toBe(1)
+  // the provider's counter: the provider cannot answer it, the customer can
+  await expect(run(ids.owner, acceptSql(await newBooking('proposed', 'provider')))).rejects.toMatchObject(notAppMove)
+  await expect(run(ids.owner, declineSql(await newBooking('proposed', 'provider')))).rejects.toMatchObject(notAppMove)
+  expect((await run(ids.customer, acceptSql(await newBooking('proposed', 'provider')))).rowCount).toBe(1)
+  expect((await run(ids.customer, declineSql(await newBooking('proposed', 'provider')))).rowCount).toBe(1)
+  // the customer's counter: the provider answers again
+  await expect(run(ids.customer, acceptSql(await newBooking('proposed', 'customer')))).rejects.toMatchObject(notAppMove)
+  expect((await run(ids.owner, acceptSql(await newBooking('proposed', 'customer')))).rowCount).toBe(1)
+  // the customer still withdraws their own proposal
+  expect((await run(ids.customer, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${await newBooking('proposed')}`)).rowCount).toBe(1)
+})
+
+it('only the answering side counters, as itself: the turn cannot be flipped to answer one\'s own proposal', async () => {
+  const notCounter = { cause: { message: expect.stringContaining('counters') } }
+  const counter = (uid: string, id: string, by: string) =>
+    run(uid, sql`UPDATE bookings SET counter_by = ${by}, start_at = start_at + interval '1 day', answer_by = now() + interval '1 day' WHERE id = ${id}`)
+  const fresh = await newBooking('proposed')
+  await expect(run(ids.customer, sql`UPDATE bookings SET counter_by = 'provider' WHERE id = ${fresh}`)).rejects.toMatchObject(notCounter)
+  await expect(counter(ids.customer, fresh, 'customer')).rejects.toMatchObject(notCounter) // not the customer's turn
+  await expect(counter(ids.owner, fresh, 'customer')).rejects.toMatchObject(notCounter) // the provider counters as the provider
+  await expect(run(ids.owner, sql`UPDATE bookings SET start_at = start_at + interval '1 day' WHERE id = ${fresh}`)).rejects.toMatchObject(notCounter)
+  expect((await counter(ids.owner, fresh, 'provider')).rowCount).toBe(1) // the domain's counter passes
+  await expect(run(ids.owner, sql`UPDATE bookings SET counter_by = 'customer' WHERE id = ${fresh}`)).rejects.toMatchObject(notCounter)
+  expect((await counter(ids.customer, fresh, 'customer')).rowCount).toBe(1) // and the counter back
+  expect((await run(ids.owner, acceptSql(fresh))).rowCount).toBe(1)
 })
 
 it('a third user cannot update or delete any of the three', async () => {

@@ -39,13 +39,15 @@ export const INSERT_RULES: Record<string, string> = {
  * The status moves app_user may make, per table, keyed '<from>><to>', with the side that makes it (trigger app_status_guard).
  * Only moves made inside a request transaction belong here; the owner connection (expiry, endings, additional tasks, staff)
  * is not affected. Customer: the row's customer_id (quotes: the request's customer); provider: the owner of its provider_id.
+ * Answerer (bookings only): the side whose turn it is, as answerBooking decides it from the old counter_by (NULL or
+ * 'customer' = the customer proposed last, so the provider answers; 'provider' = the customer answers).
  */
-export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'either'>> = {
+export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'answerer'>> = {
   requests: { 'open>quoted': 'provider', 'quoted>booked': 'customer' },
   quotes: { 'sent>superseded': 'provider', 'sent>accepted': 'customer' },
   bookings: {
-    'proposed>awaiting-payment': 'either',
-    'proposed>declined': 'either',
+    'proposed>awaiting-payment': 'answerer',
+    'proposed>declined': 'answerer',
     'proposed>withdrawn': 'customer',
     'awaiting-payment>withdrawn': 'customer',
   },
@@ -428,22 +430,32 @@ const BOOKING_TRIGGERS = [
   `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
   `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
   // app_user changes a status only by a move in APP_STATUS_MOVES, from the listed side; a request's answer_by never changes.
+  // A proposed booking's proposal (counter_by, time, place, answer_by) changes only as answerBooking's counter: by the
+  // answering side, which becomes counter_by. Else a party could flip the turn and then answer its own proposal.
   `CREATE OR REPLACE FUNCTION app_status_guard() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
-    DECLARE n jsonb := to_jsonb(NEW); side text; is_customer boolean; is_provider boolean;
+    DECLARE n jsonb := to_jsonb(NEW); o jsonb := to_jsonb(OLD); side text; answerer text; is_customer boolean; is_provider boolean;
     BEGIN
       IF current_user <> '${APP_ROLE}' THEN RETURN NEW; END IF;
-      IF TG_TABLE_NAME = 'requests' AND n -> 'answer_by' IS DISTINCT FROM to_jsonb(OLD) -> 'answer_by' THEN
+      IF TG_TABLE_NAME = 'requests' AND n -> 'answer_by' IS DISTINCT FROM o -> 'answer_by' THEN
         RAISE EXCEPTION 'requests: answer_by cannot be changed';
+      END IF;
+      is_customer := CASE WHEN TG_TABLE_NAME = 'quotes'
+        THEN EXISTS (SELECT 1 FROM requests r WHERE r.id = (n ->> 'request_id')::uuid AND r.customer_id = app_current_user_id())
+        ELSE n ->> 'customer_id' = app_current_user_id() END;
+      is_provider := EXISTS (SELECT 1 FROM providers p WHERE p.id = (n ->> 'provider_id')::uuid AND p.owner_id = app_current_user_id());
+      answerer := CASE WHEN o ->> 'counter_by' = 'provider' THEN 'customer' ELSE 'provider' END; -- as answerBooking
+      IF TG_TABLE_NAME = 'bookings' AND OLD.status = 'proposed' AND NEW.status = 'proposed'
+          AND (n -> 'counter_by', n -> 'start_at', n -> 'duration_min', n -> 'on_site', n -> 'answer_by')
+            IS DISTINCT FROM (o -> 'counter_by', o -> 'start_at', o -> 'duration_min', o -> 'on_site', o -> 'answer_by')
+          AND NOT coalesce(n ->> 'counter_by' = answerer AND CASE answerer WHEN 'customer' THEN is_customer ELSE is_provider END, false) THEN
+        RAISE EXCEPTION 'bookings: only the answering side counters a proposal, as itself';
       END IF;
       IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
       side := CASE TG_TABLE_NAME || ':' || OLD.status || '>' || NEW.status
         ${APP_STATUS_MOVE_CASES}
       END;
-      is_customer := CASE WHEN TG_TABLE_NAME = 'quotes'
-        THEN EXISTS (SELECT 1 FROM requests r WHERE r.id = (n ->> 'request_id')::uuid AND r.customer_id = app_current_user_id())
-        ELSE n ->> 'customer_id' = app_current_user_id() END;
-      is_provider := EXISTS (SELECT 1 FROM providers p WHERE p.id = (n ->> 'provider_id')::uuid AND p.owner_id = app_current_user_id());
-      IF side IS NULL OR NOT coalesce((side IN ('customer', 'either') AND is_customer) OR (side IN ('provider', 'either') AND is_provider), false) THEN
+      IF side = 'answerer' THEN side := answerer; END IF;
+      IF side IS NULL OR NOT coalesce((side = 'customer' AND is_customer) OR (side = 'provider' AND is_provider), false) THEN
         RAISE EXCEPTION '%: % > % is not a move the app makes (as this party)', TG_TABLE_NAME, OLD.status, NEW.status;
       END IF;
       RETURN NEW;
