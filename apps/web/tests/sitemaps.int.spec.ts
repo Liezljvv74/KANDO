@@ -42,6 +42,17 @@ it('providers sitemap lists only visible providers', async () => {
     expect(xml, s).not.toContain(s)
 })
 
+it('the providers sitemap lists providers of every country', async () => {
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\d+$', 'EUR')")
+  try {
+    await pool.query("UPDATE providers SET country = 'ZZ' WHERE slug = 'sm-live-slug'")
+    expect(await (await providers()).text()).toContain('/providers/sm-live-slug</loc>')
+  } finally {
+    await pool.query("UPDATE providers SET country = 'DE' WHERE slug = 'sm-live-slug'")
+    await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
+  }
+})
+
 it('pages sitemap lists the home page and published pages only', async () => {
   const xml = await (await pages()).text()
   expect(xml).toContain(`/sm-pub-${stamp}</loc>`)

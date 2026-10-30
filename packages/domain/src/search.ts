@@ -32,7 +32,7 @@ export async function search(
     postcode,
     q,
     page = 1,
-    country = 'DE',
+    country,
   }: {
     category?: string
     postcode?: string
@@ -41,9 +41,9 @@ export async function search(
     country?: string
   },
 ): Promise<SearchResult> {
-  const known =
-    (await tx.execute(sql`SELECT 1 FROM countries WHERE code = ${country}`)).rows.length > 0
-  if (!known) return fail(400, { error: 'Unknown country' })
+  country ??= await marketCountry(tx)
+  const market = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${country}`)).rows[0]
+  if (!market) return fail(400, { error: 'Unknown country' })
   const cat = category
     ? (await tx.execute<{ id: string }>(sql`SELECT id FROM categories WHERE slug = ${category}`))
         .rows[0]
@@ -113,8 +113,8 @@ export async function search(
       // Whole km, at least 1: coarse enough not to pinpoint the base postcode.
       distanceKm: p.km == null ? null : Math.max(1, Math.round(Number(p.km))),
       worksRemotely: p.works_remotely,
-      // The currency of the cheapest service, else of any shown one ('EUR' only if they vanished between the two queries).
-      currency: ((priced[0] ?? own[0])?.currency ?? 'EUR') as SearchItem['currency'],
+      // The currency of the cheapest service, else of any shown one (the country's if they vanished between the two queries).
+      currency: ((priced[0] ?? own[0])?.currency ?? market.currency) as SearchItem['currency'],
       rating,
       isNew: rating === null,
     }
@@ -122,14 +122,20 @@ export async function search(
   return { items, page, hasMore: rows.length > PAGE_SIZE }
 }
 
-/** Slugs (and last change) of the providers the search shows: the same visibility rule, for the sitemap. */
+/** The only market, when there is exactly one; with several the caller must name one. */
+export async function marketCountry(tx: Tx): Promise<string> {
+  const { rows } = await tx.execute<{ code: string }>(sql`SELECT code FROM countries LIMIT 2`)
+  if (rows.length !== 1) return fail(400, { error: 'country-required' })
+  return rows[0]!.code
+}
+
+/** Slugs (and last change) of the providers the search shows, in every market: the same visibility rule, for the sitemap. */
 export async function visibleProviderSlugs(
   tx: Tx,
-  country = 'DE',
 ): Promise<{ slug: string; updatedAt: Date }[]> {
   const { rows } = await tx.execute<{ slug: string; updated_at: Date | string }>(sql`
     SELECT p.slug, p.updated_at FROM providers p
-    WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.country = ${country} AND p.slug IS NOT NULL
+    WHERE p.status = 'published' AND ${notSuspendedSql('p')} AND p.slug IS NOT NULL
       AND EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.offerable)
     ORDER BY p.slug LIMIT ${MAX_SITEMAP_PROVIDERS}`)
   return rows.map((r) => ({ slug: r.slug, updatedAt: new Date(r.updated_at) }))

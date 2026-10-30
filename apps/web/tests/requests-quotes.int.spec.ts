@@ -303,3 +303,20 @@ it('GET /requests/{id} carries the thread id', async () => {
   }
   expect((await call(requestOne.GET, U.third, 'GET', undefined, { id: r.id })).status).toBe(404)
 })
+
+it("a quote takes the currency of the provider's country", async () => {
+  await pool.query("INSERT INTO currencies (code, minor_units) VALUES ('ZAR', 2) ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\d+$', 'ZAR')")
+  try {
+    const r = await newRequest(pRemote)
+    await pool.query("UPDATE providers SET country = 'ZZ' WHERE id = $1", [pRemote])
+    const res = await quote(r.id, U.remote)
+    expect(res.status).toBe(201)
+    const { id } = (await res.json()) as { id: string }
+    expect((await pool.query('SELECT currency FROM quotes WHERE id = $1', [id])).rows[0].currency).toBe('ZAR')
+  } finally {
+    await pool.query("UPDATE providers SET country = 'DE' WHERE id = $1", [pRemote])
+    await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
+    await pool.query("DELETE FROM currencies WHERE code = 'ZAR'")
+  }
+})

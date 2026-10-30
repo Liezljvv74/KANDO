@@ -33,7 +33,7 @@ export const SearchQuerySchema = z.object({
   q: z.string().max(100).optional(),
   page: z.coerce.number().int().min(1).max(1000).default(1),
   lang: LangSchema.default(DEFAULT_LANG),
-  country: z.string().default('DE'),
+  country: z.string().optional(),
 })
 
 export const LangQuerySchema = z.object({ lang: LangSchema.default(DEFAULT_LANG) })

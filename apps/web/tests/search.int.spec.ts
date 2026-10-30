@@ -117,6 +117,19 @@ it('bad input is 400: unknown postcode, bad format, unknown country, unknown lan
   }
 })
 
+it('search without a country uses the only market; with two markets it is 400 country-required', async () => {
+  expect((await search('')).status).toBe(200)
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\d+$', 'EUR')")
+  try {
+    const res = await search('')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'country-required' })
+    expect((await search('country=DE')).status).toBe(200)
+  } finally {
+    await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
+  }
+})
+
 it('paging: 20 per page and hasMore', async () => {
   for (let i = 0; i < 21; i++) {
     const n = String(i).padStart(2, '0')

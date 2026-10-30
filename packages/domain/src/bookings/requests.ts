@@ -214,6 +214,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed' })
   if (input.startAt) assertFuture(new Date(input.startAt), now)
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
+  const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${provider.country}`)).rows[0]!.currency
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
   const [row] = await tx
     .insert(quotes)
@@ -222,7 +223,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
       providerId: provider.id,
       version: (prev?.v ?? 0) + 1,
       amount: input.amount.toFixed(2),
-      currency: 'EUR', // ponytail: EUR only in v1, as services
+      currency,
       scope: input.scope,
       startAt: input.startAt ? new Date(input.startAt) : null,
       durationMin: input.durationMin ?? null,
@@ -233,7 +234,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
   const threadId = await threadForRequest(tx, requestId)
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
-  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
+  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   return toQuote(row!)
 }
