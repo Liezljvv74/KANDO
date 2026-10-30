@@ -4,18 +4,20 @@ import { asUser, db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
 import {
   cancelBooking,
+  clearOutbox,
   confirmJob,
   finishJob,
   handleGatewayEvent,
   objectNoShow,
   openDispute,
+  outboxForTests,
   reportNoShow,
   runDueTimers,
   setGatewayForTests,
   stopJob,
   type GatewayEvent,
 } from '@kando/domain'
-import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -39,11 +41,13 @@ beforeAll(async () => {
   await seedUser(U.third)
   providerId = await seedProvider(U.owner, { name: 'At Owner', categoryId, price: 100 })
   await pool.query("UPDATE providers SET stripe_account_id = 'acct_at_1', payouts_ready_at = now() WHERE id = $1", [providerId])
+  await pool.query("UPDATE users SET language = 'en' WHERE id = ANY($1)", [[U.cust, U.owner]]) // the texts below are checked in English
 })
 beforeEach(async () => {
   vi.stubEnv('PAYMENTS_ENABLED', 'true')
   g = fakeGateway()
   setGatewayForTests(g)
+  clearOutbox()
   // every test sees only its own bookings in a sweep
   await pool.query("DELETE FROM notifications WHERE user_id LIKE 'at-%'")
   await pool.query("UPDATE bookings SET status = 'expired' WHERE customer_id = 'at-cust' AND status IN ('confirmed', 'finished', 'disputed', 'stopped', 'awaiting-payment')")
@@ -121,6 +125,7 @@ it("either side starts an additional task; a card appears in the parent's thread
   expect(await cardsOf(root.id)).toEqual([{ type: 'additional-task', refId: r.id }])
   // the provider is told
   expect((await pool.query("SELECT payload FROM notifications WHERE user_id = $1 AND kind = 'additional-task-requested'", [U.owner])).rows).toEqual([{ payload: { requestId: r.id } }])
+  expect(outboxForTests().find((m) => m.to === EMAIL(U.owner))?.text).toMatch(/Please send them a quote/) // the provider must quote
   // one open additional task per booking at a time; contact details are refused
   expect((await start(U.owner, root.id)).status).toBe(409)
   expect((await start(U.cust, (await paidRoot()).id, 'Ruf mich an: 0171 2345678')).status).toBe(422)
@@ -133,6 +138,7 @@ it("either side starts an additional task; a card appears in the parent's thread
   expect(pr).toMatchObject({ customerId: U.cust, providerId, parentBookingId: done.id })
   expect(await cardsOf(done.id)).toEqual([{ type: 'additional-task', refId: pr.id }])
   expect((await pool.query("SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = 'additional-task-requested'", [U.cust])).rows[0].n).toBe(1)
+  expect(outboxForTests().find((m) => m.to === EMAIL(U.cust))?.text).toMatch(/The provider sends you a quote/)
 })
 
 it('accepting its quote creates an awaiting-payment child with the parent\'s time', async () => {
@@ -250,6 +256,15 @@ it("the silent-provider clock of a child starts at its payment, not at the paren
   expect((await pool.query('SELECT count(*)::int n FROM disputes WHERE booking_id = $1', [child])).rows[0].n).toBe(0)
 })
 
+it("a no-show on a child counts from its payment, not from the parent's past start", async () => {
+  const root = await paidRoot({ startAt: new Date(Date.now() - 3 * DAY) })
+  const paidAt = new Date(Date.now() + HOUR)
+  const child = await paidChildOf(root.id, 40, paidAt)
+  expect(await refusal(asUser(U.owner, (tx) => reportNoShow(tx, U.owner, child, new Date(paidAt.getTime() - MIN))))).toEqual({ status: 409, body: { error: 'TOO_EARLY' } })
+  await asUser(U.owner, (tx) => reportNoShow(tx, U.owner, child, new Date(paidAt.getTime() + MIN)))
+  expect((await row(child)).no_show).toBe('customer')
+})
+
 it('a dispute on the child freezes only the child', async () => {
   const root = await paidRoot()
   const now = new Date()
@@ -267,7 +282,7 @@ it('a dispute on the child freezes only the child', async () => {
   expect(await ledger(child)).toEqual([])
 })
 
-it('a dispute on the root freezes its additional tasks', async () => {
+it('a dispute on the root does not hold up its finished additional task', async () => {
   const root = await paidRoot()
   const now = new Date()
   const child = await paidChildOf(root.id, 40, now)
@@ -275,10 +290,37 @@ it('a dispute on the root freezes its additional tasks', async () => {
   await asUser(U.owner, (tx) => finishJob(tx, U.owner, child, {}, now))
   await asUser(U.cust, (tx) => openDispute(tx, U.cust, root.id, { description: 'Der Zaun wackelt.' }, new Date(now.getTime() + DAY)))
   await runDueTimers(db, new Date(now.getTime() + 7 * DAY + MIN))
+  // paid out independently (spec 3.12): the root waits for staff, the undisputed child is released on its own clock
   expect(await row(root.id)).toMatchObject({ status: 'disputed', released_at: null })
-  expect(await row(child)).toMatchObject({ status: 'finished', released_at: null })
-  expect(await ledger(child)).toEqual([])
-  expect(g.calls).toEqual([])
+  expect(await ledger(root.id)).toEqual([])
+  expect((await row(child)).status).toBe('completed')
+  expect(await ledger(child)).toEqual([
+    { kind: 'commission', amount: 4.8 },
+    { kind: 'transfer', amount: 35.2 },
+  ])
+})
+
+it('a chargeback flag on the root does not hold up its additional task, one on the child does', async () => {
+  const root = await paidRoot()
+  const now = new Date()
+  const child = await paidChildOf(root.id, 40, now)
+  await asUser(U.owner, (tx) => finishJob(tx, U.owner, child, {}, now))
+  await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id, note) VALUES ('chargeback', $1, $2, 'test')", [root.id, U.cust])
+  await runDueTimers(db, new Date(now.getTime() + 7 * DAY + MIN))
+  expect((await row(child)).status).toBe('completed')
+  const other = await paidChildOf((await paidRoot()).id, 40, now)
+  await asUser(U.owner, (tx) => finishJob(tx, U.owner, other, {}, now))
+  await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id, note) VALUES ('chargeback', $1, $2, 'test')", [other, U.cust])
+  await runDueTimers(db, new Date(now.getTime() + 7 * DAY + MIN))
+  expect(await row(other)).toMatchObject({ status: 'finished', released_at: null })
+})
+
+it('an expired additional-task request sends no "try another provider" message', async () => {
+  const root = await paidRoot()
+  const r = RequestSchema.parse(await (await start(U.cust, root.id)).json())
+  await runDueTimers(db, new Date(Date.now() + 4 * DAY))
+  expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('expired')
+  expect((await pool.query("SELECT count(*)::int n FROM notifications WHERE kind = 'request-expired' AND payload->>'requestId' = $1", [r.id])).rows[0].n).toBe(0)
 })
 
 it("a root's provider no-show covers its paid additional task: never finished or paid out, refunded with the root", async () => {

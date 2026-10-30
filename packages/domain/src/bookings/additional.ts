@@ -1,4 +1,4 @@
-import { and, eq, or } from 'drizzle-orm'
+import { and, eq, notInArray, or } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import type { AdditionalTaskInput, BookingRequest } from '@kando/contract'
 import { blockedWithProvider } from '../chat/blocks'
@@ -19,17 +19,29 @@ const DAY = 24 * HOUR
 /** A booking takes additional tasks while it is paid and open: `confirmed` or `finished`, a root, no no-show reported. */
 const takesAdditional = (b: Row) => !b.parentBookingId && (b.status === 'confirmed' || b.status === 'finished') && !b.noShow
 
+const LATE = new Error('an additional task committed while the family lock waited')
+
 /**
- * Locks a booking and its additional tasks (owner connection, id order, as account deletion locks) and returns them, the
- * booking first. The second read sees an additional task whose accept committed while this one waited for the booking
- * (an accept locks the parent before it inserts the child), so cancel and no-show never miss one.
+ * Locks a booking and its additional tasks in ONE read in id order (as account deletion locks, so the two never deadlock)
+ * and returns them, the booking first. An accept locks the parent before it inserts the child, so a child can commit
+ * while this read waits for the parent and be missed by it: a fresh check then finds it, the read's locks are let go
+ * (its savepoint rolled back) and the read runs again, now in id order with the child. Cancel and no-show never miss one.
  */
 export async function lockFamily(o: Exec, id: string): Promise<[Row, Row[]]> {
   const family = or(eq(bookings.id, id), eq(bookings.parentBookingId, id))
-  await o.select({ id: bookings.id }).from(bookings).where(family).orderBy(bookings.id).for('update')
-  const rows = await o.select().from(bookings).where(family).orderBy(bookings.id).for('update')
-  const b = rows.find((r) => r.id === id) ?? fail(404, { error: 'Not found' })
-  return [b, rows.filter((r) => r.id !== id)]
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await o.transaction(async (s) => {
+        const rows = await s.select().from(bookings).where(family).orderBy(bookings.id).for('update')
+        const b = rows.find((r) => r.id === id) ?? fail(404, { error: 'Not found' })
+        const late = await s.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.parentBookingId, id), notInArray(bookings.id, rows.map((r) => r.id))))
+        if (late.length) throw LATE
+        return [b, rows.filter((r) => r.id !== id)] as [Row, Row[]]
+      })
+    } catch (e) {
+      if (e !== LATE || attempt >= 3) throw e // ponytail: 3 tries; a new child accepted during every try is not a real pattern
+    }
+  }
 }
 
 /**
@@ -57,7 +69,7 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
   })
   await postCard(r.threadId, userId, { type: 'additional-task', refId: r.row.id })
   const to = side === 'customer' ? (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, r.row.providerId)))[0]?.id : r.row.customerId
-  if (to) await notifyBookingEvent('additional-task-requested', to, { requestId: r.row.id })
+  if (to) await notifyBookingEvent('additional-task-requested', to, { requestId: r.row.id, ...(side === 'customer' && { role: 'provider' }) }) // the provider is asked to quote
   return toRequest(r.row)
 }
 

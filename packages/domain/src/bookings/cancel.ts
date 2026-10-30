@@ -111,7 +111,8 @@ export async function cancelBooking(tx: Tx, userId: string, bookingId: string, n
 }
 
 /**
- * Either side reports that the OTHER did not turn up: from `confirmed`, once the start has come (else 409 TOO_EARLY).
+ * Either side reports that the OTHER did not turn up: from `confirmed`, once the start and the payment have come (else
+ * 409 TOO_EARLY).
  * Sets `noShow` (the other side) and `noShowReportedAt`; the status stays `confirmed` until the reported side objects
  * (a dispute) or NO_SHOW_OBJECTION_HOURS pass (resolveNoShow). Meanwhile Finished, confirm, stop, cancel and the
  * silent-provider rules leave the booking alone. The reported side is told, with the deadline. A second tap returns it
@@ -127,7 +128,8 @@ export async function reportNoShow(tx: Tx, userId: string, bookingId: string, no
     if (b.noShow === them) return null
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' })
-    if (now < b.startAt) fail(409, { error: 'TOO_EARLY' })
+    // from the start, or for an additional task paid after its parent's start, from the payment
+    if (now.getTime() < Math.max(b.startAt.getTime(), b.paidAt?.getTime() ?? 0)) fail(409, { error: 'TOO_EARLY' })
     const covered = kids.filter((k) => k.status === 'confirmed' && !k.noShow).map((k) => k.id)
     if (covered.length) await o.update(bookings).set({ noShow: them, noShowReportedAt: now, updatedAt: now }).where(inArray(bookings.id, covered))
     return (await o.update(bookings).set({ noShow: them, noShowReportedAt: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning())[0]!

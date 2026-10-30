@@ -48,7 +48,8 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
     }
     const iso = params.date ?? (await dateOf(kind, params))
     const template: Template =
-      kind === 'payment-released' ? (`payment-released${params.variant ? `-${params.variant}` : ''}${params.role === 'provider' ? '-provider' : ''}` as Template)
+      kind === 'additional-task-requested' && params.role === 'provider' ? 'additional-task-requested-provider'
+      : kind === 'payment-released' ? (`payment-released${params.variant ? `-${params.variant}` : ''}${params.role === 'provider' ? '-provider' : ''}` as Template)
       : kind === 'booking-cancelled' && params.variant ? (`booking-cancelled-${params.variant}` as Template)
       : kind
     await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count } })

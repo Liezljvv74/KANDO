@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm'
 import { bookings, db, disputes, ledgerEntries, providers, staffFlags } from '@kando/db'
 import { isUuid } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
@@ -13,8 +13,8 @@ import { commissionFor, toCents } from './rules'
  * for app_user before any money moves). The caller sets the booking status (plan 2d). The commission needs no gateway
  * call: it is the part of the charge that stays on the platform; its ledger row records it.
  * 404 unknown booking; 409 NOT_PAID; 409 NO_CHARGE (paid_at set but no charge in the ledger); 409 ALREADY_SETTLED once released_at is set; 400 share not 0..paid in whole cents;
- * 409 DISPUTE_OPEN while the booking (or, for an additional task, its root) has an undecided dispute or an open chargeback
- * flag, or its root a no-show report not yet resolved (a staff decision records its
+ * 409 DISPUTE_OPEN while the booking has an undecided dispute or an open chargeback flag, or (an additional task) its
+ * root has a no-show report not yet resolved, or objected and undecided for a child it covers (a staff decision records its
  * decision on the dispute in the same transaction before it settles; a chargeback flag is resolved by staff first);
  * 409 NO_PAYOUT_ACCOUNT when a transfer is due and the provider has no payout account; 409 SETTLEMENT_MISMATCH when an
  * earlier, partly done run moved a different split.
@@ -40,10 +40,12 @@ export async function settle(exec: Exec, bookingId: string, providerShare: numbe
     if (!b) return fail(404, { error: 'Not found' })
     if (!b.paidAt) fail(409, { error: 'NOT_PAID' })
     if (b.releasedAt) fail(409, { error: 'ALREADY_SETTLED' })
-    // frozen by its own dispute or chargeback, or (an additional task) by its root's, or its root's reported no-show not yet resolved
-    const family = b.parentBookingId ? [b.id, b.parentBookingId] : [b.id]
-    const openDispute = await tx.select({ id: disputes.id }).from(disputes).where(and(inArray(disputes.bookingId, family), isNull(disputes.decidedAt)))
-    const chargeback = await tx.select({ id: staffFlags.id }).from(staffFlags).where(and(eq(staffFlags.kind, 'chargeback'), inArray(staffFlags.refId, family), isNull(staffFlags.resolvedAt)))
+    // Frozen by its own dispute or chargeback. An additional task is paid out independently of its root (spec 3.12), except
+    // while the root's no-show report is unresolved, or (a child covered by it: noShow set) objected and not yet decided.
+    const covered = b.parentBookingId && b.noShow ? b.parentBookingId : null
+    const ownOrObjection = covered ? or(eq(disputes.bookingId, b.id), and(eq(disputes.bookingId, covered), eq(disputes.reason, 'no-show-objection'))) : eq(disputes.bookingId, b.id)
+    const openDispute = await tx.select({ id: disputes.id }).from(disputes).where(and(ownOrObjection, isNull(disputes.decidedAt)))
+    const chargeback = await tx.select({ id: staffFlags.id }).from(staffFlags).where(and(eq(staffFlags.kind, 'chargeback'), eq(staffFlags.refId, b.id), isNull(staffFlags.resolvedAt)))
     const rootNoShow = b.parentBookingId ? await tx.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.id, b.parentBookingId), eq(bookings.status, 'confirmed'), isNotNull(bookings.noShow))) : []
     if (openDispute.length || chargeback.length || rootNoShow.length) fail(409, { error: 'DISPUTE_OPEN' })
     if (!b.paymentRef || b.commissionRate === null) throw new Error(`paid booking ${b.id} lacks its payment ref or commission rate`)

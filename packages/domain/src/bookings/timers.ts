@@ -66,10 +66,12 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
 
   const requestsExpired = await count(sql`
     WITH e AS (UPDATE requests SET status = 'expired', updated_at = ${t}::timestamptz WHERE status = 'open' AND answer_by <= ${t}::timestamptz
-        ${scoped(sql`customer_id = ${userId}`, ownedBy('provider_id'))} RETURNING id, customer_id),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'request-expired', jsonb_build_object('requestId', id), ${t}::timestamptz FROM e RETURNING user_id, kind, payload)
+        ${scoped(sql`customer_id = ${userId}`, ownedBy('provider_id'))} RETURNING id, customer_id, parent_booking_id),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT customer_id, 'request-expired', jsonb_build_object('requestId', id), ${t}::timestamptz FROM e WHERE parent_booking_id IS NULL RETURNING user_id, kind, payload)
     ${result('e')}`)
 
+  // An expired additional task's request tells nobody (no "try a different provider" while the booking runs) and does not
+  // count toward the provider's requests-ignored notice.
   // The request stays 'quoted'; it simply has no live quote any more.
   const quotesExpired = await count(sql`
     WITH e AS (UPDATE quotes SET status = 'expired' WHERE status = 'sent' AND expires_at <= ${t}::timestamptz
@@ -117,7 +119,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     return countOn(tx, sql`
     WITH i AS (
       SELECT p.owner_id FROM providers p JOIN requests r ON r.provider_id = p.id
-      WHERE r.status = 'expired' AND r.updated_at > ${t}::timestamptz - make_interval(days => ${IGNORED_WINDOW_DAYS})
+      WHERE r.status = 'expired' AND r.parent_booking_id IS NULL AND r.updated_at > ${t}::timestamptz - make_interval(days => ${IGNORED_WINDOW_DAYS})
       GROUP BY p.owner_id HAVING count(*) >= ${IGNORED_LIMIT}),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at) SELECT owner_id, 'requests-ignored', '{}'::jsonb, ${t}::timestamptz FROM i
       WHERE NOT EXISTS (SELECT 1 FROM notifications x WHERE x.user_id = i.owner_id AND x.kind = 'requests-ignored' AND x.created_at > ${t}::timestamptz - make_interval(days => ${IGNORED_WINDOW_DAYS})) RETURNING user_id, kind, payload)
@@ -134,9 +136,10 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, events }
 }
 
-// The booking's own dispute or chargeback, or its root's (a frozen root freezes its additional tasks; settle refuses the same)
-const noOpenDispute = sql`NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id IN (bookings.id, bookings.parent_booking_id) AND d.decided_at IS NULL)`
-const noChargeback = sql`NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'chargeback' AND f.ref_id IN (bookings.id::text, bookings.parent_booking_id::text) AND f.resolved_at IS NULL)`
+// The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
+// children a root's no-show covers are left alone by their own no_show (settle checks the root's report as well)
+const noOpenDispute = sql`NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id AND d.decided_at IS NULL)`
+const noChargeback = sql`NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'chargeback' AND f.ref_id = bookings.id::text AND f.resolved_at IS NULL)`
 /**
  * The end the silent-provider rules count from: the agreed end, or the payment if later (an additional task keeps its
  * parent's start, which may be long past when it is paid). A root is paid before its start, so for it this is the end.
