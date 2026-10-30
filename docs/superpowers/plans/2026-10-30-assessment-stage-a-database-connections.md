@@ -185,10 +185,10 @@
 - Test: `apps/web/tests/rls-bookings.int.spec.ts`
 
 **Interfaces:**
-- `export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'either'>>`, keys `'<from>><to>'`:
+- `export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'answerer'>>` (Task 7b: `'answerer'` replaced `'either'`; Stage B must use the answerer semantics), keys `'<from>><to>'`:
   - `requests`: `'open>quoted': 'provider'`, `'quoted>booked': 'customer'`
   - `quotes`: `'sent>superseded': 'provider'`, `'sent>accepted': 'customer'`
-  - `bookings`: `'proposed>awaiting-payment': 'either'`, `'proposed>declined': 'either'`, `'proposed>withdrawn': 'customer'`, `'awaiting-payment>withdrawn': 'customer'`
+  - `bookings`: `'proposed>awaiting-payment': 'answerer'`, `'proposed>declined': 'answerer'` (only the side whose turn it is: the provider unless `counter_by = 'provider'`, then the customer), `'proposed>withdrawn': 'customer'`, `'awaiting-payment>withdrawn': 'customer'`
 - Trigger function `app_status_guard()` (generated from the constant), `BEFORE UPDATE` on the three tables (triggers `requests_app_status_guard`, `quotes_app_status_guard`, `bookings_app_status_guard`): only when `current_user = 'app_user'` and the status changed; raises unless the move is listed and the caller is on the listed side. Side: customer when `to_jsonb(NEW)->>'customer_id' = app_current_user_id()` (quotes: the request's customer), provider when the row's `provider_id` is owned by the caller. Moves made on the owner connection (expiry, endings, additional tasks, staff) are not affected.
 - `requests` (app role): `answer_by` may not change on UPDATE (raise in the same function).
 - `bookings_guard_status` app-role branch adds: `pay_by` or `accepted_at` changes only with `proposed > awaiting-payment` and then `pay_by <= start_at AND accepted_at <= pay_by`; `answer_by`, `counter_by`, `start_at`, `duration_min`, `on_site` change only while `OLD.status = 'proposed'` (the counter and the answer).
