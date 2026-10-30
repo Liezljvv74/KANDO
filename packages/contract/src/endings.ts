@@ -74,3 +74,24 @@ export type Review = z.infer<typeof ReviewSchema>
 /** Average stars (one decimal) and the number of visible reviews; null when there are none. */
 export const RatingSchema = z.object({ average: z.number(), count: z.number().int() })
 export type Rating = z.infer<typeof RatingSchema>
+
+/** A staff member's written reason: sent to both sides (decision, refund) or kept with the review (hiding). */
+const staffReason = z.string().trim().min(10).max(2000)
+
+/**
+ * POST /api/admin/disputes/:id/decide (Administrator). `providerShare` only with `partial` (more than 0; the server checks
+ * that it is below the paid amount and in whole cents); a full payout pays everything, a full refund nothing.
+ */
+export const DisputeDecisionSchema = z
+  .object({ decision: z.enum(['full-payout', 'partial', 'full-refund']), providerShare: AmountSchema.optional(), reason: staffReason })
+  .strict()
+  .refine((d) => (d.decision === 'partial' ? d.providerShare !== undefined && d.providerShare > 0 : d.providerShare === undefined), { path: ['providerShare'], message: 'A share only with partial, and more than 0' })
+export type DisputeDecision = z.infer<typeof DisputeDecisionSchema>
+
+/** POST /api/admin/bookings/:id/refund (Administrator): settles an unsettled paid booking; the provider keeps `providerShare`, the rest goes back. */
+export const StaffRefundSchema = z.object({ providerShare: AmountSchema, reason: staffReason }).strict()
+export type StaffRefund = z.infer<typeof StaffRefundSchema>
+
+/** POST /api/admin/reviews/:id/hide (Administrator): hide a review that breaks the rules, or show it again. */
+export const ReviewHideSchema = z.object({ hidden: z.boolean(), reason: staffReason }).strict()
+export type ReviewHide = z.infer<typeof ReviewHideSchema>

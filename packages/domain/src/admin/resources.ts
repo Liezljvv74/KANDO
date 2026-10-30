@@ -17,13 +17,18 @@ import { mediaBucket, photoUrl, removeObject } from '../storage'
 import { activeAdmins, lockAdmins, type StaffRole } from '../users'
 import { filterOf, isUuid, like, notFound, ok, orderOf, pageOf, textOf, uniqueViolation } from './common'
 import { getFlag, listFlags } from '../chat/staff'
+import { bookingGets, bookingLists } from './bookings'
 import { getDocument, listDocuments } from './documents'
 import { fullName, getUser, listUsers, withPictures } from './users'
 
-/** Who may call a resource with a method: a Reviewer reads documents, users, providers and flags and deletes photos; everything else is Administrator only. */
+/**
+ * Who may call a resource with a method: a Reviewer reads documents, users, providers, flags, bookings, disputes, refunds and
+ * reviews and deletes photos; everything else is Administrator only (deciding disputes, refunds and hiding reviews have
+ * their own Administrator-only routes).
+ */
 export function roleFor(params: Record<string, string>, method: string): StaffRole {
   const r = params.resource ?? ''
-  if (method === 'GET' && ['documents', 'users', 'providers', 'flags'].includes(r)) return 'reviewer'
+  if (method === 'GET' && ['documents', 'users', 'providers', 'flags', 'bookings', 'disputes', 'refunds', 'reviews'].includes(r)) return 'reviewer'
   if (method === 'DELETE' && r === 'photos') return 'reviewer'
   return 'admin'
 }
@@ -279,13 +284,14 @@ async function setStaffRole(tx: Tx, request: Request) {
 
 // ---- dispatch (the routes stay thin) ----
 
-const lists = { documents: listDocuments, users: listUsers, providers: listProviders, categories: listCategories, pages: listPages, staff: listStaff, flags: listFlags }
+const lists = { documents: listDocuments, users: listUsers, providers: listProviders, categories: listCategories, pages: listPages, staff: listStaff, flags: listFlags, ...bookingLists }
 export const adminList = (tx: Tx, resource: string, q: AdminListQuery): Promise<Response> | Response =>
   Object.hasOwn(lists, resource) ? lists[resource as keyof typeof lists](tx, q) : notFound()
 
-const gets = { documents: getDocument, users: getUser, providers: getProvider, categories: getCategory, pages: getPageRow, flags: getFlag }
-export const adminGet = (tx: Tx, resource: string, id: string): Promise<Response> | Response =>
-  Object.hasOwn(gets, resource) ? gets[resource as keyof typeof gets](tx, id) : notFound()
+const gets = { documents: getDocument, users: getUser, providers: getProvider, categories: getCategory, pages: getPageRow, flags: getFlag, ...bookingGets }
+/** One record; `staffId` is the reader, for the reads that are logged (a dispute's evidence). */
+export const adminGet = (tx: Tx, resource: string, id: string, staffId = ''): Promise<Response> | Response =>
+  Object.hasOwn(gets, resource) ? gets[resource as keyof typeof gets](tx, id, staffId) : notFound()
 
 export const adminCreate = (tx: Tx, resource: string, request: Request) =>
   resource === 'categories' ? createCategory(tx, request) : resource === 'pages' ? createPage(tx, request) : notFound()

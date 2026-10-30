@@ -61,6 +61,10 @@ describe('canTransition', () => {
     'finished>disputed', // finished>stopped is deliberately absent
     'stopped>completed',
     'stopped>disputed',
+    // a staff refund of the whole amount (admin/bookings.ts staffRefund)
+    'confirmed>refunded',
+    'finished>refunded',
+    'stopped>refunded',
     'disputed>completed',
     'disputed>refunded',
     'disputed>cancelled',

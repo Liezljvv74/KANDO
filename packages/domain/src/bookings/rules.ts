@@ -46,15 +46,16 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   // A paid booking and its endings move only on the owner connection (OWNER_ONLY_BOOKING_STATUSES, trigger
   // bookings_guard_status), after the domain checked the caller. The transitions below are owner-connection
   // only: the database trigger stops app_user from making them, and no app route calls canTransition with them.
-  confirmed: ['finished', 'cancelled', 'stopped', 'disputed', 'completed'],
+  // -> refunded: a staff refund of the whole amount (admin/bookings.ts staffRefund)
+  confirmed: ['finished', 'cancelled', 'stopped', 'disputed', 'completed', 'refunded'],
   expired: [],
   declined: [],
   withdrawn: [],
-  finished: ['completed', 'disputed'],
+  finished: ['completed', 'disputed', 'refunded'],
   completed: [],
   disputed: ['completed', 'refunded', 'cancelled'],
   cancelled: [],
-  stopped: ['completed', 'disputed'],
+  stopped: ['completed', 'disputed', 'refunded'],
   refunded: [],
 }
 

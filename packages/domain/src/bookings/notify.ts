@@ -29,7 +29,8 @@ async function dateOf(kind: BookingKind, params: Record<string, string>): Promis
  * no personal data; `params.date` is for the email text only). `params.slug` makes the link to that provider's page in the
  * user's language. `params.role = 'provider'` gives `payment-released` the provider's text (the payout is on its way),
  * `params.variant = 'stop'` its text for an agreed stop (the rest is refunded);
- * `params.variant` picks the `booking-cancelled` text (cancel.ts). Runs after commit, on the owner connection; never throws.
+ * `params.variant` picks the `booking-cancelled` text (cancel.ts); `params.reason` is staff's written reason (dispute-decided,
+ * refund-issued: in the email only, never in the in-app row; `role = 'provider'` gives refund-issued the provider's text). Runs after commit, on the owner connection; never throws.
  */
 export async function notifyBookingEvent(kind: BookingKind, userId: string, params: Record<string, string>): Promise<void> {
   try {
@@ -51,8 +52,9 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
       kind === 'additional-task-requested' && params.role === 'provider' ? 'additional-task-requested-provider'
       : kind === 'payment-released' ? (`payment-released${params.variant ? `-${params.variant}` : ''}${params.role === 'provider' ? '-provider' : ''}` as Template)
       : kind === 'booking-cancelled' && params.variant ? (`booking-cancelled-${params.variant}` as Template)
+      : kind === 'refund-issued' && params.role === 'provider' ? 'refund-issued-provider'
       : kind
-    await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count } })
+    await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason } })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

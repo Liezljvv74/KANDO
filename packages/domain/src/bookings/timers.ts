@@ -9,6 +9,7 @@ import { ASK_DONE_HOURS, CONFIRM_REMINDER_DAYS, endOf, NO_ACTION_STAFF_DAYS, REV
 import { RELEASE_FAILED, tryRelease } from './finish'
 import { resolveNoShows, trySettleCancelled } from './cancel'
 import { openSystemDispute } from './disputes'
+import { tryApplyDecision } from '../admin/bookings'
 import { describeError } from '../log-error'
 
 /**
@@ -43,6 +44,8 @@ export type TimerReport = {
   ignoredNoticeFlags: number
   /** Reviews shown by their 7 days (the other side wrote none): both sides got their one `review-visible`. */
   reviewsShown: number
+  /** Staff decisions whose money step failed before, carried out now (admin/bookings.ts applyDecision). */
+  decisionsApplied: number
 }
 
 /**
@@ -96,7 +99,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
     ${result('e')}`)
 
   // The lazy per-user path stops here: money and ending rules (reminders, releases, the silent provider) run in the cron only.
-  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, events }
+  if (expiryOnly) return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, events }
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -146,7 +149,7 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   const customersWaiting = waiting.length
 
   const endings = await endingRules(exec, now, count)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, events }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, events }
 }
 
 // The booking's own dispute or chargeback: an additional task is paid out independently of its root (spec 3.12); the
@@ -267,10 +270,11 @@ export type ReleaseOptions = {
  * share (cancel.ts). One booking at a time (settle), inside a time budget and a hard cap; a failure is logged and flagged
  * (attemptMoney) and never stops the loop; the booking stays due and a later run retries it. Frozen bookings (undecided
  * dispute, open chargeback flag) are not picked, and neither is a cancelled booking that had a dispute (staff settle
- * those with their decision); a finished one with a reported no-show is left alone. Bookings whose earlier attempt failed
- * (open flag) come last, so they never hold back the others.
+ * those with their decision); a finished one with a reported no-show is left alone. A `disputed` booking whose dispute
+ * staff decided but whose money step failed (admin/bookings.ts) is carried out with the stored share. Bookings whose
+ * earlier attempt failed (open flag) come last, so they never hold back the others.
  */
-async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptions): Promise<{ autoReleased: number; cancelsSettled: number }> {
+async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS, clock = Date.now }: ReleaseOptions): Promise<{ autoReleased: number; cancelsSettled: number; decisionsApplied: number }> {
   const t = now.toISOString()
   const started = clock()
   const due = (
@@ -278,16 +282,18 @@ async function releaseDue(exec: Exec, now: Date, { budgetMs = RELEASE_BUDGET_MS,
     SELECT id, customer_id, status FROM bookings
     WHERE ((status = 'finished' AND confirm_by <= ${t}::timestamptz AND no_show IS NULL)
         OR (status = 'stopped' AND confirm_by <= ${t}::timestamptz AND stop_amount IS NOT NULL)
-        OR (status = 'cancelled' AND paid_at IS NOT NULL AND released_at IS NULL AND NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id)))
+        OR (status = 'cancelled' AND paid_at IS NOT NULL AND released_at IS NULL AND NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id))
+        OR (status = 'disputed' AND EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id AND d.decided_at IS NOT NULL)))
       AND ${noOpenDispute} AND ${noChargeback}
     ORDER BY EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'payment-unprocessed' AND f.ref_id = bookings.id::text AND f.resolved_at IS NULL AND f.note LIKE ${`${RELEASE_FAILED}%`}),
       CASE WHEN status = 'cancelled' THEN cancelled_at ELSE confirm_by END, id
     LIMIT ${RELEASES_HARD_CAP}`)
   ).rows
-  const done = { autoReleased: 0, cancelsSettled: 0 }
+  const done = { autoReleased: 0, cancelsSettled: 0, decisionsApplied: 0 }
   for (const b of due) {
     if (clock() - started >= budgetMs) break
-    if (b.status !== 'cancelled') done.autoReleased += Number(await tryRelease(exec, b.id, b.customer_id, now))
+    if (b.status === 'disputed') done.decisionsApplied += Number(await tryApplyDecision(exec, b.id, b.customer_id, now))
+    else if (b.status !== 'cancelled') done.autoReleased += Number(await tryRelease(exec, b.id, b.customer_id, now))
     else done.cancelsSettled += Number(await trySettleCancelled(b.id, b.customer_id, now))
   }
   return done

@@ -17,7 +17,7 @@ type Row = typeof bookings.$inferSelect
 type Side = 'customer' | 'provider'
 const HOUR = 3_600_000
 const otherSide = (s: Side): Side => (s === 'customer' ? 'provider' : 'customer')
-const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
+export const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
 const objectBy = (b: Row) => new Date(b.noShowReportedAt!.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)
 
 /**
@@ -184,20 +184,30 @@ export async function resolveNoShow(exec: Exec, bookingId: string, now: Date): P
         await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, noShow: k.noShow ?? b.noShow, noShowReportedAt: k.noShowReportedAt ?? b.noShowReportedAt, updatedAt: now }).where(eq(bookings.id, k.id))
       else if (k.status === 'proposed' || k.status === 'awaiting-payment') await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
     }
-    if (b.noShow !== 'provider' || b.parentBookingId) return { row: row!, warn: false }
-    const n = (
-      await o.execute<{ n: number }>(sql`
-      SELECT count(*)::int AS n FROM bookings WHERE provider_id = ${b.providerId} AND parent_booking_id IS NULL AND no_show = 'provider'
-        AND status IN ('cancelled', 'refunded') AND no_show_reported_at > ${now.toISOString()}::timestamptz - interval '12 months'`)
-    ).rows[0]!.n
-    if (n >= 2) await flagForStaff(o, { kind: 'provider-no-shows', refId: b.providerId, note: `${n} no-shows in 12 months` })
-    return { row: row!, warn: n < 2 }
+    return { row: row!, warn: await providerNoShowRule(o, row!, now) }
   })
   if (!r) return false
   await tellCancelled(r.row)
   const owner = r.warn ? await ownerOf(r.row.providerId) : undefined
   if (owner) await notifyBookingEvent('provider-warning', owner, { bookingId: r.row.id })
   return true
+}
+
+/**
+ * The provider no-show rule, for a root booking whose provider no-show stood (the 48 hours, or staff upholding it): counts
+ * the provider's root no-shows ended `cancelled`/`refunded` in the 12 months up to `now` (this one included, written in
+ * the caller's transaction `o`). From the second on, staff get one open `provider-no-shows` flag (to suspend for 30 days
+ * with the suspension tool), in `o`. True when the caller sends the first one's `provider-warning` after its commit.
+ */
+export async function providerNoShowRule(o: Exec, b: Pick<Row, 'noShow' | 'parentBookingId' | 'providerId'>, now: Date): Promise<boolean> {
+  if (b.noShow !== 'provider' || b.parentBookingId) return false
+  const n = (
+    await o.execute<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM bookings WHERE provider_id = ${b.providerId} AND parent_booking_id IS NULL AND no_show = 'provider'
+      AND status IN ('cancelled', 'refunded') AND no_show_reported_at > ${now.toISOString()}::timestamptz - interval '12 months'`)
+  ).rows[0]!.n
+  if (n >= 2) await flagForStaff(o, { kind: 'provider-no-shows', refId: b.providerId, note: `${n} no-shows in 12 months` })
+  return n < 2
 }
 
 /** The due no-show reports (timers.ts), one at a time; a failure is logged and retried next run. */

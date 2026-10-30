@@ -17,5 +17,5 @@ it('401 without the bearer token, with a wrong one, and when CRON_SECRET is unse
 it('200 with the report for the right token', async () => {
   const res = await get('Bearer s3cret')
   expect(res.status).toBe(200)
-  expect(Object.keys(await res.json()).sort()).toEqual(['askedDone', 'autoReleased', 'cancelsSettled', 'confirmReminders', 'customersWaiting', 'ignoredNoticeFlags', 'ignoredNotices', 'noShowsResolved', 'overdueDisputes', 'proposalsLapsed', 'quotesExpired', 'remindersSent', 'requestsExpired', 'reviewsShown', 'sentToStaff', 'stopsToStaff', 'unpaidExpired'])
+  expect(Object.keys(await res.json()).sort()).toEqual(['askedDone', 'autoReleased', 'cancelsSettled', 'confirmReminders', 'customersWaiting', 'decisionsApplied', 'ignoredNoticeFlags', 'ignoredNotices', 'noShowsResolved', 'overdueDisputes', 'proposalsLapsed', 'quotesExpired', 'remindersSent', 'requestsExpired', 'reviewsShown', 'sentToStaff', 'stopsToStaff', 'unpaidExpired'])
 })
