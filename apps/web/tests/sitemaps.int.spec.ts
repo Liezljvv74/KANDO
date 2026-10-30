@@ -43,7 +43,7 @@ it('providers sitemap lists only visible providers', async () => {
 })
 
 it('the providers sitemap lists providers of every country', async () => {
-  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\d+$', 'EUR')")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\\d+$', 'EUR')")
   try {
     await pool.query("UPDATE providers SET country = 'ZZ' WHERE slug = 'sm-live-slug'")
     expect(await (await providers()).text()).toContain('/providers/sm-live-slug</loc>')

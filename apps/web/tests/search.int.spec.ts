@@ -119,7 +119,7 @@ it('bad input is 400: unknown postcode, bad format, unknown country, unknown lan
 
 it('search without a country uses the only market; with two markets it is 400 country-required', async () => {
   expect((await search('')).status).toBe(200)
-  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\d+$', 'EUR')")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\\d+$', 'EUR')")
   try {
     const res = await search('')
     expect(res.status).toBe(400)
