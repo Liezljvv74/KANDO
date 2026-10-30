@@ -425,6 +425,11 @@ it('the timers never expire confirmed bookings', async () => {
   await pool.query("UPDATE bookings SET pay_by = now() - interval '1 day', answer_by = now() - interval '1 day' WHERE id = $1", [b.id])
   await runDueTimers(db, new Date(Date.now() + 2 * DAY)) // past pay_by and answer_by, before the start (from 7 days after the end a silent booking goes to staff: finish.int.spec.ts)
   expect((await row(b.id)).status).toBe('confirmed')
+  // far ahead: never expired; a silent booking is asked, then (24 hours later) goes to staff as disputed
+  await runDueTimers(db, new Date(Date.now() + 30 * DAY))
+  expect((await row(b.id)).status).toBe('confirmed')
+  await runDueTimers(db, new Date(Date.now() + 31 * DAY))
+  expect((await row(b.id)).status).toBe('disputed')
 })
 
 it('with PAYMENTS_ENABLED off the pay route is 503 PAYMENTS_OFF and the webhook 404', async () => {

@@ -360,14 +360,14 @@ export const de = {
   'email.providerAvailable.body': 'Ein Anbieter, über den du benachrichtigt werden wolltest, ist jetzt buchbar: {url}',
   'email.jobFinished.subject': 'Der Auftrag wurde als erledigt markiert',
   'email.jobFinished.body':
-    'Der Anbieter hat deinen Auftrag als erledigt markiert. Die Zahlung an den Anbieter wird am {date} Uhr ausgeführt. Wenn die Arbeit erledigt ist, bestätige sie in der App, dann wird die Zahlung sofort ausgeführt. Wenn etwas nicht stimmt, melde vorher in der App ein Problem.',
+    'Der Anbieter hat deinen Auftrag als erledigt markiert. Die Zahlung an den Anbieter wird ab {date} Uhr freigegeben und danach an den Anbieter ausgezahlt. Wenn die Arbeit erledigt ist, kannst du sie vorher in der App bestätigen. Wenn etwas nicht stimmt, melde vorher in der App ein Problem.',
   'email.confirmReminder.subject': 'Die Zahlung an den Anbieter steht bevor',
   'email.confirmReminder.body':
-    'Die Zahlung an den Anbieter wird am {date} Uhr ausgeführt. Wenn die Arbeit erledigt ist, bestätige sie in der App. Wenn etwas nicht stimmt, melde vorher in der App ein Problem.',
+    'Die Zahlung an den Anbieter wird ab {date} Uhr freigegeben und danach an den Anbieter ausgezahlt. Wenn die Arbeit erledigt ist, kannst du sie in der App bestätigen. Wenn etwas nicht stimmt, melde vorher in der App ein Problem.',
   'email.paymentReleased.subject': 'Die Zahlung wurde ausgeführt',
   'email.paymentReleased.body': 'Der Auftrag ist abgeschlossen und die Zahlung an den Anbieter wurde ausgeführt. Danke, dass du die App nutzt.',
   'email.paymentReleased.provider.subject': 'Deine Auszahlung ist unterwegs',
-  'email.paymentReleased.provider.body': 'Der Auftrag ist abgeschlossen. Deine Auszahlung ist unterwegs und kommt in der Regel innerhalb von 7 Tagen auf deinem Bankkonto an.',
+  'email.paymentReleased.provider.body': 'Der Auftrag ist abgeschlossen und die Zahlung wurde für dich freigegeben. Wann sie auf deinem Bankkonto ankommt, hängt von deiner Auszahlungs-Einrichtung ab; in der Regel innerhalb von 7 Tagen.',
   'email.wasJobDone.subject': 'Wurde der Auftrag erledigt?',
   'email.wasJobDone.body':
     'Der Termin deiner Buchung ist vorbei, aber der Anbieter hat den Auftrag nicht als erledigt markiert. Wurde der Auftrag erledigt? Bestätige ihn in der App oder melde ein Problem. Bis dahin wird keine Zahlung an den Anbieter ausgeführt.',

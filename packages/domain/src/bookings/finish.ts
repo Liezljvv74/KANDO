@@ -1,5 +1,5 @@
-import { eq } from 'drizzle-orm'
-import { bookings, db, providers, type Tx } from '@kando/db'
+import { and, eq, isNull, like } from 'drizzle-orm'
+import { bookings, db, providers, staffFlags, type Tx } from '@kando/db'
 import type { Booking, FinishInput } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { flagForStaff } from '../chat/flags'
@@ -15,6 +15,8 @@ import { notifyBookingEvent } from './notify'
 import { toBooking } from './requests'
 
 const DAY = 86_400_000
+/** The note prefix of a staff flag for a failed release (timers.ts orders those bookings last). */
+export const RELEASE_FAILED = 'release failed: '
 const notFound = () => fail(404, { error: 'Not found' })
 
 /** Which side the caller is on, read on the request transaction (RLS proves they are a party); 404 for anyone else. */
@@ -100,19 +102,27 @@ export async function releaseBooking(exec: Exec, bookingId: string, now: Date): 
 /**
  * releaseBooking that never throws: true when the booking is now completed. A refusal or error is logged and, unless the
  * booking is merely frozen (open dispute or chargeback) or already moved on, flagged to staff once (`payment-unprocessed`,
- * one open flag per booking); the booking stays `finished` and the next timer run retries.
+ * one open flag per booking, note `release failed: <code or message>`); the booking stays `finished` and the next timer
+ * run retries. A later successful release resolves that flag.
  */
 export async function tryRelease(exec: Exec, bookingId: string, customerId: string, now: Date): Promise<boolean> {
   try {
     await releaseBooking(exec, bookingId, now)
-    return true
   } catch (e) {
     const code = e instanceof Response ? ((await e.json().catch(() => ({}))) as { error?: string }).error : undefined
-    console.error(`[release] booking ${bookingId} not released: ${code ?? describeError(e)}`)
+    const why = code ?? describeError(e) // an error code or a cleaned error message, never request data or keys
+    console.error(`[release] booking ${bookingId} not released: ${why}`)
     if (code === 'DISPUTE_OPEN' || code === 'not-open') return false
-    await flagForStaff(db, { kind: 'payment-unprocessed', refId: bookingId, userId: customerId, note: `release failed: ${code ?? 'error'}` }).catch((err) =>
+    await flagForStaff(db, { kind: 'payment-unprocessed', refId: bookingId, userId: customerId, note: `${RELEASE_FAILED}${why}`.slice(0, 500) }).catch((err) =>
       console.error(`[release] staff flag failed ${describeError(err)}`),
     )
     return false
   }
+  // released: an open flag from an earlier failed attempt is settled too (staff see it closed by the system)
+  await db
+    .update(staffFlags)
+    .set({ resolvedAt: now, resolvedBy: 'system' })
+    .where(and(eq(staffFlags.kind, 'payment-unprocessed'), eq(staffFlags.refId, bookingId), isNull(staffFlags.resolvedAt), like(staffFlags.note, `${RELEASE_FAILED}%`)))
+    .catch((err) => console.error(`[release] staff flag not resolved ${describeError(err)}`))
+  return true
 }

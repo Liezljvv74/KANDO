@@ -205,8 +205,9 @@ it('confirm racing the timer settles once', async () => {
   await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = $1', [id])
   const now = new Date()
   // hold the booking row: both must wait for it, then exactly one settles
+  const errors = vi.spyOn(console, 'error')
   const holder = await pool.connect()
-  let both: Promise<[unknown, unknown]>
+  let both: Promise<[Awaited<ReturnType<typeof confirm>>, Awaited<ReturnType<typeof runDueTimers>>]>
   try {
     await holder.query('BEGIN')
     await holder.query('SELECT 1 FROM bookings WHERE id = $1 FOR UPDATE', [id])
@@ -217,8 +218,14 @@ it('confirm racing the timer settles once', async () => {
   } finally {
     holder.release()
   }
-  await both!
+  const [confirmed, report] = await both!
+  expect(confirmed.status).toBe('completed') // both resolved: whichever came second found it completed and stopped quietly
+  expect(report.autoReleased).toBe(1) // the timer either released it or found it completed (never a refusal)
   expect((await row(id)).status).toBe('completed')
+  expect((await pool.query('SELECT count(*)::int n FROM staff_flags WHERE ref_id = $1', [id])).rows[0].n).toBe(0)
+  // the second one returned quietly: no refusal was logged (without the `completed` early return it is a logged not-open)
+  expect(errors.mock.calls.filter((c) => String(c[0]).startsWith('[release]'))).toEqual([])
+  errors.mockRestore()
   expect(await ledger(id)).toEqual([
     { kind: 'commission', amount: '12.00' },
     { kind: 'transfer', amount: '88.00' },
@@ -255,7 +262,8 @@ it('NO_PAYOUT_ACCOUNT: the confirmation is kept, staff are told, and the timer r
   try {
     expect((await runDueTimers(db, new Date(now.getTime() + DAY))).autoReleased).toBe(1)
     expect((await row(id)).status).toBe('completed')
-    expect((await pool.query('SELECT count(*)::int n FROM staff_flags WHERE ref_id = $1', [id])).rows[0].n).toBe(1) // one flag, not one per run
+    // one flag, not one per run, resolved by the successful release
+    expect((await pool.query('SELECT resolved_at IS NOT NULL AS resolved, resolved_by FROM staff_flags WHERE ref_id = $1', [id])).rows).toEqual([{ resolved: true, resolved_by: 'system' }])
   } finally {
     await pool.query('UPDATE providers SET stripe_account_id = NULL WHERE id = $1', [bareProviderId])
   }
@@ -335,6 +343,7 @@ it('7 days after the end with no action the booking goes to staff with a no-resp
   const S = new Date('2027-11-08T08:00:00Z')
   const { id } = await paidBooking({ startAt: S })
   const end = S.getTime() + HOUR
+  expect((await runDueTimers(db, new Date(end + DAY))).askedDone).toBe(1)
   expect((await runDueTimers(db, new Date(end + 7 * DAY - MIN))).sentToStaff).toBe(0)
   expect((await row(id)).status).toBe('confirmed')
   expect((await runDueTimers(db, new Date(end + 7 * DAY))).sentToStaff).toBe(1)
@@ -359,13 +368,74 @@ it('the lazy per-user path never runs the release, reminder or silent-provider r
   expect(g.calls).toEqual([])
 })
 
-it('releases per run are capped; the rest go in the next run', async () => {
+it('a cron that was down never asks and escalates in the same run: staff get it 24 hours after the question', async () => {
+  const S = new Date('2027-11-15T08:00:00Z')
+  const { id } = await paidBooking({ startAt: S })
+  const late = S.getTime() + HOUR + 10 * DAY
+  expect(await runDueTimers(db, new Date(late))).toMatchObject({ askedDone: 1, sentToStaff: 0 })
+  expect((await row(id)).status).toBe('confirmed')
+  expect((await runDueTimers(db, new Date(late + 24 * HOUR - MIN))).sentToStaff).toBe(0)
+  expect((await runDueTimers(db, new Date(late + 24 * HOUR))).sentToStaff).toBe(1)
+  expect((await row(id)).status).toBe('disputed')
+})
+
+/** A clock for the release budget: every reading is `step` ms after the previous one. */
+const ticking = (step: number) => {
+  let t = 0
+  return () => (t += step)
+}
+
+it('the time budget stops starting releases; the rest go in the next run', async () => {
   const T = new Date('2028-01-03T10:00:00Z')
   const ids: string[] = []
-  for (let i = 0; i < 21; i++) ids.push((await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - (i + 2) * HOUR), finishedAt: new Date(T.getTime() + i * MIN) })).id)
+  for (let i = 0; i < 3; i++) ids.push((await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - (i + 2) * HOUR), finishedAt: new Date(T.getTime() + i * MIN) })).id)
   await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = ANY($1)', [ids])
-  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY))).autoReleased).toBe(20)
-  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY))).autoReleased).toBe(1)
-  expect((await pool.query("SELECT count(*)::int n FROM bookings WHERE id = ANY($1) AND status = 'completed'", [ids])).rows[0].n).toBe(21)
-  expect(callsOf('transfer')).toHaveLength(21)
+  // the clock reads 1000 at the start, then 2000 and 3000 before the first two releases (1000 and 2000 used, inside 2500); 4000 stops the third
+  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY), { budgetMs: 2500, clock: ticking(1000) })).autoReleased).toBe(2)
+  expect((await row(ids[2]!)).status).toBe('finished') // oldest first
+  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY), { budgetMs: 2500, clock: ticking(1000) })).autoReleased).toBe(1)
+  expect((await pool.query("SELECT count(*)::int n FROM bookings WHERE id = ANY($1) AND status = 'completed'", [ids])).rows[0].n).toBe(3)
+  expect(callsOf('transfer')).toHaveLength(3)
+})
+
+it('a booking whose release keeps failing goes last and never blocks a later one', async () => {
+  const T = new Date('2028-02-01T10:00:00Z')
+  const stuck = await paidBooking({ provider: bareProviderId, status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T }) // no payout account
+  const fine = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 4 * HOUR), finishedAt: new Date(T.getTime() + HOUR) })
+  await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = ANY($1)', [[stuck.id, fine.id]])
+  // run 1 (room for one release): the older one is tried first, fails and is flagged
+  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY), { budgetMs: 1500, clock: ticking(1000) })).autoReleased).toBe(0)
+  expect((await pool.query("SELECT note FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [stuck.id])).rows).toEqual([{ note: 'release failed: NO_PAYOUT_ACCOUNT' }])
+  // run 2 (room for one): the flagged one now comes last, so the other is released
+  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY), { budgetMs: 1500, clock: ticking(1000) })).autoReleased).toBe(1)
+  expect((await row(fine.id)).status).toBe('completed')
+  expect((await row(stuck.id)).status).toBe('finished')
+})
+
+it('a booking with an open chargeback flag is not picked by the release', async () => {
+  const T = new Date('2028-03-01T10:00:00Z')
+  const { id } = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: T })
+  await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id, note) VALUES ('chargeback', $1, $2, 'test')", [id, U.cust])
+  expect((await runDueTimers(db, new Date(T.getTime() + 8 * DAY))).autoReleased).toBe(0)
+  expect(g.calls).toEqual([])
+  expect((await pool.query("SELECT count(*)::int n FROM staff_flags WHERE kind = 'payment-unprocessed' AND ref_id = $1", [id])).rows[0].n).toBe(0) // not tried, so not flagged
+})
+
+it('the releases run last: the other rules and their emails happen even when the release loop fails', async () => {
+  const T = new Date('2028-04-03T10:00:00Z')
+  const reminded = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 2 * HOUR), finishedAt: new Date(T.getTime() + 6 * DAY) }) // reminder 1 due at T + 7 d
+  const asked = await paidBooking({ startAt: new Date(T.getTime() + 5 * DAY) }) // ends T + 5 d 1 h: asked at T + 7 d
+  const released = await paidBooking({ status: 'finished', startAt: new Date(T.getTime() - 4 * HOUR), finishedAt: T }) // due at T + 7 d
+  await pool.query('UPDATE bookings SET confirm_reminders_sent = 3 WHERE id = $1', [released.id])
+  const boom = () => {
+    throw new Error('release loop broke')
+  }
+  await expect(runDueTimers(db, new Date(T.getTime() + 7 * DAY), { clock: boom })).rejects.toThrow('release loop broke')
+  expect((await row(reminded.id)).confirm_reminders_sent).toBe(1)
+  expect((await row(asked.id)).asked_done_at).not.toBeNull()
+  expect((await row(released.id)).status).toBe('finished')
+  expect(outboxForTests().filter((m) => m.to === EMAIL(U.cust))).toHaveLength(2) // the reminder and the question went out
+  // a budget used up before the first release: the same, without an error
+  expect((await runDueTimers(db, new Date(T.getTime() + 7 * DAY), { budgetMs: 0 })).autoReleased).toBe(0)
+  expect((await runDueTimers(db, new Date(T.getTime() + 7 * DAY))).autoReleased).toBe(1)
 })
