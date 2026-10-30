@@ -11,10 +11,14 @@ import { slotIsHeld } from './busy'
 
 /** The notification kinds that have an email template (a kind without one cannot be sent from here). */
 export type BookingKind = Extract<NotificationKind, BookingTemplate>
-/** Kinds whose in-app row the timers (timers.ts, one SQL statement per rule) already write (customers-waiting: payments/watches.ts; review-visible: also reviews.ts): here they only get the email and the push. */
-const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored', 'customers-waiting', 'confirm-reminder', 'was-job-done', 'review-visible']
+/**
+ * Kinds whose in-app row the caller already wrote in its own transaction: the timers (timers.ts, one SQL statement per rule;
+ * customers-waiting: payments/watches.ts; review-visible: also reviews.ts) and invoice-ready (invoices/issue.ts, together with
+ * the PDF key): here they only get the email and the push.
+ */
+const WRITTEN_BY_TIMERS: NotificationKind[] = ['request-expired', 'booking-expired', 'quote-expiring', 'payment-reminder', 'requests-ignored', 'customers-waiting', 'confirm-reminder', 'was-job-done', 'review-visible', 'invoice-ready']
 /** Kinds whose in-app row carries a link (`params.url`, or the provider page of `params.slug`) instead of ids. */
-const WITH_URL: NotificationKind[] = ['message-received', 'provider-available']
+const WITH_URL: NotificationKind[] = ['message-received', 'provider-available', 'commission-invoice-ready']
 
 
 /** The app screen a push opens: the booking, the request, the provider, the thread (`params.url`), else the profile tab. */
@@ -68,7 +72,9 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
     if (kind !== 'message-received' || !(await pushReaches(userId, kind))) {
       await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason } })
     }
-    await sendPush(userId, { kind, title: t(lang, `push.${kind}.title` as Key), body: t(lang, `push.${kind}.body` as Key), url: appUrl(params) })
+    // invoice-ready names what the provider issued: an invoice, or (private providers) a receipt
+    const push = kind === 'invoice-ready' && params.variant === 'receipt' ? 'invoice-ready.receipt' : kind
+    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: t(lang, `push.${push}.body` as Key), url: appUrl(params) })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

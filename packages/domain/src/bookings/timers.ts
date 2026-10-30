@@ -11,7 +11,8 @@ import { resolveNoShows, trySettleCancelled } from './cancel'
 import { openSystemDispute } from './disputes'
 import { tryApplyDecision } from '../admin/bookings'
 import { describeError } from '../log-error'
-import { issueDueInvoices } from '../invoices/issue'
+import { issueDueInvoices, withDeferredInvoices } from '../invoices/issue'
+import { withPushBatch } from '../push'
 import { issueCommissionInvoices } from '../invoices/commission'
 
 /**
@@ -326,21 +327,31 @@ async function sendEmails({ events, ...report }: TimerReport & { events: TimerEv
 }
 
 /**
- * The scheduled sweep (the pool, never an open transaction: see sendEmails). The money releases run LAST, after every other rule and its
- * emails: a timeout or an error in the release loop can no longer drop the day's reminders, expiries or silent-provider steps.
+ * The scheduled sweep (the pool, never an open transaction: see sendEmails), in one time budget measured from its start.
+ * Order: the SQL rules (each one statement: their in-app rows are written, their emails wait), then the money (no-show
+ * resolutions and releases, invoicing deferred), then the waiting emails (also when the money loop throws), then the documents (invoices, commission
+ * invoices) with whatever budget is left. Every push of the run is held back and sent at the very end in requests of 100
+ * (withPushBatch), so a slow push service never eats the budget of the releases. A release whose invoice the budget did not
+ * reach leaves its group due: the next run issues it (and tells both, in-app row and PDF key in one transaction).
  */
 export async function runDueTimers(exec: typeof db, now: Date, release: ReleaseOptions = {}): Promise<TimerReport> {
-  // one budget for the whole run, measured from its start: the loops before the releases count against it too
   const { budgetMs = RELEASE_BUDGET_MS, clock = Date.now } = release
   const started = clock()
   const timeUp = () => clock() - started >= budgetMs
-  const report = await sendEmails(await sweep(exec, now, undefined, false, timeUp))
-  const noShowsResolved = await resolveNoShows(exec, now, timeUp)
-  const released = await releaseDue(exec, now, timeUp)
-  // last, inside the same budget: the groups the releases above made final were invoiced by them already (attemptMoney);
-  // this catches the rest (a group ended by an expiry, a PDF a storage failure left out, an earlier failure)
-  const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
-  return { ...report, noShowsResolved, ...released, invoicesIssued, commissionInvoices: await issueCommissionInvoices(exec, now, { timeUp }) }
+  return withPushBatch(async () => {
+    const swept = await sweep(exec, now, undefined, false, timeUp)
+    let money: { noShowsResolved: number } & Awaited<ReturnType<typeof releaseDue>>
+    let report: TimerReport
+    try {
+      const noShowsResolved = await resolveNoShows(exec, now, timeUp)
+      money = { noShowsResolved, ...(await withDeferredInvoices(() => releaseDue(exec, now, timeUp))) }
+    } finally {
+      report = await sendEmails(swept) // the rules' emails go out even when the money loop fails (their rows are written)
+    }
+    // the groups the releases made final, a group ended by an expiry, a PDF a storage failure left out: all due here
+    const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
+    return { ...report, ...money, invoicesIssued, commissionInvoices: await issueCommissionInvoices(exec, now, { timeUp }) }
+  })
 }
 
 /** The four expiry rules for one user's own rows (no reminders, no ignored notice: those stay in the cron run): a late sweep never shows them stale. Uses the owner connection (the app role may not write notifications). */

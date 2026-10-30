@@ -46,6 +46,7 @@ test('where a notice leads: provider-available to the provider page, customers-w
   expect(at('provider-available', {})).toBeNull()
   expect(at('customers-waiting', { count: 2 })).toEqual({ path: '/my-profile' })
   expect(at('payout-setup-complete', {})).toBeNull()
+  expect(notificationTarget({ kind: 'commission-invoice-ready', payload: { url: 'skilled://invoices/commission' } })).toEqual({ path: '/invoices/commission' })
 })
 
 test('the booking-ending kinds have a text each', () => {

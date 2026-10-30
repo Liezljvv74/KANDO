@@ -1,16 +1,19 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { and, asc, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { bookings, db, invoices, providers, type Tx } from '@kando/db'
 import type { Invoice } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { notifyBookingEvent } from '../bookings/notify'
 import { describeError } from '../log-error'
+import { createNotification } from '../notifications-store'
 import { LIVE_PAYMENTS_ALLOWED } from '../payments/rules'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
 import { buildInvoice, type InvoiceDraft, type InvoiceInput } from './build'
-import { formatNumber, nextNumber, providerSeries, yearOf } from './numbering'
+import { platformDocumentsBlocked } from './entity'
+import { formatNumber, isTestNumber, nextNumber, providerSeries, yearOf } from './numbering'
 import { renderPdf } from './pdf'
 
 /** Statuses a booking never leaves. `disputed`, `stopped`, `finished` and `confirmed` still move money; they wait. */
@@ -108,7 +111,7 @@ export async function invoiceProvider(exec: Exec, providerId: string): Promise<{
  * and the invoice inserted. A conflict on the root (never expected under the lock) throws, so the counter bump rolls back
  * with it: no gap.
  */
-async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: () => Date): Promise<typeof invoices.$inferSelect | null> {
+async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: () => Date, live: boolean): Promise<typeof invoices.$inferSelect | null> {
   return db.transaction(async (o) => {
     const [root] = await o.select().from(bookings).where(eq(bookings.id, rootId)).for('update')
     if (!root) return null
@@ -152,10 +155,10 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
     // (the year is taken just before; at the turn of the year the earlier instant wins).
     const before = clock()
     const year = yearOf(before)
-    const n = await nextNumber(o, providerSeries(root.providerId, year))
+    const n = await nextNumber(o, providerSeries(root.providerId, year, !live)) // test documents count in their own series
     const after = clock()
     const issuedAt = yearOf(after) === year ? after : before
-    const number = formatNumber(root.providerId, year, n)
+    const number = formatNumber(root.providerId, year, n, !live)
     const [row] = await o
       .insert(invoices)
       .values({ rootBookingId: rootId, providerId: root.providerId, customerId: root.customerId, number, kind: draft.kind, issuedAt, currency: draft.currency, total: draft.totals.gross.toFixed(2), draft })
@@ -167,19 +170,26 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
 }
 
 /**
- * Renders and stores an issued invoice's PDF (`invoices/<providerId>/<number>.pdf` in the documents bucket) and records
- * the key; the run that records it tells both parties (`invoice-ready`), so they are told once, when the download works.
- * A storage failure leaves `fileKey` null for the next sweep. Never throws.
+ * Renders and stores an issued invoice's PDF (`invoices/<providerId>/<number>.pdf` in the documents bucket; the TEST
+ * watermark when its number is a test number) and records the key. The key and both parties' in-app `invoice-ready` rows
+ * commit together, so the message is never lost once the download works (a crash before the commit leaves `fileKey` null
+ * and the next sweep does both); the email and push follow (push text: invoice or receipt). A storage failure leaves
+ * `fileKey` null for the next sweep. Never throws.
  */
 async function storePdf(inv: typeof invoices.$inferSelect): Promise<void> {
   try {
     const key = `invoices/${inv.providerId}/${inv.number}.pdf`
-    const bytes = await renderPdf(inv.draft as InvoiceDraft, inv.number, inv.issuedAt, !LIVE_PAYMENTS_ALLOWED)
+    const bytes = await renderPdf(inv.draft as InvoiceDraft, inv.number, inv.issuedAt, isTestNumber(inv.number))
     await storage().put(documentsBucket(), key, Buffer.from(bytes), 'application/pdf')
-    const [done] = await db.update(invoices).set({ fileKey: key }).where(and(eq(invoices.id, inv.id), isNull(invoices.fileKey))).returning({ id: invoices.id })
-    if (!done) return
     const owner = (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, inv.providerId)))[0]?.id
-    for (const u of [inv.customerId, owner]) if (u) await notifyBookingEvent('invoice-ready', u, { bookingId: inv.rootBookingId })
+    const parties = [inv.customerId, owner].filter((u): u is string => !!u)
+    const done = await db.transaction(async (o) => {
+      const [d] = await o.update(invoices).set({ fileKey: key }).where(and(eq(invoices.id, inv.id), isNull(invoices.fileKey))).returning({ id: invoices.id })
+      if (d) for (const u of parties) await createNotification(o, u, 'invoice-ready', { bookingId: inv.rootBookingId })
+      return !!d
+    })
+    if (!done) return
+    for (const u of parties) await notifyBookingEvent('invoice-ready', u, { bookingId: inv.rootBookingId, ...(inv.kind === 'receipt' && { variant: 'receipt' }) })
   } catch (e) {
     console.error(`[invoices] PDF of ${inv.number} not stored: ${describeError(e)}`)
   }
@@ -196,9 +206,14 @@ async function storePdf(inv: typeof invoices.$inferSelect): Promise<void> {
  * group that fails on every run (e.g. a country without a VAT rate) is retried and logged each run, oldest id first: 200
  * such groups would starve the rest; skip recently failed groups if that ever happens.
  */
-export async function issueDueInvoices(exec: Exec, now: Date, opts: Scope & { timeUp?: () => boolean; clock?: () => Date } = {}): Promise<number> {
+export async function issueDueInvoices(exec: Exec, now: Date, opts: Scope & { timeUp?: () => boolean; clock?: () => Date; live?: boolean } = {}): Promise<number> {
   const timeUp = opts.timeUp ?? (() => false)
+  const live = opts.live ?? LIVE_PAYMENTS_ALLOWED
   let issued = 0
+  if (platformDocumentsBlocked(live)) {
+    console.error('[invoices] not issued: payments are live but PLATFORM_ENTITY still has placeholders (fill in invoices/entity.ts); the next run retries')
+    return 0
+  }
   try {
     const scope = opts.bookingId ? sql`${invoices.rootBookingId} = ${rootOf(opts.bookingId)}` : opts.userId ? sql`${invoices.rootBookingId} IN (SELECT r.id FROM bookings r WHERE ${ofUser(opts.userId)})` : undefined
     const pending = await exec.select().from(invoices).where(and(isNull(invoices.fileKey), scope)).orderBy(asc(invoices.issuedAt)).limit(ISSUE_CAP)
@@ -209,7 +224,7 @@ export async function issueDueInvoices(exec: Exec, now: Date, opts: Scope & { ti
     for (const id of await dueRoots(exec, now, opts)) {
       if (timeUp()) break
       try {
-        const inv = await issueOne(id, now, !!opts.forDeletion, opts.clock ?? (() => new Date()))
+        const inv = await issueOne(id, now, !!opts.forDeletion, opts.clock ?? (() => new Date()), live)
         if (!inv) continue
         issued++
         await storePdf(inv)
@@ -223,8 +238,15 @@ export async function issueDueInvoices(exec: Exec, now: Date, opts: Scope & { ti
   return issued
 }
 
+const deferred = new AsyncLocalStorage<true>()
+/**
+ * Runs `fn` with the ending hooks' invoicing switched off (the cron's money releases: the PDF work then runs after them,
+ * inside the run's time budget, through the sweep; a group not reached is due on the next run).
+ */
+export const withDeferredInvoices = <T>(fn: () => Promise<T>): Promise<T> => deferred.run(true, fn)
+
 /** After an ending's money step committed: the invoice of that booking's group, if it is now due. Never throws. */
-export const issueInvoiceFor = (bookingId: string, now: Date): Promise<number> => issueDueInvoices(db, now, { bookingId })
+export const issueInvoiceFor = async (bookingId: string, now: Date): Promise<number> => (deferred.getStore() ? 0 : issueDueInvoices(db, now, { bookingId }))
 
 const toInvoice = (r: typeof invoices.$inferSelect, userId: string): Invoice => {
   const draft = r.draft as InvoiceDraft

@@ -2,7 +2,8 @@ import { inflateSync } from 'node:zlib'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
 import type { InvoiceDraft, InvoiceLine } from './build'
-import { formatNumber, providerSeries, yearOf } from './numbering'
+import { entityHasPlaceholders, PLATFORM_ENTITY, platformDocumentsBlocked } from './entity'
+import { formatNumber, isTestNumber, providerSeries, yearOf } from './numbering'
 import { pdfSafe, renderPdf, TEST_WATERMARK } from './pdf'
 
 const line = (i: number): InvoiceLine => ({ bookingId: `b${i}`, kind: i ? 'additional-task' : 'job', description: `Arbeit ${i} äöüß`, serviceDate: '2026-10-29', labour: 80, material: 20, net: 100, vat: 0, gross: 100 })
@@ -78,5 +79,23 @@ describe('numbering', () => {
     const id = 'abcdef12-3456-7890-abcd-ef1234567890'
     expect(providerSeries(id, 2026)).toBe(`${id}-2026`) // the counter: the full id, never shared by two providers
     expect(formatNumber(id, 2026, 7)).toBe('ABCDEF12-2026-0007') // the printed number: the short prefix
+  })
+})
+
+describe('the platform entity guard', () => {
+  const filled = { name: 'Kando GmbH', address: 'Hauptstr. 1, 10115 Berlin', register: 'HRB 1 B', vatId: 'DE123456789', vatNote: 'Umsatzsteuer 19 %' }
+  it('blocks platform documents only when payments are live and a placeholder is left', () => {
+    expect(entityHasPlaceholders()).toBe(true) // today: the legal entity does not exist yet
+    expect(platformDocumentsBlocked(true)).toBe(true)
+    expect(platformDocumentsBlocked(false)).toBe(false) // test documents (watermarked) are fine
+    expect(platformDocumentsBlocked(true, filled)).toBe(false)
+    expect(platformDocumentsBlocked(true, { ...filled, vatId: '[VAT ID]' })).toBe(true)
+    expect(Object.keys(filled).sort()).toEqual(Object.keys(PLATFORM_ENTITY).sort())
+  })
+  it('test documents have their own series and a TEST- number', () => {
+    const id = 'abcdef12-3456-7890-abcd-ef1234567890'
+    expect(providerSeries(id, 2026, true)).toBe(`${id}-2026-test`)
+    expect(formatNumber(id, 2026, 1, true)).toBe('TEST-ABCDEF12-2026-0001')
+    expect([isTestNumber('TEST-ABCDEF12-2026-0001'), isTestNumber('ABCDEF12-2026-0001')]).toEqual([true, false])
   })
 })

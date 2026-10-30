@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import type { InvoiceDraft } from '@kando/domain'
+import { yearOf, type InvoiceDraft } from '@kando/domain'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -77,9 +77,12 @@ it('a customer gets an empty export', async () => {
 })
 
 it('year=abc is 400, as is a year out of range or not whole', async () => {
-  for (const q of ['?year=abc', '?year=2019', '?year=2999', '?year=2025.5', '?year=']) expect([q, (await get(U.mine, q)).status]).toEqual([q, 400])
+  for (const q of ['?year=abc', '?year=2019', '?year=2999', '?year=2025.5', '?year=', '?year=-2025', '?year=99999999999999999999', '?year=2025&year=2026', '?year=2025&year=2025']) {
+    const res = await get(U.mine, q)
+    expect([q, res.status, await res.json()]).toEqual([q, 400, { error: 'BAD_YEAR' }])
+  }
 })
 
 it('defaults to the current year', async () => {
-  expect((await get(U.mine)).headers.get('content-disposition')).toContain(`invoices-${new Date().getFullYear()}.csv`)
+  expect((await get(U.mine)).headers.get('content-disposition')).toContain(`invoices-${yearOf(new Date())}.csv`) // the year in the app's time zone
 })

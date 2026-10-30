@@ -5,14 +5,19 @@ import { InvoiceListSchema } from '@kando/contract'
 import {
   cancelBooking,
   clearOutbox,
+  clearPushOutbox,
   decideDispute,
   deleteAccount,
   dueRoots,
+  issueCommissionInvoices,
   issueDueInvoices,
+  pushOutboxForTests,
   releaseBooking,
+  runDueTimers,
   setGatewayForTests,
   setStorageForTests,
   tryRelease,
+  withDeferredInvoices,
   type InvoiceDraft,
   type Storage,
 } from '@kando/domain'
@@ -58,7 +63,8 @@ async function provider(o: { legalStatus?: string } = {}): Promise<{ uid: string
   const id = await seedProvider(uid, { name: `Inv ${n}`, categoryId, price: 100 })
   await pool.query("UPDATE users SET first_name = 'Hans', last_name = 'Müller' WHERE id = $1", [uid])
   await pool.query("UPDATE providers SET stripe_account_id = $2, payouts_ready_at = now(), invoice_consent_at = now(), legal_status = $3 WHERE id = $1", [id, `acct_inv_${n}`, o.legalStatus ?? null])
-  return { uid, id, prefix: id.slice(0, 8).toUpperCase() }
+  // payments are not live in tests: every number is a test number, in the provider's own test series
+  return { uid, id, prefix: `TEST-${id.slice(0, 8).toUpperCase()}` }
 }
 
 /** A paid booking (as the webhook leaves it) with its charge row; `finished` starts the release clock, `parent` makes it an additional task. */
@@ -113,7 +119,7 @@ it('a group with an open additional task waits; when the task is released the in
   await tryRelease(db, child, U.cust, new Date())
   expect(await invoicesOf(p.id)).toEqual([]) // the request is still open
   await pool.query("UPDATE requests SET status = 'expired' WHERE id = $1", [req])
-  expect(await issueDueInvoices(db, new Date())).toBe(1)
+  expect(await issueDueInvoices(db, new Date(), { bookingId: root })).toBe(1)
   const [inv] = await invoicesOf(p.id)
   expect((inv.draft as InvoiceDraft).lines.map((l) => [l.bookingId, l.kind, l.gross])).toEqual([
     [root, 'job', 100],
@@ -143,7 +149,8 @@ it('concurrent issuing creates one invoice and no gap', async () => {
   const a = await paid(p.id)
   await releaseBooking(db, a, new Date()) // released, not yet invoiced (no ending hook here)
   expect(await invoicesOf(p.id)).toEqual([])
-  const counts = await Promise.all([issueDueInvoices(db, new Date()), issueDueInvoices(db, new Date()), issueDueInvoices(db, new Date())])
+  // three sweeps of this group at once (scoped, so other data in the shared database cannot change the count)
+  const counts = await Promise.all([issueDueInvoices(db, new Date(), { bookingId: a }), issueDueInvoices(db, new Date(), { bookingId: a }), issueDueInvoices(db, new Date(), { bookingId: a })])
   expect(counts.reduce((s, x) => s + x, 0)).toBe(1)
   expect((await invoicesOf(p.id)).map((i) => i.number)).toEqual([`${p.prefix}-${year()}-0001`])
   expect(await readyNotices(a)).toHaveLength(2) // told once, whichever sweep stored the PDF
@@ -151,7 +158,7 @@ it('concurrent issuing creates one invoice and no gap', async () => {
   await releaseBooking(db, b, new Date())
   await Promise.all([issueDueInvoices(db, new Date()), issueDueInvoices(db, new Date())])
   expect((await invoicesOf(p.id)).map((i) => i.number)).toEqual([`${p.prefix}-${year()}-0001`, `${p.prefix}-${year()}-0002`])
-  expect((await pool.query('SELECT last FROM invoice_counters WHERE series = $1', [`${p.id}-${year()}`])).rows).toEqual([{ last: 2 }])
+  expect((await pool.query('SELECT last FROM invoice_counters WHERE series = $1', [`${p.id}-${year()}-test`])).rows).toEqual([{ last: 2 }])
 })
 
 it('numbers restart at 0001 in a new year (Berlin time)', async () => {
@@ -177,7 +184,7 @@ it('a storage failure leaves fileKey null and the next run fills it', async () =
   const res = await call(pdfRoute.GET, U.cust, 'GET', undefined, { id: inv.id })
   expect([res.status, (await res.json()).error]).toEqual([409, 'NOT_READY'])
   setStorageForTests(store)
-  expect(await issueDueInvoices(db, new Date())).toBe(0) // nothing new issued, the PDF filled
+  expect(await issueDueInvoices(db, new Date(), { bookingId: b })).toBe(0) // nothing new issued, the PDF filled
   const [again] = await invoicesOf(p.id)
   expect(again.number).toBe(inv.number)
   expect(pdfOf(again)!.subarray(0, 5).toString()).toBe('%PDF-')
@@ -265,8 +272,8 @@ it('two providers whose ids share the first 8 characters number independently an
     await pool.query("INSERT INTO providers (id, owner_id, type, status, stripe_account_id, payouts_ready_at, invoice_consent_at) VALUES ($1, $2, 'private', 'published', $3, now(), now())", [id, `inv-twin${i}`, `acct_twin_${i}`])
   }
   for (const id of [ids[0]!, ids[1]!, ids[0]!, ids[1]!]) await tryRelease(db, await paid(id), U.cust, new Date())
-  for (const id of ids) expect((await invoicesOf(id)).map((i) => i.number)).toEqual([`ABCD1234-${year()}-0001`, `ABCD1234-${year()}-0002`])
-  expect((await pool.query('SELECT series, last FROM invoice_counters WHERE series LIKE $1 ORDER BY series', ['abcd1234-%'])).rows).toEqual(ids.map((id) => ({ series: `${id}-${year()}`, last: 2 })))
+  for (const id of ids) expect((await invoicesOf(id)).map((i) => i.number)).toEqual([`TEST-ABCD1234-${year()}-0001`, `TEST-ABCD1234-${year()}-0002`])
+  expect((await pool.query('SELECT series, last FROM invoice_counters WHERE series LIKE $1 ORDER BY series', ['abcd1234-%'])).rows).toEqual(ids.map((id) => ({ series: `${id}-${year()}-test`, last: 2 })))
 })
 
 it('an account deletion first invoices paid-out groups that still wait on an unpaid additional task or an open request', async () => {
@@ -342,4 +349,47 @@ it('a Kleinunternehmer without tax number or VAT id cannot quote when payments a
   vi.stubEnv('PAYMENTS_ENABLED', '')
   await pool.query('UPDATE providers SET tax_number = NULL, invoice_consent_at = NULL WHERE id = $1', [p.id])
   expect((await quote(await request())).status).toBe(201)
+})
+
+it('with live payments and placeholder entity details nothing is issued and no number is used; while not live a TEST document is', async () => {
+  const p = await provider()
+  const b = await paid(p.id)
+  await releaseBooking(db, b, new Date())
+  expect(await issueDueInvoices(db, new Date(), { bookingId: b, live: true })).toBe(0)
+  expect(await invoicesOf(p.id)).toEqual([])
+  expect((await pool.query('SELECT series FROM invoice_counters WHERE series LIKE $1', [`${p.id}-%`])).rows).toEqual([])
+  expect(await issueCommissionInvoices(db, new Date('2040-02-01T12:00:00Z'), { live: true })).toBe(0)
+  expect((await pool.query("SELECT series FROM invoice_counters WHERE series LIKE 'commission:2040%'")).rows).toEqual([])
+  // the next run (not live) issues it: a test number in the test series, with the TEST watermark
+  expect(await issueDueInvoices(db, new Date(), { bookingId: b })).toBe(1)
+  const [inv] = await invoicesOf(p.id)
+  expect(inv.number).toBe(`${p.prefix}-${year()}-0001`)
+  expect(pdfOf(inv)!.toString('latin1')).toMatch(/%PDF-/)
+  expect((await pool.query('SELECT series FROM invoice_counters WHERE series LIKE $1', [`${p.id}-%`])).rows).toEqual([{ series: `${p.id}-${year()}-test` }])
+})
+
+it('the cron releases first; an invoice the time budget did not reach is issued and told by the next run', async () => {
+  const p = await provider()
+  // a release that went through while invoicing was deferred (as in the cron), then a run with no budget left
+  const b = await paid(p.id)
+  await withDeferredInvoices(() => tryRelease(db, b, U.cust, new Date()))
+  expect((await pool.query('SELECT status FROM bookings WHERE id = $1', [b])).rows[0].status).toBe('completed')
+  await runDueTimers(db, new Date(), { budgetMs: 0 })
+  expect(await invoicesOf(p.id)).toEqual([])
+  expect(await readyNotices(b)).toEqual([])
+  // a release due in the cron itself: released, then invoiced in the same run; the pushes go out at the end in one batch
+  const due = await paid(p.id)
+  await pool.query("UPDATE bookings SET confirm_by = now() - interval '1 minute' WHERE id = $1", [due])
+  await pool.query("INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, 'ExponentPushToken[inv-cust]', 'ios') ON CONFLICT DO NOTHING", [U.cust])
+  clearPushOutbox()
+  const report = await runDueTimers(db, new Date())
+  expect(report.autoReleased).toBeGreaterThanOrEqual(1)
+  expect(report.invoicesIssued).toBeGreaterThanOrEqual(2)
+  expect((await invoicesOf(p.id)).map((i) => i.root_booking_id).sort()).toEqual([b, due].sort())
+  for (const x of [b, due]) expect(await readyNotices(x)).toEqual([U.cust, p.uid].sort())
+  // a receipt (private provider) is called a receipt in the push, not an invoice
+  const titles = pushOutboxForTests().filter((m) => m.to === 'ExponentPushToken[inv-cust]' && m.data.kind === 'invoice-ready').map((m) => m.title)
+  expect(titles).toHaveLength(2)
+  for (const title of titles) expect(['Beleg fertig', 'Receipt ready']).toContain(title)
+  await pool.query("DELETE FROM push_tokens WHERE token = 'ExponentPushToken[inv-cust]'")
 })

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { BookingSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, outboxForTests, pushOutboxForTests, runDueTimers, sendPush } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, outboxForTests, pushOutboxForTests, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, fakeSession, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -202,4 +202,15 @@ it('a timer reminder pushes once; the next run sends nothing again', async () =>
   await runDueTimers(db, at)
   await runDueTimers(db, at)
   expect(pushes(U.cust).map((m) => [m.data.kind, m.data.url])).toEqual([['payment-reminder', `skilled://bookings/${b.id}`]])
+})
+
+it('inside a push batch (the cron) pushes are held back and sent together at its end', async () => {
+  await giveTokens(U.cust, 2)
+  clearPushOutbox()
+  await withPushBatch(async () => {
+    await sendPush(U.cust, { kind: 'booking-paid', title: 'T', body: 'B', url: 'skilled://my-profile' })
+    await sendPush(U.cust, { kind: 'booking-paid', title: 'T2', body: 'B2', url: 'skilled://my-profile' })
+    expect(pushes(U.cust)).toEqual([]) // nothing sent yet
+  })
+  expect(pushes(U.cust).map((m) => m.title)).toEqual(['T', 'T', 'T2', 'T2'])
 })

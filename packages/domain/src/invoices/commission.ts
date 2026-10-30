@@ -11,9 +11,9 @@ import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
 import { providerParty, type Party } from './build'
-import { PLATFORM_ENTITY } from './entity'
+import { PLATFORM_ENTITY, platformDocumentsBlocked } from './entity'
 import { INVOICE_LINK_SECONDS, invoiceProvider } from './issue'
-import { nextNumber, yearOf } from './numbering'
+import { isTestNumber, nextNumber, TEST_NUMBER_PREFIX, yearOf } from './numbering'
 import { renderLinesPdf } from './pdf'
 
 // All wording here must be checked by a tax adviser before launch (README launch item), like the provider invoices.
@@ -76,7 +76,7 @@ export const hasUninvoicedCommission = async (exec: Exec, userId: string): Promi
  * every commission invoice); the insert does nothing on (provider_id, month), and then the transaction rolls back with
  * the counter bump: one invoice, no gap.
  */
-async function issueOne(providerId: string, month: string, clock: () => Date): Promise<typeof commissionInvoices.$inferSelect | null> {
+async function issueOne(providerId: string, month: string, clock: () => Date, live: boolean): Promise<typeof commissionInvoices.$inferSelect | null> {
   try {
     return await db.transaction(async (o) => {
       const p = await invoiceProvider(o, providerId)
@@ -107,12 +107,12 @@ async function issueOne(providerId: string, month: string, clock: () => Date): P
       // as issue.ts: the date of issue is read once the counter lock is held, so numbers and dates stay in the same order
       const before = clock()
       const year = yearOf(before)
-      const n = await nextNumber(o, `commission:${year}`)
+      const n = await nextNumber(o, `commission:${year}${live ? '' : ':test'}`) // test documents count in their own series
       const after = clock()
       const issuedAt = yearOf(after) === year ? after : before
       const [row] = await o
         .insert(commissionInvoices)
-        .values({ providerId, month, number: `K-${year}-${String(n).padStart(5, '0')}`, total: total.toFixed(2), currency, issuedAt, draft })
+        .values({ providerId, month, number: `${live ? '' : TEST_NUMBER_PREFIX}K-${year}-${String(n).padStart(5, '0')}`, total: total.toFixed(2), currency, issuedAt, draft })
         .onConflictDoNothing({ target: [commissionInvoices.providerId, commissionInvoices.month] })
         .returning()
       if (!row) throw LOST // rolls the counter back: no gap
@@ -153,7 +153,7 @@ export function commissionLines(d: CommissionDraft): string[] {
 async function storePdf(inv: typeof commissionInvoices.$inferSelect): Promise<void> {
   try {
     const key = `commission-invoices/${inv.providerId}/${inv.number}.pdf`
-    const bytes = await renderLinesPdf(commissionLines(inv.draft as CommissionDraft), inv.number, inv.issuedAt, !LIVE_PAYMENTS_ALLOWED)
+    const bytes = await renderLinesPdf(commissionLines(inv.draft as CommissionDraft), inv.number, inv.issuedAt, isTestNumber(inv.number))
     await storage().put(documentsBucket(), key, Buffer.from(bytes), 'application/pdf')
     const [done] = await db.update(commissionInvoices).set({ fileKey: key }).where(and(eq(commissionInvoices.id, inv.id), isNull(commissionInvoices.fileKey))).returning({ id: commissionInvoices.id })
     if (!done) return
@@ -173,9 +173,15 @@ async function storePdf(inv: typeof commissionInvoices.$inferSelect): Promise<vo
  * month including the current, partial one, as the recipient's details are about to go. Returns how many it issued. Never
  * throws: a failure is logged and the next run retries.
  */
-export async function issueCommissionInvoices(exec: Exec, now: Date, opts: { timeUp?: () => boolean; clock?: () => Date; userId?: string } = {}): Promise<number> {
+export async function issueCommissionInvoices(exec: Exec, now: Date, opts: { timeUp?: () => boolean; clock?: () => Date; userId?: string; live?: boolean } = {}): Promise<number> {
   const timeUp = opts.timeUp ?? (() => false)
+  const live = opts.live ?? LIVE_PAYMENTS_ALLOWED
   let issued = 0
+  // live payments with the legal entity still "[LEGAL NAME]": nothing is issued, no number used; the next run retries
+  if (platformDocumentsBlocked(live)) {
+    console.error('[commission] not issued: payments are live but PLATFORM_ENTITY still has placeholders (fill in invoices/entity.ts); the next run retries')
+    return 0
+  }
   try {
     const pending = await exec.select().from(commissionInvoices).where(and(isNull(commissionInvoices.fileKey), opts.userId ? sql`${commissionInvoices.providerId} IN (SELECT id FROM providers WHERE owner_id = ${opts.userId})` : undefined)).orderBy(asc(commissionInvoices.issuedAt)).limit(COMMISSION_CAP)
     for (const inv of pending) {
@@ -187,7 +193,7 @@ export async function issueCommissionInvoices(exec: Exec, now: Date, opts: { tim
     for (const { provider_id: id, month } of due) {
       if (timeUp()) break
       try {
-        const inv = await issueOne(id, month, opts.clock ?? (() => new Date()))
+        const inv = await issueOne(id, month, opts.clock ?? (() => new Date()), live)
         if (!inv) continue
         issued++
         await storePdf(inv)

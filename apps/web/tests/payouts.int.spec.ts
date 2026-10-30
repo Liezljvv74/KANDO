@@ -58,7 +58,7 @@ const getStatus = (uid: string) => call(status.GET, uid)
 const profile = async (slug: string) => ProviderDetailSchema.parse(await (await call(profileRoute.GET, U.third, 'GET', undefined, { slug })).json())
 const watch = (slug: string, as: string) => call(notifyMe.POST, as, 'POST', undefined, { slug })
 const unwatch = (slug: string, as: string) => call(notifyMe.DELETE, as, 'DELETE', undefined, { slug })
-const kindsFor = async (uid: string, kind: string) => (await pool.query('SELECT payload FROM notifications WHERE user_id = $1 AND kind = $2', [uid, kind])).rows
+const kindsFor = async (uid: string, kind: string) => (await pool.query('SELECT payload FROM notifications WHERE user_id = $1 AND kind = $2 ORDER BY created_at, id', [uid, kind])).rows
 const day = (k: number) => new Date(Date.now() + k * DAY).toISOString()
 const proposal = { startAt: day(10), durationMin: 60, onSite: true, address: { postcode: '10115' } }
 const ready = (id: string) => pool.query('UPDATE providers SET payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1', [id])

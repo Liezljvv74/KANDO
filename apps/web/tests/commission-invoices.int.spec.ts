@@ -62,7 +62,7 @@ async function settled(providerId: string, at: Date, amount = 100, rate = 0.12):
 const of = async (providerId: string) => (await pool.query('SELECT * FROM commission_invoices WHERE provider_id = $1 ORDER BY month', [providerId])).rows
 const readyNotices = async (uid: string) => (await pool.query("SELECT payload FROM notifications WHERE kind = 'commission-invoice-ready' AND user_id = $1", [uid])).rows
 const pdfOf = (inv: { file_key: string }) => store.objects.get(`documents/${inv.file_key}`)
-const seq = (number: string) => Number(number.split('-')[2])
+const seq = (number: string) => Number(number.split('-').at(-1))
 
 it('two commissions in January give one January invoice with their sum', async () => {
   const p = await provider()
@@ -75,7 +75,7 @@ it('two commissions in January give one January invoice with their sum', async (
   expect(more).toEqual([])
   expect([dec.month, dec.total]).toEqual(['2030-12', '12.00'])
   expect(inv).toMatchObject({ month: '2031-01', total: '42.00', currency: 'EUR', file_key: `commission-invoices/${p.id}/${inv.number}.pdf` })
-  expect(inv.number).toMatch(/^K-2031-\d{5}$/)
+  expect(inv.number).toMatch(/^TEST-K-2031-\d{5}$/) // payments not live: a test document in its own series
   const draft = inv.draft as CommissionDraft
   expect(draft.lines.map((l) => [l.bookingId, l.amount])).toEqual([
     [a, 12],
@@ -143,9 +143,9 @@ it('concurrent runs create one invoice and leave no gap in the numbers', async (
   await settled(q.id, new Date('2035-02-10T10:00:00Z'))
   await Promise.all([run(new Date('2035-03-02T10:00:00Z')), run(new Date('2035-03-02T10:00:00Z'))])
   const [next] = await of(q.id)
-  expect(next.number.slice(0, 7)).toBe(first.number.slice(0, 7))
+  expect(next.number.slice(0, 12)).toBe(first.number.slice(0, 12))
   expect(seq(next.number)).toBe(seq(first.number) + 1)
-  expect((await pool.query("SELECT last FROM invoice_counters WHERE series = 'commission:2035'")).rows[0].last).toBe(seq(next.number))
+  expect((await pool.query("SELECT last FROM invoice_counters WHERE series = 'commission:2035:test'")).rows[0].last).toBe(seq(next.number))
 })
 
 it('a month without commission creates nothing', async () => {
@@ -154,7 +154,7 @@ it('a month without commission creates nothing', async () => {
   const run = (at: Date) => issueCommissionInvoices(db, at, { clock: () => at })
   expect(await run(new Date('2036-03-05T10:00:00Z'))).toBe(0) // February: no commission
   expect(await of(p.id)).toEqual([])
-  expect((await pool.query("SELECT 1 FROM invoice_counters WHERE series = 'commission:2036'")).rows).toEqual([]) // no number taken
+  expect((await pool.query("SELECT 1 FROM invoice_counters WHERE series LIKE 'commission:2036%'")).rows).toEqual([]) // no number taken
   expect(await run(new Date('2036-04-05T10:00:00Z'))).toBe(1)
   expect((await of(p.id)).map((i) => i.month)).toEqual(['2036-03'])
 })

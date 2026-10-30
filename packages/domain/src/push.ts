@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db, pushTokens, users, type Tx } from '@kando/db'
 import type { PushSettings, PushTokenInput } from '@kando/contract'
@@ -60,34 +61,68 @@ async function devicesFor(userId: string, kind: NotificationKind): Promise<strin
 /** Whether a push of this kind would reach a device (switch on and a token): the chat email goes only when it would not. */
 export const pushReaches = async (userId: string, kind: NotificationKind): Promise<boolean> => (await devicesFor(userId, kind)).length > 0
 
+type Queued = { userId: string; message: PushMessage }
+const batch = new AsyncLocalStorage<Queued[]>()
+
+/**
+ * Runs `fn` with every push it causes held back, then sends them all at the end in requests of up to CHUNK messages (the
+ * cron: one slow push service then costs one timeout per 100 messages after the run's work, never one per event inside
+ * its time budget). Never throws for the pushes.
+ */
+export async function withPushBatch<T>(fn: () => Promise<T>): Promise<T> {
+  const queued: Queued[] = []
+  try {
+    return await batch.run(queued, fn)
+  } finally {
+    await deliver(queued)
+  }
+}
+
 /**
  * Pushes one message to every device of the person, unless their switch for that kind is off. Owner connection (after
- * commit: callers run it once the event is stored). Tests record into the outbox and never reach the network. A ticket
- * `DeviceNotRegistered` deletes that token only. Never throws: a failed push must not touch the event that caused it.
+ * commit: callers run it once the event is stored). Inside withPushBatch it is queued and sent at the batch's end. Tests
+ * record into the outbox and never reach the network. A ticket `DeviceNotRegistered` deletes that token only. Never
+ * throws: a failed push must not touch the event that caused it.
  */
 export async function sendPush(userId: string, message: { kind: NotificationKind; title: string; body: string; url: string }): Promise<void> {
   try {
-    const all: PushMessage[] = (await devicesFor(userId, message.kind)).map((token) => ({ to: token, title: message.title, body: message.body, sound: 'default', data: { url: message.url, kind: message.kind } }))
-    if (process.env.VITEST || process.env.NODE_ENV === 'test') return void outbox.push(...all)
+    const all: Queued[] = (await devicesFor(userId, message.kind)).map((token) => ({ userId, message: { to: token, title: message.title, body: message.body, sound: 'default', data: { url: message.url, kind: message.kind } } }))
+    const queue = batch.getStore()
+    if (queue) return void queue.push(...all)
+    await deliver(all)
+  } catch (e) {
+    console.error('[push] send failed', describeError(e))
+  }
+}
+
+/** Sends the messages in requests of up to CHUNK (each with the timeout); removes tokens Expo reports as gone. Never throws. */
+async function deliver(all: Queued[]): Promise<void> {
+  try {
+    if (process.env.VITEST || process.env.NODE_ENV === 'test') return void outbox.push(...all.map((q) => q.message))
     const access = process.env.EXPO_ACCESS_TOKEN
     for (let i = 0; i < all.length; i += CHUNK) {
       const chunk = all.slice(i, i + CHUNK)
-      const res = await fetch(EXPO_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json', ...(access && { authorization: `Bearer ${access}` }) },
-        body: JSON.stringify(chunk),
-        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS), // a slow push service never holds up the event that caused it
-      })
-      if (!res.ok) {
-        console.error(`[push] send failed: HTTP ${res.status}`)
-        continue
+      try {
+        const res = await fetch(EXPO_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json', ...(access && { authorization: `Bearer ${access}` }) },
+          body: JSON.stringify(chunk.map((q) => q.message)),
+          signal: AbortSignal.timeout(PUSH_TIMEOUT_MS), // a slow push service never holds up the event that caused it
+        })
+        if (!res.ok) {
+          console.error(`[push] send failed: HTTP ${res.status}`)
+          continue
+        }
+        // tickets come back in the order sent; only a device that is gone for good loses its token
+        // a malformed answer only skips this chunk's token clean-up, never the remaining chunks
+        const reply = (await res.json().catch(() => null)) as { data?: unknown } | null
+        const tickets = (Array.isArray(reply?.data) ? reply.data : []) as ({ status?: string; details?: { error?: string } } | null)[]
+        // only the token of the person the message was for (a token that moved on meanwhile stays with its new holder)
+        for (const q of chunk.filter((_, j) => tickets[j]?.status === 'error' && tickets[j]?.details?.error === 'DeviceNotRegistered'))
+          await db.delete(pushTokens).where(and(eq(pushTokens.userId, q.userId), inArray(pushTokens.token, [q.message.to])))
+      } catch (e) {
+        console.error('[push] send failed', describeError(e)) // this chunk only: the others still go
       }
-      // tickets come back in the order sent; only a device that is gone for good loses its token
-      // a malformed answer only skips this chunk's token clean-up, never the remaining chunks
-      const reply = (await res.json().catch(() => null)) as { data?: unknown } | null
-      const tickets = (Array.isArray(reply?.data) ? reply.data : []) as ({ status?: string; details?: { error?: string } } | null)[]
-      const dead = chunk.filter((_, j) => tickets[j]?.status === 'error' && tickets[j]?.details?.error === 'DeviceNotRegistered').map((m) => m.to)
-      if (dead.length) await db.delete(pushTokens).where(and(eq(pushTokens.userId, userId), inArray(pushTokens.token, dead)))
     }
   } catch (e) {
     console.error('[push] send failed', describeError(e))
