@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db, pushTokens, users, type Tx } from '@kando/db'
 import type { PushSettings, PushTokenInput } from '@kando/contract'
+import { deferSend } from './deferred-sends'
 import { describeError } from './log-error'
 import type { NotificationKind } from './notifications-store'
 
@@ -74,7 +75,7 @@ export async function withPushBatch<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await batch.run(queued, fn)
   } finally {
-    await deliver(queued)
+    if (!deferSend(() => deliver(queued))) await deliver(queued)
   }
 }
 
@@ -82,9 +83,16 @@ export async function withPushBatch<T>(fn: () => Promise<T>): Promise<T> {
  * Pushes one message to every device of the person, unless their switch for that kind is off. Owner connection (after
  * commit: callers run it once the event is stored). Inside withPushBatch it is queued and sent at the batch's end. Tests
  * record into the outbox and never reach the network. A ticket `DeviceNotRegistered` deletes that token only. Never
- * throws: a failed push must not touch the event that caused it.
+ * throws: a failed push must not touch the event that caused it. Inside a request (withDeferredSends) it is only queued
+ * and goes out after the answer.
  */
-export async function sendPush(userId: string, message: { kind: NotificationKind; title: string; body: string; url: string }): Promise<void> {
+export async function sendPush(userId: string, message: PushInput): Promise<void> {
+  if (deferSend(() => pushNow(userId, message))) return
+  await pushNow(userId, message)
+}
+
+type PushInput = { kind: NotificationKind; title: string; body: string; url: string }
+async function pushNow(userId: string, message: PushInput): Promise<void> {
   try {
     const all: Queued[] = (await devicesFor(userId, message.kind)).map((token) => ({ userId, message: { to: token, title: message.title, body: message.body, sound: 'default', data: { url: message.url, kind: message.kind } } }))
     const queue = batch.getStore()

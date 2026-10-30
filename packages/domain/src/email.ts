@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { deferSend } from './deferred-sends'
 import { describeError } from './log-error'
 import { LATE_CANCEL_SHARE } from './bookings/ending-rules'
 import { t, type Lang } from '@kando/i18n'
@@ -95,9 +96,21 @@ function compose(lang: Lang, template: Template, params: Params) {
 }
 
 let client: Resend | undefined
+/** A Resend call that has not answered by then is given up (logged), so a hanging mail service never holds a request or a cron run. */
+export const EMAIL_TIMEOUT_MS = 10_000
+type EmailArgs = { to: string; lang: Lang; template: Template; params: Params }
 
-/** Sends through Resend; with no RESEND_API_KEY it logs one line (and in tests records the mail in the outbox). Never throws. */
-export async function sendEmail(args: { to: string; lang: Lang; template: Template; params: Params }): Promise<void> {
+/**
+ * Sends through Resend; with no RESEND_API_KEY it logs one line (and in tests records the mail in the outbox). Inside a
+ * request (withDeferredSends) it is only queued and goes out after the answer. Never throws.
+ */
+export async function sendEmail(args: EmailArgs): Promise<void> {
+  if (deferSend(() => deliverEmail(args))) return
+  await deliverEmail(args)
+}
+
+async function deliverEmail(args: EmailArgs): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const mail: Mail = { to: args.to, from: FROM, replyTo: REPLY_TO, ...compose(args.lang, args.template, args.params) }
     const key = process.env.RESEND_API_KEY
@@ -108,9 +121,13 @@ export async function sendEmail(args: { to: string; lang: Lang; template: Templa
       return
     }
     client ??= new Resend(key)
-    const { error } = await client.emails.send({ from: mail.from, to: mail.to, replyTo: mail.replyTo, subject: mail.subject, text: mail.text, html: mail.html })
-    if (error) console.error('[email] send failed', error.name)
+    const timeout = new Promise<'timeout'>((resolve) => (timer = setTimeout(() => resolve('timeout'), EMAIL_TIMEOUT_MS)))
+    const result = await Promise.race([client.emails.send({ from: mail.from, to: mail.to, replyTo: mail.replyTo, subject: mail.subject, text: mail.text, html: mail.html }), timeout])
+    if (result === 'timeout') console.error('[email] send failed timeout')
+    else if (result.error) console.error('[email] send failed', result.error.name)
   } catch (e) {
     console.error(`[email] send failed ${describeError(e)}`)
+  } finally {
+    clearTimeout(timer)
   }
 }

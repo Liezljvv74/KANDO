@@ -1,5 +1,6 @@
 export * from './users'
 export * from './app-request'
+export * from './deferred-sends'
 export * from './origin'
 export * from './log-error'
 export * from './providers/eligibility'
