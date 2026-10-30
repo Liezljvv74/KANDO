@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { bookings, db, disputes, providers, type Tx } from '@kando/db'
 import type { Booking, NoShowObjection } from '@kando/contract'
 import { assertNoContactDetails, flagForStaff } from '../chat/flags'
@@ -7,6 +7,7 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
+import { lockFamily, parentNoShow } from './additional'
 import { openDisputeCore, tellDisputeOpened } from './disputes'
 import { customerCancelShare, isLate, NO_SHOW_OBJECTION_HOURS } from './ending-rules'
 import { attemptMoney, lockRow, reload, sideOf } from './finish'
@@ -90,10 +91,8 @@ async function tellCancelled(b: Row): Promise<void> {
 export async function cancelBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
   const side = await sideOf(tx, userId, bookingId)
   const done = await db.transaction(async (o) => {
-    // the booking and its additional tasks in ONE statement, in id order (as account deletion locks), so the two never deadlock
-    const rows = await o.select().from(bookings).where(or(eq(bookings.id, bookingId), eq(bookings.parentBookingId, bookingId))).orderBy(bookings.id).for('update')
-    const b = rows.find((r) => r.id === bookingId) ?? fail(404, { error: 'Not found' })
-    const kids = rows.filter((r) => r.id !== bookingId)
+    // the booking and its additional tasks, in id order (as account deletion locks), so the two never deadlock
+    const [b, kids] = await lockFamily(o, bookingId)
     if (b.status === 'cancelled') return []
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' }) // a report that won the lock first stands (its clock may run a little ahead)
@@ -114,18 +113,23 @@ export async function cancelBooking(tx: Tx, userId: string, bookingId: string, n
 /**
  * Either side reports that the OTHER did not turn up: from `confirmed`, once the start has come (else 409 TOO_EARLY).
  * Sets `noShow` (the other side) and `noShowReportedAt`; the status stays `confirmed` until the reported side objects
- * (a dispute) or NO_SHOW_OBJECTION_HOURS pass (resolveNoShow). Meanwhile Finished, confirm and the silent-provider rules
- * leave the booking alone. The reported side is told, with the deadline. A second tap returns it unchanged; a report back
- * by the reported side is 409 NO_SHOW_REPORTED. Only this booking: an additional task is reported on its own.
+ * (a dispute) or NO_SHOW_OBJECTION_HOURS pass (resolveNoShow). Meanwhile Finished, confirm, stop, cancel and the
+ * silent-provider rules leave the booking alone. The reported side is told, with the deadline. A second tap returns it
+ * unchanged; a report back by the reported side is 409 NO_SHOW_REPORTED. A root's report covers its paid (`confirmed`)
+ * additional tasks (same time and place): they get the same `noShow` in the same transaction, freeze with the root and
+ * end with it (resolveNoShow, or staff on an objection); an unpaid one paid meanwhile is refunded by the webhook. An
+ * additional task reported on its own ends on its own.
  */
 export async function reportNoShow(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
   const them = otherSide(await sideOf(tx, userId, bookingId))
   const row = await db.transaction(async (o) => {
-    const b = await lockRow(o, bookingId)
+    const [b, kids] = await lockFamily(o, bookingId)
     if (b.noShow === them) return null
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' })
     if (now < b.startAt) fail(409, { error: 'TOO_EARLY' })
+    const covered = kids.filter((k) => k.status === 'confirmed' && !k.noShow).map((k) => k.id)
+    if (covered.length) await o.update(bookings).set({ noShow: them, noShowReportedAt: now, updatedAt: now }).where(inArray(bookings.id, covered))
     return (await o.update(bookings).set({ noShow: them, noShowReportedAt: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning())[0]!
   })
   if (row) {
@@ -146,6 +150,7 @@ export async function objectNoShow(tx: Tx, userId: string, bookingId: string, in
     const b = await lockRow(o, bookingId)
     if (!b.noShow) fail(409, { error: 'not-open' })
     if (b.noShow !== side) fail(403, { error: 'not-your-turn' })
+    if (await parentNoShow(o, b)) fail(409, { error: 'not-open' }) // covered by the root's report: the objection goes there
     if (b.status === 'disputed' && (await o.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.bookingId, b.id), eq(disputes.reason, 'no-show-objection')))).length) return null
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (now >= objectBy(b)) fail(409, { error: 'OBJECTION_CLOSED' })
@@ -163,13 +168,20 @@ export async function objectNoShow(tx: Tx, userId: string, bookingId: string, in
  * a full refund). Then the provider no-show rule (root bookings, 12 months up to `now`): the first gets a
  * `provider-warning`, from the second on staff get one open `provider-no-shows` flag (to suspend for 30 days with the
  * suspension tool). The reporter is told. Owner connection, row locked and re-checked (an objection racing it: one wins).
- * False when there was nothing to do.
+ * A root's paid additional tasks end with it, by the same rule on their own amount (cancelled with the root's `noShow`
+ * unless they carry their own; the timer's settle loop moves the money); unpaid ones are withdrawn. An additional task
+ * covered by its root's report is never resolved on its own. False when there was nothing to do.
  */
 export async function resolveNoShow(exec: Exec, bookingId: string, now: Date): Promise<boolean> {
   const r = await exec.transaction(async (o) => {
-    const b = await lockRow(o, bookingId)
-    if (b.status !== 'confirmed' || !b.noShow || !b.noShowReportedAt || objectBy(b) > now) return null
+    const [b, kids] = await lockFamily(o, bookingId)
+    if (b.status !== 'confirmed' || !b.noShow || !b.noShowReportedAt || objectBy(b) > now || (await parentNoShow(o, b))) return null
     const [row] = await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
+    for (const k of kids) {
+      if (k.status === 'confirmed')
+        await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, noShow: k.noShow ?? b.noShow, noShowReportedAt: k.noShowReportedAt ?? b.noShowReportedAt, updatedAt: now }).where(eq(bookings.id, k.id))
+      else if (k.status === 'proposed' || k.status === 'awaiting-payment') await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
+    }
     if (b.noShow !== 'provider' || b.parentBookingId) return { row: row!, warn: false }
     const n = (
       await o.execute<{ n: number }>(sql`
@@ -191,7 +203,8 @@ export async function resolveNoShows(exec: Exec, now: Date): Promise<number> {
   const due = (
     await exec.execute<{ id: string }>(sql`
     SELECT id FROM bookings WHERE status = 'confirmed' AND no_show IS NOT NULL
-      AND no_show_reported_at + make_interval(hours => ${NO_SHOW_OBJECTION_HOURS}) <= ${now.toISOString()}::timestamptz ORDER BY id`)
+      AND no_show_reported_at + make_interval(hours => ${NO_SHOW_OBJECTION_HOURS}) <= ${now.toISOString()}::timestamptz
+      AND NOT EXISTS (SELECT 1 FROM bookings p WHERE p.id = bookings.parent_booking_id AND p.no_show IS NOT NULL) ORDER BY id`)
   ).rows
   let n = 0
   for (const { id } of due) {

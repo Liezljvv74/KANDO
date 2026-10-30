@@ -32,6 +32,8 @@ export const RequestSchema = z.object({
   serviceId: z.string().nullable(),
   description: z.string(),
   preferredDate: z.string().nullable(),
+  /** Set for an additional task: the booking it adds work to. */
+  parentBookingId: z.string().nullable(),
   status: z.enum(REQUEST_STATUSES),
   answerBy: z.string(),
   createdAt: z.string(),
@@ -78,8 +80,11 @@ export const TimeProposalSchema = z
   .refine((v) => !v.onSite || v.address !== undefined, { message: 'Address required when on site', path: ['address'] })
 export type TimeProposal = z.infer<typeof TimeProposalSchema>
 
-/** POST /quotes/[id]/accept: the customer's proposed time. */
-export const AcceptQuoteInputSchema = TimeProposalSchema
+/**
+ * POST /quotes/[id]/accept: the customer's proposed time. An additional task's quote takes no time (an empty body, or a
+ * note only): it gets the time, duration, place and address of the booking it adds to.
+ */
+export const AcceptQuoteInputSchema = z.union([TimeProposalSchema, z.object({ note: text(1000).optional() }).strict()])
 export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
 
 /** POST /bookings: a booking without a prior request. */

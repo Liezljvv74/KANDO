@@ -134,9 +134,15 @@ async function sweep(exec: Exec, now: Date, userId?: string, expiryOnly = false)
   return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, events }
 }
 
-const noOpenDispute = sql`NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id = bookings.id AND d.decided_at IS NULL)`
-const noChargeback = sql`NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'chargeback' AND f.ref_id = bookings.id::text AND f.resolved_at IS NULL)`
-const endAt = sql`start_at + make_interval(mins => duration_min)`
+// The booking's own dispute or chargeback, or its root's (a frozen root freezes its additional tasks; settle refuses the same)
+const noOpenDispute = sql`NOT EXISTS (SELECT 1 FROM disputes d WHERE d.booking_id IN (bookings.id, bookings.parent_booking_id) AND d.decided_at IS NULL)`
+const noChargeback = sql`NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'chargeback' AND f.ref_id IN (bookings.id::text, bookings.parent_booking_id::text) AND f.resolved_at IS NULL)`
+/**
+ * The end the silent-provider rules count from: the agreed end, or the payment if later (an additional task keeps its
+ * parent's start, which may be long past when it is paid). A root is paid before its start, so for it this is the end.
+ */
+const endAt = sql`greatest(start_at + make_interval(mins => duration_min), paid_at)`
+const endOrPaid = (b: typeof bookings.$inferSelect) => Math.max(endOf(b).getTime(), b.paidAt?.getTime() ?? 0)
 /**
  * The booking rows of `pred`, locked in id order (account deletion locks a person's bookings by id too, so the two never
  * wait on each other in opposite orders). The lock re-checks `pred` on a row changed meanwhile.
@@ -174,7 +180,7 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
     sql`status = 'confirmed' AND no_show IS NULL AND ${endAt} + make_interval(days => ${NO_ACTION_STAFF_DAYS}) <= ${t}::timestamptz
         AND asked_done_at IS NOT NULL AND asked_done_at + make_interval(hours => ${ASK_DONE_HOURS}) <= ${t}::timestamptz`,
     (b) =>
-      b.status === 'confirmed' && !b.noShow && b.askedDoneAt !== null && b.askedDoneAt.getTime() + ASK_DONE_HOURS * HOUR <= now.getTime() && endOf(b).getTime() + NO_ACTION_STAFF_DAYS * DAY <= now.getTime(),
+      b.status === 'confirmed' && !b.noShow && b.askedDoneAt !== null && b.askedDoneAt.getTime() + ASK_DONE_HOURS * HOUR <= now.getTime() && endOrPaid(b) + NO_ACTION_STAFF_DAYS * DAY <= now.getTime(),
   )
 
   // A stopped job whose stated amount the customer left unanswered (or whose provider never stated one) for

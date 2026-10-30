@@ -21,6 +21,10 @@ export type StopAmountInput = z.infer<typeof StopAmountInputSchema>
 export const StopAnswerSchema = z.object({ agree: z.boolean() }).strict()
 export type StopAnswer = z.infer<typeof StopAnswerSchema>
 
+/** POST /bookings/:id/additional-task (either side, on a paid or finished booking): what the extra work is; the provider then quotes it. */
+export const AdditionalTaskInputSchema = z.object({ description: requiredText(2000) }).strict()
+export type AdditionalTaskInput = z.infer<typeof AdditionalTaskInputSchema>
+
 export const DISPUTE_REASONS = ['problem', 'no-show-objection', 'no-response', 'stop-disagreed', 'chargeback'] as const
 
 /** A dispute as the two parties see it (GET /bookings/:id/dispute). Who decided it is not shown. */

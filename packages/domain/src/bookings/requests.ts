@@ -15,6 +15,7 @@ import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { canTransact } from '../payments/rules'
 import { assertFuture, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { NO_SHOW_OBJECTION_HOURS } from './ending-rules'
+import { acceptAdditional } from './additional'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -22,13 +23,14 @@ const NO_ID = '00000000-0000-0000-0000-000000000000'
 const notFound = () => fail(404, { error: 'Not found' })
 const iso = (d: Date) => d.toISOString()
 
-const toRequest = (r: typeof requests.$inferSelect): BookingRequest => ({
+export const toRequest = (r: typeof requests.$inferSelect): BookingRequest => ({
   id: r.id,
   customerId: r.customerId,
   providerId: r.providerId,
   serviceId: r.serviceId,
   description: r.description,
   preferredDate: r.preferredDate,
+  parentBookingId: r.parentBookingId,
   status: r.status as BookingRequest['status'],
   answerBy: iso(r.answerBy),
   createdAt: iso(r.createdAt),
@@ -91,6 +93,10 @@ export const toBooking = (b: typeof bookings.$inferSelect): Booking => ({
   updatedAt: iso(b.updatedAt),
 })
 
+/** A request that still waits for the provider: open before its deadline, or quoted with a quote still valid. */
+export const liveRequest = (now: Date) =>
+  or(and(eq(requests.status, 'open'), gt(requests.answerBy, now)), and(eq(requests.status, 'quoted'), sql`EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ${requests.id} AND q.status = 'sent' AND q.expires_at > ${now.toISOString()}::timestamptz)`))
+
 /** Serialises actions on one request (two accepts, or an accept and a new quote, cannot interleave). */
 const lockRequest = (tx: Tx, requestId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext(${requestId}))`)
@@ -103,8 +109,8 @@ const lockRequest = (tx: Tx, requestId: string) =>
 export async function assertWithinLimits(tx: Tx, userId: string, providerId: string | null, now: Date): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('request_limit'), hashtext(${userId}))`)
   if (providerId) {
-    const open = or(and(eq(requests.status, 'open'), gt(requests.answerBy, now)), and(eq(requests.status, 'quoted'), sql`EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ${requests.id} AND q.status = 'sent' AND q.expires_at > ${now.toISOString()}::timestamptz)`)) // a quoted request counts only while its quote is live (the timer leaves it 'quoted' after expiry); an open request past its deadline is as good as expired
-    const n = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(eq(requests.customerId, userId), eq(requests.providerId, providerId), open)))[0]!.n
+    // a quoted request counts only while its quote is live (the timer leaves it 'quoted' after expiry); an open request past its deadline is as good as expired
+    const n = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(eq(requests.customerId, userId), eq(requests.providerId, providerId), liveRequest(now))))[0]!.n
     if (n >= MAX_OPEN_REQUESTS_PER_PAIR) fail(409, { error: 'request-limit' })
   }
   const since = new Date(now.getTime() - DAY)
@@ -200,7 +206,8 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     .returning()
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
   const threadId = await threadForRequest(tx, requestId)
-  afterCommit(() => postCard(threadId, userId, { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
+  // an additional task's quote shows as the additional-task card (with the explainer in the app)
+  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   return toQuote(row!)
 }
@@ -223,6 +230,14 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   // a suspended or unpublished provider row is hidden from the customer by RLS: that is unavailable too
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return unavailable()
   if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // the provider's payouts stopped being ready since the quote
+  if (req.parentBookingId) {
+    // an additional task: the parent's time and place, awaiting payment at once (additional.ts)
+    const child = await acceptAdditional(quote, req, input.note ?? null, now)
+    const threadId = await threadForRequest(tx, req.id) // the parent's thread
+    afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
+    return toBooking(child)
+  }
+  if (!('startAt' in input)) return fail(400, { error: 'time-required' })
   const startAt = new Date(input.startAt)
   assertFuture(startAt, now)
   if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })

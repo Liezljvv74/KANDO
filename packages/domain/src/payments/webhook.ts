@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { bookings, db, ledgerEntries, providers, stripeEvents, type Tx } from '@kando/db'
 import { lockProviderSlots, slotIsHeld } from '../bookings/busy'
+import { parentNoShow } from '../bookings/additional'
 import { openSystemDispute } from '../bookings/disputes'
 import { notifyBookingEvent } from '../bookings/notify'
 import { flagForStaff } from '../chat/flags'
@@ -72,7 +73,8 @@ async function paid(tx: Tx, e: Paid, now: Date, after: After): Promise<void> {
     now.getTime() <= b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 &&
     toCents(Number(b.amount)) === e.amountCents &&
     b.currency === e.currency &&
-    !(await slotIsHeld(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) // owner connection sees every booking; other slot writers wait on our lock
+    // an additional task has its parent's time (no slot check) and is refunded once the parent has a reported no-show
+    (b.parentBookingId ? !(await parentNoShow(tx, b)) : !(await slotIsHeld(tx, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id))) // owner connection sees every booking; other slot writers wait on our lock
 
   if (confirmable) {
     // booking first, then its charge row: both or neither
