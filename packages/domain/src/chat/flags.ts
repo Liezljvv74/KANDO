@@ -33,3 +33,9 @@ export async function assertNoContactDetails(userId: string, text: string, threa
   await recordAttempt(userId, text, hit, threadId)
   fail(422, { error: 'CONTACT_DETAILS' })
 }
+
+/** The same check for public profile texts: the non-empty texts of one save are joined, so one save is one recorded attempt. */
+export async function assertNoContactDetailsIn(userId: string, texts: (string | null | undefined)[]): Promise<void> {
+  const joined = texts.filter((t): t is string => !!t?.trim()).join('\n') // the digit rule never crosses a line break
+  if (joined) await assertNoContactDetails(userId, joined)
+}

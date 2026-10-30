@@ -1,3 +1,4 @@
+import { assertNoContactDetailsIn } from '../chat/flags'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { categories, categoryTexts, providerReferences, providers, serviceAppInsert, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG } from '@kando/i18n'
@@ -65,6 +66,7 @@ async function withState(tx: Tx, profile: NonNullable<Awaited<ReturnType<typeof 
 }
 
 export async function addService(tx: Tx, userId: string, input: ServiceInput): Promise<OwnService> {
+  await assertNoContactDetailsIn(userId, [input.title, input.description])
   const profile = (await ownProvider(tx, userId)) ?? noProfile()
   await assertCategory(tx, input.categoryId)
   const price = input.priceType === 'on-request' ? null : (input.price ?? null)
@@ -96,6 +98,7 @@ const ownServiceRow = async (tx: Tx, userId: string, id: string) =>
 
 /** null when the service is not the caller's (the route answers 404). */
 export async function updateService(tx: Tx, userId: string, id: string, patch: ServicePatch): Promise<OwnService | null> {
+  await assertNoContactDetailsIn(userId, [patch.title, patch.description])
   const existing = await ownServiceRow(tx, userId, id)
   if (!existing) return null
   const profile = (await ownProvider(tx, userId))!
@@ -142,6 +145,7 @@ export async function listReferences(tx: Tx, userId: string): Promise<OwnReferen
 }
 
 export async function addReference(tx: Tx, userId: string, input: ReferenceInput): Promise<OwnReference> {
+  await assertNoContactDetailsIn(userId, [input.clientName, input.description])
   await lockProfile(tx, userId) // concurrent creates cannot pass the limit together
   const profile = (await ownProvider(tx, userId)) ?? noProfile()
   const [{ n }] = (await tx
@@ -168,6 +172,7 @@ const ownReferenceRow = async (tx: Tx, userId: string, id: string) =>
       )[0]?.r ?? null)
 
 export async function updateReference(tx: Tx, userId: string, id: string, patch: ReferencePatch): Promise<OwnReference | null> {
+  await assertNoContactDetailsIn(userId, [patch.clientName, patch.description])
   if (!(await ownReferenceRow(tx, userId, id))) return null
   const [row] = await tx
     .update(providerReferences)

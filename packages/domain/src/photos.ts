@@ -1,3 +1,4 @@
+import { assertNoContactDetailsIn } from './chat/flags'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import sharp from 'sharp'
@@ -84,6 +85,7 @@ export async function listPhotos(tx: Tx, userId: string): Promise<Photo[]> {
 
 /** Inserts the row for the photo `preparePhoto` already stored. A profile photo replaces the old one. */
 export async function addPhoto(tx: Tx, userId: string, p: PreparedPhoto, afterCommit: AfterCommit) {
+  await assertNoContactDetailsIn(userId, [p.alt])
   await lockProfile(tx, userId)
   const profile = await ownProvider(tx, userId)
   if (p.kind === 'portfolio') {
