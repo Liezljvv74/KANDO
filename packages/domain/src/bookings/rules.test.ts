@@ -54,7 +54,16 @@ describe('canTransition', () => {
     'proposed>withdrawn',
     'awaiting-payment>expired',
     'awaiting-payment>withdrawn',
-    'awaiting-payment>confirmed', // the payment webhook (owner connection); confirmed has no exits for the app
+    'awaiting-payment>confirmed', // the payment webhook (owner connection)
+    // endings: owner connection only (trigger bookings_guard_status); the table documents them
+    ...['finished', 'cancelled', 'stopped', 'disputed', 'completed'].map((t) => `confirmed>${t}`),
+    'finished>completed',
+    'finished>disputed', // finished>stopped is deliberately absent
+    'stopped>completed',
+    'stopped>disputed',
+    'disputed>completed',
+    'disputed>refunded',
+    'disputed>cancelled',
   ])
   it('allows exactly the table, nothing leaves a final state', () => {
     for (const from of all) for (const to of all) expect(canTransition(from, to), `${from}>${to}`).toBe(allowed.has(`${from}>${to}`))
