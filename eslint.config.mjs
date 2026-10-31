@@ -14,9 +14,9 @@ export default tseslint.config(
     },
   },
   {
-    // CommonJS tool configs (Metro, Expo config plugins).
-    files: ['**/metro.config.js', 'apps/mobile/plugins/*.js'],
-    languageOptions: { sourceType: 'commonjs', globals: { require: 'readonly', module: 'writable', __dirname: 'readonly' } },
+    // CommonJS tool configs (Metro, Expo config plugins, the Jest setup).
+    files: ['**/metro.config.js', 'apps/mobile/plugins/*.js', 'apps/mobile/jest.setup.js'],
+    languageOptions: { sourceType: 'commonjs', globals: { require: 'readonly', module: 'writable', __dirname: 'readonly', jest: 'readonly' } },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
 )
