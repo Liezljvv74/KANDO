@@ -8,8 +8,8 @@ export const PATCH = adminRequest(roleFor, async ({ tx, request, params }) => {
   refreshAfterAdminChange(params.resource!)
   return answer
 })
-export const DELETE = adminRequest(roleFor, async ({ tx, params, afterCommit }) => {
-  const answer = await adminRemove(tx, params.resource!, params.id!, afterCommit)
+export const DELETE = adminRequest(roleFor, async ({ tx, staff, request, params, afterCommit }) => {
+  const answer = await adminRemove(tx, staff.id, params.resource!, params.id!, request, afterCommit)
   refreshAfterAdminChange(params.resource!)
   return answer
 })

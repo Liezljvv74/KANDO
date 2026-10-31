@@ -10,7 +10,7 @@ const APP_LINK = 'skilled://my-profile'
 
 /** One email per booking event kind (see bookings/notify.ts). */
 export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning' | 'dispute-opened' | 'job-stopped' | 'stop-amount-stated' | 'additional-task-requested' | 'dispute-decided' | 'refund-issued' | 'review-visible' | 'invoice-ready' | 'commission-invoice-ready' | 'request-withdrawn' | 'request-declined' | 'request-reopened'
-export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | 'additional-task-requested-provider' | 'payment-released-stop' | 'payment-released-stop-provider' | 'payment-released-stop-refund' | 'payment-released-stop-refund-provider' | 'refund-issued-provider' | CancelTemplate | BookingTemplate
+export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'photo-removed' | 'photo-removed-draft' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | 'additional-task-requested-provider' | 'payment-released-stop' | 'payment-released-stop-provider' | 'payment-released-stop-refund' | 'payment-released-stop-refund-provider' | 'refund-issued-provider' | CancelTemplate | BookingTemplate
 /** booking-cancelled variants (bookings/cancel.ts: who cancelled, what happens to the money). */
 export type CancelTemplate = 'booking-cancelled-late' | 'booking-cancelled-by-provider' | 'booking-cancelled-no-show-customer' | 'booking-cancelled-no-show-provider'
 type Params = Record<string, string | null | undefined>
@@ -34,6 +34,8 @@ export const EMAIL_KEYS: Record<Template, string> = {
   'profile-live': 'email.profileLive',
   suspended: 'email.suspended',
   'published-again': 'email.publishedAgain',
+  'photo-removed': 'email.photoRemoved',
+  'photo-removed-draft': 'email.photoRemoved.draft',
   'account-deleted': 'email.accountDeleted',
   'account-deleted-retained': 'email.accountDeleted.retained',
   'request-received': 'email.requestReceived',

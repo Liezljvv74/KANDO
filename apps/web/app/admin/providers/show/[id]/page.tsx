@@ -1,8 +1,9 @@
 'use client'
 
-import { useCustomMutation, useShow } from '@refinedev/core'
+import { useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
-import { Button, Descriptions, Image, Popconfirm, Space } from 'antd'
+import { Descriptions, Image, Space } from 'antd'
+import { RemovePhotoButton } from '../../../../../lib/admin/RemovePhotoButton'
 import { useAt } from '../../../../../lib/admin/t'
 
 type Provider = {
@@ -18,7 +19,6 @@ type Provider = {
 export default function ProviderShow() {
   const at = useAt()
   const { query, result } = useShow<Provider>()
-  const remove = useCustomMutation()
   return (
     <Show title={at('admin.resource.providers')} isLoading={query.isLoading} canEdit={false} canDelete={false}>
       {result && (
@@ -37,11 +37,7 @@ export default function ProviderShow() {
             {result.photos.map((p) => (
               <Space key={p.id} direction="vertical">
                 <Image src={p.url} alt={p.alt ?? ''} width={160} />
-                <Popconfirm title={at('admin.action.deletePhoto')} onConfirm={() => remove.mutate({ url: `/api/admin/photos/${p.id}`, method: 'delete', values: {} }, { onSuccess: () => query.refetch() })}>
-                  <Button danger size="small">
-                    {at('admin.action.deletePhoto')}
-                  </Button>
-                </Popconfirm>
+                <RemovePhotoButton photoId={p.id} onDone={() => query.refetch()} />
               </Space>
             ))}
           </Space>

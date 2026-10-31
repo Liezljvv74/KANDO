@@ -99,6 +99,18 @@ export async function notifyDocumentDecision(userId: string, document: DocumentD
   }
 }
 
+/** Tells the person staff removed their photo, with the reason; `profileDraft`: their live profile went back to draft with it. */
+export async function notifyPhotoRemoved(userId: string, p: { reason: string; profileDraft: boolean }): Promise<void> {
+  try {
+    const [user] = await db.select({ email: users.email, language: users.language }).from(users).where(eq(users.id, userId))
+    if (!user) return
+    const lang = isLang(user.language) ? user.language : DEFAULT_LANG
+    await sendEmail({ to: user.email, lang, template: p.profileDraft ? 'photo-removed-draft' : 'photo-removed', params: { reason: p.reason } })
+  } catch (e) {
+    console.error('[notify] photo removed email failed', describeError(e))
+  }
+}
+
 /** Tells the user their profile was suspended until `until` (with the reason), or, with null, that it is published again. */
 export async function notifySuspension(userId: string, s: { until: Date | null; reason: string }): Promise<void> {
   try {

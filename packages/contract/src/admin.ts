@@ -53,6 +53,11 @@ export const SuspendInputSchema = z.object({
   reason: z.string().trim().max(500),
 })
 
+/** Staff remove a photo with a reason; the person is emailed the reason. */
+export const PhotoRemovalInputSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+})
+
 export const StaffInputSchema = z.object({
   email: z.string().trim().toLowerCase().max(320),
   staffRole: StaffRoleSchema.nullable(),
