@@ -32,8 +32,8 @@ const placeOf = (b: Booking) => {
 }
 
 /** Actions that open a form or statement below the booking before anything is sent. */
-type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
-const SHEETS: readonly BookingAction[] = ['finish', 'cancel', 'dispute', 'objectNoShow', 'additionalTask', 'stateStopAmount', 'answerStop']
+type Sheet = 'counter' | 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
+const SHEETS: readonly BookingAction[] = ['counter', 'finish', 'cancel', 'dispute', 'objectNoShow', 'additionalTask', 'stateStopAmount', 'answerStop']
 const DANGER: readonly BookingAction[] = ['decline', 'withdraw', 'cancel']
 
 /** A booking: plain-words status, the proposed time and the actions allowed now. */
@@ -70,7 +70,6 @@ export default function BookingDetail() {
 
   async function act(action: BookingAction) {
     setNotice(null)
-    if (action === 'counter') return go('/bookings/counter', { id: b.id })
     if (SHEETS.includes(action)) return setSheet(sheet === action ? null : (action as Sheet))
     const ask = ASK[action]
     if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return
@@ -107,6 +106,12 @@ export default function BookingDetail() {
       {bookingActions(b, viewer, now).map((a) => (
         <Button key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={sheet !== null && sheet !== a} danger={DANGER.includes(a)} />
       ))}
+      {sheet === 'counter' && (
+        <>
+          <OpenChat find={async () => data.threadId} />
+          <Button label={t('booking.counterEnter')} onPress={() => go('/bookings/counter', { id: b.id })} />
+        </>
+      )}
       {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
       {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
       {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
