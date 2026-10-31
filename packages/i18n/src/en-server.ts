@@ -240,7 +240,7 @@ export const en: Record<ServerKey, string> = {
   'admin.action.setRole': 'Set role',
   'admin.action.deletePhoto': 'Delete photo',
   'admin.photoRemoval.hint': 'The person is emailed this reason.',
-  'admin.photoRemoval.gone': 'This photo no longer exists; someone has probably removed it already. The page was refreshed.',
+  'admin.photoRemoval.gone': 'This photo no longer exists.',
   'admin.photoRemoval.failed': 'The photo may not have been removed. Refresh the page to check, then try again. If it keeps failing, ask an administrator to check the server log.',
   'admin.action.clear': 'Clear',
   'admin.action.confirm': 'Are you sure?',
