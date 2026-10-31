@@ -238,6 +238,8 @@ export const de = {
   'admin.action.setRole': 'Rolle setzen',
   'admin.action.deletePhoto': 'Foto löschen',
   'admin.photoRemoval.hint': 'Die Person erhält diesen Grund per E-Mail.',
+  'admin.photoRemoval.gone': 'Dieses Foto gibt es nicht mehr, vermutlich hat es schon jemand entfernt. Die Seite wurde neu geladen.',
+  'admin.photoRemoval.failed': 'Das Foto wurde möglicherweise nicht entfernt. Lade die Seite neu, um das zu prüfen, und versuche es dann erneut. Wenn es weiter scheitert, bitte einen Administrator, das Server-Protokoll zu prüfen.',
   'admin.action.clear': 'Zurücksetzen',
   'admin.action.confirm': 'Bist du sicher?',
   'admin.notify.success': 'Erledigt',
