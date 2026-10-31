@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type CSSProperties } from 'react'
-import { useCustomMutation, useNotification, type HttpError } from '@refinedev/core'
+import { useCustomMutation } from '@refinedev/core'
 import { Button, Input, Popconfirm, Space } from 'antd'
 import { useAt } from './t'
 
@@ -10,13 +10,6 @@ export function RemovePhotoButton({ photoId, onDone, style }: { photoId: string;
   const at = useAt()
   const [reason, setReason] = useState('')
   const remove = useCustomMutation()
-  const { open } = useNotification()
-  // what went wrong, the likely cause and what to do next (the raw server text is English and has no next step)
-  const fail = (e: HttpError) => {
-    const gone = e.statusCode === 404
-    open?.({ type: 'error', message: at('admin.notify.error'), description: at(gone ? 'admin.photoRemoval.gone' : 'admin.photoRemoval.failed') })
-    if (gone) onDone() // someone removed it already: the refreshed page no longer lists it
-  }
   return (
     <Popconfirm
       title={at('admin.action.deletePhoto')}
@@ -30,13 +23,13 @@ export function RemovePhotoButton({ photoId, onDone, style }: { photoId: string;
       okButtonProps={{ disabled: !reason.trim(), loading: remove.mutation.isPending }}
       onConfirm={() =>
         remove.mutate(
-          { url: `/api/admin/photos/${photoId}`, method: 'delete', values: { reason }, errorNotification: false },
+          { url: `/api/admin/photos/${photoId}`, method: 'delete', values: { reason } },
           {
             onSuccess: () => {
               setReason('')
               onDone()
             },
-            onError: fail,
+            onError: (e) => e.statusCode === 404 && onDone(), // someone removed it already: the refreshed page no longer lists it
           },
         )
       }

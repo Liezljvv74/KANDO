@@ -11,7 +11,7 @@ import enUS from 'antd/locale/en_US'
 import '@refinedev/antd/dist/reset.css'
 import { accessControlProvider, authProvider } from '../../lib/admin/auth-provider'
 import { adminLangCookie } from '../../lib/admin/lang'
-import { dataProvider } from '../../lib/admin/data-provider'
+import { dataProvider, setErrorLang } from '../../lib/admin/data-provider'
 import { LANGS, t, type Key, type Lang } from '@kando/i18n'
 import { refineText } from '../../lib/admin/refine-text'
 import { AdminLangProvider, useAdminLang, useAt } from '../../lib/admin/t'
@@ -52,6 +52,7 @@ function Header() {
 
 // The root layout of the back office (the website has its own in app/(site)): a client component around <Refine>.
 export default function AdminShell({ lang, children }: { lang: Lang; children: ReactNode }) {
+  setErrorLang(lang)
   const at = (key: Key) => t(lang, key) // outside the provider below
   const resources = [
     {
