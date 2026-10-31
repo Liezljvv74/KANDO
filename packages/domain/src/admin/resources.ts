@@ -6,11 +6,13 @@ import {
   DOCUMENT_TYPES,
   PageInputSchema,
   PageUpdateSchema,
+  PhotoRemovalInputSchema,
   StaffInputSchema,
   parseBody,
   type AdminListQuery,
 } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
+import { notifyPhotoRemoved } from '../notifications'
 import { fail } from '../providers/http'
 import { isSuspendedNow } from '../providers/profile'
 import { mediaBucket, photoUrl, removeObject } from '../storage'
@@ -105,18 +107,28 @@ async function getProvider(tx: Tx, id: string) {
   })
 }
 
-/** A Reviewer removes a photo that breaks the rules. A published profile that loses the person's picture goes back to draft. */
-async function deletePhoto(tx: Tx, id: string, afterCommit: AfterCommit) {
+/**
+ * A Reviewer removes a photo that breaks the rules, with a reason (400 without). A published profile that loses the
+ * person's picture goes back to draft. The person is emailed the reason (and the draft state), like a suspension; the
+ * audit line names who removed what (ids only: the reason is staff free text and stays out of the logs).
+ */
+async function deletePhoto(tx: Tx, staffId: string, id: string, request: Request, afterCommit: AfterCommit) {
   const row = isUuid(id) ? (await tx.select().from(photos).where(eq(photos.id, id)))[0] : undefined
   if (!row) return notFound()
+  const { reason } = await parseBody(PhotoRemovalInputSchema, request)
+  let profileDraft = false
   if (row.kind === 'profile') {
-    await tx
+    const drafted = await tx
       .update(providers)
       .set({ status: 'draft', updatedAt: new Date() })
       .where(and(eq(providers.ownerId, row.ownerId), eq(providers.status, 'published')))
+      .returning({ id: providers.id })
+    profileDraft = drafted.length > 0
   }
   await tx.delete(photos).where(eq(photos.id, id))
+  console.log(JSON.stringify({ audit: 'photo-removed', time: new Date().toISOString(), staffId, photoId: id, ownerId: row.ownerId, kind: row.kind }))
   afterCommit(() => removeObject(mediaBucket(), row.key))
+  afterCommit(() => notifyPhotoRemoved(row.ownerId, { reason, profileDraft }))
   return new Response(null, { status: 204 })
 }
 
@@ -314,8 +326,8 @@ export const adminCreate = (tx: Tx, resource: string, request: Request) =>
 export const adminUpdate = (tx: Tx, resource: string, id: string, request: Request) =>
   resource === 'categories' ? updateCategory(tx, id, request) : resource === 'pages' ? updatePage(tx, id, request) : notFound()
 
-export async function adminRemove(tx: Tx, resource: string, id: string, afterCommit: AfterCommit): Promise<Response> {
-  if (resource === 'photos') return deletePhoto(tx, id, afterCommit)
+export async function adminRemove(tx: Tx, staffId: string, resource: string, id: string, request: Request, afterCommit: AfterCommit): Promise<Response> {
+  if (resource === 'photos') return deletePhoto(tx, staffId, id, request, afterCommit)
   if (resource === 'pages' && isUuid(id)) {
     const gone = await tx.delete(pages).where(eq(pages.id, id)).returning({ id: pages.id })
     return gone.length ? new Response(null, { status: 204 }) : notFound()

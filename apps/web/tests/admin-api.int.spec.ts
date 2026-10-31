@@ -269,13 +269,13 @@ it('providers are readable; a Reviewer deletes a photo (object removed, publishe
   expect(list1.total).toBe(1)
   const shown = (await get('providers', 'aa-rev', '', providerId).then((r) => r.json())).data
   expect(shown.photos.map((p: { id: string }) => p.id)).toContain(photo)
-  const del = await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: photo })
+  const del = await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', { reason: 'Not allowed' }, { resource: 'photos', id: photo })
   expect(del.status).toBe(204)
   expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [photo])).rowCount).toBe(0)
   expect(store.objects.has('media/providers/aa/one.jpg')).toBe(false)
-  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: photo })).status).toBe(404)
+  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', { reason: 'Not allowed' }, { resource: 'photos', id: photo })).status).toBe(404)
   const prof = (await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('aa-owner', 'profile', 'users/aa/p.jpg', 1, 1) RETURNING id")).rows[0].id
-  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: prof })).status).toBe(204)
+  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', { reason: 'Not allowed' }, { resource: 'photos', id: prof })).status).toBe(204)
   expect((await pool.query('SELECT status FROM providers WHERE id = $1', [providerId])).rows[0].status).toBe('draft')
 })
 
@@ -284,9 +284,27 @@ it("staff see a person's picture on the provider page and the user page, and del
   const shown = (await get('providers', 'aa-rev', '', providerId).then((r) => r.json())).data
   expect(shown.photos.map((p: { id: string }) => p.id)).toContain(pic)
   expect((await (await get('users', 'aa-rev', '', 'aa-owner')).json()).data.photoId).toBe(pic)
-  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', undefined, { resource: 'photos', id: pic })).status).toBe(204)
+  expect((await adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', { reason: 'Not allowed' }, { resource: 'photos', id: pic })).status).toBe(204)
   expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [pic])).rowCount).toBe(0)
   expect((await (await get('users', 'aa-rev', '', 'aa-owner')).json()).data.photoId).toBeNull()
+})
+
+it('removing a photo needs a reason and emails it to the person (the draft variant when their live profile went offline)', async () => {
+  const del = (id: string, body?: unknown) => adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', body, { resource: 'photos', id })
+  const photo = (await pool.query("INSERT INTO photos (owner_id, provider_id, kind, key, width, height) VALUES ('aa-owner', $1, 'portfolio', 'providers/aa/two.jpg', 1, 1) RETURNING id", [providerId])).rows[0].id
+  expect((await del('00000000-0000-4000-8000-000000000000')).status).toBe(404) // no photo: 404 even without a body
+  expect((await del(photo)).status).toBe(400)
+  expect((await del(photo, { reason: '   ' })).status).toBe(400)
+  expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [photo])).rowCount).toBe(1)
+  clearOutbox()
+  expect((await del(photo, { reason: 'Shows a stranger' })).status).toBe(204)
+  expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('aa-owner'), 'Eines Deiner Fotos wurde entfernt']])
+  expect(outboxForTests()[0]!.text).toContain('Shows a stranger')
+  await pool.query("UPDATE providers SET status = 'published' WHERE id = $1", [providerId])
+  const pic = (await pool.query("INSERT INTO photos (owner_id, kind, key, width, height) VALUES ('aa-owner', 'profile', 'users/aa/r.jpg', 1, 1) RETURNING id")).rows[0].id
+  clearOutbox()
+  expect((await del(pic, { reason: 'Not you' })).status).toBe(204)
+  expect(outboxForTests().map((m) => m.subject)).toEqual(['Dein Bild wurde entfernt und Dein Profil ist offline'])
 })
 
 it('GET /me returns the staff user; unknown resources are 404', async () => {

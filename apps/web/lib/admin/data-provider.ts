@@ -1,17 +1,38 @@
 import type { BaseRecord, CrudFilter, DataProvider, HttpError } from '@refinedev/core'
 
+import { DEFAULT_LANG, t, type Lang } from '@kando/i18n'
+
 const API = '/api/admin'
 
+let errorLang: Lang = DEFAULT_LANG
+/** The shell sets the back office language, so every failed request is worded in it. */
+export const setErrorLang = (lang: Lang) => {
+  errorLang = lang
+}
+
+/** What went wrong, the likely cause and what to do next (the raw server text is English and has no next step). Status 0: no answer. */
+export function friendlyError(lang: Lang, status: number, detail?: string): string {
+  if (status === 404) return t(lang, 'admin.error.gone')
+  if (status === 401 || status === 403) return t(lang, 'admin.error.forbidden')
+  if ((status === 400 || status === 409 || status === 422) && detail) return t(lang, 'admin.error.rejected', { detail })
+  return t(lang, 'admin.error.failed')
+}
+
 async function call<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    credentials: 'same-origin',
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    throw { message: friendlyError(errorLang, 0), statusCode: 0 } satisfies HttpError
+  }
   if (!res.ok) {
     const e = (await res.json().catch(() => ({}))) as { error?: string }
-    throw { message: e.error ?? res.statusText, statusCode: res.status } satisfies HttpError
+    throw { message: friendlyError(errorLang, res.status, e.error), statusCode: res.status } satisfies HttpError
   }
   return (res.status === 204 ? {} : await res.json()) as T
 }
