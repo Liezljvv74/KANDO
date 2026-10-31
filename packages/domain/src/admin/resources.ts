@@ -110,12 +110,12 @@ async function getProvider(tx: Tx, id: string) {
 /**
  * A Reviewer removes a photo that breaks the rules, with a reason (400 without). A published profile that loses the
  * person's picture goes back to draft. The person is emailed the reason (and the draft state), like a suspension; the
- * audit line names who removed what.
+ * audit line names who removed what (ids only: the reason is staff free text and stays out of the logs).
  */
 async function deletePhoto(tx: Tx, staffId: string, id: string, request: Request, afterCommit: AfterCommit) {
-  const { reason } = await parseBody(PhotoRemovalInputSchema, request)
   const row = isUuid(id) ? (await tx.select().from(photos).where(eq(photos.id, id)))[0] : undefined
   if (!row) return notFound()
+  const { reason } = await parseBody(PhotoRemovalInputSchema, request)
   let profileDraft = false
   if (row.kind === 'profile') {
     const drafted = await tx
@@ -126,7 +126,7 @@ async function deletePhoto(tx: Tx, staffId: string, id: string, request: Request
     profileDraft = drafted.length > 0
   }
   await tx.delete(photos).where(eq(photos.id, id))
-  console.log(JSON.stringify({ audit: 'photo-removed', time: new Date().toISOString(), staffId, photoId: id, ownerId: row.ownerId, kind: row.kind, reason }))
+  console.log(JSON.stringify({ audit: 'photo-removed', time: new Date().toISOString(), staffId, photoId: id, ownerId: row.ownerId, kind: row.kind }))
   afterCommit(() => removeObject(mediaBucket(), row.key))
   afterCommit(() => notifyPhotoRemoved(row.ownerId, { reason, profileDraft }))
   return new Response(null, { status: 204 })

@@ -19,6 +19,7 @@ export function RemovePhotoButton({ photoId, onDone, style }: { photoId: string;
           <Input.TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder={at('admin.field.reason')} maxLength={500} rows={3} />
         </Space>
       }
+      onOpenChange={(open) => !open && setReason('')}
       okButtonProps={{ disabled: !reason.trim(), loading: remove.mutation.isPending }}
       onConfirm={() =>
         remove.mutate(

@@ -292,6 +292,7 @@ it("staff see a person's picture on the provider page and the user page, and del
 it('removing a photo needs a reason and emails it to the person (the draft variant when their live profile went offline)', async () => {
   const del = (id: string, body?: unknown) => adminCall(item.DELETE, 'aa-rev', 'DELETE', '/x', body, { resource: 'photos', id })
   const photo = (await pool.query("INSERT INTO photos (owner_id, provider_id, kind, key, width, height) VALUES ('aa-owner', $1, 'portfolio', 'providers/aa/two.jpg', 1, 1) RETURNING id", [providerId])).rows[0].id
+  expect((await del('00000000-0000-4000-8000-000000000000')).status).toBe(404) // no photo: 404 even without a body
   expect((await del(photo)).status).toBe(400)
   expect((await del(photo, { reason: '   ' })).status).toBe(400)
   expect((await pool.query('SELECT 1 FROM photos WHERE id = $1', [photo])).rowCount).toBe(1)
