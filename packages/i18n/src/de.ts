@@ -421,6 +421,7 @@ export const de = {
   'bookingStatus.waitProvider': 'Wartet auf den Anbieter',
   'bookingStatus.waitCustomer': 'Wartet auf den Kunden',
   'bookingStatus.answerNow': 'Wartet auf deine Antwort',
+  'bookingStatus.awaiting-time': 'Wartet auf die Terminabsprache',
   'bookingStatus.payBy': 'Wartet auf deine Zahlung, zahle bis {date}',
   'bookingStatus.waitPayment': 'Wartet auf die Zahlung des Kunden, fällig bis {date}',
   'bookingStatus.confirmed': 'Bezahlt und bestätigt',

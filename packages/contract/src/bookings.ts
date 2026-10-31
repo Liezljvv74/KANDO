@@ -6,7 +6,7 @@ import { RatingSchema } from './endings'
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
 export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn', 'declined'] as const
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
-export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
+export const BOOKING_STATUSES = ['proposed', 'awaiting-time', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
 const IsoSchema = z.string().datetime({ offset: true })
 const DurationSchema = z.number().int().min(15).max(720)

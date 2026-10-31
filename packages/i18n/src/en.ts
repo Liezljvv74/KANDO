@@ -422,6 +422,7 @@ export const en: Record<AppKey, string> = {
   'bookingStatus.waitProvider': 'Waiting for the provider',
   'bookingStatus.waitCustomer': 'Waiting for the customer',
   'bookingStatus.answerNow': 'Waiting for your answer',
+  'bookingStatus.awaiting-time': 'Waiting for the date and time to be agreed',
   'bookingStatus.payBy': 'Waiting for your payment, pay by {date}',
   'bookingStatus.waitPayment': 'Waiting for the customer\'s payment, due by {date}',
   'bookingStatus.confirmed': 'Paid and confirmed',

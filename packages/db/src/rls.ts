@@ -57,6 +57,7 @@ export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record
     'proposed>declined': 'answerer',
     'proposed>withdrawn': 'customer',
     'awaiting-payment>withdrawn': 'customer',
+    'awaiting-time>withdrawn': 'customer',
   },
 }
 
@@ -103,7 +104,7 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
     'amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at',
     'parent_booking_id', 'finished_at', 'confirm_by', 'confirm_reminders_sent', 'asked_done_at', 'completed_at', 'cancelled_at',
     'cancelled_by', 'late_cancel', 'no_show', 'no_show_reported_at', 'stopped_at', 'stopped_by', 'stop_amount', 'stop_note',
-    'stop_stated_at', 'material_amount',
+    'stop_stated_at', 'material_amount', 'time_proposed_by', 'time_proposed_start_at', 'time_proposed_duration_min', 'time_proposed_on_site', 'time_answer_by',
   ],
   // The cached eligibility: only the offerable triggers below write it.
   services: ['offerable'],
@@ -162,6 +163,8 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
   reviews: '(NOT hidden AND visible_at IS NOT NULL AND visible_at <= now()) OR author_id = app_current_user_id()',
   // The customer and the provider's owner of an issued invoice (plain ids, no foreign keys: it outlives the accounts).
   invoices: PARTY,
+  // A quote's numbered PDF: the same two parties (plain ids, no foreign keys).
+  quote_documents: PARTY,
   // KANDO's commission invoice: the provider's owner only (no foreign key: it outlives the account).
   commission_invoices: OWN_SERVICE,
 }
@@ -552,7 +555,7 @@ const BOOKING_TRIGGERS = [
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_reopen_request ON bookings`,
   `CREATE TRIGGER bookings_reopen_request AFTER UPDATE OF status ON bookings FOR EACH ROW
-    WHEN (OLD.status IN ('proposed', 'awaiting-payment') AND NEW.status IN ('declined', 'expired', 'withdrawn') AND NEW.quote_id IS NOT NULL AND NEW.parent_booking_id IS NULL)
+    WHEN (OLD.status IN ('proposed', 'awaiting-time', 'awaiting-payment') AND NEW.status IN ('declined', 'expired', 'withdrawn') AND NEW.quote_id IS NOT NULL AND NEW.parent_booking_id IS NULL)
     EXECUTE FUNCTION reopen_quote_request()`,
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
   // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that

@@ -33,6 +33,27 @@ export const invoices = pgTable(
   ],
 )
 
+/**
+ * A quote's numbered PDF (flow 1): written on the owner connection when the provider sends the quote, read by its two parties.
+ * Plain ids, no foreign keys (like invoices). `draft` is the snapshot the PDF is printed from, so a later change to the request or
+ * the profile never alters an issued quote; the number is gapless per provider and year (own series in invoice_counters).
+ */
+export const quoteDocuments = pgTable(
+  'quote_documents',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    quoteId: uuid('quote_id').notNull().unique(),
+    providerId: uuid('provider_id').notNull(),
+    customerId: text('customer_id').notNull(),
+    number: text().notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    draft: jsonb().notNull(),
+    // null until the PDF is stored (a storage failure is retried by the timers)
+    fileKey: text('file_key'),
+  },
+  (t) => [uniqueIndex('quote_documents_provider_id_number_idx').on(t.providerId, t.number), index('quote_documents_customer_id_idx').on(t.customerId)],
+)
+
 /** The last number per series (`<full provider id>-<year>`), staff only; bumped in the same transaction as the invoice insert. */
 export const invoiceCounters = pgTable('invoice_counters', {
   series: text().primaryKey(),

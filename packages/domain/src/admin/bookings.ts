@@ -145,7 +145,7 @@ export async function applyDecision(exec: Exec, bookingId: string, now: Date): P
       for (const k of kids) {
         if (stands && k.status === 'confirmed')
           ended.push((await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, noShow: k.noShow ?? b.noShow, noShowReportedAt: k.noShowReportedAt ?? b.noShowReportedAt, updatedAt: now }).where(eq(bookings.id, k.id)).returning())[0]!)
-        else if (stands && (k.status === 'proposed' || k.status === 'awaiting-payment')) await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
+        else if (stands && (k.status === 'proposed' || k.status === 'awaiting-time' || k.status === 'awaiting-payment')) await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
         else if (!stands && k.status === 'confirmed' && k.noShow === b.noShow && k.noShowReportedAt?.getTime() === b.noShowReportedAt?.getTime())
           await o.update(bookings).set({ noShow: null, noShowReportedAt: null, updatedAt: now }).where(eq(bookings.id, k.id))
       }

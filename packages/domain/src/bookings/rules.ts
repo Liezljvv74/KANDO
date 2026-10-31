@@ -41,6 +41,8 @@ export const overlaps = (a: Span, b: Span, bufferMin: number): boolean => {
 const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   proposed: ['awaiting-payment', 'expired', 'declined', 'withdrawn', 'proposed'],
   // -> confirmed only by the payment webhook on the owner connection (trigger bookings_guard_status); plan 2d adds the ways out of confirmed
+  // a quote accepted without a time: no slot, no money until both sides agree the time (flow 1)
+  'awaiting-time': ['awaiting-payment', 'expired', 'withdrawn'],
   'awaiting-payment': ['expired', 'withdrawn', 'confirmed'],
   // A paid booking and its endings move only on the owner connection (OWNER_ONLY_BOOKING_STATUSES, trigger
   // bookings_guard_status), after the domain checked the caller. The transitions below are owner-connection

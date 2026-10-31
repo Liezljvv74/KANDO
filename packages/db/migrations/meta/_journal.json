@@ -169,6 +169,13 @@
       "when": 1793374903236,
       "tag": "0023_fantastic_ogun",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793490023148,
+      "tag": "0024_quiet_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }
