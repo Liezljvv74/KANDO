@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AcceptQuoteInputSchema, BookingAnswerSchema, BookingSchema, DirectBookingInputSchema, TimeProposalSchema } from './index'
+import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, DirectBookingInputSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
 
 const proposal = { startAt: '2026-11-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
@@ -54,5 +54,48 @@ describe('BookingSchema', () => {
     expect(keys).toContain('requestId')
     expect(BookingSchema.shape.requestId.safeParse(null).success).toBe(true)
     for (const k of ['commissionRate', 'paymentRef', 'checkoutRef', 'paidAt', 'releasedAt', 'acceptedAt']) expect(keys).not.toContain(k)
+  })
+})
+
+describe('flow 1: a request carries the customer\'s time', () => {
+  const base = { providerId: '3f1c2a52-6a40-4a2c-9f44-6d1f5a8c9b11', description: 'Fix the fence' }
+
+  it('a request with a complete time is accepted; on site needs an address', () => {
+    expect(RequestInputSchema.safeParse({ ...base, ...proposal }).success).toBe(true)
+    expect(RequestInputSchema.safeParse({ ...base, ...proposal, onSite: true }).success).toBe(false)
+    expect(RequestInputSchema.safeParse({ ...base, ...proposal, onSite: true, address: { postcode: '04109' }, note: 'Back door' }).success).toBe(true)
+  })
+
+  it('a half-given time is rejected (all of start, duration and place, or none)', () => {
+    expect(RequestInputSchema.safeParse({ ...base, startAt: proposal.startAt }).success).toBe(false)
+    expect(RequestInputSchema.safeParse({ ...base, startAt: proposal.startAt, durationMin: 60 }).success).toBe(false)
+    expect(RequestInputSchema.safeParse({ ...base, ...proposal, durationMin: 5 }).success).toBe(false)
+  })
+
+  it('an old-style request without a time still parses (the server decides whether it is allowed)', () => {
+    expect(RequestInputSchema.safeParse(base).success).toBe(true)
+  })
+
+  it('confirming a quote takes no time, only an optional note', () => {
+    expect(ConfirmQuoteInputSchema.safeParse({}).success).toBe(true)
+    expect(ConfirmQuoteInputSchema.safeParse({ note: 'Thank you' }).success).toBe(true)
+    expect(ConfirmQuoteInputSchema.safeParse({ ...proposal }).success).toBe(false)
+  })
+
+  it('an agreed time (after a quote without a time) is a start, a duration and the place kind', () => {
+    expect(AgreedTimeInputSchema.safeParse(proposal).success).toBe(true)
+    expect(AgreedTimeInputSchema.safeParse({ startAt: 'soon', durationMin: 60, onSite: false }).success).toBe(false)
+    expect(AgreedTimeInputSchema.safeParse({ ...proposal, durationMin: 0 }).success).toBe(false)
+  })
+
+  it('a quote list item has a number, a role and a status', () => {
+    const item = { id: 'q1', number: 'ABCD1234-2026-0001', role: 'provider', requestId: 'r1', startAt: null, durationMin: null, amount: 120, currency: 'EUR', counterparty: 'Anna H.', status: 'sent', issuedAt: '2026-11-01T10:00:00.000Z', pdfReady: true }
+    expect(QuoteListItemSchema.safeParse(item).success).toBe(true)
+    expect(QuoteListItemSchema.safeParse({ ...item, role: 'admin' }).success).toBe(false)
+    expect(QuoteListItemSchema.safeParse({ ...item, status: 'weird' }).success).toBe(false)
+  })
+
+  it('awaiting-time is a booking status', () => {
+    expect(BOOKING_STATUSES).toContain('awaiting-time')
   })
 })

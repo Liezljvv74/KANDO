@@ -53,6 +53,7 @@
 - Rejected provider: the request ends, nothing is held, the customer sees "find another provider".
 - A booking in `awaiting-time` never holds a slot and never asks for money; the time written at confirm is checked again under the lock.
 - Old data: bookings already in `proposed` still work (answer, expire) until they end.
+- **The customer's street stays private until the customer confirms** (the existing rule: `view()` in `bookings.ts` hides the address from the provider until `pay_by` is set). The request the provider sees shows postcode and city; the street appears only once the booking exists. Task 4 masks `address.street` in the provider's view of a request, with a test.
 - Nothing here changes the payment, payout, commission, invoice or ending logic.
 
 ## File structure

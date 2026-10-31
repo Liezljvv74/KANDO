@@ -33,6 +33,14 @@ export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), reo
     serviceId: r.serviceId,
     description: r.description,
     preferredDate: r.preferredDate,
+    startAt: r.startAt ? iso(r.startAt) : null,
+    durationMin: r.durationMin,
+    onSite: r.onSite,
+    address: r.addressPostcode
+      ? { postcode: r.addressPostcode, ...(r.addressStreet && { street: r.addressStreet }), ...(r.addressCity && { city: r.addressCity }) }
+      : null,
+    note: r.note,
+    revision: r.revision,
     parentBookingId: r.parentBookingId,
     status: (status === 'open' && r.answerBy <= now ? 'expired' : status) as BookingRequest['status'],
     answerBy: iso(r.answerBy),
