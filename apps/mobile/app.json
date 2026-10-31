@@ -43,6 +43,7 @@
         }
       ],
       "expo-web-browser",
+      "./plugins/withLintFix.js",
       [
         "expo-notifications",
         {
