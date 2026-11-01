@@ -27,7 +27,7 @@ Where this section and a task below disagree, **this section wins**. The tasks a
 - Flow 2: instant booking needs a system path to send the provider's quote (an owner-connection variant of `sendQuote`), because the request handler runs as the customer; and `proposeAgreedTime` / `confirmAgreedTime` also call `timeIsAcceptable`.
 - Task 13 adds a before/after count of taps for the "fewer clicks" goal and a print step (open the PDF, print from the phone's viewer). The request statuses map to the owner's words: `open` Pending, `quoted` Quote received, `booked` Accepted, `declined`/`withdrawn` Rejected.
 
-**Status:** DRAFT, written 1 November 2026 from the owner's process description and the three decisions confirmed the same day. Nothing in this plan is built yet. The owner confirms this plan before Task 1 starts.
+**Status (updated 1 November 2026):** Phase 0 step 0.5 done: Tasks 10 to 12 below carry the confirmed reuse map; the server side is built (see the progress line). **Original status:** DRAFT, written 1 November 2026 from the owner's process description and the three decisions confirmed the same day. Nothing in this plan is built yet. The owner confirms this plan before Task 1 starts.
 
 **Goal:** Every job starts the same way: the customer sends one request that already holds the date, time, duration, place and description. The provider sees the same fields prefilled and answers with one tap: **Accept and send quote**, **Propose a different time** or **Reject**. The quote (start, duration, total) is generated as a numbered PDF the moment the provider sends it, saved for both people and downloadable. The customer answers with one tap: **Confirm and pay**, **Open chat** or **Decline**. After one proposal in each direction the app steers both to the chat. The job is booked when the customer's payment goes through.
 
@@ -225,6 +225,8 @@ Texts (English; German written to match in the same task):
 
 ### Task 10: App - request form, provider answer panel, customer quote screen
 
+**Reuse map (confirmed by the owner, 1 November 2026; no new fields, no duplicate screens).** Extract the "when and where" fields of `TimeProposalForm` (date, time, duration, on site, address, note) into ONE shared component with native date and time pickers (Finding 2); the address is prefilled from the saved account address. That one component serves the request form (Task 10a), the enter-a-time screen for an `awaiting-time` booking and the counter screen (the same screen with another submit call). The request form keeps `description` and photos and gains those fields; `preferredDate` is already removed everywhere. `SendQuoteForm` (amount, scope, optional date, time, duration) becomes the provider's answer: add the switch "Date and time confirmed" and prefill from the request. `QuoteCard` stays: its button becomes **Confirm** (a direct call, no time entry) and it gains the quote number, the revision, "date and time to be confirmed" and later the PDF link. `AcceptQuoteScreen` and `/bookings/accept` fall away. `request-detail` and `booking-detail` stay and gain the time and place, the pending-time block with a confirm button, the awaiting-time text (the stand-in time is never shown), "discuss changes in the chat" once a quote exists, and Decline offering the chat first. The old "Book" button for a fixed-price service opens the same request form with the service chosen (one flow; instant booking returns with Flow 2).
+
 **Files:** modify `apps/mobile/src/screens/bookings/{request-form,request-detail,booking-detail,time-proposal-form,quote-card}.tsx`, `apps/mobile/src/screens/bookings/proposal-screens.tsx`, `apps/mobile/src/api/bookings.ts`; create `apps/mobile/src/screens/bookings/provider-answer.tsx`; tests next to each (jest).
 
 Screens and behaviour:
@@ -242,6 +244,8 @@ Screens and behaviour:
 - [ ] **Step 5: Commit** `feat(mobile): one request form, provider answer panel, customer quote screen`.
 
 ### Task 11: App - Quotes sent and My received quotes, download and print
+
+**Reuse:** a list row opens the existing request page (no new detail screen); the PDF opens from the row.
 
 **Files:** create `apps/mobile/src/screens/quotes/{quote-list,quotes-card}.tsx`, `apps/mobile/src/app/quotes/{_layout,index}.tsx`, `apps/mobile/src/api/quotes.ts`; modify `apps/mobile/src/screens/account-screen.tsx`; tests `apps/mobile/src/api/quotes.test.ts`, list tests like `invoices.test.ts`.
 
@@ -277,6 +281,8 @@ Screens and behaviour:
 - [ ] **Step 5: Commit** `docs: flow 1 test report and README`.
 
 ### Task 14 (optional, the owner decides): "Needs your answer" strip on the account page
+
+**Same list as the inbox (finding 5): build it once, as the first version of the inbox.**
 
 Replaces the earlier idea of a pop-out that cannot be closed (phone-test Item 3). A short list at the top of the account page of everything waiting for the person's tap (a request to answer for a provider, a quote to confirm for a customer), each opening its screen, with the existing dot on the tab. No blocking dialog. Build only if the owner still wants it after phone-testing Task 10.
 
