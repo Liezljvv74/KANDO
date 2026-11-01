@@ -394,7 +394,6 @@ export const de = {
   'booking.bookings': 'Buchungen',
   'booking.none': 'Noch nichts vorhanden.',
   'booking.description': 'Was soll gemacht werden?',
-  'booking.preferredDate': 'Wunschtermin (optional, JJJJ-MM-TT)',
   'booking.requestHelp': 'Der Anbieter schickt Dir ein Angebot. Ein Angebot gilt 7 Tage, danach läuft es ab.',
   'booking.sendRequest': 'Anfrage senden',
   'booking.dateField': 'Datum (JJJJ-MM-TT)',

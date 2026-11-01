@@ -32,14 +32,13 @@ export const TimeProposalSchema = TimeProposalObject.refine(onSiteNeedsAddress, 
 /**
  * POST /requests: the customer describes the job and proposes the time. The time (start, duration, place) is all or nothing;
  * the server requires it for a new request (packages/domain bookings/requests.ts), so an app from before this change gets a
- * plain error, not a half-saved request. `preferredDate` is the old day-only field, ignored when a time is given.
+ * plain error, not a half-saved request.
  */
 export const RequestInputSchema = z
   .object({
     providerId: z.string().uuid(),
     serviceId: z.string().uuid().optional(),
     description: requiredText(2000),
-    preferredDate: z.string().date().optional(),
     ...TimeProposalObject.partial().shape,
   })
   .refine((v) => (v.startAt === undefined) === (v.durationMin === undefined) && (v.startAt === undefined) === (v.onSite === undefined), { message: 'Start, duration and place go together', path: ['startAt'] })
@@ -51,7 +50,6 @@ export const RequestSchema = z.object({
   providerId: z.string(),
   serviceId: z.string().nullable(),
   description: z.string(),
-  preferredDate: z.string().nullable(),
   /** The customer's proposed time and place; null on a request from before it was asked for. */
   startAt: z.string().nullable(),
   durationMin: z.number().int().nullable(),

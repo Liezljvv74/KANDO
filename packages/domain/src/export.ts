@@ -58,7 +58,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       docs.map(async (d) => ({ requirement: d.requirement, status: d.status, staffNote: d.note, reviewedAt: d.reviewedAt, createdAt: d.createdAt, downloadUrl: await link(d.key) })),
     ),
     privateFiles: await Promise.all(files.map(async (f) => ({ createdAt: f.createdAt, downloadUrl: await link(f.key) }))),
-    requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.customerId === userId ? r.description : null, preferredDate: r.preferredDate, answerBy: r.answerBy, createdAt: r.createdAt })),
+    requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.customerId === userId ? r.description : null, startAt: r.startAt, durationMin: r.durationMin, onSite: r.onSite, answerBy: r.answerBy, createdAt: r.createdAt })),
     quotes: myQuotes.map((q) => ({ id: q.id, requestId: q.requestId, version: q.version, amount: Number(q.amount), currency: q.currency, scope: q.providerId === own ? q.scope : null, suggestedStart: q.startAt, durationMin: q.durationMin, status: q.status, expiresAt: q.expiresAt, createdAt: q.createdAt })),
     bookings: myBookings.map((b) => ({
       id: b.id,

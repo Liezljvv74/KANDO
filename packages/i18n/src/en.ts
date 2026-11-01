@@ -395,7 +395,6 @@ export const en: Record<AppKey, string> = {
   'booking.bookings': 'Bookings',
   'booking.none': 'Nothing here yet.',
   'booking.description': 'What needs to be done?',
-  'booking.preferredDate': 'Preferred date (optional, YYYY-MM-DD)',
   'booking.requestHelp': 'The provider sends you a quote. A quote is valid for 7 days, then it expires.',
   'booking.sendRequest': 'Send request',
   'booking.dateField': 'Date (YYYY-MM-DD)',

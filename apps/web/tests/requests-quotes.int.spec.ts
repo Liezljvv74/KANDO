@@ -38,10 +38,10 @@ const accepting = (quoteId: string, as: string, body: object = proposal()) => ca
 const ids = (j: { docs: { id: string }[] }) => j.docs.map((d) => d.id)
 
 it('customer creates a request; provider sees it incoming', async () => {
-  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix the fence', preferredDate: '2027-01-05', ...requestTime() })
+  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix the fence', ...requestTime() })
   expect(res.status).toBe(201)
   const r = RequestSchema.parse(await res.json())
-  expect(r).toMatchObject({ customerId: U.cust, providerId: pOwner, status: 'open', preferredDate: '2027-01-05' })
+  expect(r).toMatchObject({ customerId: U.cust, providerId: pOwner, status: 'open' })
   expect(new Date(r.answerBy).getTime() - new Date(r.createdAt).getTime()).toBe(3 * 86_400_000)
   const asProvider = await requests.GET(
     new Request('http://localhost/app-api/v1/requests?role=provider', { headers: { cookie: `uid=${U.owner}:${EMAIL(U.owner)}` } }),

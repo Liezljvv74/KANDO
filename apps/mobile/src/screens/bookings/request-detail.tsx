@@ -10,7 +10,7 @@ import { useLoad } from '@/hooks/use-load'
 import { useMe } from '@/hooks/use-me'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang, type Key } from '@/i18n'
-import { formatDay, formatWhen } from '@/lib/booking-time'
+import { formatWhen } from '@/lib/booking-time'
 import { confirmDanger } from '@/lib/confirm'
 import { go, goReplace } from '@/lib/go'
 import { OpenChat } from '@/screens/chat/open-chat'
@@ -58,7 +58,6 @@ export default function RequestDetail() {
         {extra && <Text style={styles.small}>{t('booking.additionalTaskRequest')}</Text>}
         <Text style={styles.text}>{request.description}</Text>
         {extra && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
-        {request.preferredDate && <Text style={styles.small}>{formatDay(request.preferredDate)}</Text>}
         <Text style={styles.small}>{t(`requestStatus.${request.status}` as Key)}</Text>
         {open && <Text style={styles.small}>{t('booking.answerBy', { date: formatWhen(request.answerBy) })}</Text>}
       </Card>
