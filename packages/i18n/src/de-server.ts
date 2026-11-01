@@ -23,10 +23,10 @@ export const de = {
   'email.documentApproved.suspended.body': 'Dein Dokument wurde freigegeben. Dein Profil ist bis zum {date} gesperrt; die Leistung wird sichtbar, wenn die Sperre endet.',
   'email.requestReceived.subject': 'Du hast eine neue Anfrage',
   'email.requestReceived.body':
-    'Ein Kunde hat Dir eine Anfrage geschickt. Bitte antworte innerhalb von 3 Tagen, mit einem Angebot oder einer kurzen Antwort in der App. Unbeantwortete Anfragen laufen ab und lassen Dich nicht verfügbar wirken.',
+    'Ein Kunde hat Dir eine Anfrage mit Datum, Uhrzeit und Ort geschickt. Bitte antworte innerhalb von 3 Tagen: sende ein Angebot (mit oder ohne endgültiges Datum und Uhrzeit) oder lehne ab. Unbeantwortete Anfragen laufen ab und lassen Dich nicht verfügbar wirken.',
   'email.quoteReceived.subject': 'Du hast ein Angebot erhalten',
   'email.quoteReceived.body':
-    'Ein Anbieter hat Dir ein Angebot geschickt. Sieh es Dir bitte in der App an. Das Angebot gilt bis zum {date}: Ein Angebot, das Du nicht annimmst, läuft 7 Tage nach dem Versand ab.',
+    'Ein Anbieter hat Dir ein Angebot (oder ein überarbeitetes Angebot) für Deine Anfrage geschickt. Sieh es Dir bitte in der App an und bestätige es, um zu buchen. Es gilt 7 Tage, bis zum {date}. Hat es noch kein Datum mit Uhrzeit, legt ihr beides nach Deiner Bestätigung fest; die Zahlung wird erst verlangt, wenn beide Seiten Datum und Uhrzeit bestätigt haben.',
   'email.bookingProposed.subject': 'Ein neuer Termin wurde vorgeschlagen',
   'email.bookingProposed.body': 'Für Deine Buchungsanfrage wurde ein neues Datum mit Uhrzeit vorgeschlagen. Bitte antworte innerhalb von 24 Stunden in der App.',
   'email.bookingAccepted.subject': 'Zahlung fällig für Deine Buchung',
@@ -42,7 +42,7 @@ export const de = {
     'Deine Buchung ist angenommen, aber noch nicht bezahlt. Bitte zahle bis {date} Uhr, sonst läuft sie ab und der Termin wird für andere frei.',
   'email.quoteExpiring.subject': 'Dein Angebot läuft bald ab',
   'email.quoteExpiring.body':
-    'Ein Angebot, das Du erhalten hast, läuft am {date} Uhr ab. Nimm es bis dahin in der App an, sonst verfällt es.',
+    'Ein Angebot, das Du erhalten hast, läuft am {date} Uhr ab. Bestätige es bis dahin in der App, sonst verfällt es.',
   'email.requestExpired.subject': 'Deine Anfrage wurde nicht beantwortet',
   'email.requestExpired.body':
     'Deine Anfrage wurde nicht rechtzeitig beantwortet. Der Anbieter ist im Moment nicht verfügbar. Bitte wende Dich an einen anderen Anbieter.',

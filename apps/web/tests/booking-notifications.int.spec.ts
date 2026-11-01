@@ -135,7 +135,9 @@ it('the quote email states the 7-day expiry in German too', async () => {
 })
 
 it('real sweeps: quote-expiring and payment-reminder emails carry their dates, one row each', async () => {
-  const stamp = new Date(Date.now() + 60 * 86_400_000)
+  // 06:00 UTC on a day 60 days ahead: the dates 2 h and 12 h later fall on the same calendar day in Berlin whatever the time of the test run
+  const today = new Date()
+  const stamp = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 60, 6, 0))
   const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', 'quoted', $3) RETURNING id", [U.cust, prov, new Date(stamp.getTime() + 86_400_000)])).rows[0].id
   const expires = new Date(stamp.getTime() + 12 * 3_600_000)
   await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at) VALUES ($1, $2, 50, 's', $3)", [r, prov, expires])
