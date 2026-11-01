@@ -2,7 +2,7 @@
   "stamp": "2026-11-01 21-52",
   "steps": {
     "0.1": "In progress",
-    "0.2": "In progress",
+    "0.2": "Done",
     "0.3": "Waiting for owner",
     "0.5": "Done",
     "0.6": "Done",
@@ -134,6 +134,22 @@
       "commit": "3c08c72",
       "note": "Production migrations 0024-0027 applied by the owner (1 Nov 2026); #49 code confirmed live (quotes route answers 401); live site probes fine",
       "steps": []
+    },
+    {
+      "when": "2026-11-01 22:41",
+      "commit": "53b1beb",
+      "note": "AI plan written (docs/superpowers/plans/2026-11-01-ai-document-check.md) with the owner decisions: human sees only ID problems plus 10% sample, 30-day ID deletion, only verdict and reason stored",
+      "steps": [
+        "step 0.2 Waiting for owner"
+      ]
+    },
+    {
+      "when": "2026-11-01 22:44",
+      "commit": "5a66db1",
+      "note": "AI plan approved by the owner (1 Nov 2026)",
+      "steps": [
+        "step 0.2 Done"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
