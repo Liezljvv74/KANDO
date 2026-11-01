@@ -7,7 +7,7 @@
     "0.5": "Done",
     "0.6": "Waiting for owner",
     "0.4": "Waiting for owner",
-    "1.1": "Done"
+    "1.1": "Waiting for owner"
   },
   "tasks": {
     "1": "Waiting for owner",
@@ -15,7 +15,7 @@
     "3": "In progress",
     "6": "Waiting for owner",
     "7": "Waiting for owner",
-    "15": "Done",
+    "15": "Waiting for owner",
     "5": "Waiting for owner"
   },
   "log": [
@@ -68,7 +68,19 @@
       "steps": [
         "step 0.1 In progress"
       ]
+    },
+    {
+      "when": "2026-11-01 16:01",
+      "commit": "ec300ca",
+      "note": "PR 47 was merged by the owner at its earlier head (2e093d6); the later work (tasks 6b to 9, preferredDate removal, review fixes, tracker) is in the new PR 49 (branch merged with main, conflicts resolved for the branch). PR 48 (CLAUDE.md, .claude folder, RLS note) still open; review records posted on PRs 47 and 48. Production needs migrations 0024 to 0026 (and 0027 with PR 49) - owner to check.",
+      "steps": [
+        "step 1.1 Waiting for owner",
+        "task 15 Waiting for owner",
+        "merged PR #47"
+      ]
     }
   ],
-  "mergesSinceWorkbook": []
+  "mergesSinceWorkbook": [
+    "47"
+  ]
 }
