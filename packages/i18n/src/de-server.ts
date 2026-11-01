@@ -29,9 +29,9 @@ export const de = {
     'Ein Anbieter hat Dir ein Angebot geschickt. Sieh es Dir bitte in der App an. Das Angebot gilt bis zum {date}: Ein Angebot, das Du nicht annimmst, läuft 7 Tage nach dem Versand ab.',
   'email.bookingProposed.subject': 'Ein neuer Termin wurde vorgeschlagen',
   'email.bookingProposed.body': 'Für Deine Buchungsanfrage wurde ein neues Datum mit Uhrzeit vorgeschlagen. Bitte antworte innerhalb von 24 Stunden in der App.',
-  'email.bookingAccepted.subject': 'Deine Buchung wurde angenommen',
+  'email.bookingAccepted.subject': 'Zahlung fällig für Deine Buchung',
   'email.bookingAccepted.body':
-    'Der Anbieter hat Deine Buchung angenommen. Bitte zahle bis {date} Uhr. Den Zahlungslink bekommst Du anschließend in der App; dort siehst Du ihn, sobald die Zahlung möglich ist.',
+    'Datum und Uhrzeit sind von beiden Seiten bestätigt. Die Zahlung ist bis {date} Uhr fällig. Öffne die App zum Bezahlen; dort siehst Du den Zahlungslink, sobald die Zahlung möglich ist.',
   'email.bookingDeclined.subject': 'Deine Buchung wurde abgelehnt',
   'email.bookingDeclined.body':
     'Der Anbieter hat Deine Buchung abgelehnt. Du kannst diesem oder einem anderen Anbieter eine neue Anfrage senden.',

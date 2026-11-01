@@ -42,6 +42,7 @@ const notices = async (user: string, kind: string) => (await pool.query('SELECT 
 it('confirming a quote with a time makes a booking that awaits payment, at the quote\'s price and time', async () => {
   const { r, q } = await quoted()
   const before = await notices(U.owner, 'quote-confirmed')
+  const dueBefore = await notices(U.cust, 'booking-accepted')
   const res = await confirming(q.id, U.cust, { note: 'Thank you' })
   expect(res.status).toBe(200)
   const b = BookingSchema.parse(await res.json())
@@ -51,6 +52,7 @@ it('confirming a quote with a time makes a booking that awaits payment, at the q
   expect(b.address).toEqual({ postcode: '10115' }) // the customer reads the whole place back
   expect([await state('quotes', q.id), await state('requests', r.id)]).toEqual(['accepted', 'booked'])
   expect(await notices(U.owner, 'quote-confirmed')).toBe(before + 1)
+  expect(await notices(U.cust, 'booking-accepted')).toBe(dueBefore + 1) // "Payment due" to the customer
   const card = (await pool.query("SELECT card FROM messages m JOIN threads t ON t.id = m.thread_id WHERE t.request_id = $1 AND m.kind = 'card' ORDER BY m.created_at DESC LIMIT 1", [r.id])).rows[0]?.card
   expect(card).toMatchObject({ type: 'acceptance', refId: b.id })
 })
@@ -95,6 +97,7 @@ it('a stranger gets 404, the provider 403, and a body with a time is refused', a
 it('a quote without a time becomes a booking that waits for its time: no slot, no payment window', async () => {
   const when = fresh()
   const { r, q } = await quoted(U.cust, when, false)
+  const due0 = await notices(U.cust, 'booking-accepted')
   const res = await confirming(q.id)
   expect(res.status).toBe(200)
   const b = BookingSchema.parse(await res.json())
@@ -105,6 +108,7 @@ it('a quote without a time becomes a booking that waits for its time: no slot, n
   const busy = (await pool.query("SELECT * FROM busy_times($1::uuid, $2::timestamptz, $3::timestamptz)", [pOwner, new Date(new Date(r.startAt!).getTime() - 3_600_000), new Date(new Date(r.startAt!).getTime() + 4 * 3_600_000)])).rows
   expect(busy).toEqual([])
   expect([await state('quotes', q.id), await state('requests', r.id)]).toEqual(['accepted', 'booked'])
+  expect(await notices(U.cust, 'booking-accepted')).toBe(due0) // no time yet: nothing is due
   // another customer can still get that very time, because the waiting booking holds nothing
   const other = await quoted(U.cust2, when)
   expect((await confirming(other.q.id, U.cust2)).status).toBe(200)

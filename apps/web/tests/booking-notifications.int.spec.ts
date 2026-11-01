@@ -70,7 +70,7 @@ it('accepting a quote tells the provider of the proposal; a direct booking on a 
   clearOutbox()
   await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: b.id })
   expect((await rows(U.cust)).map((x) => x.kind)).toContain('booking-accepted')
-  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Deine Buchung wurde angenommen'])
+  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Zahlung fällig für Deine Buchung'])
   // another customer proposes an overlapping time
   await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
   const other = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust2, 'POST', proposal(0, { startAt: day(30) }))).json())

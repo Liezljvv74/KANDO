@@ -15,7 +15,7 @@ import { payBy, TIME_ANSWER_DAYS } from './rules'
 
 type Row = typeof bookings.$inferSelect
 
-const pending = (b: Row, now: Date) => b.timeProposedBy && b.timeProposedStartAt && b.timeAnswerBy && b.timeAnswerBy > now // a time not answered in 7 days falls away
+const pending = (b: Row, now: Date) => b.timeProposedBy && b.timeProposedStartAt && b.timeAnswerBy && b.timeAnswerBy > now // a time not answered in 2 days falls away
 
 /**
  * After a quote was confirmed without a time (status awaiting-time): either side enters a date and time for the other to
@@ -32,7 +32,7 @@ export async function proposeAgreedTime(tx: Tx, userId: string, bookingId: strin
     if (b.status !== 'awaiting-time' || (b.answerBy && b.answerBy <= now)) fail(409, { error: 'not-open' })
     if (input.onSite && !b.addressPostcode) fail(400, { error: 'address-required' }) // a remote job cannot become on-site: nobody knows where to go
     await timeIsAcceptable(tx, { providerId: b.providerId, startAt, durationMin: input.durationMin, onSite: input.onSite, now, clash: false }) // a clash is checked at confirm
-    const answerBy = new Date(now.getTime() + TIME_ANSWER_DAYS * DAY) // the other side has the full 7 days, so the booking's own deadline moves out with it
+    const answerBy = new Date(now.getTime() + TIME_ANSWER_DAYS * DAY) // the other side has the full 2 days, so the booking's own deadline moves out with it
     const [r] = await o
       .update(bookings)
       .set({ timeProposedBy: role, timeProposedStartAt: startAt, timeProposedDurationMin: input.durationMin, timeProposedOnSite: input.onSite, timeAnswerBy: answerBy, answerBy: b.answerBy && b.answerBy > answerBy ? b.answerBy : answerBy, updatedAt: now })
@@ -75,6 +75,7 @@ export async function confirmAgreedTime(tx: Tx, userId: string, bookingId: strin
       .returning()
     return [r!, payAt] as const
   })
-  if (role === 'provider') afterCommit(() => notifyBookingEvent('booking-accepted', row.customerId, { bookingId: row.id, date: pay.toISOString() })) // the customer is told to pay
+  // both sides have confirmed the time: whichever side confirmed last, the customer gets "Payment due" (pay_by from payBy(), the existing payment rules)
+  afterCommit(() => notifyBookingEvent('booking-accepted', row.customerId, { bookingId: row.id, date: pay.toISOString() }))
   return view(row, userId, now)
 }

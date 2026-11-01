@@ -41,6 +41,7 @@ it('the provider enters a time, the customer confirms it: the booking awaits pay
   const b = await waiting()
   const when = fresh()
   const before = await notices(U.cust, 'time-to-confirm')
+  const dueBefore = await notices(U.cust, 'booking-accepted')
   const e = await enter(b.id, U.owner, when)
   expect(e.status).toBe(200)
   expect(await notices(U.cust, 'time-to-confirm')).toBe(before + 1)
@@ -48,6 +49,7 @@ it('the provider enters a time, the customer confirms it: the booking awaits pay
   const c = await agreeing(b.id, U.cust)
   expect(c.status).toBe(200)
   const done = BookingSchema.parse(await c.json())
+  expect(await notices(U.cust, 'booking-accepted')).toBe(dueBefore + 1) // the customer confirmed last and still gets "Payment due"
   expect(done.status).toBe('awaiting-payment')
   expect(new Date(done.startAt).getTime()).toBe(new Date(when).getTime())
   expect(done.payBy).not.toBeNull()
@@ -60,7 +62,7 @@ it('the customer enters a time, the provider confirms and the customer is told t
   expect((await enter(b.id, U.cust)).status).toBe(200)
   const before = await notices(U.cust, 'booking-accepted')
   expect((await agreeing(b.id, U.owner)).status).toBe(200)
-  expect(await notices(U.cust, 'booking-accepted')).toBe(before + 1)
+  expect(await notices(U.cust, 'booking-accepted')).toBe(before + 1) // "Payment due"
 })
 
 it('the one who entered the time cannot confirm it; nothing pending is a 409; a stranger gets 404; a past time is refused', async () => {
@@ -74,7 +76,7 @@ it('the one who entered the time cannot confirm it; nothing pending is a 409; a 
   expect((await enter(b.id, U.owner, day(-1))).status).toBe(400)
 })
 
-it('a pending time falls away after 48 hours', async () => {
+it('a pending time falls away after 2 days', async () => {
   const b = await waiting()
   await enter(b.id, U.owner)
   await pool.query("UPDATE bookings SET time_answer_by = now() - interval '1 minute' WHERE id = $1", [b.id])
@@ -132,13 +134,14 @@ it('payment is only possible once both sides have confirmed the time: no pay lin
   expect(r.pay_by).toBeNull()
 })
 
-it('both sides have 7 days: a time entered late moves the booking deadline out, so the other side still has the full 7 days', async () => {
+it('both sides have 2 days: a time entered late moves the booking deadline out, so the other side still has the full 2 days', async () => {
   const b = await waiting()
-  await pool.query("UPDATE bookings SET answer_by = now() + interval '1 day' WHERE id = $1", [b.id]) // day 6 of 7
+  await pool.query("UPDATE bookings SET answer_by = now() + interval '1 day' WHERE id = $1", [b.id]) // 1 day left of the 7
   expect((await enter(b.id, U.owner)).status).toBe(200)
   const r = await row(b.id)
   const left = (d: Date) => d.getTime() - Date.now()
-  expect(left(r.time_answer_by)).toBeGreaterThan(6.99 * 86_400_000)
+  expect(left(r.time_answer_by)).toBeGreaterThan(1.99 * 86_400_000)
+  expect(left(r.time_answer_by)).toBeLessThan(2.01 * 86_400_000)
   expect(left(r.answer_by)).toBeGreaterThanOrEqual(left(r.time_answer_by) - 1000)
   expect((await agreeing(b.id, U.cust)).status).toBe(200)
 })

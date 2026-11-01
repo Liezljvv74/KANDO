@@ -96,5 +96,7 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
   const threadId = await threadForRequest(tx, req.id)
   afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row.id, amount: Number(row.amount), currency: row.currency as 'EUR' }))
   afterCommit(() => notifyBookingEvent('quote-confirmed', provider.ownerId, { bookingId: row.id }))
+  // a quote with a time: the provider's quote and the customer's confirm are both in, so "Payment due" goes out now (pay_by from payBy())
+  if (hasTime) afterCommit(() => notifyBookingEvent('booking-accepted', userId, { bookingId: row.id, date: row.payBy!.toISOString() }))
   return toBooking(row, now)
 }

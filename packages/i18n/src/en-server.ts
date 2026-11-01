@@ -31,9 +31,9 @@ export const en: Record<ServerKey, string> = {
     'A provider sent you a quote. Please look at it in the app. The quote is open until {date}: a quote you do not accept expires 7 days after it was sent.',
   'email.bookingProposed.subject': 'A new time was proposed',
   'email.bookingProposed.body': 'A new date and time has been proposed for your booking request. Please answer in the app within 24 hours.',
-  'email.bookingAccepted.subject': 'Your booking was accepted',
+  'email.bookingAccepted.subject': 'Payment due for your booking',
   'email.bookingAccepted.body':
-    'The provider accepted your booking. Please pay by {date}. The pay link follows in the app; you will see it there as soon as payment is available.',
+    'The date and time are confirmed by both sides. Payment is due by {date}. Open the app to pay; you will see the pay link there as soon as payment is available.',
   'email.bookingDeclined.subject': 'Your booking was declined',
   'email.bookingDeclined.body':
     'The provider declined your booking. You can send a new request to this or another provider.',
