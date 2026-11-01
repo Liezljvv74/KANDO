@@ -407,7 +407,6 @@ export const en: Record<AppKey, string> = {
   'booking.pickDate': 'Choose a date',
   'booking.pickTime': 'Choose a time',
   'booking.invalidAmount': 'Please enter an amount and the scope.',
-  'booking.proposeTitle': 'Propose a time',
   'booking.propose': 'Propose this time',
   'busy.title': 'Busy times',
   'busy.pending': 'Pending booking',

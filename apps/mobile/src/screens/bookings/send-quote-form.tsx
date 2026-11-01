@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { BookingRequest, QuoteInput } from '@kando/contract'
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
+import { servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { errorText, t } from '@/i18n'
@@ -23,6 +24,22 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // a request for one of the provider's fixed-price services starts with that price (the provider can change it)
+  useEffect(() => {
+    if (!request.serviceId) return
+    let live = true
+    servicesApi.list().then(
+      (list) => {
+        const price = list.find((s) => s.id === request.serviceId && s.priceType === 'fixed')?.price
+        if (live && price) setAmount((a) => a || String(price))
+      },
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [request.serviceId])
 
   async function submit() {
     const value = parseAmount(amount)

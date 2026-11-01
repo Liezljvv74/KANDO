@@ -6,7 +6,6 @@ import type {
   BookingRequest,
   BookingView,
   BusyTime,
-  DirectBookingInput,
   Dispute,
   FinishInput,
   Page,
@@ -36,7 +35,6 @@ export const confirmQuote = (quoteId: string) => api<Booking>(`${BASE}/quotes/${
 /** An awaiting-time booking: one side enters the date and time, the other confirms it. */
 export const enterAgreedTime = (id: string, body: AgreedTimeInput) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time`, json('POST', body))
 export const confirmAgreedTime = (id: string) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time/confirm`, json('POST'))
-export const createDirectBooking = (body: DirectBookingInput) => api<Booking>(`${BASE}/bookings`, json('POST', body))
 export const listBookings = (role: Role, cursor?: string) => api<Page<Booking>>(list('bookings', role, cursor))
 export const getBooking = (id: string) => api<BookingView>(`${BASE}/bookings/${encodeURIComponent(id)}`)
 export const answerBooking = (id: string, answer: BookingAnswer) => api<Booking>(`${BASE}/bookings/${id}/answer`, json('POST', answer))
