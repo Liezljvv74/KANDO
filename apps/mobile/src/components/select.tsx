@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { t } from '@/i18n'
@@ -63,7 +64,9 @@ export function Select<T extends string | number>({
         </Text>
       </Pressable>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={close}>
+      {/* A modal is its own window: translucent bars let the keyboard view measure it on Android; the sheet then rises above the keyboard. */}
+      <Modal visible={open} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+        <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <Pressable style={styles.backdrop} onPress={close} accessibilityLabel={t('common.close')} accessibilityRole="button" />
         <SafeAreaView style={styles.sheet} edges={['bottom']}>
           <View style={styles.sheetHead}>
@@ -107,6 +110,7 @@ export function Select<T extends string | number>({
             }}
           />
         </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   )
@@ -129,6 +133,7 @@ const styles = StyleSheet.create({
   value: { flex: 1, fontSize: 16, color: '#14352E' },
   placeholder: { color: '#7A948D' },
   chevron: { fontSize: 16, color: '#0E8A6B' },
+  flex: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(20, 53, 46, 0.35)' },
   sheet: { maxHeight: '70%', backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },

@@ -1,20 +1,21 @@
 import { useRouter } from 'expo-router'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { LinkText } from '@/components/auth-ui'
+import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { t } from '@/i18n'
 
 export function FormScreen({ title, children, back = true }: { title: string; children: React.ReactNode; back?: boolean }) {
   const router = useRouter()
   return (
     <SafeAreaView style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         <Text style={styles.title}>{title}</Text>
         {children}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   )
 }

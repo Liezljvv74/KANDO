@@ -1,13 +1,14 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, FlatList, StyleSheet, Text, View } from 'react-native'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import type { SearchItem } from '@kando/contract'
 
 import { ApiError } from '@/api/client'
 import { searchProviders, type SearchParams } from '@/api/providers'
-import { Button, ErrorText, Field } from '@/components/auth-ui'
+import { Button, ErrorText, Field, KEYBOARD_GAP } from '@/components/auth-ui'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { t, useLang } from '@/i18n'
@@ -133,7 +134,7 @@ export default function SearchScreen() {
         }
         ListFooterComponent={footer ?? undefined}
         contentContainerStyle={styles.list}
-        automaticallyAdjustKeyboardInsets
+        renderScrollComponent={(props) => <KeyboardAwareScrollView {...props} bottomOffset={KEYBOARD_GAP} />}
         keyboardShouldPersistTaps="handled"
       />
     </SafeAreaView>

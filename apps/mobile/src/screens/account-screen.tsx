@@ -2,13 +2,14 @@ import type { Me, Photo, PushSettings } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
-import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
+import { Button, ErrorText, Field, KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
 import { NotificationBanners } from '@/components/notification-banner'
@@ -89,7 +90,7 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         <NotificationBanners me={shared} />
         <View style={styles.card}>
           <Text style={styles.title}>{t('tab.account')}</Text>
@@ -122,7 +123,7 @@ export default function AccountScreen() {
             {t('account.admin')}
           </Text>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   )
 }

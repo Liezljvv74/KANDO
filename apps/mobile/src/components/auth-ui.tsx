@@ -1,18 +1,22 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LanguageSwitch } from '@/components/language-switch'
 
+/** How far above the keyboard the field being typed in stays (every scrolling form uses it, Android and iPhone alike). */
+export const KEYBOARD_GAP = 24
+
 export function AuthScreen({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <SafeAreaView style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           {children}
         </View>
         <LanguageSwitch />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   )
 }
