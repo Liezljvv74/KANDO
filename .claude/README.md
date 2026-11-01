@@ -17,7 +17,7 @@ General-purpose subagents (built into Claude Code) did the per-task implementati
 ## Slash commands (`commands/`)
 | File | Used for |
 |---|---|
-| `security-scan.md` | Runs the three security scanners in parallel and merges the findings by severity. |
+| `security-scan.md` | Runs the project's own read-only agents (`nextjs-security-scanner`, `vercel-security-scanner`, `rls-check`) in parallel over the whole repository and merges the findings by severity. |
 | `security-scan-changed.md` | The same, limited to the files changed against `main`. |
 | `test-report.md` | Added for the capstone: runs the full suites once at the end of a stage and writes the Excel test report in `Reports/`. |
 
@@ -29,9 +29,10 @@ Also used from Claude Code itself: `/code-review` (review of a diff or a pull re
 | `brainstorming` | superpowers plugin 7.0.0 (MIT) | Turning an idea into a design before any building (stage designs, the flow design talks). |
 | `writing-plans` | superpowers plugin 7.0.0 (MIT) | The written implementation plans in `docs/superpowers/plans/` and `docs/plans/`. |
 | `subagent-driven-development` | superpowers plugin 7.0.0 (MIT) | Executing a plan task by task with an implementer and a reviewer per task (stages 1, 2a to 2e, the assessment fixes). |
-| `neon-postgres` | Neon plugin 2.3.0 | Neon Postgres practice: branches, pooled and direct connections, migrations. |
 
-Other plugins enabled in the owner's set-up and used in sessions: `ponytail` (minimal-solution discipline), `expo`, `stripe`, `frontend-design`. They are installed per user, not copied here.
+The three skills above are text copies of the MIT-licensed superpowers plugin (licence: `skills/LICENSE-superpowers.txt`). Their helper scripts (a local preview server and shell helpers) are NOT copied: only the instruction text, so nothing executable is vendored here. The plugin itself is installed per user and gives the full skills.
+
+Other plugins used in sessions and installed per user, not copied here: `neon-postgres` (Neon Postgres practice: branches, pooled and direct connections, migrations), `ponytail` (minimal-solution discipline), `expo`, `stripe`, `frontend-design`.
 
 ## Rules
 The project rules for every session are in `CLAUDE.md` (project root) and the README section "How a new session starts". The row-level-security evidence for the assessors is `docs/rls-and-auth-evidence.md`.
