@@ -341,6 +341,12 @@ export const en: Record<ServerKey, string> = {
   'email.requestWithdrawn.body': 'The customer withdrew their request.',
   'email.requestDeclined.subject': 'Request declined',
   'email.requestDeclined.body': 'The provider cannot take your request. Please try another provider.',
+  'email.requestUpdated.subject': 'The customer changed the time',
+  'email.requestUpdated.body': 'The customer changed the date and time of a request. Please open the app and answer it.',
+  'email.timeProposed.subject': 'A different time was proposed',
+  'email.timeProposed.body': 'The provider proposed a different date and time for your request. Please open the app to confirm it, talk in the chat, or decline.',
+  'email.timeToConfirm.subject': 'Please confirm the time',
+  'email.timeToConfirm.body': 'A date and time was entered for your booking. Please open the app to confirm it.',
   'email.requestReopened.subject': 'Quote open again',
   'email.requestReopened.body': 'The time was not agreed. The quote is open again until {date}. Please propose another time.',
 }
