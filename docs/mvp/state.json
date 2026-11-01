@@ -5,7 +5,7 @@
     "0.2": "In progress",
     "0.3": "Waiting for owner",
     "0.5": "Done",
-    "0.6": "Waiting for owner",
+    "0.6": "Done",
     "0.4": "Waiting for owner",
     "1.1": "Waiting for owner"
   },
@@ -14,7 +14,7 @@
     "2": "In progress",
     "3": "In progress",
     "6": "Waiting for owner",
-    "7": "Waiting for owner",
+    "7": "In progress",
     "15": "Waiting for owner",
     "5": "Waiting for owner"
   },
@@ -77,6 +77,15 @@
         "step 1.1 Waiting for owner",
         "task 15 Waiting for owner",
         "merged PR #47"
+      ]
+    },
+    {
+      "when": "2026-11-01 16:04",
+      "commit": "4373a83",
+      "note": "Phase 0.6 done: review records posted as comments on 12 merged PRs (2, 5, 11, 14, 15, 16, 29, 30, 35, 36, 37, 38) copied from the written reports, and on PRs 47 and 48 (code review of this session). Not posted on 25, 27, 28 and 18 to 20: the reports hold only partial or no code-review lines for them. /code-review 48 was run; findings fixed in PR 48. Still for the owner: submit a GitHub review (Approve) on PR 48 and PR 49 before merging.",
+      "steps": [
+        "step 0.6 Done",
+        "task 7 In progress"
       ]
     }
   ],
