@@ -1,12 +1,13 @@
 {
-  "stamp": "2026-11-01 14-49",
+  "stamp": "2026-11-01 15-00",
   "steps": {
     "0.1": "In progress",
     "0.2": "In progress",
     "0.3": "Waiting for owner",
     "0.5": "Done",
     "0.6": "Waiting for owner",
-    "0.4": "Waiting for owner"
+    "0.4": "Waiting for owner",
+    "1.1": "Done"
   },
   "tasks": {
     "1": "Waiting for owner",
@@ -14,7 +15,7 @@
     "3": "In progress",
     "6": "Waiting for owner",
     "7": "Waiting for owner",
-    "15": "Open",
+    "15": "Done",
     "5": "Waiting for owner"
   },
   "log": [
@@ -48,6 +49,16 @@
         "task 1 Waiting for owner",
         "task 5 Waiting for owner",
         "task 6 Waiting for owner"
+      ]
+    },
+    {
+      "when": "2026-11-01 15:00",
+      "commit": "d325b15",
+      "note": "Phase 1.1 (Task 9): notice wording for the one-flow request in German and English (in-app, push, email); the sweep test no longer depends on the time of day (it failed after midday, also without these changes). The owner should read the German texts. Added the /update-mvp-report command.",
+      "steps": [
+        "step 1.1 Done",
+        "step 0.1 In progress",
+        "task 15 Done"
       ]
     }
   ]
