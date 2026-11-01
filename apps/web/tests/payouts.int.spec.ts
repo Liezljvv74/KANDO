@@ -5,7 +5,7 @@ import { appPool } from '@kando/db/src/client'
 import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, getPublicProfile, notifyBookingEvent, payoutStatus, refreshAccount, runDueTimers } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -75,7 +75,7 @@ async function whilePaymentsOff<T>(fn: () => Promise<T>): Promise<T> {
 }
 const newRequest = async (providerId: string, as = U.c1) => {
   await relaxLimits(as)
-  const res = await call(requestsRoute.POST, as, 'POST', { providerId, description: 'Paint the hall' })
+  const res = await call(requestsRoute.POST, as, 'POST', { providerId, description: 'Paint the hall', ...requestTime() })
   expect(res.status).toBe(201)
   return RequestSchema.parse(await res.json())
 }
@@ -201,7 +201,7 @@ it('a provider who stops being ready: the customer cannot accept their quote or 
 it('a customer cannot request or book an unready provider (409) but can watch it', async () => {
   const p = await provider()
   await relaxLimits(U.c1)
-  const r = await call(requestsRoute.POST, U.c1, 'POST', { providerId: p.id, description: 'Paint the hall' })
+  const r = await call(requestsRoute.POST, U.c1, 'POST', { providerId: p.id, description: 'Paint the hall', ...requestTime() })
   expect(r.status).toBe(409)
   expect((await r.json()).error).toBe('PROVIDER_NOT_READY')
   const b = await call(bookingsRoute.POST, U.c1, 'POST', { ...proposal, serviceId: p.serviceId })
