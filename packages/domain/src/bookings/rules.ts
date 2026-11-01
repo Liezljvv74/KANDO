@@ -19,6 +19,12 @@ export const SHORT_NOTICE_PAY_HOURS = 6
 export const SHORT_NOTICE_THRESHOLD_HOURS = 24
 export const MAX_OPEN_REQUESTS_PER_PAIR = 1
 export const MAX_REQUESTS_PER_DAY = 10
+/** A side that already proposed this many times needs the other side to have written in the chat before it proposes again (the request is the customer's first). */
+export const PROPOSALS_BEFORE_CHAT = 1
+/** Days a booking may wait in awaiting-time (a quote accepted without a time) for both sides to agree it. */
+export const AWAITING_TIME_DAYS = 7
+/** Hours the other side has to confirm a time that was entered after the quote was accepted. */
+export const TIME_ANSWER_HOURS = 48
 
 export type Span = { start: Date; end: Date }
 
@@ -66,8 +72,18 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
  */
 export const bookingShownStatus = (b: { status: string; answerBy: Date | null; payBy: Date | null }, now: Date): string => {
   if (b.status === 'proposed' && b.answerBy && b.answerBy <= now) return 'expired'
+  if (b.status === 'awaiting-time' && b.answerBy && b.answerBy <= now) return 'expired'
   if (b.status === 'awaiting-payment' && b.payBy && b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 <= now.getTime()) return 'expired'
   return b.status
+}
+
+/**
+ * Whether a side may propose a (different) time now. Each side's first proposal is free; after that the other side must have
+ * written in the chat since this side's last proposal, so the two talk before the loop goes on (flow 1).
+ */
+export const mayPropose = (a: { side: 'customer' | 'provider'; customerProposals: number; providerProposals: number; otherWroteSinceMine: boolean }): { ok: true } | { ok: false; reason: 'chat-first' } => {
+  const mine = a.side === 'customer' ? a.customerProposals : a.providerProposals
+  return mine < PROPOSALS_BEFORE_CHAT || a.otherWroteSinceMine ? { ok: true } : { ok: false, reason: 'chat-first' }
 }
 
 export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)

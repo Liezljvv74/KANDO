@@ -109,6 +109,7 @@ export const errorKeys: Record<string, Key> = {
   ALREADY_STATED: 'error.booking.already-stated',
   INVALID_STOP_AMOUNT: 'error.booking.invalid-stop-amount',
   'time-required': 'error.booking.time-required',
+  'chat-first': 'error.booking.chat-first',
   REVIEW_EXISTS: 'error.review.exists',
   REVIEW_CLOSED: 'error.review.closed',
   REVIEW_FINAL: 'error.review.final',

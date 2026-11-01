@@ -27,6 +27,8 @@ export const requests = pgTable(
     addressCity: text('address_city'),
     note: text(),
     revision: integer().notNull().default(0),
+    // When the customer last changed the time (null: never); the round rule looks for chat messages after it.
+    revisedAt: timestamp('revised_at', { withTimezone: true }),
     status: text().notNull().default('open'),
     answerBy: timestamp('answer_by', { withTimezone: true }).notNull(),
     // An additional task's request: the paid booking it adds to (trigger check_parent_booking, never changed: rls.ts).
@@ -63,6 +65,8 @@ export const quotes = pgTable(
     // A suggested time only; the customer confirms a date and time separately.
     startAt: timestamp('start_at', { withTimezone: true }),
     durationMin: integer('duration_min'),
+    // True when this quote's time differs from the request's: it counts as the provider's proposal in the round rule (flow 1).
+    proposedOtherTime: boolean('proposed_other_time').notNull().default(false),
     status: text().notNull().default('sent'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),

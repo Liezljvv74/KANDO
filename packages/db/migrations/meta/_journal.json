@@ -176,6 +176,13 @@
       "when": 1793490023148,
       "tag": "0024_quiet_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793493978308,
+      "tag": "0025_friendly_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

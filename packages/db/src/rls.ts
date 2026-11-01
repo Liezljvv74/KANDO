@@ -83,7 +83,7 @@ export const APPEND_ONLY_TABLES: Record<string, { read: string; insert: string }
 // Columns that never change after insert (a trigger, so it holds for every writer): the parties of a row cannot be reassigned.
 export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
   // A quote is final once sent (the booking's price is copied from it): only status and reminder_sent_at change.
-  quotes: ['request_id', 'provider_id', 'amount', 'currency', 'scope', 'start_at', 'duration_min', 'expires_at'],
+  quotes: ['request_id', 'provider_id', 'amount', 'currency', 'scope', 'start_at', 'duration_min', 'proposed_other_time', 'expires_at'],
   bookings: ['customer_id', 'provider_id', 'request_id', 'parent_booking_id'],
   requests: ['customer_id', 'provider_id', 'parent_booking_id'],
 }

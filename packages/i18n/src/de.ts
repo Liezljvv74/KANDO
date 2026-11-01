@@ -639,6 +639,7 @@ export const de = {
   'error.booking.already-stated': 'Es wurde bereits ein Betrag angegeben; er kann nicht mehr geändert werden.',
   'error.booking.invalid-stop-amount': 'Der Betrag muss zwischen 0 und dem Preis liegen, in ganzen Cent.',
   'error.booking.time-required': 'Bitte wähle eine Zeit.',
+  'error.booking.chat-first': 'Von Deiner Seite wurde schon ein Termin vorgeschlagen. Bitte sprecht zuerst im Chat und einigt Euch auf einen Termin, der für beide passt.',
   'error.review.exists': 'Du hast diese Buchung bereits bewertet.',
   'error.review.closed': 'Die 7 Tage für eine Bewertung sind vorbei.',
   'error.review.final': 'Deine Bewertung wird jetzt angezeigt und kann nicht mehr geändert werden.',

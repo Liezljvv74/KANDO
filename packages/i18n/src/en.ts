@@ -640,6 +640,7 @@ export const en: Record<AppKey, string> = {
   'error.booking.already-stated': 'An amount was already stated and cannot be changed.',
   'error.booking.invalid-stop-amount': 'The amount must be between 0 and the price, in whole cents.',
   'error.booking.time-required': 'Please choose a time.',
+  'error.booking.chat-first': 'A time was already proposed from your side. Please talk in the chat first and agree a time that suits you both.',
   'error.review.exists': 'You have already reviewed this booking.',
   'error.review.closed': 'The 7 days for a review have passed.',
   'error.review.final': 'Your review is shown now and can no longer be changed.',
