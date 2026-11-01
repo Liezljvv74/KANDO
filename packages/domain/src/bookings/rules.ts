@@ -23,8 +23,8 @@ export const MAX_REQUESTS_PER_DAY = 10
 export const PROPOSALS_BEFORE_CHAT = 1
 /** Days a booking may wait in awaiting-time (a quote accepted without a time) for both sides to agree it. */
 export const AWAITING_TIME_DAYS = 7
-/** Hours the other side has to confirm a time that was entered after the quote was accepted. */
-export const TIME_ANSWER_HOURS = 48
+/** Days the other side has to confirm a time that was entered after the quote was accepted (the booking's own deadline is extended to cover it). */
+export const TIME_ANSWER_DAYS = 7
 
 export type Span = { start: Date; end: Date }
 

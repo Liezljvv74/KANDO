@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
+import { asUser, pool } from '@kando/db'
+import { sql } from 'drizzle-orm'
 import { RequestSchema } from '@kando/contract'
 import { call, cleanupUsers, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -67,16 +68,42 @@ it('the provider sees postcode and city of the job place but not the street; the
   expect(mine.address).toEqual({ postcode: '10115', city: 'Berlin' })
 })
 
-it('the customer revises the time: revision counts, the provider is told, and a sent quote is replaced', async () => {
+it('before a quote exists the customer revises the time: revision counts and the provider is told', async () => {
   const r = await created()
-  const q = await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence', startAt: r.startAt, durationMin: 120 }, { id: r.id })).json()
   const before = await noticesOf(U.owner, 'request-updated')
   const res = await call(revise.POST, U.cust, 'POST', time({ startAt: day(12) }), { id: r.id })
   expect(res.status).toBe(200)
   expect(RequestSchema.parse(await res.json())).toMatchObject({ revision: 1 })
   expect(await noticesOf(U.owner, 'request-updated')).toBe(before + 1)
-  expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('superseded')
   expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('open')
+})
+
+it('once a quote was sent the customer cannot change the request (409 quote-sent): changes go through the chat and a revised quote', async () => {
+  const r = await created()
+  const q = await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence', startAt: r.startAt, durationMin: 120 }, { id: r.id })).json()
+  for (const body of [time({ startAt: day(12) }), time({ startAt: r.startAt, note: 'Another note' })]) {
+    const res = await call(revise.POST, U.cust, 'POST', body, { id: r.id })
+    expect([res.status, (await res.json()).error]).toEqual([409, 'quote-sent'])
+  }
+  expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('sent')
+  // the provider's revised quote is the way: it replaces the sent one and keeps counting versions
+  const revised = await call(quotes.POST, U.owner, 'POST', { amount: 120, scope: 'Fence and gate', startAt: r.startAt, durationMin: 120 }, { id: r.id })
+  expect([revised.status, (await revised.json()).version]).toEqual([201, 2])
+  expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('superseded')
+})
+
+it('a blocked or unavailable provider: the customer cannot revise', async () => {
+  const r = await created()
+  await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [U.owner, U.cust])
+  expect((await call(revise.POST, U.cust, 'POST', time({ startAt: day(12) }), { id: r.id })).status).toBe(403)
+  await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [U.owner, U.cust])
+})
+
+it('the app role cannot write the revision count, nor change a quoted request', async () => {
+  const r = await created()
+  await expect(asUser(U.cust, (tx) => tx.execute(sql`UPDATE requests SET revision = 5 WHERE id = ${r.id}`))).rejects.toThrow()
+  await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence' }, { id: r.id })
+  await expect(asUser(U.cust, (tx) => tx.execute(sql`UPDATE requests SET start_at = now() + interval '30 days' WHERE id = ${r.id}`))).rejects.toThrow() // quoted: frozen
 })
 
 it('revising to the same time changes nothing', async () => {

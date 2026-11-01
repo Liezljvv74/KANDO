@@ -72,13 +72,14 @@ it('two customers confirming overlapping times: the first gets the slot, the sec
   expect(await state('quotes', b.q.id)).toBe('sent') // nothing half-written: the quote is still open for another time
 })
 
-it('an expired quote and a quote replaced by the customer\'s new time cannot be confirmed', async () => {
+it('an expired quote and a quote replaced by the provider\'s revised quote cannot be confirmed', async () => {
   const old = await quoted()
   await expireQuotes('request_id = $1', [old.r.id])
   const e = await confirming(old.q.id)
   expect([e.status, (await e.json()).error]).toEqual([409, 'quote-expired'])
   const replaced = await quoted()
-  expect((await call(revise.POST, U.cust, 'POST', { ...requestTime(), startAt: day(next++) }, { id: replaced.r.id })).status).toBe(200)
+  expect((await call(revise.POST, U.cust, 'POST', { ...requestTime(), startAt: day(next++) }, { id: replaced.r.id })).status).toBe(409) // the customer cannot change a quoted request
+  expect((await call(quotes.POST, U.owner, 'POST', { amount: 160, scope: 'Fence, revised' }, { id: replaced.r.id })).status).toBe(201)
   const s = await confirming(replaced.q.id)
   expect([s.status, (await s.json()).error]).toEqual([409, 'quote-not-open'])
 })

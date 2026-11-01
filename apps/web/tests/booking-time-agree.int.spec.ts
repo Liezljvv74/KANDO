@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { runDueTimers } from '@kando/domain'
+import { createPayLink, runDueTimers } from '@kando/domain'
 import { call, cleanupUsers, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -121,4 +121,44 @@ it('a quote without a time, confirmed after the request time has passed, gets a 
   await pool.query("UPDATE requests SET start_at = now() - interval '1 day' WHERE id = $1", [r.id])
   const b = BookingSchema.parse(await (await call(confirm.POST, U.cust, 'POST', {}, { id: q.id })).json())
   expect(new Date(b.startAt).getTime()).toBeGreaterThan(Date.now())
+})
+
+it('payment is only possible once both sides have confirmed the time: no pay link while waiting or while a time is pending', async () => {
+  const b = await waiting()
+  await expect(createPayLink(db, U.cust, b.id)).rejects.toMatchObject({ status: 409 })
+  await enter(b.id, U.owner)
+  await expect(createPayLink(db, U.cust, b.id)).rejects.toMatchObject({ status: 409 }) // entered by one side only
+  const r = await row(b.id)
+  expect(r.pay_by).toBeNull()
+})
+
+it('both sides have 7 days: a time entered late moves the booking deadline out, so the other side still has the full 7 days', async () => {
+  const b = await waiting()
+  await pool.query("UPDATE bookings SET answer_by = now() + interval '1 day' WHERE id = $1", [b.id]) // day 6 of 7
+  expect((await enter(b.id, U.owner)).status).toBe(200)
+  const r = await row(b.id)
+  const left = (d: Date) => d.getTime() - Date.now()
+  expect(left(r.time_answer_by)).toBeGreaterThan(6.99 * 86_400_000)
+  expect(left(r.answer_by)).toBeGreaterThanOrEqual(left(r.time_answer_by) - 1000)
+  expect((await agreeing(b.id, U.cust)).status).toBe(200)
+})
+
+it('a time cannot be confirmed after the booking deadline, and a remote job cannot become on-site', async () => {
+  const b = await waiting()
+  await enter(b.id, U.owner)
+  await pool.query("UPDATE bookings SET answer_by = now() - interval '1 minute' WHERE id = $1", [b.id])
+  const late = await agreeing(b.id, U.cust)
+  expect([late.status, (await late.json()).error]).toEqual([409, 'not-open'])
+  const c = await waiting()
+  await pool.query('UPDATE bookings SET address_postcode = NULL, address_street = NULL, address_city = NULL, on_site = false WHERE id = $1', [c.id])
+  const flip = await enter(c.id, U.owner)
+  expect([flip.status, (await flip.json()).error]).toEqual([400, 'address-required'])
+})
+
+it('a blocked customer cannot confirm', async () => {
+  const b = await waiting()
+  await enter(b.id, U.owner)
+  await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [U.owner, U.cust])
+  expect((await agreeing(b.id, U.cust)).status).toBe(403)
+  await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2',[U.owner, U.cust])
 })

@@ -38,7 +38,7 @@ it('every cron route answers 401 without the secret', async () => {
 it('200 with the report for the right token', async () => {
   const res = await get('bookings', 'Bearer s3cret')
   expect(res.status).toBe(200)
-  expect(Object.keys(await res.json()).sort()).toEqual(['askedDone', 'autoReleased', 'cancelsSettled', 'commissionInvoices', 'confirmReminders', 'customersWaiting', 'decisionsApplied', 'ignoredNoticeFlags', 'ignoredNotices', 'invoicesIssued', 'noShowsResolved', 'overdueDisputes', 'proposalsLapsed', 'quotesExpired', 'remindersSent', 'requestsExpired', 'reviewsShown', 'sentToStaff', 'stopsToStaff', 'unpaidExpired'])
+  expect(Object.keys(await res.json()).sort()).toEqual(['askedDone', 'autoReleased', 'cancelsSettled', 'commissionInvoices', 'confirmReminders', 'customersWaiting', 'decisionsApplied', 'ignoredNoticeFlags', 'ignoredNotices', 'invoicesIssued', 'noShowsResolved', 'overdueDisputes', 'proposalsLapsed', 'quotesExpired', 'remindersSent', 'requestsExpired', 'reviewsShown', 'sentToStaff', 'stopsToStaff', 'timeLapsed', 'unpaidExpired'])
 })
 
 it('each cron route has its own budget: a slow release does not stop the invoices route', async () => {

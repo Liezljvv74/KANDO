@@ -29,6 +29,7 @@ export type TimerReport = {
   quotesExpired: number
   proposalsLapsed: number
   unpaidExpired: number
+  timeLapsed: number
   remindersSent: number
   ignoredNotices: number
   customersWaiting: number
@@ -95,7 +96,7 @@ async function sweep(exec: Exec, now: Date, timeUp: () => boolean): Promise<Time
     WITH e AS (UPDATE quotes SET status = 'expired' WHERE status = 'sent' AND expires_at <= ${t}::timestamptz RETURNING id)
     SELECT count(*)::int AS n FROM e`)
 
-  const { proposalsLapsed, unpaidExpired } = await expireBookings(count, t)
+  const { proposalsLapsed, unpaidExpired, timeLapsed } = await expireBookings(count, t)
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -143,7 +144,7 @@ async function sweep(exec: Exec, now: Date, timeUp: () => boolean): Promise<Time
   const customersWaiting = paymentsEnabled() ? (await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, undefined, true)).length : 0
 
   const endings = await endingRules(exec, now, count, timeUp)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }
+  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, timeLapsed, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }
 }
 
 /**
@@ -156,25 +157,20 @@ async function sweep(exec: Exec, now: Date, timeUp: () => boolean): Promise<Time
 async function expireBookings(count: (q: SQL) => Promise<number>, t: string, only: SQL = sql`TRUE`) {
   const lapsed = sql`status = 'proposed' AND answer_by <= ${t}::timestamptz AND ${only}`
   const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz AND ${only}`
-  const proposalsLapsed = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(lapsed)} AND ${lapsed} RETURNING ${EXPIRED_COLS}),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at) SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL FROM e ${reopenedJoin} RETURNING id)
-    ${result('e')}`)
-  const unpaidExpired = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(unpaid)} AND ${unpaid} RETURNING ${EXPIRED_COLS}),
+  // One statement per lapse: the booking expires, the customer is told (the job reads open again where its quote reopens), and
+  // the provider too unless it was the provider's own proposal that lapsed.
+  const expire = (pred: SQL, tellProvider: boolean) =>
+    count(sql`
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(pred)} AND ${pred} RETURNING ${EXPIRED_COLS}),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
       SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL::timestamptz FROM e ${reopenedJoin}
-      UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
+      ${tellProvider ? sql`UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id` : sql``} RETURNING id)
     ${result('e')}`)
-  // a quote accepted without a time, and no time agreed within AWAITING_TIME_DAYS: the booking expires and the job reads open again
-  const waiting = sql`status = 'awaiting-time' AND answer_by <= ${t}::timestamptz AND ${only}`
-  const timeLapsed = await count(sql`
-    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(waiting)} AND ${waiting} RETURNING ${EXPIRED_COLS}),
-    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
-      SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL::timestamptz FROM e ${reopenedJoin}
-      UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
-    ${result('e')}`)
-  return { proposalsLapsed: proposalsLapsed + timeLapsed, unpaidExpired }
+  const proposalsLapsed = await expire(lapsed, false)
+  const unpaidExpired = await expire(unpaid, true)
+  // a quote accepted without a time, and no time agreed within AWAITING_TIME_DAYS (or the days left after a late entry)
+  const timeLapsed = await expire(sql`status = 'awaiting-time' AND answer_by <= ${t}::timestamptz AND ${only}`, true)
+  return { proposalsLapsed, unpaidExpired, timeLapsed }
 }
 
 /**

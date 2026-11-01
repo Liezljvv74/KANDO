@@ -503,8 +503,14 @@ const BOOKING_TRIGGERS = [
     DECLARE n jsonb := to_jsonb(NEW); o jsonb := to_jsonb(OLD); side text; answerer text; is_customer boolean; is_provider boolean;
     BEGIN
       IF current_user <> '${APP_ROLE}' THEN RETURN NEW; END IF;
-      IF TG_TABLE_NAME = 'requests' AND n -> 'answer_by' IS DISTINCT FROM o -> 'answer_by' THEN
-        RAISE EXCEPTION 'requests: answer_by cannot be changed';
+      IF TG_TABLE_NAME = 'requests' AND (n -> 'answer_by', n -> 'revision', n -> 'revised_at') IS DISTINCT FROM (o -> 'answer_by', o -> 'revision', o -> 'revised_at') THEN
+        RAISE EXCEPTION 'requests: answer_by, revision and revised_at cannot be changed';
+      END IF;
+      -- once a quote exists the customer no longer edits the request: changes go through the chat and the provider's revised quote
+      IF TG_TABLE_NAME = 'requests' AND OLD.status <> 'open'
+          AND (n -> 'start_at', n -> 'duration_min', n -> 'on_site', n -> 'address_street', n -> 'address_postcode', n -> 'address_city', n -> 'note')
+            IS DISTINCT FROM (o -> 'start_at', o -> 'duration_min', o -> 'on_site', o -> 'address_street', o -> 'address_postcode', o -> 'address_city', o -> 'note') THEN
+        RAISE EXCEPTION 'requests: the time, place and note change only while the request is open';
       END IF;
       is_customer := CASE WHEN TG_TABLE_NAME = 'quotes'
         THEN EXISTS (SELECT 1 FROM requests r WHERE r.id = (n ->> 'request_id')::uuid AND r.customer_id = app_current_user_id())

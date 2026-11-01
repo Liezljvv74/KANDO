@@ -256,8 +256,11 @@ export async function reviseRequest(tx: Tx, userId: string, requestId: string, i
   if (first.customerId !== userId) fail(403, { error: 'not-your-turn' })
   await lockRequest(tx, requestId)
   const row = (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] ?? notFound() // read again after the lock
-  if (row.parentBookingId || !['open', 'quoted'].includes(row.status) || (row.status === 'open' && row.answerBy <= now)) fail(409, { error: 'request-closed' })
+  if (row.status === 'quoted') fail(409, { error: 'quote-sent' }) // a sent quote is final for the customer: changes go through the chat and the provider's revised quote
+  if (row.parentBookingId || row.status !== 'open' || row.answerBy <= now) fail(409, { error: 'request-closed' })
+  if (await blockedWithProvider(tx, userId, row.providerId)) fail(403, { error: 'BLOCKED' })
   const provider = (await tx.select().from(providers).where(eq(providers.id, row.providerId)))[0] ?? notFound()
+  if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
   const startAt = new Date(input.startAt)
   const place = placeColumns(input)
   const timeChanged = row.startAt?.getTime() !== startAt.getTime() || row.durationMin !== input.durationMin || row.onSite !== input.onSite
@@ -283,7 +286,6 @@ export async function reviseRequest(tx: Tx, userId: string, requestId: string, i
       })
       .where(eq(requests.id, requestId))
       .returning()
-    if (timeChanged) await o.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
     return r!
   })
   if (timeChanged) afterCommit(() => notifyBookingEvent('request-updated', provider.ownerId, { requestId }))

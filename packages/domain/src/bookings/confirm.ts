@@ -48,7 +48,6 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
   if (quote.status === 'expired') fail(409, { error: 'quote-expired' })
   if (quote.status !== 'sent' || req.status !== 'quoted') fail(409, { error: 'quote-not-open' })
   if (quote.expiresAt <= now) fail(409, { error: 'quote-expired' })
-  if (req.revisedAt && quote.createdAt < req.revisedAt) fail(409, { error: 'quote-not-open' }) // for a time the customer has since changed
   const provider = (await tx.select().from(providers).where(eq(providers.id, req.providerId)))[0]
   if (!provider || quote.providerId !== req.providerId) return notFound()
   // a suspended or unpublished provider row is hidden from the customer by RLS: that is unavailable too
