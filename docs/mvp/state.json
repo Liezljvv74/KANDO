@@ -60,6 +60,15 @@
         "step 0.1 In progress",
         "task 15 Done"
       ]
+    },
+    {
+      "when": "2026-11-01 15:49",
+      "commit": "ad03c64",
+      "note": "Review of PR 47 (/code-review): fixed the missing-document sweep and revision numbering, account deletion and data export for quote documents, VAT arithmetic in cents, the checks and the clash check when a time is entered, a stale comment. Rejected or documented: dropped preferredDate column (owner decision), stand-in start time (README), quote expiry cap, no reminder for awaiting-time expiry. Tracker rule changed: the workbook is written after every 2 merged PRs.",
+      "steps": [
+        "step 0.1 In progress"
+      ]
     }
-  ]
+  ],
+  "mergesSinceWorkbook": []
 }
