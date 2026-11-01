@@ -1,0 +1,40 @@
+{
+  "stamp": "2026-11-01 14-45",
+  "steps": {
+    "0.1": "In progress",
+    "0.2": "In progress",
+    "0.3": "In progress",
+    "0.5": "Done",
+    "0.6": "Waiting for owner"
+  },
+  "tasks": {
+    "1": "In progress",
+    "2": "In progress",
+    "3": "In progress",
+    "6": "In progress",
+    "7": "Waiting for owner",
+    "15": "Open"
+  },
+  "log": [
+    {
+      "when": "2026-11-01 12:00",
+      "commit": "1f9423a",
+      "note": "Baseline before the tracked updates: server side of Flow 1 built (tasks 1 to 8 incl. 6a, 6b, 7), the old preferredDate field removed everywhere (migration 0027), the .claude folder pushed on branch chore/claude-folder, owner decisions recorded (Neon approved; AI feature direction).",
+      "steps": [
+        "step 0.1 In progress",
+        "step 0.2 In progress",
+        "step 0.3 In progress",
+        "task 1 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-01 14:45",
+      "commit": "ab7813f",
+      "note": "Phase 0.5: Tasks 10 to 12 of the Flow 1 plan now carry the confirmed reuse map; the plan keeps the approved one-flow rule (the Book button opens the request form, direct booking retires in Task 12); tracked-update tooling (docs/mvp) added",
+      "steps": [
+        "step 0.5 Done",
+        "step 0.1 In progress"
+      ]
+    }
+  ]
+}
