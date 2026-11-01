@@ -32,16 +32,19 @@ export function withTimeOfDay(current: Date | null, picked: Date): Date {
   return d
 }
 
-export type BuildResult = { ok: true; proposal: TimeProposal } | { ok: false; error: 'invalid-time' | 'address-required' }
+export type ProposalError = 'invalid-time' | 'start-in-past' | 'address-required'
+export type BuildResult = { ok: true; proposal: TimeProposal } | { ok: false; error: ProposalError }
 
 /**
  * The proposal the server takes, from the form: the start and the duration must be there; an on-site job with details needs the
- * postcode at least (the server's rule, said before the trip). `canRemote`: the person may choose remote (else it is on site);
+ * postcode at least (the server's rule, said before the trip), and the start must be in the future (the day and the time are chosen
+ * separately, so a past time today is possible). `canRemote`: the person may choose remote (else it is on site);
  * `withDetails`: the address and the note are asked (not for a counter or an entered time).
  */
-export function buildProposal(v: WhenWhere, o: { canRemote: boolean; withDetails: boolean }): BuildResult {
+export function buildProposal(v: WhenWhere, o: { canRemote: boolean; withDetails: boolean }, now = new Date()): BuildResult {
   const durationMin = toMinutes(v.duration)
   if (!v.when || Number.isNaN(v.when.getTime()) || durationMin === null) return { ok: false, error: 'invalid-time' }
+  if (v.when.getTime() <= now.getTime()) return { ok: false, error: 'start-in-past' }
   const onSite = !o.canRemote || v.onSite
   const postcode = v.address.postcode.trim()
   if (o.withDetails && onSite && !postcode) return { ok: false, error: 'address-required' }

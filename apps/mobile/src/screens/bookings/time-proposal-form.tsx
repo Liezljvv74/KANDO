@@ -3,10 +3,13 @@ import { useState } from 'react'
 
 import { ApiError } from '@/api/client'
 import { Button, ErrorText } from '@/components/auth-ui'
-import { errorText, t } from '@/i18n'
+import { errorText } from '@/i18n'
 import { buildProposal, emptyWhenWhere } from '@/lib/when-where'
 import { BusyTimes } from '@/screens/bookings/busy-times'
-import { WhenWhereFields } from '@/screens/bookings/when-where-fields'
+import { useSavedAddress } from '@/screens/bookings/use-saved-address'
+import { proposalError, WhenWhereFields } from '@/screens/bookings/when-where-fields'
+
+const noUpdate = () => {}
 
 /**
  * Date, time, duration and place of a proposed time; the server decides whether it is allowed. The fields are the shared
@@ -27,12 +30,13 @@ export function TimeProposalForm({
   onSubmit: (p: TimeProposal) => Promise<void>
 }) {
   const [value, setValue] = useState(emptyWhenWhere())
+  useSavedAddress(withDetails ? setValue : noUpdate) // the address starts from the saved account address, as in the request form
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function submit() {
     const built = buildProposal(value, { canRemote, withDetails })
-    if (!built.ok) return setError(built.error === 'address-required' ? errorText('address-required') : t('booking.invalidTime'))
+    if (!built.ok) return setError(proposalError(built.error))
     setBusy(true)
     setError(null)
     try {

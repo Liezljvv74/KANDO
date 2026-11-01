@@ -89,6 +89,7 @@ export const en: Record<AppKey, string> = {
   'common.back': 'Back',
   'list.showMore': 'Show more',
   'common.close': 'Close',
+  'common.done': 'Done',
   'common.choose': 'Please choose',
   'form.required': 'Required.',
   'form.invalid': 'Invalid value.',

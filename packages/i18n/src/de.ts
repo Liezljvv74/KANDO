@@ -88,6 +88,7 @@ export const de = {
   'common.back': 'Zurück',
   'list.showMore': 'Mehr anzeigen',
   'common.close': 'Schließen',
+  'common.done': 'Fertig',
   'common.choose': 'Bitte auswählen',
   'form.required': 'Pflichtfeld.',
   'form.invalid': 'Ungültiger Wert.',

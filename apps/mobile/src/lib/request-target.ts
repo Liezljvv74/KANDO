@@ -7,7 +7,7 @@ export function requestTarget(provider: ProviderDetail, service?: Service): { pa
   if (!provider.providerId) return null
   if (service?.priceType === 'fixed' && service.price !== null)
     return { path: '/bookings/book', params: { slug: provider.slug, serviceId: service.id, ...(provider.worksRemotely && { remote: '1' }) }, book: true }
-  return { path: '/bookings/new-request', params: { providerId: provider.providerId, ...(service && { serviceId: service.id }) }, book: false }
+  return { path: '/bookings/new-request', params: { providerId: provider.providerId, ...(service && { serviceId: service.id }), ...(provider.worksRemotely && { remote: '1' }) }, book: false }
 }
 
 /** True only when the server says the provider cannot be booked yet; an older cached profile without `canBook` keeps today's buttons. */
