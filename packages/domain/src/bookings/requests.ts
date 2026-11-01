@@ -14,6 +14,7 @@ import { isUuid, NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
+import { issueQuoteDocument } from '../quotes/issue'
 import { canTransact } from '../payments/rules'
 import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
@@ -102,6 +103,10 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   answerBy: b.answerBy ? iso(b.answerBy) : null,
   payBy: b.payBy ? iso(b.payBy) : null,
   counterBy: b.counterBy as Booking['counterBy'],
+  pendingTime:
+    b.status === 'awaiting-time' && b.timeProposedBy && b.timeProposedStartAt && b.timeProposedDurationMin !== null && b.timeAnswerBy && b.timeAnswerBy > now
+      ? { by: b.timeProposedBy as 'customer' | 'provider', startAt: iso(b.timeProposedStartAt), durationMin: b.timeProposedDurationMin, onSite: b.timeProposedOnSite ?? true, answerBy: iso(b.timeAnswerBy) }
+      : null,
   finishedAt: b.finishedAt ? iso(b.finishedAt) : null,
   confirmBy: b.confirmBy ? iso(b.confirmBy) : null,
   askedDoneAt: b.askedDoneAt ? iso(b.askedDoneAt) : null,
@@ -344,6 +349,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
   afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent(proposedOtherTime ? 'time-proposed' : 'quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
+  if (ordinary) afterCommit(() => issueQuoteDocument(row!.id, now)) // the numbered quote and its PDF (a revision keeps the number, adds _Rev.N)
   return toQuote(row!, now)
 }
 

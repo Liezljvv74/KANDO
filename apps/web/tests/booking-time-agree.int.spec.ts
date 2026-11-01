@@ -44,6 +44,7 @@ it('the provider enters a time, the customer confirms it: the booking awaits pay
   const dueBefore = await notices(U.cust, 'booking-accepted')
   const e = await enter(b.id, U.owner, when)
   expect(e.status).toBe(200)
+  expect(BookingSchema.parse(await e.json()).pendingTime).toMatchObject({ by: 'provider', durationMin: 120, onSite: true }) // the app can show what is waiting for an answer
   expect(await notices(U.cust, 'time-to-confirm')).toBe(before + 1)
   expect((await row(b.id)).status).toBe('awaiting-time') // nothing is held yet
   const c = await agreeing(b.id, U.cust)
@@ -51,6 +52,7 @@ it('the provider enters a time, the customer confirms it: the booking awaits pay
   const done = BookingSchema.parse(await c.json())
   expect(await notices(U.cust, 'booking-accepted')).toBe(dueBefore + 1) // the customer confirmed last and still gets "Payment due"
   expect(done.status).toBe('awaiting-payment')
+  expect(done.pendingTime ?? null).toBeNull()
   expect(new Date(done.startAt).getTime()).toBe(new Date(when).getTime())
   expect(done.payBy).not.toBeNull()
   const r = await row(b.id)

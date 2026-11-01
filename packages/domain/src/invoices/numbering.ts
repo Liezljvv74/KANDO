@@ -23,11 +23,20 @@ export const yearOf = (d: Date): number => Number(new Intl.DateTimeFormat('en-CA
  */
 export const providerSeries = (providerId: string, year: number, test = false): string => `${providerId}-${year}${test ? '-test' : ''}`
 
+/** A provider's quote counter for a year: its own series, so invoice numbers stay gapless; test quotes count in their own (`-quote-test`). */
+export const quoteSeries = (providerId: string, year: number, test = false): string => `${providerId}-${year}-quote${test ? '-test' : ''}`
+
 /** The prefix of every test document's number: visible on the PDF, in the lists and in the CSV export. */
 export const TEST_NUMBER_PREFIX = 'TEST-'
 
 /** The printed number `<first 8 characters of the provider id, upper case>-<year>-0001` (unique per provider, not globally); `TEST-` first for a test document. */
 export const formatNumber = (providerId: string, year: number, n: number, test = false): string => `${test ? TEST_NUMBER_PREFIX : ''}${providerId.slice(0, 8).toUpperCase()}-${year}-${String(n).padStart(4, '0')}`
+
+/**
+ * A quote's number `Q-<first 8 characters of the provider id, upper case>-<year>-0001` (`TEST-` first for a test quote). A revision keeps
+ * the number and adds `_Rev.N` (N = the number of revisions), added by the issuing code, never taken from the series.
+ */
+export const formatQuoteNumber = (providerId: string, year: number, n: number, test = false): string => `${test ? TEST_NUMBER_PREFIX : ''}Q-${providerId.slice(0, 8).toUpperCase()}-${year}-${String(n).padStart(4, '0')}`
 
 /** A test document (issued while payments were not live): its number says so, and its PDF carries the TEST watermark. */
 export const isTestNumber = (n: string): boolean => n.startsWith(TEST_NUMBER_PREFIX)

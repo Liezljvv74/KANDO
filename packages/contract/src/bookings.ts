@@ -121,7 +121,11 @@ export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
 
 /** One row of "Quotes sent" (role provider) or "My received quotes" (role customer): the numbered quote document. */
 export const QuoteListItemSchema = z.object({
+  /** The quote document (use it for the PDF link). */
   id: z.string(),
+  /** The quote itself (to open it, confirm it). */
+  quoteId: z.string(),
+  /** `Q-XXXXXXXX-2026-0001`; a revision adds `_Rev.1`, `_Rev.2`, ... */
   number: z.string(),
   role: z.enum(['customer', 'provider']),
   requestId: z.string(),
@@ -136,6 +140,8 @@ export const QuoteListItemSchema = z.object({
   pdfReady: z.boolean(),
 })
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
+export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })
+export const QuotePdfSchema = z.object({ url: z.string() })
 
 /** POST /bookings: a booking without a prior request. */
 export const DirectBookingInputSchema = z.intersection(TimeProposalSchema, z.object({ serviceId: z.string().uuid() }))
@@ -148,6 +154,16 @@ export const BookingAnswerSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('counter'), startAt: IsoSchema, durationMin: DurationSchema, onSite: z.boolean() }),
 ])
 export type BookingAnswer = z.infer<typeof BookingAnswerSchema>
+
+/** A date and time one side entered for an awaiting-time booking, for the other side to confirm (until answerBy). */
+export const PendingTimeSchema = z.object({
+  by: z.enum(['customer', 'provider']),
+  startAt: IsoSchema,
+  durationMin: z.number().int(),
+  onSite: z.boolean(),
+  answerBy: IsoSchema,
+})
+export type PendingTime = z.infer<typeof PendingTimeSchema>
 
 export const BookingSchema = z.object({
   id: z.string(),
@@ -171,6 +187,8 @@ export const BookingSchema = z.object({
   answerBy: z.string().nullable(),
   payBy: z.string().nullable(),
   counterBy: z.enum(['provider', 'customer']).nullable(),
+  /** awaiting-time only: the time entered and not yet confirmed (null or absent when none, or when it lapsed). */
+  pendingTime: PendingTimeSchema.nullable().optional(),
   /** When the provider tapped "Finished" (or the customer said it was done). */
   finishedAt: z.string().nullable(),
   /** When the payment to the provider is made unless the customer confirms earlier or reports a problem. */
