@@ -125,7 +125,7 @@ export const liveRequest = (now: Date) =>
   or(and(eq(requests.status, 'open'), gt(requests.answerBy, now)), and(eq(requests.status, 'quoted'), sql`EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ${requests.id} AND q.status = 'sent' AND q.expires_at > ${now.toISOString()}::timestamptz)`))
 
 /** Serialises actions on one request (two accepts, or an accept and a new quote, cannot interleave). */
-const lockRequest = (tx: Tx, requestId: string) =>
+export const lockRequest = (tx: Tx, requestId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext(${requestId}))`)
 
 /**

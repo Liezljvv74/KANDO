@@ -347,6 +347,8 @@ export const en: Record<ServerKey, string> = {
   'email.timeProposed.body': 'The provider proposed a different date and time for your request. Please open the app to confirm it, talk in the chat, or decline.',
   'email.timeToConfirm.subject': 'Please confirm the time',
   'email.timeToConfirm.body': 'A date and time was entered for your booking. Please open the app to confirm it.',
+  'email.quoteConfirmed.subject': 'The customer accepted your quote',
+  'email.quoteConfirmed.body': 'The customer accepted your quote. Please open the app. If no date and time was set yet, agree it with the customer in the chat.',
   'email.requestReopened.subject': 'Quote open again',
   'email.requestReopened.body': 'The time was not agreed. The quote is open again until {date}. Please propose another time.',
 }

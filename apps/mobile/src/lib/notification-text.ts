@@ -47,6 +47,7 @@ const KEY: Record<Notification['kind'], Key> = {
   'request-updated': 'notification.requestUpdated',
   'time-proposed': 'notification.timeProposed',
   'time-to-confirm': 'notification.timeToConfirm',
+  'quote-confirmed': 'notification.quoteConfirmed',
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */

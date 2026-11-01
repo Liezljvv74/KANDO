@@ -345,6 +345,8 @@ export const de = {
   'email.timeProposed.body': 'Der Anbieter hat für Deine Anfrage ein anderes Datum mit Uhrzeit vorgeschlagen. Bitte öffne die App, um ihn zu bestätigen, im Chat zu sprechen oder abzulehnen.',
   'email.timeToConfirm.subject': 'Bitte Termin bestätigen',
   'email.timeToConfirm.body': 'Für Deine Buchung wurde ein Datum mit Uhrzeit eingetragen. Bitte öffne die App und bestätige es.',
+  'email.quoteConfirmed.subject': 'Der Kunde hat Dein Angebot angenommen',
+  'email.quoteConfirmed.body': 'Der Kunde hat Dein Angebot angenommen. Bitte öffne die App. Falls noch kein Datum mit Uhrzeit festgelegt wurde, sprecht im Chat darüber.',
   'email.requestReopened.subject': 'Angebot wieder offen',
   'email.requestReopened.body': 'Der Termin wurde nicht vereinbart. Das Angebot ist wieder offen bis {date}. Bitte schlage einen anderen Termin vor.',
 }
