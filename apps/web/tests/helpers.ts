@@ -12,6 +12,9 @@ export const fakeSession = async (request: Request) => {
 
 export const EMAIL = (id: string) => `${id}@test.skilled.invalid`
 
+/** The time and place every request now carries (flow 1): ten days ahead, two hours, on site in Berlin. */
+export const requestTime = () => ({ startAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), durationMin: 120, onSite: true, address: { postcode: '10115' } })
+
 export function call(
   handler: (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>,
   uid: string,
@@ -96,6 +99,7 @@ export async function cleanupUsers(): Promise<void> {
   // booking of theirs (a deleted customer's invoice still has the provider), and their numbering series with them.
   await pool.query(`DELETE FROM invoice_counters WHERE left(series, 36) IN (SELECT id::text FROM providers WHERE owner_id IN ${mine})`)
   await pool.query(`DELETE FROM invoices WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
+  await pool.query(`DELETE FROM quote_documents WHERE customer_id IN ${mine} OR provider_id IN ${myProviders}`)
   // the platform's commission series (commission:<year>) is shared and stays: numbers only ever go up
   await pool.query(`DELETE FROM commission_invoices WHERE provider_id IN ${myProviders}`)
   const myBookings = `(SELECT id FROM bookings WHERE customer_id IN ${mine} OR provider_id IN ${myProviders})`

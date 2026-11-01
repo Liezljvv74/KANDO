@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, BookingViewSchema, LIST_PAGE, QuoteSchema, RequestSchema } from '@kando/contract'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
@@ -108,7 +108,7 @@ it('provider accept: awaiting-payment with payBy 48h out (24h before a nearer st
 })
 
 it('provider accepts a booking made from an accepted quote the same way as a direct one: status awaiting-payment and payBy set', async () => {
-  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix' })).json())
+  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix', ...requestTime() })).json())
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence' }, { id: r.id })).json())
   const b = BookingSchema.parse(await (await call(accept.POST, U.cust, 'POST', proposal({ startAt: day(20) }), { id: q.id })).json())
   expect(b).toMatchObject({ source: 'quote', status: 'proposed', requestId: r.id, amount: 100 })
@@ -321,7 +321,7 @@ it('a lapsed payment window no longer holds the slot before any sweep runs', asy
 // A quote-born booking that ends unagreed reopens its request and quote (trigger bookings_reopen_request, rls.ts)
 const quoteBorn = async (as = U.cust) => {
   await relaxLimits(as)
-  const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix' })).json())
+  const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix', ...requestTime() })).json())
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 100, scope: 'Fence' }, { id: r.id })).json())
   const b = BookingSchema.parse(await (await call(accept.POST, as, 'POST', proposal(), { id: q.id })).json())
   return { r, q, b }

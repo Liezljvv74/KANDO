@@ -31,9 +31,9 @@ export const en: Record<ServerKey, string> = {
     'A provider sent you a quote. Please look at it in the app. The quote is open until {date}: a quote you do not accept expires 7 days after it was sent.',
   'email.bookingProposed.subject': 'A new time was proposed',
   'email.bookingProposed.body': 'A new date and time has been proposed for your booking request. Please answer in the app within 24 hours.',
-  'email.bookingAccepted.subject': 'Your booking was accepted',
+  'email.bookingAccepted.subject': 'Payment due for your booking',
   'email.bookingAccepted.body':
-    'The provider accepted your booking. Please pay by {date}. The pay link follows in the app; you will see it there as soon as payment is available.',
+    'The date and time are confirmed by both sides. Payment is due by {date}. Open the app to pay; you will see the pay link there as soon as payment is available.',
   'email.bookingDeclined.subject': 'Your booking was declined',
   'email.bookingDeclined.body':
     'The provider declined your booking. You can send a new request to this or another provider.',
@@ -341,6 +341,14 @@ export const en: Record<ServerKey, string> = {
   'email.requestWithdrawn.body': 'The customer withdrew their request.',
   'email.requestDeclined.subject': 'Request declined',
   'email.requestDeclined.body': 'The provider cannot take your request. Please try another provider.',
+  'email.requestUpdated.subject': 'The customer changed the time',
+  'email.requestUpdated.body': 'The customer changed the date and time of a request. Please open the app and answer it.',
+  'email.timeProposed.subject': 'A different time was proposed',
+  'email.timeProposed.body': 'The provider proposed a different date and time for your request. Please open the app to confirm it, talk in the chat, or decline.',
+  'email.timeToConfirm.subject': 'Please confirm the time',
+  'email.timeToConfirm.body': 'A date and time was entered for your booking. Please open the app to confirm it.',
+  'email.quoteConfirmed.subject': 'The customer accepted your quote',
+  'email.quoteConfirmed.body': 'The customer accepted your quote. Please open the app. If no date and time was set yet, agree it with the customer in the chat.',
   'email.requestReopened.subject': 'Quote open again',
   'email.requestReopened.body': 'The time was not agreed. The quote is open again until {date}. Please propose another time.',
 }

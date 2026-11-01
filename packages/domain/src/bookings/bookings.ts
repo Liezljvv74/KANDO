@@ -20,7 +20,7 @@ import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rul
 type Row = typeof bookings.$inferSelect
 
 /** The job address stays private to the customer; the provider sees it only once the booking was accepted (payBy is set then). */
-const view = (b: Row, userId: string, now = new Date()): Booking => {
+export const view = (b: Row, userId: string, now = new Date()): Booking => {
   const dto = toBooking(b, now)
   return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
 }

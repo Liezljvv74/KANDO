@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertFuture, bookingShownStatus, canTransition, overlaps, payBy } from './rules'
+import { assertFuture, bookingShownStatus, canTransition, mayPropose, overlaps, payBy } from './rules'
 import { PAY_GRACE_MINUTES } from '../payments/rules'
 
 const d = (s: string) => new Date(`2026-11-${s}:00.000Z`)
@@ -119,5 +119,35 @@ describe('assertFuture', () => {
   })
   it('rejects more than 365 days ahead', async () => {
     expect(await failure(new Date(now.getTime() + year + 1))).toEqual({ status: 400, body: { error: 'start-too-far' } })
+  })
+})
+
+describe('flow 1: the proposal round rule', () => {
+  const mine = { side: 'provider' as const, customerProposals: 1, providerProposals: 0, otherWroteSinceMine: false }
+  it('the first proposal each way is free (the request is the customer\'s first)', () => {
+    expect(mayPropose({ ...mine, side: 'provider' })).toEqual({ ok: true })
+    expect(mayPropose({ ...mine, side: 'customer', customerProposals: 1, providerProposals: 1 })).toEqual({ ok: false, reason: 'chat-first' })
+  })
+  it('a customer changing the time before the provider proposed anything is not looping', () => {
+    expect(mayPropose({ side: 'customer', customerProposals: 3, providerProposals: 0, otherWroteSinceMine: false })).toEqual({ ok: true })
+  })
+  it('a side that already proposed needs the other side to have written since', () => {
+    expect(mayPropose({ ...mine, providerProposals: 1 })).toEqual({ ok: false, reason: 'chat-first' })
+    expect(mayPropose({ ...mine, providerProposals: 1, otherWroteSinceMine: true })).toEqual({ ok: true })
+    expect(mayPropose({ side: 'customer', customerProposals: 2, providerProposals: 1, otherWroteSinceMine: true })).toEqual({ ok: true })
+  })
+})
+
+describe('flow 1: an awaiting-time booking', () => {
+  const now = d('10T12:00')
+  it('shows expired once its answer-by has passed, and is not a proposal or payment state', () => {
+    expect(bookingShownStatus({ status: 'awaiting-time', answerBy: now, payBy: null }, now)).toBe('expired')
+    expect(bookingShownStatus({ status: 'awaiting-time', answerBy: new Date(now.getTime() + 60_000), payBy: null }, now)).toBe('awaiting-time')
+  })
+  it('moves to payment, expiry or withdrawal, never straight to paid', () => {
+    expect(canTransition('awaiting-time', 'awaiting-payment')).toBe(true)
+    expect(canTransition('awaiting-time', 'expired')).toBe(true)
+    expect(canTransition('awaiting-time', 'withdrawn')).toBe(true)
+    expect(canTransition('awaiting-time', 'confirmed')).toBe(false)
   })
 })

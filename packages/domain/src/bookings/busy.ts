@@ -4,7 +4,7 @@ import type { BusyTime } from '@kando/contract'
 import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow } from '../providers/profile'
-import { BUFFER_MINUTES, overlaps } from './rules'
+import { assertFuture, BUFFER_MINUTES, overlaps } from './rules'
 
 /** The provider's busy ranges (time and state only) overlapping [from, to) (half-open); 404 for an unknown, unpublished or suspended provider. */
 export async function busyTimes(tx: Tx, slug: string, from: Date, to: Date): Promise<BusyTime[]> {
@@ -37,4 +37,23 @@ export async function slotIsHeld(tx: Exec, providerId: string, startAt: Date, du
 /** Reads on the owner connection: a customer's RLS transaction cannot see other customers' holds. The provider lock is held, and other accepts commit before releasing it. */
 export async function assertSlotFree(_tx: Tx, providerId: string, startAt: Date, durationMin: number, onSite: boolean, now: Date, ignoreBookingId?: string): Promise<void> {
   if (await slotIsHeld(db, providerId, startAt, durationMin, onSite, now, ignoreBookingId)) fail(409, { error: 'slot-pending' })
+}
+
+/**
+ * The one answer to "can this time be offered or confirmed": in the future and not too far, on site or remote as the provider
+ * works, and no clash with a held booking (the same buffer rule). Throws the usual 400/409 answers. Every flow-1 step that offers
+ * or confirms a time calls this; later rules (opening hours, days off, notice) are added here and nowhere else. A clash is read on
+ * the owner connection, so hold `lockProviderSlots` first when the answer is about to be written.
+ */
+export async function timeIsAcceptable(
+  tx: Tx,
+  t: { providerId: string; startAt: Date; durationMin: number; onSite: boolean; now: Date; ignoreBookingId?: string; clash?: boolean },
+): Promise<void> {
+  assertFuture(t.startAt, t.now)
+  if (!t.onSite) {
+    const [p] = await db.select({ remote: providers.worksRemotely }).from(providers).where(eq(providers.id, t.providerId))
+    if (!p?.remote) fail(400, { error: 'on-site-required' })
+  }
+  // a request or a revision holds no slot, so it skips the clash check (clash: false); sending a quote and confirming do the check
+  if (t.clash !== false) await assertSlotFree(tx, t.providerId, t.startAt, t.durationMin, t.onSite, t.now, t.ignoreBookingId)
 }

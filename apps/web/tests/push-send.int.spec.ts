@@ -3,7 +3,7 @@ import { db, pool } from '@kando/db'
 import { BookingSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
 import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, fakeSession, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, fakeSession, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -23,7 +23,7 @@ const giveTokens = async (uid: string, n = 1) => {
 }
 const newRequest = async (description = 'Bitte den Zaun reparieren') => {
   await relaxLimits(U.cust)
-  return RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description })).json())
+  return RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description, ...requestTime() })).json())
 }
 const threadOf = async (as: string, requestId: string) => ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs).find((t) => t.requestId === requestId)!
 

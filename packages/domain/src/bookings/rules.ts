@@ -19,6 +19,12 @@ export const SHORT_NOTICE_PAY_HOURS = 6
 export const SHORT_NOTICE_THRESHOLD_HOURS = 24
 export const MAX_OPEN_REQUESTS_PER_PAIR = 1
 export const MAX_REQUESTS_PER_DAY = 10
+/** A side that already proposed this many times needs the other side to have written in the chat before it proposes again (the request is the customer's first). */
+export const PROPOSALS_BEFORE_CHAT = 1
+/** Days a booking may wait in awaiting-time (a quote accepted without a time) for both sides to agree it. */
+export const AWAITING_TIME_DAYS = 7
+/** Days the other side has to confirm a time that was entered after the quote was accepted (the booking's own deadline is extended to cover it). */
+export const TIME_ANSWER_DAYS = 2
 
 export type Span = { start: Date; end: Date }
 
@@ -41,6 +47,8 @@ export const overlaps = (a: Span, b: Span, bufferMin: number): boolean => {
 const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   proposed: ['awaiting-payment', 'expired', 'declined', 'withdrawn', 'proposed'],
   // -> confirmed only by the payment webhook on the owner connection (trigger bookings_guard_status); plan 2d adds the ways out of confirmed
+  // a quote accepted without a time: no slot, no money until both sides agree the time (flow 1)
+  'awaiting-time': ['awaiting-payment', 'expired', 'withdrawn'],
   'awaiting-payment': ['expired', 'withdrawn', 'confirmed'],
   // A paid booking and its endings move only on the owner connection (OWNER_ONLY_BOOKING_STATUSES, trigger
   // bookings_guard_status), after the domain checked the caller. The transitions below are owner-connection
@@ -64,8 +72,20 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
  */
 export const bookingShownStatus = (b: { status: string; answerBy: Date | null; payBy: Date | null }, now: Date): string => {
   if (b.status === 'proposed' && b.answerBy && b.answerBy <= now) return 'expired'
+  if (b.status === 'awaiting-time' && b.answerBy && b.answerBy <= now) return 'expired'
   if (b.status === 'awaiting-payment' && b.payBy && b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 <= now.getTime()) return 'expired'
   return b.status
+}
+
+/**
+ * Whether a side may propose a (different) time now. Free until each side has proposed once (the request is the customer's
+ * first); from then on the other side must have written in the chat since this side's last proposal, so the two talk before the
+ * loop goes on (flow 1). A customer who changes the time before the provider has proposed anything is not looping.
+ */
+export const mayPropose = (a: { side: 'customer' | 'provider'; customerProposals: number; providerProposals: number; otherWroteSinceMine: boolean }): { ok: true } | { ok: false; reason: 'chat-first' } => {
+  const mine = a.side === 'customer' ? a.customerProposals : a.providerProposals
+  const theirs = a.side === 'customer' ? a.providerProposals : a.customerProposals
+  return mine < PROPOSALS_BEFORE_CHAT || theirs < PROPOSALS_BEFORE_CHAT || a.otherWroteSinceMine ? { ok: true } : { ok: false, reason: 'chat-first' }
 }
 
 export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)

@@ -6,7 +6,7 @@ import { RatingSchema } from './endings'
 // Mirror the status checks in packages/db/src/schema/bookings.ts.
 export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdrawn', 'declined'] as const
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
-export const BOOKING_STATUSES = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
+export const BOOKING_STATUSES = ['proposed', 'awaiting-time', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
 const IsoSchema = z.string().datetime({ offset: true })
 const DurationSchema = z.number().int().min(15).max(720)
@@ -18,13 +18,32 @@ export const BookingAddressSchema = z.object({
   city: text(80).optional(),
 })
 
-/** POST /requests: the customer describes the job. */
-export const RequestInputSchema = z.object({
-  providerId: z.string().uuid(),
-  serviceId: z.string().uuid().optional(),
-  description: requiredText(2000),
-  preferredDate: z.string().date().optional(),
+/** A proposed time; whether the provider can work remotely is checked in the domain. The past-time check also lives there. */
+const TimeProposalObject = z.object({
+  startAt: IsoSchema,
+  durationMin: DurationSchema,
+  onSite: z.boolean(),
+  address: BookingAddressSchema.optional(),
+  note: text(1000).optional(),
 })
+const onSiteNeedsAddress = (v: { onSite?: boolean; address?: unknown }) => !v.onSite || v.address !== undefined
+export const TimeProposalSchema = TimeProposalObject.refine(onSiteNeedsAddress, { message: 'Address required when on site', path: ['address'] })
+
+/**
+ * POST /requests: the customer describes the job and proposes the time. The time (start, duration, place) is all or nothing;
+ * the server requires it for a new request (packages/domain bookings/requests.ts), so an app from before this change gets a
+ * plain error, not a half-saved request. `preferredDate` is the old day-only field, ignored when a time is given.
+ */
+export const RequestInputSchema = z
+  .object({
+    providerId: z.string().uuid(),
+    serviceId: z.string().uuid().optional(),
+    description: requiredText(2000),
+    preferredDate: z.string().date().optional(),
+    ...TimeProposalObject.partial().shape,
+  })
+  .refine((v) => (v.startAt === undefined) === (v.durationMin === undefined) && (v.startAt === undefined) === (v.onSite === undefined), { message: 'Start, duration and place go together', path: ['startAt'] })
+  .refine(onSiteNeedsAddress, { message: 'Address required when on site', path: ['address'] })
 
 export const RequestSchema = z.object({
   id: z.string(),
@@ -33,6 +52,14 @@ export const RequestSchema = z.object({
   serviceId: z.string().nullable(),
   description: z.string(),
   preferredDate: z.string().nullable(),
+  /** The customer's proposed time and place; null on a request from before it was asked for. */
+  startAt: z.string().nullable(),
+  durationMin: z.number().int().nullable(),
+  onSite: z.boolean().nullable(),
+  address: BookingAddressSchema.nullable(),
+  note: z.string().nullable(),
+  /** How many times the customer changed the time after sending. */
+  revision: z.number().int(),
   /** Set for an additional task: the booking it adds work to. */
   parentBookingId: z.string().nullable(),
   status: z.enum(REQUEST_STATUSES),
@@ -48,12 +75,14 @@ export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
 
 /** A quote's start and duration are only a suggestion; the customer confirms the time when accepting. */
-export const QuoteInputSchema = z.object({
-  amount: AmountSchema,
-  scope: requiredText(2000),
-  startAt: IsoSchema.optional(),
-  durationMin: DurationSchema.optional(),
-})
+export const QuoteInputSchema = z
+  .object({
+    amount: AmountSchema.refine((v) => v > 0, { message: 'A quote needs a price above zero' }),
+    scope: requiredText(2000),
+    startAt: IsoSchema.optional(),
+    durationMin: DurationSchema.optional(),
+  })
+  .refine((v) => (v.startAt === undefined) === (v.durationMin === undefined), { message: 'Start and duration go together', path: ['startAt'] })
 
 export type QuoteInput = z.infer<typeof QuoteInputSchema>
 
@@ -73,17 +102,15 @@ export const QuoteSchema = z.object({
 })
 export type Quote = z.infer<typeof QuoteSchema>
 
-/** A proposed time; whether the provider can work remotely is checked in the domain. The past-time check also lives there. */
-export const TimeProposalSchema = z
-  .object({
-    startAt: IsoSchema,
-    durationMin: DurationSchema,
-    onSite: z.boolean(),
-    address: BookingAddressSchema.optional(),
-    note: text(1000).optional(),
-  })
-  .refine((v) => !v.onSite || v.address !== undefined, { message: 'Address required when on site', path: ['address'] })
 export type TimeProposal = z.infer<typeof TimeProposalSchema>
+
+/** POST /quotes/[id]/confirm: the customer confirms the quote as it is (its time, or none yet): only an optional note. */
+export const ConfirmQuoteInputSchema = z.object({ note: text(1000).optional() }).strict()
+export type ConfirmQuoteInput = z.infer<typeof ConfirmQuoteInputSchema>
+
+/** POST /bookings/[id]/time and /time/confirm: the date and time entered after a quote was accepted without one. */
+export const AgreedTimeInputSchema = z.object({ startAt: IsoSchema, durationMin: DurationSchema, onSite: z.boolean() })
+export type AgreedTimeInput = z.infer<typeof AgreedTimeInputSchema>
 
 /**
  * POST /quotes/[id]/accept: the customer's proposed time. An additional task's quote takes no time (an empty body, or a
@@ -91,6 +118,24 @@ export type TimeProposal = z.infer<typeof TimeProposalSchema>
  */
 export const AcceptQuoteInputSchema = z.union([TimeProposalSchema, z.object({ note: text(1000).optional() }).strict()])
 export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
+
+/** One row of "Quotes sent" (role provider) or "My received quotes" (role customer): the numbered quote document. */
+export const QuoteListItemSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  role: z.enum(['customer', 'provider']),
+  requestId: z.string(),
+  /** Null: the quote says "date and time to be confirmed". */
+  startAt: z.string().nullable(),
+  durationMin: z.number().int().nullable(),
+  amount: AmountSchema,
+  currency: CurrencySchema,
+  counterparty: z.string(),
+  status: z.enum(QUOTE_STATUSES),
+  issuedAt: z.string(),
+  pdfReady: z.boolean(),
+})
+export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 
 /** POST /bookings: a booking without a prior request. */
 export const DirectBookingInputSchema = z.intersection(TimeProposalSchema, z.object({ serviceId: z.string().uuid() }))

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MessageSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { adminCall, call, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, adminCall, call, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await mockAuth()), sessionFromRequest: fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -29,7 +29,7 @@ afterAll(cleanupUsers)
 
 const newThread = async (as = U.cust) => {
   await relaxLimits(as)
-  const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence' })).json())
+  const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence', ...requestTime() })).json())
   return ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs).find((t) => t.requestId === r.id)!
 }
 const send = (threadId: string, as: string, body: string) => call(messagesRoute.POST, as, 'POST', { body }, { id: threadId })

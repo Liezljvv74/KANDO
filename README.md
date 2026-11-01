@@ -173,6 +173,7 @@ Done on 30 and 31 October 2026 for Production: sandbox account, Connect, Account
 - Confirm, cancel and stop take longer because invoicing runs inline (to move to Inngest later).
 - Provider-available and watcher notices ignore the invoice consent while payments are off.
 - Placeholder graphics (app icon, splash, home page pictures); the legal pages are records that staff must write and publish in the back office.
+- **Stand-in start time (flow 1, to revisit).** A quote confirmed without a date and time becomes a booking in status `awaiting-time`. The booking row must have a `start_at`, so it carries a stand-in: the request's own time, or, if that has already passed, the end of the 7-day waiting period. Nobody agreed that time. Nothing reads it for `awaiting-time` today (no slot is held, no payment is asked, the app must show "date and time to be confirmed"), but any future calendar, feed or report that reads `bookings.start_at` without checking the status would show an appointment that was never made. **Revisit later:** make `start_at` nullable for `awaiting-time` (a schema change that touches every reader), or always filter on status. Found in the code review of PR #47.
 - Before South Africa: the website footer links to the German legal pages directly, the language switches assume exactly two languages, email dates use one time-zone constant (`TIME_ZONE`, Europe/Berlin), and a country missing from the countries table fails the postcode check.
 
 ## How a new session starts

@@ -18,6 +18,17 @@ export const requests = pgTable(
     serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
     description: text().notNull(),
     preferredDate: date('preferred_date'),
+    // The customer's proposed time and place (flow 1). Null on requests made before it existed; revision counts the customer's changes.
+    startAt: timestamp('start_at', { withTimezone: true }),
+    durationMin: integer('duration_min'),
+    onSite: boolean('on_site'),
+    addressStreet: text('address_street'),
+    addressPostcode: text('address_postcode'),
+    addressCity: text('address_city'),
+    note: text(),
+    revision: integer().notNull().default(0),
+    // When the customer last changed the time (null: never); the round rule looks for chat messages after it.
+    revisedAt: timestamp('revised_at', { withTimezone: true }),
     status: text().notNull().default('open'),
     answerBy: timestamp('answer_by', { withTimezone: true }).notNull(),
     // An additional task's request: the paid booking it adds to (trigger check_parent_booking, never changed: rls.ts).
@@ -28,6 +39,7 @@ export const requests = pgTable(
   },
   (t) => [
     check('requests_status_check', sql`status in ('open','quoted','booked','expired','withdrawn','declined')`),
+    check('requests_duration_check', sql`duration_min > 0`),
     index('requests_provider_id_status_idx').on(t.providerId, t.status),
     index('requests_customer_id_idx').on(t.customerId),
     index('requests_service_id_idx').on(t.serviceId),
@@ -53,6 +65,8 @@ export const quotes = pgTable(
     // A suggested time only; the customer confirms a date and time separately.
     startAt: timestamp('start_at', { withTimezone: true }),
     durationMin: integer('duration_min'),
+    // True when this quote's time differs from the request's: it counts as the provider's proposal in the round rule (flow 1).
+    proposedOtherTime: boolean('proposed_other_time').notNull().default(false),
     status: text().notNull().default('sent'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
@@ -141,11 +155,20 @@ export const bookings = pgTable(
     stopStatedAt: timestamp('stop_stated_at', { withTimezone: true }),
     // the material part of the amount, stated at "Finished" (plan 2e's invoices)
     materialAmount: numeric('material_amount', { precision: 10, scale: 2 }).notNull().default('0'),
+    // awaiting-time (flow 1, a quote accepted without a time): the time one side entered for the other to confirm.
+    // Written on the owner connection after the domain checked the caller (rls.ts COLUMN_STAFF_ONLY).
+    timeProposedBy: text('time_proposed_by'),
+    timeProposedStartAt: timestamp('time_proposed_start_at', { withTimezone: true }),
+    timeProposedDurationMin: integer('time_proposed_duration_min'),
+    timeProposedOnSite: boolean('time_proposed_on_site'),
+    timeAnswerBy: timestamp('time_answer_by', { withTimezone: true }),
   },
   (t) => [
     check('bookings_source_check', sql`source in ('quote','direct')`),
-    check('bookings_status_check', sql`status in ('proposed','awaiting-payment','confirmed','expired','declined','withdrawn','finished','completed','disputed','cancelled','stopped','refunded')`),
+    check('bookings_status_check', sql`status in ('proposed','awaiting-time','awaiting-payment','confirmed','expired','declined','withdrawn','finished','completed','disputed','cancelled','stopped','refunded')`),
     check('bookings_counter_by_check', sql`counter_by in ('provider','customer')`),
+    check('bookings_time_proposed_by_check', sql`time_proposed_by in ('provider','customer')`),
+    index('bookings_awaiting_time_answer_by_idx').on(t.answerBy).where(sql`status = 'awaiting-time'`),
     check('bookings_pay_by_check', sql`status <> 'awaiting-payment' OR pay_by IS NOT NULL`),
     check('bookings_accepted_at_check', sql`status <> 'awaiting-payment' OR accepted_at IS NOT NULL`),
     index('bookings_provider_id_status_idx').on(t.providerId, t.status),

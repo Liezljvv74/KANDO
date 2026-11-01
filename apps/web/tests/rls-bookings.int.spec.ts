@@ -225,3 +225,55 @@ it('a third user cannot update or delete any of the three', async () => {
     else expect((await run(ids.other, sql.raw(`DELETE FROM ${t}`))).rowCount).toBe(0)
   }
 })
+
+// Flow 1 (one request-to-booked flow): the request carries the customer's time; a booking can wait for its time.
+it('a request stores the customer\'s time and place, and a new request starts at revision 0', async () => {
+  const [r] = (await pool.query(
+    `INSERT INTO requests (customer_id, provider_id, description, answer_by, start_at, duration_min, on_site, address_postcode, note)
+     VALUES ($1, $2, 'Time test', now() + interval '3 days', now() + interval '5 days', 90, true, '04109', 'Back door') RETURNING duration_min, on_site, address_postcode, note, revision`,
+    [ids.customer, providerId],
+  )).rows
+  expect(r).toEqual({ duration_min: 90, on_site: true, address_postcode: '04109', note: 'Back door', revision: 0 })
+})
+
+it('a booking can wait for its time (awaiting-time) and then holds no slot', async () => {
+  const [b] = (await pool.query(
+    `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, answer_by)
+     VALUES ($1, $2, $3, 'quote', 'awaiting-time', now() + interval '50 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id, status, pay_by`,
+    [ids.customer, providerId, quoteId],
+  )).rows
+  expect(b).toMatchObject({ status: 'awaiting-time', pay_by: null })
+  // a window around that booking only (other tests in this file leave bookings of their own): only paid and awaiting-payment bookings hold the provider's time
+  const busy = (await pool.query(`SELECT * FROM busy_times($1::uuid, now() + interval '49 days', now() + interval '51 days')`, [providerId])).rows
+  expect(busy).toEqual([])
+})
+
+it('the customer may withdraw an awaiting-time booking, the provider may not', async () => {
+  const id = (await pool.query(
+    `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, answer_by)
+     VALUES ($1, $2, $3, 'quote', 'awaiting-time', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id`,
+    [ids.customer, providerId, quoteId],
+  )).rows[0].id
+  await expect(run(ids.owner, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${id}`)).rejects.toBeTruthy()
+  await expect(run(ids.customer, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${id}`)).resolves.toBeTruthy()
+})
+
+it('the app role cannot set the agree-the-time columns of a booking', async () => {
+  const id = (await pool.query(
+    `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, answer_by)
+     VALUES ($1, $2, $3, 'quote', 'awaiting-time', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id`,
+    [ids.customer, providerId, quoteId],
+  )).rows[0].id
+  await expect(run(ids.customer, sql`UPDATE bookings SET time_proposed_by = 'customer' WHERE id = ${id}`)).rejects.toBeTruthy()
+})
+
+it('only the two parties read a quote document, and the app role cannot write one', async () => {
+  const qd = (await pool.query(
+    `INSERT INTO quote_documents (quote_id, provider_id, customer_id, number, issued_at, draft) VALUES ($1, $2, $3, 'RB-TEST-0001', now(), '{}') RETURNING id`,
+    [quoteId, providerId, ids.customer],
+  )).rows[0].id
+  const read = async (uid: string | null) => (await run(uid, sql`SELECT id FROM quote_documents WHERE id = ${qd}`)).rows.length
+  expect([await read(ids.customer), await read(ids.owner), await read(ids.other), await read(null)]).toEqual([1, 1, 0, 0])
+  await expect(run(ids.owner, sql`UPDATE quote_documents SET number = 'X' WHERE id = ${qd}`)).rejects.toBeTruthy()
+  await expect(run(ids.owner, sql`DELETE FROM quote_documents WHERE id = ${qd}`)).rejects.toBeTruthy()
+})

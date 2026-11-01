@@ -4,7 +4,7 @@ import { MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/
 import sharp from 'sharp'
 import { clearOutbox, notifyNewMessage } from '@kando/domain'
 import { outboxForTests, setStorageForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits, sized } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -31,7 +31,7 @@ afterAll(cleanupUsers)
 
 const newRequest = async (as = U.cust) => {
   await relaxLimits(as)
-  return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence' })).json())
+  return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence', ...requestTime() })).json())
 }
 const threadOf = async (as: string, requestId: string) => ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs).find((t) => t.requestId === requestId)!
 const send = (thread: string, as: string, body: string) => call(messagesRoute.POST, as, 'POST', { body }, { id: thread })
@@ -82,13 +82,13 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
   const t = await threadOf(U.cust, (await newRequest()).id)
   await block(U.owner, t.id)
   await relaxLimits(U.cust)
-  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Another job' })
+  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Another job', ...requestTime() })
   expect([res.status, await res.json()]).toEqual([404, { error: 'Not found' }])
   const direct = await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
   expect([direct.status, await direct.json()]).toEqual([404, { error: 'Not found' }])
   const control = await call(bookingsRoute.POST, U.third, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
   expect(control.status).toBe(201) // the same booking by an unblocked user works
-  expect((await call(requests.POST, U.third, 'POST', { providerId: pOwner, description: 'Third job' })).status).toBe(201) // others are not affected
+  expect((await call(requests.POST, U.third, 'POST', { providerId: pOwner, description: 'Third job', ...requestTime() })).status).toBe(201) // others are not affected
   await unblock(U.owner, t.id)
 })
 

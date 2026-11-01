@@ -3,7 +3,7 @@ import { db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, notifyBookingEvent, runDueTimers } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
@@ -39,7 +39,7 @@ afterAll(cleanupUsers)
 const proposal = (n: number, extra: object = {}) => ({ serviceId: service, startAt: day(n), durationMin: 60, onSite: true, address: { postcode: '10115' }, ...extra })
 
 it('a request: one in-app row and one German email for the provider', async () => {
-  const res = await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'Bitte helfen' })
+  const res = await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'Bitte helfen', ...requestTime() })
   const r = RequestSchema.parse(await res.json())
   expect(await rows(U.owner)).toEqual([{ kind: 'request-received', payload: { requestId: r.id } }])
   expect(subjects(U.owner).map((m) => m.subject)).toEqual(['Du hast eine neue Anfrage'])
@@ -47,7 +47,7 @@ it('a request: one in-app row and one German email for the provider', async () =
 
 it('a quote: the customer gets one row and an English email naming the 7-day expiry date', async () => {
   await pool.query("UPDATE users SET language = 'en' WHERE id = $1", [U.cust])
-  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x' })).json())
+  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x', ...requestTime() })).json())
   clearOutbox()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r.id })).json())
   expect(await rows(U.cust)).toEqual([{ kind: 'quote-received', payload: { requestId: r.id, quoteId: q.id } }])
@@ -60,7 +60,7 @@ it('a quote: the customer gets one row and an English email naming the 7-day exp
 })
 
 it('accepting a quote tells the provider of the proposal; a direct booking on a time awaiting payment also sends pending-slot-requested', async () => {
-  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x' })).json())
+  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x', ...requestTime() })).json())
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r.id })).json())
   await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
   const b = BookingSchema.parse(await (await call(accept.POST, U.cust, 'POST', { startAt: day(30), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q.id })).json())
@@ -70,7 +70,7 @@ it('accepting a quote tells the provider of the proposal; a direct booking on a 
   clearOutbox()
   await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: b.id })
   expect((await rows(U.cust)).map((x) => x.kind)).toContain('booking-accepted')
-  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Deine Buchung wurde angenommen'])
+  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Zahlung fällig für Deine Buchung'])
   // another customer proposes an overlapping time
   await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
   const other = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust2, 'POST', proposal(0, { startAt: day(30) }))).json())
@@ -126,7 +126,7 @@ it('a counter notifies the other side, in both directions, with one row and one 
 })
 
 it('the quote email states the 7-day expiry in German too', async () => {
-  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x' })).json())
+  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x', ...requestTime() })).json())
   clearOutbox()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r.id })).json())
   const mail = subjects(U.cust)[0]!

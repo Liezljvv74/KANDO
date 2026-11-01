@@ -29,9 +29,9 @@ export const de = {
     'Ein Anbieter hat Dir ein Angebot geschickt. Sieh es Dir bitte in der App an. Das Angebot gilt bis zum {date}: Ein Angebot, das Du nicht annimmst, läuft 7 Tage nach dem Versand ab.',
   'email.bookingProposed.subject': 'Ein neuer Termin wurde vorgeschlagen',
   'email.bookingProposed.body': 'Für Deine Buchungsanfrage wurde ein neues Datum mit Uhrzeit vorgeschlagen. Bitte antworte innerhalb von 24 Stunden in der App.',
-  'email.bookingAccepted.subject': 'Deine Buchung wurde angenommen',
+  'email.bookingAccepted.subject': 'Zahlung fällig für Deine Buchung',
   'email.bookingAccepted.body':
-    'Der Anbieter hat Deine Buchung angenommen. Bitte zahle bis {date} Uhr. Den Zahlungslink bekommst Du anschließend in der App; dort siehst Du ihn, sobald die Zahlung möglich ist.',
+    'Datum und Uhrzeit sind von beiden Seiten bestätigt. Die Zahlung ist bis {date} Uhr fällig. Öffne die App zum Bezahlen; dort siehst Du den Zahlungslink, sobald die Zahlung möglich ist.',
   'email.bookingDeclined.subject': 'Deine Buchung wurde abgelehnt',
   'email.bookingDeclined.body':
     'Der Anbieter hat Deine Buchung abgelehnt. Du kannst diesem oder einem anderen Anbieter eine neue Anfrage senden.',
@@ -339,6 +339,14 @@ export const de = {
   'email.requestWithdrawn.body': 'Der Kunde hat seine Anfrage zurückgezogen.',
   'email.requestDeclined.subject': 'Anfrage abgelehnt',
   'email.requestDeclined.body': 'Der Anbieter kann Deine Anfrage nicht übernehmen. Bitte versuche es bei einem anderen Anbieter.',
+  'email.requestUpdated.subject': 'Der Kunde hat den Termin geändert',
+  'email.requestUpdated.body': 'Der Kunde hat Datum und Uhrzeit einer Anfrage geändert. Bitte öffne die App und antworte.',
+  'email.timeProposed.subject': 'Ein anderer Termin wurde vorgeschlagen',
+  'email.timeProposed.body': 'Der Anbieter hat für Deine Anfrage ein anderes Datum mit Uhrzeit vorgeschlagen. Bitte öffne die App, um ihn zu bestätigen, im Chat zu sprechen oder abzulehnen.',
+  'email.timeToConfirm.subject': 'Bitte Termin bestätigen',
+  'email.timeToConfirm.body': 'Für Deine Buchung wurde ein Datum mit Uhrzeit eingetragen. Bitte öffne die App und bestätige es.',
+  'email.quoteConfirmed.subject': 'Der Kunde hat Dein Angebot angenommen',
+  'email.quoteConfirmed.body': 'Der Kunde hat Dein Angebot angenommen. Bitte öffne die App. Falls noch kein Datum mit Uhrzeit festgelegt wurde, sprecht im Chat darüber.',
   'email.requestReopened.subject': 'Angebot wieder offen',
   'email.requestReopened.body': 'Der Termin wurde nicht vereinbart. Das Angebot ist wieder offen bis {date}. Bitte schlage einen anderen Termin vor.',
 }
