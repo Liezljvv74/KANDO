@@ -5,8 +5,8 @@ from openpyxl.utils import get_column_letter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE = json.load(open(os.path.join(HERE, 'state.json'), encoding='utf-8'))
-STAMP = STATE['stamp']  # set by update.py: 'YYYY-MM-DD HH-MM'
-OUT = os.environ.get('MVP_OUT', f'Reports/MVP Completion Tasks {STAMP}.xlsx')
+# one file, updated in place each time (owner rule, 2 November 2026); the history is the Change log sheet and docs/mvp/state.json
+OUT = os.environ.get('MVP_OUT', 'Reports/MVP Completion Tasks.xlsx')
 PLAN_FILE = os.path.join(HERE, 'mvp_plan.py')
 wb = openpyxl.Workbook()
 wb.remove(wb.active)
@@ -159,5 +159,8 @@ sheet('Owner actions', ['Where', 'Action'], act, [14, 150])
 exec(open(PLAN_FILE, encoding='utf-8').read())
 LOG = [[e['when'], e['commit'], e['note'], ', '.join(e.get('steps', []))] for e in reversed(STATE['log'])]
 sheet('Change log', ['When', 'Commit', 'What changed', 'Plan steps / tasks affected'], LOG, [18, 12, 120, 30])
-wb.save(OUT)
+try:
+    wb.save(OUT)
+except PermissionError:
+    raise SystemExit(f'Cannot write {OUT}: close it in Excel and run the command again (nothing was recorded as written).')
 print('saved', OUT, len(T), 'tasks')

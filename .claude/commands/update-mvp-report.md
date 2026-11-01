@@ -1,8 +1,8 @@
 ---
-description: Record progress in the MVP tracker; a new dated "MVP Completion Tasks" workbook is written after every 2 merged PRs
+description: Record progress in the MVP tracker; the "MVP Completion Tasks" workbook is updated in place after every 2 merged code PRs
 ---
 
-The owner's rule: everything follows the phases of the Plan sheet of the newest `Reports/MVP Completion Tasks <date time>.xlsx`. The workbook is renewed **only after every 2 successful merges** (owner rule of 1 November 2026), not after each commit.
+The owner's rule: everything follows the phases of the Plan sheet of `Reports/MVP Completion Tasks.xlsx`. The workbook is renewed **only after every 2 successful merges** (owner rule of 1 November 2026), not after each commit.
 
 1. Make the work commit first (code, texts, docs). Note its short hash.
 2. From the repository root run:
