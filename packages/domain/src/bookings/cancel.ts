@@ -109,7 +109,7 @@ export async function beginCancelBooking(tx: Tx, userId: string, bookingId: stri
     const cancel = async (r: Row) =>
       (await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, cancelledBy: side, lateCancel: isLate(r.startAt, now), updatedAt: now }).where(eq(bookings.id, r.id)).returning())[0]!
     const out = [await cancel(b)]
-    const unpaid = kids.filter((k) => k.status === 'proposed' || k.status === 'awaiting-payment').map((k) => k.id)
+    const unpaid = kids.filter((k) => k.status === 'proposed' || k.status === 'awaiting-time' || k.status === 'awaiting-payment').map((k) => k.id)
     if (unpaid.length) await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(inArray(bookings.id, unpaid))
     for (const k of kids) if (k.status === 'confirmed') out.push(await cancel(k))
     return out
@@ -193,7 +193,7 @@ export async function resolveNoShow(exec: Exec, bookingId: string, now: Date): P
     for (const k of kids) {
       if (k.status === 'confirmed')
         await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, noShow: k.noShow ?? b.noShow, noShowReportedAt: k.noShowReportedAt ?? b.noShowReportedAt, updatedAt: now }).where(eq(bookings.id, k.id))
-      else if (k.status === 'proposed' || k.status === 'awaiting-payment') await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
+      else if (k.status === 'proposed' || k.status === 'awaiting-time' || k.status === 'awaiting-payment') await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
     }
     return { row: row!, warn: await providerNoShowRule(o, row!, now) }
   })

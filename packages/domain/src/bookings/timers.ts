@@ -166,7 +166,15 @@ async function expireBookings(count: (q: SQL) => Promise<number>, t: string, onl
       SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL::timestamptz FROM e ${reopenedJoin}
       UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
     ${result('e')}`)
-  return { proposalsLapsed, unpaidExpired }
+  // a quote accepted without a time, and no time agreed within AWAITING_TIME_DAYS: the booking expires and the job reads open again
+  const waiting = sql`status = 'awaiting-time' AND answer_by <= ${t}::timestamptz AND ${only}`
+  const timeLapsed = await count(sql`
+    WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(waiting)} AND ${waiting} RETURNING ${EXPIRED_COLS}),
+    n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
+      SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL::timestamptz FROM e ${reopenedJoin}
+      UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
+    ${result('e')}`)
+  return { proposalsLapsed: proposalsLapsed + timeLapsed, unpaidExpired }
 }
 
 /**

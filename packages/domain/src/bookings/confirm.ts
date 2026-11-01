@@ -56,7 +56,10 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
   if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // the provider's payouts stopped being ready since the quote
 
   const hasTime = quote.startAt !== null && quote.durationMin !== null
-  const startAt = quote.startAt ?? req.startAt
+  // without a time the booking carries a stand-in (the request's time) until both agree one; a stand-in already past becomes the end
+  // of the waiting period, so no booking ever holds a past start
+  const answerBy = new Date(now.getTime() + AWAITING_TIME_DAYS * DAY)
+  const startAt = quote.startAt ?? (req.startAt && req.startAt > now ? req.startAt : answerBy)
   const durationMin = quote.durationMin ?? req.durationMin
   const onSite = req.onSite ?? true
   if (!startAt || !durationMin) return fail(400, { error: 'time-required' })
@@ -84,7 +87,7 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
         note: input.note ?? req.note,
         amount: quote.amount, // the bookings_fill_amount trigger sets the same from the quote
         currency: quote.currency,
-        ...(hasTime ? { payBy: payBy(now, startAt), acceptedAt: now } : { answerBy: new Date(now.getTime() + AWAITING_TIME_DAYS * DAY) }),
+        ...(hasTime ? { payBy: payBy(now, startAt), acceptedAt: now } : { answerBy }),
         createdAt: now,
         updatedAt: now,
       })

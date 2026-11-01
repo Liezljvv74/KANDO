@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Build progress (update as tasks finish):** Tasks 1 to 6 built on branch `feat/flow-1-request-quote-booking` (database, contract, one time rule and round rule, request with a time and revision, provider answers, customer confirm via `POST /quotes/[id]/confirm`; a fourth notice kind `quote-confirmed` and migration `0027` were added for the provider's notice). Next: Task 6a (agree the time afterwards), then 7 to 13. Findings made while building are written into the tasks below.
+**Build progress (update as tasks finish):** Tasks 1 to 6 and 6a built on branch `feat/flow-1-request-quote-booking` (database, contract, one time rule and round rule, request with a time and revision, provider answers, customer confirm via `POST /quotes/[id]/confirm`; a fourth notice kind `quote-confirmed` and migration `0027` were added for the provider's notice). Task 6a: routes `POST /bookings/[id]/time` and `/time/confirm`; the 7-day expiry of `awaiting-time` runs in the daily timers. Next: 7 to 13. Findings made while building are written into the tasks below.
 
 **Status:** DRAFT, written 1 November 2026 from the owner's process description and the three decisions confirmed the same day. Nothing in this plan is built yet. The owner confirms this plan before Task 1 starts.
 

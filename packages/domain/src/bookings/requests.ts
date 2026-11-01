@@ -75,7 +75,7 @@ async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map
   const roots = await tx
     .select({ requestId: bookings.requestId, quoteId: bookings.quoteId, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
     .from(bookings)
-    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['proposed', 'awaiting-payment'])))
+    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['proposed', 'awaiting-time', 'awaiting-payment'])))
   return new Map(roots.filter((b) => bookingShownStatus(b, now) === 'expired').map((b) => [b.requestId!, b.quoteId]))
 }
 
