@@ -111,6 +111,12 @@
       "commit": "2024ae1",
       "note": "Code review of PR 49 (/code-review): fixed the sweep clock and count, on-demand PDF storing, tracker script robustness; documented the deploy order of migration 0027 (apply after the code); rejected 3 findings (dense versions, trader retention, stricter checks on entering a time). Review record posted on PR 49.",
       "steps": []
+    },
+    {
+      "when": "2026-11-01 18:29",
+      "commit": "64bafa9",
+      "note": "Code review of PR 50 (/code-review): 7 findings fixed (iPhone picker default and Done button, past time today refused, remote only for remote providers, address prefill once and shared with the time proposal form, 24-hour display); the typed fields of the send-quote form are step 1.3. Review record posted on PR 50.",
+      "steps": []
     }
   ],
   "mergesSinceWorkbook": [
