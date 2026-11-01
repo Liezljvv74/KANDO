@@ -1,10 +1,8 @@
 import { useLocalSearchParams } from 'expo-router'
 
-import { acceptQuote, answerBooking, createDirectBooking } from '@/api/bookings'
-import { Info } from '@/components/auth-ui'
+import { answerBooking, createDirectBooking, enterAgreedTime } from '@/api/bookings'
 import { FormScreen } from '@/components/form-ui'
 import { t, useLang } from '@/i18n'
-import { formatWhen } from '@/lib/booking-time'
 import { goReplace } from '@/lib/go'
 import { TimeProposalForm } from '@/screens/bookings/time-proposal-form'
 
@@ -21,14 +19,21 @@ export function BookScreen() {
   )
 }
 
-/** The customer accepts a quote by proposing a time. Whether the provider works remotely is not known here: the server says. */
-export function AcceptQuoteScreen() {
+/** An awaiting-time booking: either side enters the date and time they agreed (in the chat); the other side confirms it. */
+export function AgreedTimeScreen() {
   useLang()
-  const { quoteId, expiresAt } = useLocalSearchParams<{ quoteId: string; expiresAt?: string }>()
+  const { id } = useLocalSearchParams<{ id: string }>()
   return (
-    <FormScreen title={t('booking.proposeTitle')}>
-      {!!expiresAt && <Info text={t('booking.acceptExpiry', { date: formatWhen(expiresAt) })} />}
-      <TimeProposalForm canRemote withDetails submitLabel={t('booking.propose')} onSubmit={async (p) => toBooking((await acceptQuote(quoteId, p)).id)} />
+    <FormScreen title={t('booking.agreeTitle')}>
+      <TimeProposalForm
+        canRemote
+        withDetails={false}
+        submitLabel={t('booking.enterTime')}
+        onSubmit={async (p) => {
+          await enterAgreedTime(id, { startAt: p.startAt, durationMin: p.durationMin, onSite: p.onSite })
+          toBooking(id)
+        }}
+      />
     </FormScreen>
   )
 }

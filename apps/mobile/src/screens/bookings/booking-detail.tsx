@@ -2,9 +2,7 @@ import { useLocalSearchParams } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
-import type { Booking } from '@kando/contract'
-
-import { answerBooking, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
+import { answerBooking, confirmAgreedTime, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -16,6 +14,7 @@ import { confirmDanger } from '@/lib/confirm'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 import { go } from '@/lib/go'
+import { placeText } from '@/lib/place'
 import { CancelSheet } from '@/screens/bookings/cancel-sheet'
 import { DescriptionForm, DisputeInfo } from '@/screens/bookings/dispute-form'
 import { FinishSheet } from '@/screens/bookings/finish-sheet'
@@ -24,12 +23,6 @@ import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
-
-const placeOf = (b: Booking) => {
-  if (!b.onSite) return t('booking.remote')
-  const a = b.address
-  return a ? t('booking.onSiteAt', { address: [a.street, [a.postcode, a.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') }) : t('booking.onSiteShort')
-}
 
 /** Actions that open a form or statement below the booking before anything is sent. */
 type Sheet = 'counter' | 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
@@ -70,10 +63,11 @@ export default function BookingDetail() {
 
   async function act(action: BookingAction) {
     setNotice(null)
+    if (action === 'enterTime') return go('/bookings/agreed-time', { id: b.id })
     if (SHEETS.includes(action)) return setSheet(sheet === action ? null : (action as Sheet))
     const ask = ASK[action]
     if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return
-    submit(ask ? ask[2] : () => answerBooking(b.id, { type: 'accept' }), retry)
+    submit(ask ? ask[2] : action === 'confirmTime' ? () => confirmAgreedTime(b.id) : () => answerBooking(b.id, { type: 'accept' }), retry)
   }
 
   const descriptionSheet = (label: Key, hint: Key | undefined, submitLabel: Key, call: (text: string) => Promise<unknown>, after = closeAndReload) => (
@@ -81,6 +75,8 @@ export default function BookingDetail() {
   )
   const showDays = viewer === 'customer' && b.status === 'finished' && !!b.confirmBy && daysLeft(b.confirmBy, now) > 0
   const days = b.confirmBy ? daysLeft(b.confirmBy, now) : 0
+  const awaitingTime = b.status === 'awaiting-time'
+  const pending = awaitingTime ? b.pendingTime : null
 
   return (
     <FormScreen title={title}>
@@ -90,9 +86,17 @@ export default function BookingDetail() {
           {bookingStatusText(b, viewer, now)}
         </Text>
         {showDays && <Text style={styles.text}>{days === 1 ? t('booking.daysLeft.one') : t('booking.daysLeft.other', { n: days })}</Text>}
-        <Text style={styles.text}>{`${t('booking.when')}: ${formatWhen(b.startAt)} (${b.durationMin} min)`}</Text>
+        {awaitingTime ? (
+          // the start time stored for an awaiting-time booking is only a stand-in: never shown
+          <>
+            <Text style={styles.text}>{t('booking.timeNotAgreed')}</Text>
+            {!!pending && <Text style={styles.text}>{t(pending.by === viewer ? 'booking.pendingTimeYou' : 'booking.pendingTimeOther', { when: formatWhen(pending.startAt), min: pending.durationMin })}</Text>}
+          </>
+        ) : (
+          <Text style={styles.text}>{`${t('booking.when')}: ${formatWhen(b.startAt)} (${b.durationMin} min)`}</Text>
+        )}
         <Text style={styles.text}>{`${t('booking.amount')}: ${formatPrice({ priceType: 'fixed', price: b.amount, currency: b.currency })}`}</Text>
-        <Text style={styles.text}>{`${t('booking.mode')}: ${placeOf(b)}`}</Text>
+        <Text style={styles.text}>{`${t('booking.mode')}: ${placeText(b.onSite, b.address)}`}</Text>
         {!!b.note && <Text style={styles.small}>{b.note}</Text>}
         {!!b.parentBookingId && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
       </Card>

@@ -8,15 +8,15 @@ import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 
-/** One quote: amount, scope and the day it expires. `onAccept` only for the customer, on a quote that is still open. */
-export function QuoteCard({ quote, onAccept, busy }: { quote: Quote; onAccept?: () => void; busy?: boolean }) {
+/** One quote: amount, scope, the time (or that it is still to be confirmed) and the day it expires. `onConfirm` only for the customer, on a quote that is still open. */
+export function QuoteCard({ quote, onConfirm, busy }: { quote: Quote; onConfirm?: () => void; busy?: boolean }) {
   return (
     <Card>
       <Text style={styles.amount}>{formatPrice({ priceType: 'fixed', price: quote.amount, currency: quote.currency })}</Text>
       <Text style={styles.text}>{quote.scope}</Text>
-      {quote.startAt && <Text style={styles.small}>{t('booking.quoteSuggested', { when: formatWhen(quote.startAt) })}</Text>}
+      <Text style={styles.small}>{quote.startAt ? t('booking.quoteSuggested', { when: formatWhen(quote.startAt) }) : t('booking.quoteTimeOpen')}</Text>
       <Text style={styles.small}>{`${t(`quoteStatus.${quote.status}` as Key)} · ${t('booking.quoteValidUntil', { date: formatWhen(quote.expiresAt) })}`}</Text>
-      {onAccept && quote.status === 'sent' && <Button label={t('booking.acceptQuote')} onPress={onAccept} busy={busy} />}
+      {onConfirm && quote.status === 'sent' && <Button label={t('booking.confirmQuote')} onPress={onConfirm} busy={busy} />}
     </Card>
   )
 }

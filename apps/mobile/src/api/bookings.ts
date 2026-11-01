@@ -1,5 +1,6 @@
 import type {
   AcceptQuoteInput,
+  AgreedTimeInput,
   Booking,
   BookingAnswer,
   BookingRequest,
@@ -30,6 +31,11 @@ export const declineRequest = (id: string) => api<BookingRequest>(`${BASE}/reque
 export const listQuotes = async (requestId: string) => (await api<{ docs: Quote[] }>(`${BASE}/requests/${requestId}/quotes`)).docs
 export const sendQuote = (requestId: string, body: QuoteInput) => api<Quote>(`${BASE}/requests/${requestId}/quotes`, json('POST', body))
 export const acceptQuote = (quoteId: string, body: AcceptQuoteInput) => api<Booking>(`${BASE}/quotes/${quoteId}/accept`, json('POST', body))
+/** The customer confirms the quote as it is (its time, or none yet): the booking waits for payment, or for the agreed time. */
+export const confirmQuote = (quoteId: string) => api<Booking>(`${BASE}/quotes/${quoteId}/confirm`, json('POST', {}))
+/** An awaiting-time booking: one side enters the date and time, the other confirms it. */
+export const enterAgreedTime = (id: string, body: AgreedTimeInput) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time`, json('POST', body))
+export const confirmAgreedTime = (id: string) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time/confirm`, json('POST'))
 export const createDirectBooking = (body: DirectBookingInput) => api<Booking>(`${BASE}/bookings`, json('POST', body))
 export const listBookings = (role: Role, cursor?: string) => api<Page<Booking>>(list('bookings', role, cursor))
 export const getBooking = (id: string) => api<BookingView>(`${BASE}/bookings/${encodeURIComponent(id)}`)
