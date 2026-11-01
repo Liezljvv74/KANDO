@@ -14,10 +14,10 @@
     "1": "Waiting for owner",
     "2": "In progress",
     "3": "In progress",
+    "5": "Waiting for owner",
     "6": "Waiting for owner",
     "7": "In progress",
     "15": "Waiting for owner",
-    "5": "Waiting for owner",
     "20": "In progress"
   },
   "log": [
@@ -105,6 +105,12 @@
         "task 3 In progress",
         "task 20 In progress"
       ]
+    },
+    {
+      "when": "2026-11-01 18:17",
+      "commit": "2024ae1",
+      "note": "Code review of PR 49 (/code-review): fixed the sweep clock and count, on-demand PDF storing, tracker script robustness; documented the deploy order of migration 0027 (apply after the code); rejected 3 findings (dense versions, trader retention, stricter checks on entering a time). Review record posted on PR 49.",
+      "steps": []
     }
   ],
   "mergesSinceWorkbook": [

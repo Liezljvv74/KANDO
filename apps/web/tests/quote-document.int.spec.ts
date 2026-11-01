@@ -113,6 +113,30 @@ it('a storage failure leaves no file: the link is 409 NOT_READY and the next swe
   expect((await listing(p.uid)).find((d) => d.quoteId === q.id)!.pdfReady).toBe(true)
 })
 
+it('opening the PDF of a quote whose file is missing stores it on the spot', async () => {
+  const p = await provider()
+  const r = await request(p.id, U.c2)
+  setStorageForTests({ ...store, put: async () => Promise.reject(new Error('storage down')) } as Storage)
+  const q = await quote(p, r)
+  setStorageForTests(store) // storage is back, but no sweep has run
+  const doc = (await listing(p.uid)).find((d) => d.quoteId === q.id)!
+  expect(doc.pdfReady).toBe(false)
+  const res = await call(pdf.GET, U.c2, 'GET', undefined, { id: doc.id })
+  expect([res.status, (await res.json()).url]).toEqual([200, expect.stringContaining('quotes/')])
+  expect((await listing(p.uid)).find((d) => d.quoteId === q.id)!.pdfReady).toBe(true)
+})
+
+it('the sweep numbers a quote in the year it was sent, not the year of the sweep', async () => {
+  const p = await provider()
+  const r = await request(p.id, U.c3)
+  const q = await quote(p, r)
+  await pool.query('DELETE FROM quote_documents WHERE quote_id = $1', [q.id])
+  await pool.query("UPDATE quotes SET created_at = now() - interval '10 minutes' WHERE id = $1", [q.id]) // old enough for the sweep (5 minutes), young enough (30 days)
+  await storePendingQuoteDocuments(db)
+  const doc = (await pool.query('SELECT number, issued_at, q.created_at FROM quote_documents d JOIN quotes q ON q.id = d.quote_id WHERE d.quote_id = $1', [q.id])).rows[0]
+  expect(Math.abs(new Date(doc.issued_at).getTime() - new Date(doc.created_at).getTime())).toBeLessThan(2) // issued at the quote's own time, not at the time of the sweep
+})
+
 it('a quote whose document failed gets one later, and a revision still continues the first number', async () => {
   const p = await provider()
   const r = await request(p.id, U.c1)
