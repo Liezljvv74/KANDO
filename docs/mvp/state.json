@@ -93,6 +93,12 @@
       "commit": "0f16a5a",
       "note": "CI of PR 48 failed on booking-notifications: the test compared a date without leading zeros (1.1.2027) with the email's 01.01.2027; it failed because today plus 60 days is 1 January. Fixed in the test on both branches (PR 48 and PR 49); my earlier time-of-day explanation was incomplete.",
       "steps": []
+    },
+    {
+      "when": "2026-11-01 18:17",
+      "commit": "2024ae1",
+      "note": "Code review of PR 49 (/code-review): fixed the sweep clock and count, on-demand PDF storing, tracker script robustness; documented the deploy order of migration 0027 (apply after the code); rejected 3 findings (dense versions, trader retention, stricter checks on entering a time). Review record posted on PR 49.",
+      "steps": []
     }
   ],
   "mergesSinceWorkbook": [
