@@ -12,6 +12,11 @@ test('a fixed-price service is booked, others ask for a quote', () => {
   expect(requestTarget(provider({}))!.params).toEqual({ providerId: 'p1' })
 })
 
+test('a quote request tells the form whether the provider works remotely', () => {
+  expect(requestTarget(provider({ worksRemotely: true }), service('hourly', 30))!.params).toEqual({ providerId: 'p1', serviceId: 's1', remote: '1' })
+  expect(requestTarget(provider({ worksRemotely: false }))!.params.remote).toBeUndefined()
+})
+
 test('a profile without providerId offers no request at all', () => {
   expect(requestTarget(provider({ providerId: undefined }), service('fixed', 50))).toBeNull()
   expect(requestTarget(provider({ providerId: null }))).toBeNull()
