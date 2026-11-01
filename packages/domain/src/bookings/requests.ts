@@ -248,11 +248,11 @@ export async function listQuotes(tx: Tx, userId: string, requestId: string, now 
 const unavailable = () => fail(409, { error: 'provider-unavailable' })
 
 /**
- * The customer changes the time of an open or quoted request (flow 1). A change of start, duration or place kind counts as a
- * proposal under the round rule (assertMayPropose), replaces the provider's sent quote (it was for the old time), opens the
- * request again and restarts the provider's answer period; the provider is told. Changing only the address or note is free.
- * The writes run on the owner connection after the checks (the app role may not supersede the provider's quote), under the
- * request lock. 404 for a stranger, 403 for the provider, 409 request-closed for a closed or lapsed request.
+ * The customer changes an OPEN request (flow 1), before any quote exists. A change of start, duration or place kind counts as a
+ * proposal under the round rule (assertMayPropose), restarts the provider's answer period and tells the provider; changing only the
+ * address or note is free. Once a quote was sent (status quoted) the customer cannot change the request (409 quote-sent): changes go
+ * through the chat and the provider's revised quote. The writes run on the owner connection after the checks, under the request
+ * lock. 404 for a stranger, 403 for the provider, 409 request-closed for a closed or lapsed request.
  */
 export async function reviseRequest(tx: Tx, userId: string, requestId: string, input: TimeProposal, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
   const first = await ownRequest(tx, userId, requestId)

@@ -1,5 +1,5 @@
 import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
-import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, pushTokens, quotes, requests, services, users, type Tx } from '@kando/db'
+import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, pushTokens, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
@@ -125,6 +125,8 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))
     const docs = await tx.select({ key: documents.key }).from(documents).where(eq(documents.ownerId, userId))
+    // The numbered quote PDFs of either side (the table has no foreign keys): rows and files go with the person.
+    const quoteFiles = await tx.select({ key: quoteDocuments.fileKey }).from(quoteDocuments).where(sql`${quoteDocuments.customerId} = ${userId} OR ${quoteDocuments.providerId} IN ${own}`)
     // A provider or a person with submitted documents is a trader: basic details and the document metadata are kept for the
     // retention period, and the document objects stay in storage until then (everything else is deleted as before).
     const [provider] = await tx.select().from(providers).where(eq(providers.ownerId, userId))
@@ -174,6 +176,7 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
     await tx.delete(disputes).where(sql`${disputes.bookingId} IN ${ownBookings}`)
     await tx.delete(reviews).where(sql`${reviews.bookingId} IN ${ownBookings} OR ${reviews.authorId} = ${userId} OR ${reviews.subjectId} = ${userId}`)
     await tx.delete(bookings).where(sql`${bookings.customerId} = ${userId} OR ${bookings.providerId} IN ${own}`)
+    await tx.delete(quoteDocuments).where(sql`${quoteDocuments.customerId} = ${userId} OR ${quoteDocuments.providerId} IN ${own}`)
     await tx.delete(quotes).where(sql`${quotes.providerId} IN ${own}`)
     await tx.delete(requests).where(sql`${requests.customerId} = ${userId} OR ${requests.providerId} IN ${own}`)
     await tx.delete(providerReferences).where(sql`${providerReferences.providerId} IN ${own}`)
@@ -188,6 +191,7 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
       ...[...files, ...(keepUntil ? [] : docs)].map((f) => ({ bucket: documentsBucket(), key: f.key })),
       // Chat photos of the person's threads (both sides' photos: the thread goes).
       ...chatPhotos.map((m) => ({ bucket: documentsBucket(), key: m.key! })),
+      ...quoteFiles.filter((q) => q.key).map((q) => ({ bucket: documentsBucket(), key: q.key! })),
     ]
     const tombstones = owed.length ? (await tx.insert(pendingObjectDeletes).values(owed).returning({ id: pendingObjectDeletes.id })).map((r) => r.id) : []
     return { email: user.email, language: user.language, tombstones, keepUntil }

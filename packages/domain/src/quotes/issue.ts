@@ -76,22 +76,44 @@ async function storePdf(doc: typeof quoteDocuments.$inferSelect): Promise<void> 
   }
 }
 
-/** After a quote was sent and committed: its numbered document and PDF. Never throws (the quote stands without it; the sweep retries). */
+/**
+ * After a quote was sent and committed: its numbered document and PDF. Earlier versions of the same request that have no document yet
+ * (an issue that failed) get theirs first, in order, so a revision always continues the first quote's number. Never throws (the quote
+ * stands without it; the sweep retries).
+ */
 export async function issueQuoteDocument(quoteId: string, now = new Date(), live = LIVE_PAYMENTS_ALLOWED): Promise<void> {
   try {
-    const doc = await issueOne(quoteId, now, live)
-    if (doc && !doc.fileKey) await storePdf(doc)
+    const [q] = await db.select({ requestId: quotes.requestId, version: quotes.version }).from(quotes).where(eq(quotes.id, quoteId))
+    if (!q) return
+    const earlier = await db.execute<{ id: string }>(sql`SELECT x.id FROM quotes x WHERE x.request_id = ${q.requestId} AND x.version < ${q.version}
+      AND NOT EXISTS (SELECT 1 FROM quote_documents d WHERE d.quote_id = x.id) ORDER BY x.version`)
+    for (const id of [...earlier.rows.map((r) => r.id), quoteId]) {
+      const doc = await issueOne(id, now, live)
+      if (doc && !doc.fileKey) await storePdf(doc)
+    }
   } catch (e) {
     console.error(`[quotes] document of quote ${quoteId} not issued: ${describeError(e)}`)
   }
 }
 
-/** The sweep (cron): stores the PDFs a storage failure left out, and gives a quote that missed its document one. Idempotent; never throws. */
+/**
+ * The sweep (cron): gives a recent quote that missed its document one (an issue that failed after the quote committed; quotes younger
+ * than 5 minutes are left to their own after-commit step, quotes older than 30 days are not numbered now), then stores the PDFs a
+ * storage failure left out. Idempotent; never throws.
+ */
 export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boolean = () => false): Promise<number> {
   let stored = 0
   try {
-    const missing = await exec.select().from(quoteDocuments).where(isNull(quoteDocuments.fileKey)).orderBy(asc(quoteDocuments.issuedAt)).limit(CAP)
-    for (const d of missing) {
+    const missing = await exec.execute<{ id: string }>(sql`SELECT q.id FROM quotes q JOIN requests r ON r.id = q.request_id
+      WHERE r.parent_booking_id IS NULL AND q.created_at < now() - interval '5 minutes' AND q.created_at > now() - interval '30 days'
+        AND NOT EXISTS (SELECT 1 FROM quote_documents d WHERE d.quote_id = q.id) ORDER BY q.request_id, q.version LIMIT ${CAP}`)
+    for (const m of missing.rows) {
+      if (timeUp()) return stored
+      await issueQuoteDocument(m.id)
+      stored++
+    }
+    const unstored = await exec.select().from(quoteDocuments).where(isNull(quoteDocuments.fileKey)).orderBy(asc(quoteDocuments.issuedAt)).limit(CAP)
+    for (const d of unstored) {
       if (timeUp()) break
       await storePdf(d)
       stored++

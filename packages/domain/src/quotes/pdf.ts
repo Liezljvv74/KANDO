@@ -85,9 +85,12 @@ export function quoteLines(d: QuoteDraft, number: string): string[] {
     ...(d.durationMin ? [`Dauer (Duration): ${hours(d.durationMin)}`] : []),
   ]
   if (d.legalStatus === 'business') {
-    const net = Math.round(Number((toCents(d.amount) / (1 + d.vatRate)).toPrecision(15))) / 100
+    const grossCents = toCents(d.amount)
+    const netCents = Math.round(Number((grossCents / (1 + d.vatRate)).toPrecision(15)))
+    const net = netCents / 100
+    const vat = (grossCents - netCents) / 100 // cents arithmetic: net + VAT always equals the gross
     const pct = new Intl.NumberFormat(LOCALE[lang], { style: 'percent', maximumFractionDigits: 2 }).format(d.vatRate)
-    out.push(`Gesamtbetrag netto (Total net): ${m(net)}, USt. ${pct} (VAT ${pct}): ${m(d.amount - net)}, brutto (gross): ${m(d.amount)}`)
+    out.push(`Gesamtbetrag netto (Total net): ${m(net)}, USt. ${pct} (VAT ${pct}): ${m(vat)}, brutto (gross): ${m(d.amount)}`)
   } else out.push(`Gesamtbetrag (Total): ${m(d.amount)}`)
   out.push(`Gültig bis (Valid until): ${date(d.validUntil)}`, 'Dies ist ein Angebot, keine Rechnung (This is a quote, not an invoice).')
   return [...out, ...d.notes]

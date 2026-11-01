@@ -77,6 +77,13 @@ describe('the quote document', () => {
     expect(priv).not.toContain('UStG')
   })
 
+  it('the VAT line is computed in cents, so net plus VAT is the gross', () => {
+    const base = input().provider
+    const text = quoteLines(buildQuoteDraft(input({ amount: 100.1, provider: { ...base, legalStatus: 'business', businessName: 'Gross GmbH', impressum: 'Gross GmbH, Berlin', vatId: 'DE1' } })), 'Q').join(' ')
+    expect(text).toContain('84,12') // net: 10010 cents / 1.19 rounded
+    expect(text).toContain('15,98') // VAT: 10010 - 8412 cents
+  })
+
   it('names with emoji and letters Helvetica lacks do not break the PDF; the test watermark is drawn for a test number', async () => {
     const bytes = await renderQuotePdf(buildQuoteDraft(input()), 'TEST-Q-ABCDEF12-2026-0001', new Date('2026-11-01T10:00:00Z'), true)
     expect(await drawn(bytes)).toContain('TESTDOKUMENT')

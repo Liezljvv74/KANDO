@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { QuoteListSchema, RequestSchema } from '@kando/contract'
-import { storePendingQuoteDocuments, type Storage } from '@kando/domain'
+import { deleteAccount, issueQuoteDocument, storePendingQuoteDocuments, type Storage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, memoryStorage, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -10,8 +10,9 @@ const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const list = await import('../app/app-api/v1/quotes/route')
 const pdf = await import('../app/app-api/v1/quotes/[id]/pdf/route')
+const exportRoute = await import('../app/app-api/v1/me/export/route')
 
-const U = { c1: 'qd-c1', c2: 'qd-c2', c3: 'qd-c3', c4: 'qd-c4', third: 'qd-third' }
+const U = { c1: 'qd-c1', c2: 'qd-c2', c3: 'qd-c3', c4: 'qd-c4', c5: 'qd-c5', third: 'qd-third' }
 let categoryId: string
 let store: ReturnType<typeof memoryStorage>
 let n = 0
@@ -20,7 +21,7 @@ beforeAll(async () => {
   await cleanupUsers()
   categoryId = (await seedBase()).categoryId
   await seedUser(U.c1, null, 'Zoë Łukasz')
-  for (const u of [U.c2, U.c3, U.c4, U.third]) await seedUser(u)
+  for (const u of [U.c2, U.c3, U.c4, U.c5, U.third]) await seedUser(u)
 })
 beforeEach(() => {
   store = memoryStorage()
@@ -110,6 +111,56 @@ it('a storage failure leaves no file: the link is 409 NOT_READY and the next swe
   setStorageForTests(store)
   await storePendingQuoteDocuments(db)
   expect((await listing(p.uid)).find((d) => d.quoteId === q.id)!.pdfReady).toBe(true)
+})
+
+it('a quote whose document failed gets one later, and a revision still continues the first number', async () => {
+  const p = await provider()
+  const r = await request(p.id, U.c1)
+  const v1 = await quote(p, r)
+  const v2 = await quote(p, r, 120)
+  await pool.query('DELETE FROM quote_documents WHERE quote_id IN ($1, $2)', [v1.id, v2.id]) // both after-commit steps "failed"
+  await issueQuoteDocument(v2.id) // the later version is issued first by mistake: version 1 is numbered before it
+  const nums = Object.fromEntries((await listing(p.uid)).filter((d) => [v1.id, v2.id].includes(d.quoteId)).map((d) => [d.quoteId, d.number]))
+  // (deleting the rows by hand does not give the numbers back, so the base is the next free one; what counts is that v2 continues v1's number)
+  expect(nums[v1.id]).toMatch(new RegExp('^' + p.prefix + '-[0-9]{4}$'))
+  expect(nums[v2.id]).toBe(nums[v1.id] + '_Rev.1')
+})
+
+it('the sweep numbers a recent quote that has no document (older than 5 minutes)', async () => {
+  const p = await provider()
+  const r = await request(p.id, U.c2)
+  const q = await quote(p, r)
+  await pool.query('DELETE FROM quote_documents WHERE quote_id = $1', [q.id])
+  await storePendingQuoteDocuments(db)
+  expect((await listing(p.uid)).some((d) => d.quoteId === q.id)).toBe(false) // too fresh: its own after-commit step still owns it
+  await pool.query("UPDATE quotes SET created_at = now() - interval '10 minutes' WHERE id = $1", [q.id])
+  await storePendingQuoteDocuments(db)
+  expect((await listing(p.uid)).find((d) => d.quoteId === q.id)).toMatchObject({ number: expect.stringMatching(new RegExp('^' + p.prefix + '-[0-9]{4}$')), pdfReady: true })
+})
+
+it('the data export lists the quote documents of the person', async () => {
+  const p = await provider()
+  const r = await request(p.id, U.c3)
+  const q = await quote(p, r)
+  const out = await (await call(exportRoute.GET, U.c3, 'GET')).json()
+  expect(out.quoteDocuments).toEqual(expect.arrayContaining([expect.objectContaining({ quoteId: q.id, role: 'customer', number: `${p.prefix}-0001`, downloadUrl: expect.stringContaining('quotes/') })]))
+})
+
+it('deleting an account removes its quote documents and queues the PDFs for deletion', async () => {
+  vi.stubEnv('DELETE_RETENTION_MONTHS', '0')
+  const p = await provider()
+  const r = await request(p.id, U.c5)
+  const q = await quote(p, r)
+  const doc = (await listing(U.c5)).find((d) => d.quoteId === q.id)!
+  const key = `quotes/${p.id}/${doc.number}.pdf`
+  const later: (() => unknown)[] = []
+  await deleteAccount(U.c5, (fn) => void later.push(fn))
+  expect((await pool.query('SELECT 1 FROM quote_documents WHERE quote_id = $1', [q.id])).rows).toHaveLength(0)
+  expect((await pool.query('SELECT 1 FROM pending_object_deletes WHERE key = $1', [key])).rows).toHaveLength(1) // owed until the files are removed
+  for (const fn of later) await fn() // the after-commit step removes the file and the owed row
+  expect([...store.objects.keys()].some((k) => k.endsWith(key))).toBe(false)
+  expect((await pool.query('SELECT 1 FROM pending_object_deletes WHERE key = $1', [key])).rows).toHaveLength(0)
+  vi.unstubAllEnvs()
 })
 
 it('a third user sees no quotes and gets 404 on the link', async () => {

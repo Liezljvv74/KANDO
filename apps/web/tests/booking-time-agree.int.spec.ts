@@ -167,3 +167,20 @@ it('a blocked customer cannot confirm', async () => {
   expect((await agreeing(b.id, U.cust)).status).toBe(403)
   await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2',[U.owner, U.cust])
 })
+
+it('a time that clashes with a held booking is refused when it is entered, not only at confirm', async () => {
+  const when = fresh()
+  const a = await waiting(U.cust)
+  const b = await waiting(U.cust2)
+  await enter(a.id, U.owner, when)
+  expect((await agreeing(a.id, U.cust)).status).toBe(200) // a holds the time now
+  const clash = await enter(b.id, U.owner, when)
+  expect([clash.status, (await clash.json()).error]).toEqual([409, 'slot-pending'])
+})
+
+it('a blocked customer or provider cannot even enter a time', async () => {
+  const b = await waiting()
+  await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [U.owner, U.cust])
+  expect((await enter(b.id, U.cust)).status).toBe(403)
+  await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [U.owner, U.cust])
+})
