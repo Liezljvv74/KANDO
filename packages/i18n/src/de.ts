@@ -406,7 +406,6 @@ export const de = {
   'booking.pickDate': 'Datum wählen',
   'booking.pickTime': 'Uhrzeit wählen',
   'booking.invalidAmount': 'Bitte einen Betrag und die Leistung angeben.',
-  'booking.proposeTitle': 'Termin vorschlagen',
   'booking.propose': 'Diese Zeit vorschlagen',
   'busy.title': 'Belegte Zeiten',
   'busy.pending': 'Buchung angefragt',
