@@ -10,6 +10,8 @@ export type BookingAction =
   | 'decline'
   | 'counter'
   | 'withdraw'
+  | 'enterTime'
+  | 'confirmTime'
   | 'finish'
   | 'confirm'
   | 'dispute'
@@ -78,6 +80,11 @@ export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): Bo
   switch (b.status) {
     case 'proposed':
       return waitingFor(b) === viewer ? ['accept', 'decline', 'counter', ...withdraw] : withdraw
+    case 'awaiting-time': {
+      // either side enters the agreed time; the other confirms it (never your own entry). Only the customer can walk away: the provider uses the chat or lets it lapse.
+      const theirs = !!b.pendingTime && b.pendingTime.by !== viewer
+      return [...(theirs ? ['confirmTime' as const] : []), 'enterTime', ...withdraw]
+    }
     case 'awaiting-payment':
       return withdraw
     case 'confirmed': {

@@ -1,21 +1,26 @@
 import { useState } from 'react'
 
-import type { QuoteInput } from '@kando/contract'
+import type { BookingRequest, QuoteInput } from '@kando/contract'
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
-import { Button, ErrorText, Field } from '@/components/auth-ui'
+import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
+import { SwitchRow } from '@/components/form-ui'
 import { errorText, t } from '@/i18n'
 import { parseAmount } from '@/lib/amount'
-import { toMinutes, toStartAt } from '@/lib/booking-time'
+import { buildQuoteTime, whenFromRequest } from '@/lib/when-where'
+import { proposalError, WhenWhereFields } from '@/screens/bookings/when-where-fields'
 
-/** The provider's quote: amount, scope and an optional time suggestion (the customer confirms the time when accepting). */
-export function SendQuoteForm({ requestId, onSent }: { requestId: string; onSent: () => void }) {
+/**
+ * The provider's answer: price, scope and the time. The time starts as the customer asked; "Date and time confirmed" (on when the
+ * request has a time) sends it with the quote, off sends a quote that says the time is still to be confirmed.
+ */
+export function SendQuoteForm({ request, onSent }: { request: BookingRequest; onSent: () => void }) {
   const [amount, setAmount] = useState('')
   const [scope, setScope] = useState('')
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  const [duration, setDuration] = useState('60')
+  // on only while the customer's time is still ahead; a time that has passed cannot be confirmed in a quote
+  const [confirmed, setConfirmed] = useState(request.startAt !== null && new Date(request.startAt).getTime() > Date.now())
+  const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -23,19 +28,15 @@ export function SendQuoteForm({ requestId, onSent }: { requestId: string; onSent
     const value = parseAmount(amount)
     if (value === null) return setError(t('booking.invalidAmountFormat'))
     if (!scope.trim()) return setError(t('booking.invalidAmount'))
-    const suggest = date.trim() || time.trim()
-    const startAt = suggest ? toStartAt(date, time) : null
-    const durationMin = toMinutes(duration)
-    if (suggest && (!startAt || durationMin === null)) return setError(t('booking.invalidTime'))
-    const body: QuoteInput = { amount: value, scope: scope.trim(), ...(startAt && durationMin !== null && { startAt, durationMin }) }
+    const built = buildQuoteTime(when, confirmed)
+    if (!built.ok) return setError(proposalError(built.error))
+    const body: QuoteInput = { amount: value, scope: scope.trim(), ...built.time }
     setBusy(true)
     setError(null)
     try {
-      await sendQuote(requestId, body)
+      await sendQuote(request.id, body)
       setAmount('')
       setScope('')
-      setDate('')
-      setTime('')
       onSent()
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))
@@ -47,9 +48,8 @@ export function SendQuoteForm({ requestId, onSent }: { requestId: string; onSent
     <>
       <Field label={t('booking.quoteAmount')} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" editable={!busy} />
       <Field label={t('booking.quoteScope')} value={scope} onChangeText={setScope} multiline editable={!busy} />
-      <Field label={`${t('booking.quoteSuggestion')}: ${t('booking.dateField')}`} value={date} onChangeText={setDate} placeholder="2027-01-31" keyboardType="numbers-and-punctuation" autoCapitalize="none" editable={!busy} />
-      <Field label={t('booking.timeField')} value={time} onChangeText={setTime} placeholder="09:30" keyboardType="numbers-and-punctuation" autoCapitalize="none" editable={!busy} />
-      <Field label={t('booking.durationField')} value={duration} onChangeText={setDuration} keyboardType="number-pad" editable={!busy} />
+      <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
+      {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}
       <ErrorText text={error} />
       <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} />
     </>

@@ -1,12 +1,13 @@
-"""Record progress in the MVP tracker; write a new workbook after every 2nd merged pull request.
+"""Record progress in the MVP tracker; update the workbook after every 2nd merged pull request.
 
 Usage (from the repository root):
   python docs/mvp/update.py --note "what changed" [--commit abc1234] [--step 0.5=Done ...] [--task 5=Done ...] [--merged 48]
   python docs/mvp/update.py --force --note "..."      # write a workbook now, whatever the merge count
 
 Every call records the status changes and a change-log line in docs/mvp/state.json. A workbook
-Reports/MVP Completion Tasks <YYYY-MM-DD HH-MM>.xlsx (older versions are kept) is written only when two merged
+Reports/MVP Completion Tasks.xlsx (the same file, updated in place) is written only when two merged
 pull requests have been recorded with --merged since the last workbook (owner rule, 1 November 2026), or with --force.
+Only merges that change code count (owner rule): never pass --merged for a pull request that changes documents, plans or tracker files only.
 Statuses: Open, In progress, Waiting for owner, Done. Commit state.json (and the new workbook, when there is one).
 """
 import argparse, datetime, json, os, subprocess, sys

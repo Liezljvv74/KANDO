@@ -21,15 +21,18 @@ export function TimeProposalForm({
   slug,
   canRemote,
   withDetails,
+  initialOnSite = true,
   onSubmit,
 }: {
   submitLabel: string
   slug?: string
   canRemote: boolean
   withDetails: boolean
+  /** Where the on-site switch starts (an agreed time starts from the booking's place). */
+  initialOnSite?: boolean
   onSubmit: (p: TimeProposal) => Promise<void>
 }) {
-  const [value, setValue] = useState(emptyWhenWhere())
+  const [value, setValue] = useState(() => ({ ...emptyWhenWhere(), onSite: initialOnSite }))
   useSavedAddress(withDetails ? setValue : noUpdate) // the address starts from the saved account address, as in the request form
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

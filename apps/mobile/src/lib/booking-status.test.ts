@@ -31,6 +31,16 @@ const before = new Date('2027-01-04T09:00:00.000Z') // a day before the start
 const after = new Date('2027-01-05T11:00:00.000Z') // after the start
 const DAY = 86_400_000
 
+const pending = (by: 'customer' | 'provider') => ({ by, startAt: '2027-01-06T09:00:00.000Z', durationMin: 60, onSite: true, answerBy: '2027-01-08T09:00:00.000Z' })
+
+test('awaiting the agreed time: either side enters one, only the other side confirms it, only the customer can walk away', () => {
+  expect(bookingActions(b({ status: 'awaiting-time' }), 'customer')).toEqual(['enterTime', 'withdraw'])
+  expect(bookingActions(b({ status: 'awaiting-time' }), 'provider')).toEqual(['enterTime'])
+  expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('provider') }), 'customer')).toEqual(['confirmTime', 'enterTime', 'withdraw'])
+  expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('provider') }), 'provider')).toEqual(['enterTime'])
+  expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('customer') }), 'provider')).toEqual(['confirmTime', 'enterTime'])
+})
+
 test('a new proposal waits for the provider; the customer can only withdraw', () => {
   expect(bookingStatusText(b({}), 'customer')).toBe('bookingStatus.waitProvider')
   expect(bookingActions(b({}), 'customer')).toEqual(['withdraw'])

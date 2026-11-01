@@ -23,6 +23,7 @@ import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { InvoicesCard } from '@/screens/invoices/invoices-card'
+import { QuotesCard } from '@/screens/quotes/quotes-card'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -113,6 +114,7 @@ export default function AccountScreen() {
           <LanguageSwitch />
         </View>
         <PushSwitches />
+        <QuotesCard />
         <InvoicesCard me={shared ?? me} />
         <Button label={t('auth.logOut')} onPress={signOut} />
         <AccountDataSection />
