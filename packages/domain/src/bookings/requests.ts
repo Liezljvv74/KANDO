@@ -307,7 +307,16 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   // The 3-day answer deadline binds the first quote only; a revision may follow while the last quote is still valid.
   const open = (await tx.select({ e: quotes.expiresAt }).from(quotes).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent'))))[0]
   if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed' })
-  if (input.startAt) assertFuture(new Date(input.startAt), now)
+  // flow 1: an ordinary request's quote may carry a time (checked like any offered time, clash included) or none ("to be confirmed").
+  // A time other than the request's is the provider's proposal under the round rule. An additional task keeps its old rules.
+  const startAt = input.startAt ? new Date(input.startAt) : null
+  const ordinary = !req.parentBookingId
+  const proposedOtherTime = ordinary && startAt !== null && (req.startAt?.getTime() !== startAt.getTime() || req.durationMin !== input.durationMin)
+  if (startAt) {
+    if (ordinary) await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin: input.durationMin!, onSite: req.onSite ?? true, now })
+    else assertFuture(startAt, now)
+  }
+  if (proposedOtherTime) await assertMayPropose(tx, req, 'provider', req.customerId)
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
   const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${provider.country}`)).rows[0]!.currency
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
@@ -320,9 +329,11 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
       amount: input.amount.toFixed(2),
       currency,
       scope: input.scope,
-      startAt: input.startAt ? new Date(input.startAt) : null,
+      startAt,
       durationMin: input.durationMin ?? null,
-      expiresAt: new Date(now.getTime() + QUOTE_VALID_DAYS * DAY),
+      proposedOtherTime,
+      // valid for 7 days, but never past the time it offers
+      expiresAt: new Date(Math.min(now.getTime() + QUOTE_VALID_DAYS * DAY, startAt?.getTime() ?? Infinity)),
       createdAt: now,
     })
     .returning()
@@ -330,7 +341,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   const threadId = await threadForRequest(tx, requestId)
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
   afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
-  afterCommit(() => notifyBookingEvent('quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
+  afterCommit(() => notifyBookingEvent(proposedOtherTime ? 'time-proposed' : 'quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   return toQuote(row!, now)
 }
 

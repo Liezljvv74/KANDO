@@ -75,12 +75,14 @@ export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
 
 /** A quote's start and duration are only a suggestion; the customer confirms the time when accepting. */
-export const QuoteInputSchema = z.object({
-  amount: AmountSchema,
-  scope: requiredText(2000),
-  startAt: IsoSchema.optional(),
-  durationMin: DurationSchema.optional(),
-})
+export const QuoteInputSchema = z
+  .object({
+    amount: AmountSchema.refine((v) => v > 0, { message: 'A quote needs a price above zero' }),
+    scope: requiredText(2000),
+    startAt: IsoSchema.optional(),
+    durationMin: DurationSchema.optional(),
+  })
+  .refine((v) => (v.startAt === undefined) === (v.durationMin === undefined), { message: 'Start and duration go together', path: ['startAt'] })
 
 export type QuoteInput = z.infer<typeof QuoteInputSchema>
 
