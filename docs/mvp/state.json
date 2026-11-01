@@ -7,7 +7,8 @@
     "0.5": "Done",
     "0.6": "Done",
     "0.4": "Waiting for owner",
-    "1.1": "Waiting for owner"
+    "1.1": "Waiting for owner",
+    "1.2": "Waiting for owner"
   },
   "tasks": {
     "1": "Waiting for owner",
@@ -16,7 +17,8 @@
     "6": "Waiting for owner",
     "7": "In progress",
     "15": "Waiting for owner",
-    "5": "Waiting for owner"
+    "5": "Waiting for owner",
+    "20": "In progress"
   },
   "log": [
     {
@@ -93,6 +95,16 @@
       "commit": "0f16a5a",
       "note": "CI of PR 48 failed on booking-notifications: the test compared a date without leading zeros (1.1.2027) with the email's 01.01.2027; it failed because today plus 60 days is 1 January. Fixed in the test on both branches (PR 48 and PR 49); my earlier time-of-day explanation was incomplete.",
       "steps": []
+    },
+    {
+      "when": "2026-11-01 17:07",
+      "commit": "b460758",
+      "note": "Phase 1.2 (Task 10a, Finding 2): one shared set of when-and-where fields (WhenWhereFields, buildProposal) with native date and time pickers, used by the request form and the time proposal form; the request form now sends start, duration, place, address (prefilled from the saved account address) and note, so the app works with the server again. New native dependency @react-native-community/datetimepicker: a new Android build is needed. Owner: review and merge PR 50 (stacked on PR 49), then make the build and test on the phone.",
+      "steps": [
+        "step 1.2 Waiting for owner",
+        "task 3 In progress",
+        "task 20 In progress"
+      ]
     }
   ],
   "mergesSinceWorkbook": [
