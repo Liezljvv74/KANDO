@@ -1,19 +1,21 @@
 {
-  "stamp": "2026-11-01 14-45",
+  "stamp": "2026-11-01 14-49",
   "steps": {
     "0.1": "In progress",
     "0.2": "In progress",
-    "0.3": "In progress",
+    "0.3": "Waiting for owner",
     "0.5": "Done",
-    "0.6": "Waiting for owner"
+    "0.6": "Waiting for owner",
+    "0.4": "Waiting for owner"
   },
   "tasks": {
-    "1": "In progress",
+    "1": "Waiting for owner",
     "2": "In progress",
     "3": "In progress",
-    "6": "In progress",
+    "6": "Waiting for owner",
     "7": "Waiting for owner",
-    "15": "Open"
+    "15": "Open",
+    "5": "Waiting for owner"
   },
   "log": [
     {
@@ -34,6 +36,18 @@
       "steps": [
         "step 0.5 Done",
         "step 0.1 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-01 14:49",
+      "commit": "e971d62",
+      "note": "Phase 0.3 and 0.4 on PR #48 (branch chore/claude-folder): CLAUDE.md, the rls-check agent, the /test-report command, project .claude folder with README, RLS and auth evidence note, README section on how the project is built with Claude Code. Waiting for the owner: run /code-review --comment on PR #48, submit a GitHub review, merge.",
+      "steps": [
+        "step 0.3 Waiting for owner",
+        "step 0.4 Waiting for owner",
+        "task 1 Waiting for owner",
+        "task 5 Waiting for owner",
+        "task 6 Waiting for owner"
       ]
     }
   ]
