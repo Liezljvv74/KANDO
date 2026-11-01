@@ -29,11 +29,14 @@ now = datetime.datetime.now()
 touched = []
 for kind, items in (('steps', a.step), ('tasks', a.task)):
     for item in items:
+        if '=' not in item:
+            sys.exit(f"--{kind[:-1]} needs N=Status, got '{item}'")  # nothing has been changed yet
         k, v = item.split('=', 1)
         state[kind][k] = v
         touched.append(('step ' if kind == 'steps' else 'task ') + k + ' ' + v)
 for pr in a.merged:
-    if pr not in state['mergesSinceWorkbook']:
+    # a pull request already counted (in this workbook round or in the last workbook) is not counted again
+    if pr not in state['mergesSinceWorkbook'] and pr not in state.get('workbookMerges', []):
         state['mergesSinceWorkbook'].append(pr)
         touched.append('merged PR #' + pr)
 commit = a.commit or subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True, text=True).stdout.strip()
@@ -41,11 +44,15 @@ write = a.force or len(state['mergesSinceWorkbook']) >= 2
 if write:
     state['stamp'] = now.strftime('%Y-%m-%d %H-%M')
 state['log'].append({'when': now.strftime('%Y-%m-%d %H:%M'), 'commit': commit, 'note': a.note, 'steps': touched})
-if write:
-    state['workbookMerges'] = list(state['mergesSinceWorkbook'])
-    state['mergesSinceWorkbook'] = []
-json.dump(state, open(path, 'w', encoding='utf-8'), indent=2, ensure_ascii=False)
 if not write:
+    json.dump(state, open(path, 'w', encoding='utf-8'), indent=2, ensure_ascii=False)
     print(f"Recorded in state.json; no workbook yet ({len(state['mergesSinceWorkbook'])} of 2 merged PRs since the last one).")
     sys.exit(0)
-sys.exit(subprocess.call([sys.executable, os.path.join(HERE, 'mvp_report.py')]))
+# the workbook first, from the state with this entry; the merge counter is cleared only when it was written
+json.dump(state, open(path, 'w', encoding='utf-8'), indent=2, ensure_ascii=False)
+code = subprocess.call([sys.executable, os.path.join(HERE, 'mvp_report.py')])
+if code == 0:
+    state['workbookMerges'] = list(state['mergesSinceWorkbook'])
+    state['mergesSinceWorkbook'] = []
+    json.dump(state, open(path, 'w', encoding='utf-8'), indent=2, ensure_ascii=False)
+sys.exit(code)

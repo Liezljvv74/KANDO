@@ -81,18 +81,22 @@ async function storePdf(doc: typeof quoteDocuments.$inferSelect): Promise<void> 
  * (an issue that failed) get theirs first, in order, so a revision always continues the first quote's number. Never throws (the quote
  * stands without it; the sweep retries).
  */
-export async function issueQuoteDocument(quoteId: string, now = new Date(), live = LIVE_PAYMENTS_ALLOWED): Promise<void> {
+export async function issueQuoteDocument(quoteId: string, now = new Date(), live = LIVE_PAYMENTS_ALLOWED): Promise<boolean> {
   try {
     const [q] = await db.select({ requestId: quotes.requestId, version: quotes.version }).from(quotes).where(eq(quotes.id, quoteId))
-    if (!q) return
+    if (!q) return false
     const earlier = await db.execute<{ id: string }>(sql`SELECT x.id FROM quotes x WHERE x.request_id = ${q.requestId} AND x.version < ${q.version}
       AND NOT EXISTS (SELECT 1 FROM quote_documents d WHERE d.quote_id = x.id) ORDER BY x.version`)
+    let mine: Awaited<ReturnType<typeof issueOne>> = null
     for (const id of [...earlier.rows.map((r) => r.id), quoteId]) {
       const doc = await issueOne(id, now, live)
       if (doc && !doc.fileKey) await storePdf(doc)
+      if (id === quoteId) mine = doc
     }
+    return mine !== null
   } catch (e) {
     console.error(`[quotes] document of quote ${quoteId} not issued: ${describeError(e)}`)
+    return false
   }
 }
 
@@ -104,19 +108,19 @@ export async function issueQuoteDocument(quoteId: string, now = new Date(), live
 export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boolean = () => false): Promise<number> {
   let stored = 0
   try {
-    const missing = await exec.execute<{ id: string }>(sql`SELECT q.id FROM quotes q JOIN requests r ON r.id = q.request_id
+    const missing = await exec.execute<{ id: string; created_at: Date | string }>(sql`SELECT q.id, q.created_at FROM quotes q JOIN requests r ON r.id = q.request_id
       WHERE r.parent_booking_id IS NULL AND q.created_at < now() - interval '5 minutes' AND q.created_at > now() - interval '30 days'
         AND NOT EXISTS (SELECT 1 FROM quote_documents d WHERE d.quote_id = q.id) ORDER BY q.request_id, q.version LIMIT ${CAP}`)
     for (const m of missing.rows) {
       if (timeUp()) return stored
-      await issueQuoteDocument(m.id)
-      stored++
+      // the quote's own time gives the year of its number and its date of issue (a quote of 31 December is numbered in that year)
+      if (await issueQuoteDocument(m.id, new Date(m.created_at))) stored++
     }
     const unstored = await exec.select().from(quoteDocuments).where(isNull(quoteDocuments.fileKey)).orderBy(asc(quoteDocuments.issuedAt)).limit(CAP)
     for (const d of unstored) {
       if (timeUp()) break
       await storePdf(d)
-      stored++
+      if ((await exec.select({ k: quoteDocuments.fileKey }).from(quoteDocuments).where(eq(quoteDocuments.id, d.id)))[0]?.k) stored++
     }
   } catch (e) {
     console.error(`[quotes] sweep failed: ${describeError(e)}`)
@@ -165,6 +169,12 @@ export async function quotePdfUrl(tx: Tx, userId: string, id: string): Promise<{
   const [d] = isUuid(id) ? await tx.select().from(quoteDocuments).where(eq(quoteDocuments.id, id)) : []
   const own = d && d.customerId !== userId ? await ownProvider(tx, userId) : null
   if (!d || (d.customerId !== userId && own?.id !== d.providerId)) return fail(404, { error: 'Not found' })
-  if (!d.fileKey) return fail(409, { error: 'NOT_READY' })
-  return { url: await storage().getSignedUrl(documentsBucket(), d.fileKey, LINK_SECONDS) }
+  let key = d.fileKey
+  if (!key) {
+    // the PDF is missing (storage was down when it was made): try once now instead of waiting for the daily sweep
+    await storePdf(d)
+    key = (await tx.select({ k: quoteDocuments.fileKey }).from(quoteDocuments).where(eq(quoteDocuments.id, d.id)))[0]?.k ?? null
+  }
+  if (!key) return fail(409, { error: 'NOT_READY' })
+  return { url: await storage().getSignedUrl(documentsBucket(), key, LINK_SECONDS) }
 }

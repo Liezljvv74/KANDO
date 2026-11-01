@@ -347,7 +347,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
   afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent(proposedOtherTime ? 'time-proposed' : 'quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
-  if (ordinary) afterCommit(() => issueQuoteDocument(row!.id, now)) // the numbered quote and its PDF (a revision keeps the number, adds _Rev.N)
+  if (ordinary) afterCommit(async () => void (await issueQuoteDocument(row!.id, now))) // the numbered quote and its PDF (a revision keeps the number, adds _Rev.N)
   return toQuote(row!, now)
 }
 
