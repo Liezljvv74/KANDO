@@ -14,6 +14,7 @@
     "@expo/vector-icons": "15.0.2",
     "@kando/contract": "workspace:*",
     "@kando/i18n": "workspace:*",
+    "@react-native-community/datetimepicker": "9.2.1",
     "expo": "58.0.19",
     "expo-constants": "58.0.13",
     "expo-dev-client": "58.0.15",
