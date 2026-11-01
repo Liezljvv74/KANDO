@@ -128,6 +128,9 @@ describe('flow 1: the proposal round rule', () => {
     expect(mayPropose({ ...mine, side: 'provider' })).toEqual({ ok: true })
     expect(mayPropose({ ...mine, side: 'customer', customerProposals: 1, providerProposals: 1 })).toEqual({ ok: false, reason: 'chat-first' })
   })
+  it('a customer changing the time before the provider proposed anything is not looping', () => {
+    expect(mayPropose({ side: 'customer', customerProposals: 3, providerProposals: 0, otherWroteSinceMine: false })).toEqual({ ok: true })
+  })
   it('a side that already proposed needs the other side to have written since', () => {
     expect(mayPropose({ ...mine, providerProposals: 1 })).toEqual({ ok: false, reason: 'chat-first' })
     expect(mayPropose({ ...mine, providerProposals: 1, otherWroteSinceMine: true })).toEqual({ ok: true })

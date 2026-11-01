@@ -5,7 +5,7 @@ import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { sendMessage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -37,7 +37,7 @@ afterAll(async () => {
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
 const newRequest = async (description = 'Fix the fence') => {
   await relaxLimits(U.cust)
-  return RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description })).json())
+  return RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description, ...requestTime() })).json())
 }
 const threadOf = async (as: string, requestId: string) => {
   const docs = ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs)
@@ -122,7 +122,7 @@ it('a request description or quote scope with an email is 422', async () => {
   const count = async () => (await pool.query('SELECT count(*)::int AS n FROM requests WHERE customer_id = $1', [U.cust])).rows[0].n
   const before = await count()
   await relaxLimits(U.cust)
-  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'write to me at max@example.com' })
+  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'write to me at max@example.com', ...requestTime() })
   expect([res.status, await res.json()]).toEqual([422, { error: 'CONTACT_DETAILS' }])
   expect(await count()).toBe(before)
   const r = await newRequest()
@@ -134,7 +134,7 @@ it('a request description or quote scope with an email is 422', async () => {
 })
 
 it('three blocked attempts in a day create one staff flag', async () => {
-  const r = await call(requests.POST, U.spam, 'POST', { providerId: pOwner, description: 'ok job' })
+  const r = await call(requests.POST, U.spam, 'POST', { providerId: pOwner, description: 'ok job', ...requestTime() })
   const t = await threadOf(U.spam, RequestSchema.parse(await r.json()).id)
   for (let i = 0; i < 3; i++) expect((await send(t.id, U.spam, { body: `call 0151 2345678${i}` })).status).toBe(422)
   expect((await pool.query("SELECT count(*)::int AS n FROM staff_flags WHERE user_id = $1 AND kind = 'contact-attempts'", [U.spam])).rows[0].n).toBe(1)

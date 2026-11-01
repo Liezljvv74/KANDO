@@ -78,12 +78,14 @@ export const bookingShownStatus = (b: { status: string; answerBy: Date | null; p
 }
 
 /**
- * Whether a side may propose a (different) time now. Each side's first proposal is free; after that the other side must have
- * written in the chat since this side's last proposal, so the two talk before the loop goes on (flow 1).
+ * Whether a side may propose a (different) time now. Free until each side has proposed once (the request is the customer's
+ * first); from then on the other side must have written in the chat since this side's last proposal, so the two talk before the
+ * loop goes on (flow 1). A customer who changes the time before the provider has proposed anything is not looping.
  */
 export const mayPropose = (a: { side: 'customer' | 'provider'; customerProposals: number; providerProposals: number; otherWroteSinceMine: boolean }): { ok: true } | { ok: false; reason: 'chat-first' } => {
   const mine = a.side === 'customer' ? a.customerProposals : a.providerProposals
-  return mine < PROPOSALS_BEFORE_CHAT || a.otherWroteSinceMine ? { ok: true } : { ok: false, reason: 'chat-first' }
+  const theirs = a.side === 'customer' ? a.providerProposals : a.customerProposals
+  return mine < PROPOSALS_BEFORE_CHAT || theirs < PROPOSALS_BEFORE_CHAT || a.otherWroteSinceMine ? { ok: true } : { ok: false, reason: 'chat-first' }
 }
 
 export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)

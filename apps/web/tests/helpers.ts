@@ -12,6 +12,9 @@ export const fakeSession = async (request: Request) => {
 
 export const EMAIL = (id: string) => `${id}@test.skilled.invalid`
 
+/** The time and place every request now carries (flow 1): ten days ahead, two hours, on site in Berlin. */
+export const requestTime = () => ({ startAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), durationMin: 120, onSite: true, address: { postcode: '10115' } })
+
 export function call(
   handler: (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>,
   uid: string,

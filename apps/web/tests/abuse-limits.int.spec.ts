@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { call, cleanupUsers, expireQuotes, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, expireQuotes, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -20,7 +20,7 @@ beforeAll(async () => {
 })
 afterAll(cleanupUsers)
 
-const req = (as: string, providerId = pOwner, description = 'Fix the fence') => call(requests.POST, as, 'POST', { providerId, description })
+const req = (as: string, providerId = pOwner, description = 'Fix the fence') => call(requests.POST, as, 'POST', { providerId, description, ...requestTime() })
 const book = (as: string, n: number) =>
   call(bookingsRoute.POST, as, 'POST', { serviceId: sOwner2, startAt: new Date(Date.now() + (200 + n) * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
 const count = async (uid: string) =>

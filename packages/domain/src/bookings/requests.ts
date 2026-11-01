@@ -1,6 +1,6 @@
 import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
-import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput } from '@kando/contract'
+import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
@@ -8,6 +8,8 @@ import { postCard } from '../chat/messages'
 import { threadForRequest, threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { notifyBookingEvent, notifyProposal } from './notify'
+import { timeIsAcceptable } from './busy'
+import { assertMayPropose } from './rounds'
 import { isUuid, NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
@@ -154,6 +156,12 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
   if (provider.ownerId === userId) fail(400, { error: 'own-service' })
   if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // payout set-up unfinished: the app offers "notify me"
   if (input.serviceId && !offerable.includes(input.serviceId)) fail(400, { error: 'Unknown service' })
+  // flow 1: the request carries the customer's time and place (the schema makes them all-or-nothing)
+  const { startAt: wanted, durationMin, onSite } = input
+  if (wanted === undefined || durationMin === undefined || onSite === undefined) return fail(400, { error: 'time-required' })
+  const startAt = new Date(wanted)
+  await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin, onSite, now, clash: false })
+  if (input.note) await assertNoContactDetails(userId, input.note)
   const [row] = await tx
     .insert(requests)
     .values({
@@ -162,6 +170,11 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       serviceId: input.serviceId ?? null,
       description: input.description,
       preferredDate: input.preferredDate ?? null,
+      startAt,
+      durationMin,
+      onSite,
+      ...placeColumns({ onSite, address: input.address }),
+      note: input.note ?? null,
       answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY),
       createdAt: now,
       updatedAt: now,
@@ -170,6 +183,17 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
   await threadForRequest(tx, row!.id) // the chat opens with the request
   afterCommit(() => notifyBookingEvent('request-received', provider.ownerId, { requestId: row!.id }))
   return toRequest(row!, now)
+}
+
+/** The job place as the request and booking rows store it: street, postcode and city of an on-site job, none for a remote one. */
+const placeColumns = (t: Pick<TimeProposal, 'onSite' | 'address'>) =>
+  t.onSite && t.address ? { addressStreet: t.address.street ?? null, addressPostcode: t.address.postcode, addressCity: t.address.city ?? null } : { addressStreet: null, addressPostcode: null, addressCity: null }
+
+/** What the provider may see of a request before the customer confirms: postcode and city, never the street (as for bookings, view in bookings.ts). */
+const hideStreet = (r: BookingRequest): BookingRequest => {
+  if (!r.address?.street) return r
+  const { street: _street, ...place } = r.address
+  return { ...r, address: place }
 }
 
 /** The caller's requests, a page newest first by (created_at, id): those they sent (customer) or those addressed to their provider profile. */
@@ -184,7 +208,7 @@ export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'p
   const { rows, next } = pageOf(found)
   const lapsed = await lapsedRoots(tx, rows.map(({ r }) => r.id), now)
   const list = rows.map(({ r }) => toRequest(r, now, lapsed.has(r.id)))
-  return { docs: role === 'provider' ? await withCustomerRatings(tx, list) : list, next }
+  return { docs: role === 'provider' ? await withCustomerRatings(tx, list.map(hideStreet)) : list, next }
 }
 
 /** The provider's view adds what providers' shown reviews say about each customer. */
@@ -208,7 +232,7 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
   const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
   const dto = { ...toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).has(row.id)), threadId }
-  return row.customerId === userId ? dto : (await withCustomerRatings(tx, [dto]))[0]!
+  return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }
 
 /** Quotes of a request, newest version first, for either party. */
@@ -219,6 +243,52 @@ export async function listQuotes(tx: Tx, userId: string, requestId: string, now 
 }
 
 const unavailable = () => fail(409, { error: 'provider-unavailable' })
+
+/**
+ * The customer changes the time of an open or quoted request (flow 1). A change of start, duration or place kind counts as a
+ * proposal under the round rule (assertMayPropose), replaces the provider's sent quote (it was for the old time), opens the
+ * request again and restarts the provider's answer period; the provider is told. Changing only the address or note is free.
+ * The writes run on the owner connection after the checks (the app role may not supersede the provider's quote), under the
+ * request lock. 404 for a stranger, 403 for the provider, 409 request-closed for a closed or lapsed request.
+ */
+export async function reviseRequest(tx: Tx, userId: string, requestId: string, input: TimeProposal, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
+  const first = await ownRequest(tx, userId, requestId)
+  if (first.customerId !== userId) fail(403, { error: 'not-your-turn' })
+  await lockRequest(tx, requestId)
+  const row = (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] ?? notFound() // read again after the lock
+  if (row.parentBookingId || !['open', 'quoted'].includes(row.status) || (row.status === 'open' && row.answerBy <= now)) fail(409, { error: 'request-closed' })
+  const provider = (await tx.select().from(providers).where(eq(providers.id, row.providerId)))[0] ?? notFound()
+  const startAt = new Date(input.startAt)
+  const place = placeColumns(input)
+  const timeChanged = row.startAt?.getTime() !== startAt.getTime() || row.durationMin !== input.durationMin || row.onSite !== input.onSite
+  const otherChange =
+    row.note !== (input.note ?? null) || (row.addressStreet ?? null) !== place.addressStreet || (row.addressPostcode ?? null) !== place.addressPostcode || (row.addressCity ?? null) !== place.addressCity
+  if (!timeChanged && !otherChange) return toRequest(row, now)
+  if (input.note) await assertNoContactDetails(userId, input.note)
+  if (timeChanged) {
+    await assertMayPropose(tx, row, 'customer', provider.ownerId)
+    await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin: input.durationMin, onSite: input.onSite, now, clash: false })
+  }
+  const updated = await db.transaction(async (o) => {
+    const [r] = await o
+      .update(requests)
+      .set({
+        startAt,
+        durationMin: input.durationMin,
+        onSite: input.onSite,
+        ...place,
+        note: input.note ?? null,
+        updatedAt: now,
+        ...(timeChanged && { revision: row.revision + 1, revisedAt: now, status: 'open', answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY) }),
+      })
+      .where(eq(requests.id, requestId))
+      .returning()
+    if (timeChanged) await o.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
+    return r!
+  })
+  if (timeChanged) afterCommit(() => notifyBookingEvent('request-updated', provider.ownerId, { requestId }))
+  return toRequest(updated, now)
+}
 
 export async function sendQuote(tx: Tx, userId: string, requestId: string, input: QuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Quote> {
   const provider = (await ownProvider(tx, userId)) ?? notFound()

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { call, cleanupUsers, EMAIL, expireQuotes, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, expireQuotes, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -31,14 +31,14 @@ const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
 const proposal = (extra: object = {}) => ({ startAt: day(10), durationMin: 120, onSite: true, address: { postcode: '10115' }, ...extra })
 const newRequest = async (providerId = pOwner, as = U.cust) => {
   await relaxLimits(as)
-  return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId, description: 'Fix the fence' })).json())
+  return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId, description: 'Fix the fence', ...requestTime() })).json())
 }
 const quote = (reqId: string, as: string, body: object = { amount: 100, scope: 'Fence' }) => call(quotes.POST, as, 'POST', body, { id: reqId })
 const accepting = (quoteId: string, as: string, body: object = proposal()) => call(accept.POST, as, 'POST', body, { id: quoteId })
 const ids = (j: { docs: { id: string }[] }) => j.docs.map((d) => d.id)
 
 it('customer creates a request; provider sees it incoming', async () => {
-  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix the fence', preferredDate: '2027-01-05' })
+  const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix the fence', preferredDate: '2027-01-05', ...requestTime() })
   expect(res.status).toBe(201)
   const r = RequestSchema.parse(await res.json())
   expect(r).toMatchObject({ customerId: U.cust, providerId: pOwner, status: 'open', preferredDate: '2027-01-05' })
@@ -54,12 +54,12 @@ it('customer creates a request; provider sees it incoming', async () => {
 
 it('request to an unpublished or suspended provider is 404', async () => {
   for (const providerId of [pDraft, pSusp, crypto.randomUUID()]) {
-    expect((await call(requests.POST, U.cust, 'POST', { providerId, description: 'x' })).status).toBe(404)
+    expect((await call(requests.POST, U.cust, 'POST', { providerId, description: 'x', ...requestTime() })).status).toBe(404)
   }
 })
 
 it('own service request is 400', async () => {
-  expect((await call(requests.POST, U.owner, 'POST', { providerId: pOwner, description: 'x' })).status).toBe(400)
+  expect((await call(requests.POST, U.owner, 'POST', { providerId: pOwner, description: 'x', ...requestTime() })).status).toBe(400)
 })
 
 it('provider sends a quote; a second quote supersedes the first', async () => {
@@ -233,12 +233,12 @@ it('the customer withdraws an open and a quoted request; the provider is told', 
 
 it('the provider declines; the customer is told; the request leaves the pair limit', async () => {
   const r = await newRequest()
-  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again' })).status).toBe(409) // one live request per pair
+  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again', ...requestTime() })).status).toBe(409) // one live request per pair
   const res = await closing(decline, r.id, U.owner)
   expect(res.status).toBe(200)
   expect(RequestSchema.parse(await res.json())).toMatchObject({ id: r.id, status: 'declined' })
   expect(await told(U.cust, 'request-declined', r.id)).toBe(1)
-  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again' })).status).toBe(201)
+  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again', ...requestTime() })).status).toBe(201)
 })
 
 it('the other side gets 403, a stranger 404, a booked request 409', async () => {

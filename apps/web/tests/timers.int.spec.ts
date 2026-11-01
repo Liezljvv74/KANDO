@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { acceptQuote, clearOutbox, createRequest, drainOutbox, getBooking, getRequest, listBookings, listQuotes, listRequests, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
-import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 'tm-cust', cust2: 'tm-cust2', owner: 'tm-owner', owner2: 'tm-owner2' }
 let prov: string, prov2: string, service: string
@@ -41,7 +41,7 @@ const notes = async (kind: string) => (await pool.query('SELECT user_id, payload
 it('a request open 3 days and 1 minute expires and the customer is notified', async () => {
   await clean()
   // created through createRequest: its own 3-day answerBy decides
-  const make = async (description: string, createdAt: Date, providerId = prov) => (await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId, description }, createdAt))).id
+  const make = async (description: string, createdAt: Date, providerId = prov) => (await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId, description, ...requestTime(), startAt: new Date(createdAt.getTime() + 10 * 86_400_000).toISOString() }, createdAt))).id
   const old = await make('old request', new Date(NOW.getTime() - 3 * 86_400_000 - 60_000))
   const fresh = await make('fresh request', new Date(NOW.getTime() - 3 * 86_400_000 + 60_000), prov2) // another provider: one open request per pair
   expect((await run(0)).requestsExpired).toBeGreaterThanOrEqual(1)
@@ -173,7 +173,7 @@ it('a lapsed request reads expired in the list and alone, the row is untouched, 
   expect((await asUser(U.cust, (tx) => getBooking(tx, U.cust, b))).booking.status).toBe('expired')
   expect([await status('requests', mine), await status('bookings', b), await status('bookings', b2)]).toEqual(['open', 'proposed', 'awaiting-payment']) // shown, not written
   expect(await notes('request-expired')).toHaveLength(0)
-  const again = await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId: prov, description: 'second try' }))
+  const again = await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId: prov, description: 'second try', ...requestTime() }))
   expect(again.status).toBe('open')
 })
 

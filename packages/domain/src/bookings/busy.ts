@@ -47,12 +47,13 @@ export async function assertSlotFree(_tx: Tx, providerId: string, startAt: Date,
  */
 export async function timeIsAcceptable(
   tx: Tx,
-  t: { providerId: string; startAt: Date; durationMin: number; onSite: boolean; now: Date; ignoreBookingId?: string },
+  t: { providerId: string; startAt: Date; durationMin: number; onSite: boolean; now: Date; ignoreBookingId?: string; clash?: boolean },
 ): Promise<void> {
   assertFuture(t.startAt, t.now)
   if (!t.onSite) {
     const [p] = await db.select({ remote: providers.worksRemotely }).from(providers).where(eq(providers.id, t.providerId))
     if (!p?.remote) fail(400, { error: 'on-site-required' })
   }
-  await assertSlotFree(tx, t.providerId, t.startAt, t.durationMin, t.onSite, t.now, t.ignoreBookingId)
+  // a request or a revision holds no slot, so it skips the clash check (clash: false); sending a quote and confirming do the check
+  if (t.clash !== false) await assertSlotFree(tx, t.providerId, t.startAt, t.durationMin, t.onSite, t.now, t.ignoreBookingId)
 }

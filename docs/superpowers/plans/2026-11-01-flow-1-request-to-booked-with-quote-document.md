@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Build progress (update as tasks finish):** Tasks 1 to 5 built on branch `feat/flow-1-request-quote-booking` (database, contract, one time rule and round rule, request with a time and revision, provider answers). Next: Tasks 6, 6a, 7 to 13. Findings made while building are written into the tasks below.
+
 **Status:** DRAFT, written 1 November 2026 from the owner's process description and the three decisions confirmed the same day. Nothing in this plan is built yet. The owner confirms this plan before Task 1 starts.
 
 **Goal:** Every job starts the same way: the customer sends one request that already holds the date, time, duration, place and description. The provider sees the same fields prefilled and answers with one tap: **Accept and send quote**, **Propose a different time** or **Reject**. The quote (start, duration, total) is generated as a numbered PDF the moment the provider sends it, saved for both people and downloadable. The customer answers with one tap: **Confirm and pay**, **Open chat** or **Decline**. After one proposal in each direction the app steers both to the chat. The job is booked when the customer's payment goes through.
@@ -37,7 +39,7 @@
 - Everything user-facing exists in German and English (`packages/i18n/src/en.ts` and `de.ts` same keys, `en-server.ts` and `de-server.ts` for emails; `packages/i18n/src/index.test.ts` enforces parity). No competitor names. No "Treuhand", "Escrow" or "Garantie".
 - Money stays `numeric(10,2)` + `currency`; contract currency `z.literal('EUR')`. No new Germany-only assumptions (South Africa is a later market).
 - Every new column on a classified table needs no new RLS map entry, but each new read path gets an isolation test (a third user reads no quote and no PDF link).
-- Migrations continue from `0023` (next is `0024`). Enums are `text` + `check(...)`.
+- Migrations continue from `0023`. Built so far: `0024` (Task 1), `0025` (the two round-rule columns, Task 3), `0026` (the three notice kinds, built with Task 3 because Task 4 needs them). Enums are `text` + `check(...)`.
 - Errors shown to people use the existing friendly-error pattern (`errorText(code)`; a new server error code gets its sentence in German and English and the steps to fix it).
 - Timing values stay in `packages/domain/src/bookings/rules.ts`: provider answers within 3 days (`REQUEST_ANSWER_DAYS`), a quote is valid 7 days (`QUOTE_VALID_DAYS`) but never past its start time, payment window by `payBy()`. New constant: `PROPOSALS_BEFORE_CHAT = 1` (one proposal each way, then chat).
 - Repo rules: tests per task are only the affected specs plus `tsc`; the full suites run once at the end (Task 13); no AI co-author or "Generated with" lines; the owner merges every PR; the test report goes in `Reports/`; the README gets the stage description after the stage (Task 13).
@@ -99,7 +101,8 @@
 
 **Interfaces:**
 - `timeIsAcceptable(tx, { providerId, startAt, durationMin, onSite, now, ignoreBookingId? })` throws the existing 400/409 errors (`start-in-past`, `start-too-far`, `on-site-required`, `slot-pending`). It is the only caller of `assertFuture` and `assertSlotFree` for new flows. Flow 2 extends it.
-- `mayPropose({ proposalsByCustomer, proposalsByProvider, chatContactSinceLast })`: returns `{ ok: true }` or `{ ok: false, reason: 'chat-first' }`. With `PROPOSALS_BEFORE_CHAT = 1` a side that already made one proposal needs chat contact from the other side since then.
+- `mayPropose({ side, customerProposals, providerProposals, otherWroteSinceMine })`: returns `{ ok: true }` or `{ ok: false, reason: 'chat-first' }`. With `PROPOSALS_BEFORE_CHAT = 1` it is free until **both** sides have proposed once (the request is the customer's first, a provider quote with another time is the provider's first); after that a side needs the other side to have written in the chat since its own last proposal. A customer adjusting the time before the provider proposed anything is not looping, so is free. The proposals are counted from `requests.revision` and `quotes.proposed_other_time`; "since its last proposal" uses `requests.revised_at` (or the request's creation) and the quote's creation time. Built in Task 3 (`rounds.ts`).
+- `timeIsAcceptable` takes `clash: false` for a request or a revision (they hold no slot); sending a quote and confirming leave the clash check on.
 
 - [ ] **Step 1: Write failing tests** for both, covering: past, too far, remote when the provider does not work remotely, clash with an awaiting-payment booking, clash with the 30-minute on-site buffer, touching spans free; round rule: first proposal each way free, a repeat without chat refused, a repeat after a chat message from the other side allowed.
 - [ ] **Step 2: Run** `pnpm --filter @kando/domain test -- rules`: expect failure.
@@ -113,7 +116,7 @@
 
 - [ ] **Step 1: Write failing integration tests**: a customer request stores the time, place and note and notifies the provider (`request-received`); a request for an unpublished or suspended provider is 404; own service 400; a past time 400; with a fixed-price service the response includes `suggestedAmount` (the service price) for the provider's prefill; `reviseRequest` (customer changes the time of an open or quoted request) bumps `revision`, supersedes the sent quote, notifies the provider with `request-updated`, and is refused by the round rule with `chat-first`.
 - [ ] **Step 2: Run** the new spec: expect failure.
-- [ ] **Step 3: Implement** `createRequest` with the time fields (reuse `timeIsAcceptable` with `ignore` not needed: a request holds no slot), and `reviseRequest`. The existing limits stay (`MAX_OPEN_REQUESTS_PER_PAIR`, `MAX_REQUESTS_PER_DAY`).
+- [ ] **Step 3: Implement** `createRequest` with the time fields (`timeIsAcceptable` with `clash: false`: a request holds no slot) and `reviseRequest` (route `POST /requests/[id]/revise`; the writes run on the owner connection because the app role may not supersede the provider's quote; a change restarts the provider's 3-day answer period; the provider sees postcode and city only). The existing limits stay (`MAX_OPEN_REQUESTS_PER_PAIR`, `MAX_REQUESTS_PER_DAY`). The fixed-price suggestion is not sent by the server: the provider's app reads the price from the provider's own service list. **Done in Task 4;** about 25 older spec call sites now send a time through the shared `requestTime()` test helper.
 - [ ] **Step 4: Run** the spec: pass.
 - [ ] **Step 5: Commit** `feat(domain): a request carries the customer's time and can be revised`.
 
@@ -123,7 +126,7 @@
 
 - [ ] **Step 1: Write failing tests**: `send-quote` with the request's time and a price creates version 1 (a quote **without** a time is allowed: `startAt` omitted means "to be confirmed", no clash check is run for it, `proposed_other_time = false`, same `quote-received` notice), `proposed_other_time = false`, notice `quote-received` to the customer; with another time creates the next version with `proposed_other_time = true`, notice `time-proposed`, and supersedes the old one; a price of zero or missing is 400 (the Accept button is only enabled after a price, the server enforces it too); the provider cannot send a quote to a request that is not theirs (404) or closed (409); `reject` closes the request as `declined` and sends `request-declined` (existing); the round rule applies to the provider's second different time.
 - [ ] **Step 2: Run** the spec: expect failure.
-- [ ] **Step 3: Implement.** `timeIsAcceptable` runs at send time (the quote does not hold the slot, but a time already taken must not be offered). `expiresAt` = the earlier of `now + QUOTE_VALID_DAYS` and the start time. The quote copies place and address from the request (snapshot). Number and PDF are added by Task 7 in the same transaction commit sequence (the quote exists first, the PDF is stored after commit with a retry sweep, as invoices do).
+- [ ] **Step 3: Implement.** Additional-task requests keep their old rules (no time, no round rule). For an ordinary request: `QuoteInputSchema` requires a price above zero and start and duration together or neither; `quotes.proposed_other_time` is set when the quote's start or duration differs from the request's, the notice kind is then `time-proposed`, else `quote-received`. `timeIsAcceptable` runs at send time (the quote does not hold the slot, but a time already taken must not be offered). `expiresAt` = the earlier of `now + QUOTE_VALID_DAYS` and the start time. The quote copies place and address from the request (snapshot). Number and PDF are added by Task 7 in the same transaction commit sequence (the quote exists first, the PDF is stored after commit with a retry sweep, as invoices do).
 - [ ] **Step 4: Run** the spec: pass.
 - [ ] **Step 5: Commit** `feat(domain): provider sends a quote, proposes another time or rejects`.
 
