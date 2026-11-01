@@ -7,6 +7,7 @@ Usage (from the repository root):
 Every call records the status changes and a change-log line in docs/mvp/state.json. A workbook
 Reports/MVP Completion Tasks <YYYY-MM-DD HH-MM>.xlsx (older versions are kept) is written only when two merged
 pull requests have been recorded with --merged since the last workbook (owner rule, 1 November 2026), or with --force.
+Only merges that change code count (owner rule): never pass --merged for a pull request that changes documents, plans or tracker files only.
 Statuses: Open, In progress, Waiting for owner, Done. Commit state.json (and the new workbook, when there is one).
 """
 import argparse, datetime, json, os, subprocess, sys

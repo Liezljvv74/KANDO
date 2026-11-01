@@ -1,4 +1,4 @@
-import { buildProposal, emptyWhenWhere, suggestedWhen, withDay, withTimeOfDay } from './when-where'
+import { buildProposal, buildQuoteTime, emptyWhenWhere, suggestedWhen, whenFromRequest, withDay, withTimeOfDay } from './when-where'
 
 // a fixed 'now', so the tests do not depend on today's date
 const NOW = new Date(2026, 11, 1, 12, 0, 0, 0)
@@ -67,5 +67,24 @@ describe('buildProposal', () => {
   it('without details (a counter or an entered time) there is no address and no note, and the postcode is not needed', () => {
     const r = build(filled({ address: { street: '', postcode: '', city: '' }, note: 'x' }), { canRemote: true, withDetails: false })
     expect(r).toEqual({ ok: true, proposal: { startAt: at(2027, 1, 5, 9, 30).toISOString(), durationMin: 60, onSite: true } })
+  })
+})
+
+describe('whenFromRequest, buildQuoteTime', () => {
+  const asked = { startAt: at(2027, 1, 5, 9, 30).toISOString(), durationMin: 90 }
+
+  it('the answer starts from the time the customer asked for, and is empty for a request without one', () => {
+    expect(whenFromRequest(asked)).toMatchObject({ when: at(2027, 1, 5, 9, 30), duration: '90' })
+    expect(whenFromRequest({ startAt: null, durationMin: null }).when).toBeNull()
+  })
+
+  it('a quote without a confirmed time carries none, whatever the fields hold', () => {
+    expect(buildQuoteTime(emptyWhenWhere(), false, NOW)).toEqual({ ok: true, time: null })
+  })
+
+  it('a confirmed time is checked like any other: needed, and in the future', () => {
+    expect(buildQuoteTime(whenFromRequest(asked), true, NOW)).toEqual({ ok: true, time: { startAt: asked.startAt, durationMin: 90 } })
+    expect(buildQuoteTime(emptyWhenWhere(), true, NOW)).toEqual({ ok: false, error: 'invalid-time' })
+    expect(buildQuoteTime(whenFromRequest(asked), true, at(2027, 1, 6))).toEqual({ ok: false, error: 'start-in-past' })
   })
 })

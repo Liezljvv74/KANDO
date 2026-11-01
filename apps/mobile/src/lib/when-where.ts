@@ -32,6 +32,12 @@ export function withTimeOfDay(current: Date | null, picked: Date): Date {
   return d
 }
 
+/** The provider's answer starts from the customer's time (empty when the request has none, an old request). */
+export function whenFromRequest(r: { startAt: string | null; durationMin: number | null }): WhenWhere {
+  const empty = emptyWhenWhere()
+  return r.startAt ? { ...empty, when: new Date(r.startAt), duration: String(r.durationMin ?? 60) } : empty
+}
+
 export type ProposalError = 'invalid-time' | 'start-in-past' | 'address-required'
 export type BuildResult = { ok: true; proposal: TimeProposal } | { ok: false; error: ProposalError }
 
@@ -61,4 +67,13 @@ export function buildProposal(v: WhenWhere, o: { canRemote: boolean; withDetails
       ...(o.withDetails && note && { note }),
     },
   }
+}
+
+export type QuoteTimeResult = { ok: true; time: { startAt: string; durationMin: number } | null } | { ok: false; error: ProposalError }
+
+/** The time a quote carries: none when "date and time confirmed" is off (the quote says "to be confirmed"), else the checked start and duration. */
+export function buildQuoteTime(v: WhenWhere, confirmed: boolean, now = new Date()): QuoteTimeResult {
+  if (!confirmed) return { ok: true, time: null }
+  const built = buildProposal(v, { canRemote: false, withDetails: false }, now)
+  return built.ok ? { ok: true, time: { startAt: built.proposal.startAt, durationMin: built.proposal.durationMin } } : { ok: false, error: built.error }
 }

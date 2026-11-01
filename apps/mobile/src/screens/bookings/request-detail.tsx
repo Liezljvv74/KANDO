@@ -70,7 +70,7 @@ export default function RequestDetail() {
       <ErrorText text={accepting.problem} />
       <ErrorText text={closing.problem} />
       {open && <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />}
-      {!isCustomer && open && <SendQuoteForm requestId={request.id} onSent={retry} />}
+      {!isCustomer && open && <SendQuoteForm request={request} onSent={retry} />}
     </FormScreen>
   )
 }
