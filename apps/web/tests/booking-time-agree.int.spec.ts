@@ -44,6 +44,7 @@ it('the provider enters a time, the customer confirms it: the booking awaits pay
   const dueBefore = await notices(U.cust, 'booking-accepted')
   const e = await enter(b.id, U.owner, when)
   expect(e.status).toBe(200)
+  expect(BookingSchema.parse(await e.json()).pendingTime).toMatchObject({ by: 'provider', durationMin: 120, onSite: true }) // the app can show what is waiting for an answer
   expect(await notices(U.cust, 'time-to-confirm')).toBe(before + 1)
   expect((await row(b.id)).status).toBe('awaiting-time') // nothing is held yet
   const c = await agreeing(b.id, U.cust)
@@ -51,6 +52,7 @@ it('the provider enters a time, the customer confirms it: the booking awaits pay
   const done = BookingSchema.parse(await c.json())
   expect(await notices(U.cust, 'booking-accepted')).toBe(dueBefore + 1) // the customer confirmed last and still gets "Payment due"
   expect(done.status).toBe('awaiting-payment')
+  expect(done.pendingTime ?? null).toBeNull()
   expect(new Date(done.startAt).getTime()).toBe(new Date(when).getTime())
   expect(done.payBy).not.toBeNull()
   const r = await row(b.id)
@@ -164,4 +166,21 @@ it('a blocked customer cannot confirm', async () => {
   await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [U.owner, U.cust])
   expect((await agreeing(b.id, U.cust)).status).toBe(403)
   await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2',[U.owner, U.cust])
+})
+
+it('a time that clashes with a held booking is refused when it is entered, not only at confirm', async () => {
+  const when = fresh()
+  const a = await waiting(U.cust)
+  const b = await waiting(U.cust2)
+  await enter(a.id, U.owner, when)
+  expect((await agreeing(a.id, U.cust)).status).toBe(200) // a holds the time now
+  const clash = await enter(b.id, U.owner, when)
+  expect([clash.status, (await clash.json()).error]).toEqual([409, 'slot-pending'])
+})
+
+it('a blocked customer or provider cannot even enter a time', async () => {
+  const b = await waiting()
+  await pool.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [U.owner, U.cust])
+  expect((await enter(b.id, U.cust)).status).toBe(403)
+  await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [U.owner, U.cust])
 })

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, uniqueIndex, integer, numeric, date, pgTable, text, timestamp, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core'
+import { boolean, check, index, uniqueIndex, integer, numeric, pgTable, text, timestamp, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { providers, services } from './providers'
 import { users } from './users'
 
@@ -17,7 +17,6 @@ export const requests = pgTable(
       .references(() => providers.id, { onDelete: 'cascade' }),
     serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
     description: text().notNull(),
-    preferredDate: date('preferred_date'),
     // The customer's proposed time and place (flow 1). Null on requests made before it existed; revision counts the customer's changes.
     startAt: timestamp('start_at', { withTimezone: true }),
     durationMin: integer('duration_min'),

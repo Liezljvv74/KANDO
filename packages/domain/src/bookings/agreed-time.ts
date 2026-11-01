@@ -31,7 +31,14 @@ export async function proposeAgreedTime(tx: Tx, userId: string, bookingId: strin
     const b = await lockRow(o, bookingId)
     if (b.status !== 'awaiting-time' || (b.answerBy && b.answerBy <= now)) fail(409, { error: 'not-open' })
     if (input.onSite && !b.addressPostcode) fail(400, { error: 'address-required' }) // a remote job cannot become on-site: nobody knows where to go
-    await timeIsAcceptable(tx, { providerId: b.providerId, startAt, durationMin: input.durationMin, onSite: input.onSite, now, clash: false }) // a clash is checked at confirm
+    // the checks confirmAgreedTime makes, so nobody is asked to confirm a time that can never be confirmed
+    if (await blockedWithProvider(tx, b.customerId, b.providerId)) fail(403, { error: 'BLOCKED' })
+    const [pr] = await o.select().from(providers).where(eq(providers.id, b.providerId))
+    if (!pr) return notFound()
+    if (pr.status !== 'published' || (await isSuspendedNow(tx, pr.id))) fail(409, { error: 'provider-unavailable' })
+    if (!canTransact(pr)) fail(409, { error: 'PROVIDER_NOT_READY' })
+    // a time that clashes with a held booking is refused now (it holds nothing, so it is checked again at confirm)
+    await timeIsAcceptable(tx, { providerId: b.providerId, startAt, durationMin: input.durationMin, onSite: input.onSite, now })
     const answerBy = new Date(now.getTime() + TIME_ANSWER_DAYS * DAY) // the other side has the full 2 days, so the booking's own deadline moves out with it
     const [r] = await o
       .update(bookings)

@@ -25,10 +25,10 @@ export const en: Record<ServerKey, string> = {
   'email.documentApproved.suspended.body': 'Your document is approved. Your profile is suspended until {date}; the service becomes visible when the suspension ends.',
   'email.requestReceived.subject': 'You have a new request',
   'email.requestReceived.body':
-    'A customer sent you a request. Please answer within 3 days, either with a quote or a short reply in the app. Requests that stay unanswered expire and make you look unavailable.',
+    'A customer sent you a request with a date, time and place. Please answer within 3 days: send a quote (with or without a final date and time), or decline. Requests that stay unanswered expire and make you look unavailable.',
   'email.quoteReceived.subject': 'You have received a quote',
   'email.quoteReceived.body':
-    'A provider sent you a quote. Please look at it in the app. The quote is open until {date}: a quote you do not accept expires 7 days after it was sent.',
+    'A provider sent you a quote (or a revised quote) for your request. Please look at it in the app and confirm it to book. It is valid for 7 days, until {date}. If it has no date and time yet, you agree them after you confirm; payment is asked once both sides have confirmed the date and time.',
   'email.bookingProposed.subject': 'A new time was proposed',
   'email.bookingProposed.body': 'A new date and time has been proposed for your booking request. Please answer in the app within 24 hours.',
   'email.bookingAccepted.subject': 'Payment due for your booking',
@@ -44,7 +44,7 @@ export const en: Record<ServerKey, string> = {
     'Your booking is accepted but not paid yet. Please pay by {date}, otherwise it expires and the time becomes free for others.',
   'email.quoteExpiring.subject': 'Your quote expires soon',
   'email.quoteExpiring.body':
-    'A quote you received expires on {date}. Accept it in the app before then, or it expires.',
+    'A quote you received expires on {date}. Confirm it in the app before then, or it expires.',
   'email.requestExpired.subject': 'Your request was not answered',
   'email.requestExpired.body':
     'Your request was not answered in time. The provider is not available at the moment. Please contact a different provider.',

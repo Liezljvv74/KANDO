@@ -10,3 +10,5 @@ Reports/~*
 *.tsbuildinfo
 next-env.d.ts
 packages/domain/seed-data/test-users.json
+# Office lock files
+~$*

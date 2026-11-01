@@ -1,0 +1,107 @@
+{
+  "stamp": "2026-11-01 15-00",
+  "steps": {
+    "0.1": "In progress",
+    "0.2": "In progress",
+    "0.3": "Waiting for owner",
+    "0.5": "Done",
+    "0.6": "Done",
+    "0.4": "Waiting for owner",
+    "1.1": "Waiting for owner"
+  },
+  "tasks": {
+    "1": "Waiting for owner",
+    "2": "In progress",
+    "3": "In progress",
+    "6": "Waiting for owner",
+    "7": "In progress",
+    "15": "Waiting for owner",
+    "5": "Waiting for owner"
+  },
+  "log": [
+    {
+      "when": "2026-11-01 12:00",
+      "commit": "1f9423a",
+      "note": "Baseline before the tracked updates: server side of Flow 1 built (tasks 1 to 8 incl. 6a, 6b, 7), the old preferredDate field removed everywhere (migration 0027), the .claude folder pushed on branch chore/claude-folder, owner decisions recorded (Neon approved; AI feature direction).",
+      "steps": [
+        "step 0.1 In progress",
+        "step 0.2 In progress",
+        "step 0.3 In progress",
+        "task 1 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-01 14:45",
+      "commit": "ab7813f",
+      "note": "Phase 0.5: Tasks 10 to 12 of the Flow 1 plan now carry the confirmed reuse map; the plan keeps the approved one-flow rule (the Book button opens the request form, direct booking retires in Task 12); tracked-update tooling (docs/mvp) added",
+      "steps": [
+        "step 0.5 Done",
+        "step 0.1 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-01 14:49",
+      "commit": "e971d62",
+      "note": "Phase 0.3 and 0.4 on PR #48 (branch chore/claude-folder): CLAUDE.md, the rls-check agent, the /test-report command, project .claude folder with README, RLS and auth evidence note, README section on how the project is built with Claude Code. Waiting for the owner: run /code-review --comment on PR #48, submit a GitHub review, merge.",
+      "steps": [
+        "step 0.3 Waiting for owner",
+        "step 0.4 Waiting for owner",
+        "task 1 Waiting for owner",
+        "task 5 Waiting for owner",
+        "task 6 Waiting for owner"
+      ]
+    },
+    {
+      "when": "2026-11-01 15:00",
+      "commit": "d325b15",
+      "note": "Phase 1.1 (Task 9): notice wording for the one-flow request in German and English (in-app, push, email); the sweep test no longer depends on the time of day (it failed after midday, also without these changes). The owner should read the German texts. Added the /update-mvp-report command.",
+      "steps": [
+        "step 1.1 Done",
+        "step 0.1 In progress",
+        "task 15 Done"
+      ]
+    },
+    {
+      "when": "2026-11-01 15:49",
+      "commit": "ad03c64",
+      "note": "Review of PR 47 (/code-review): fixed the missing-document sweep and revision numbering, account deletion and data export for quote documents, VAT arithmetic in cents, the checks and the clash check when a time is entered, a stale comment. Rejected or documented: dropped preferredDate column (owner decision), stand-in start time (README), quote expiry cap, no reminder for awaiting-time expiry. Tracker rule changed: the workbook is written after every 2 merged PRs.",
+      "steps": [
+        "step 0.1 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-01 16:01",
+      "commit": "ec300ca",
+      "note": "PR 47 was merged by the owner at its earlier head (2e093d6); the later work (tasks 6b to 9, preferredDate removal, review fixes, tracker) is in the new PR 49 (branch merged with main, conflicts resolved for the branch). PR 48 (CLAUDE.md, .claude folder, RLS note) still open; review records posted on PRs 47 and 48. Production needs migrations 0024 to 0026 (and 0027 with PR 49) - owner to check.",
+      "steps": [
+        "step 1.1 Waiting for owner",
+        "task 15 Waiting for owner",
+        "merged PR #47"
+      ]
+    },
+    {
+      "when": "2026-11-01 16:04",
+      "commit": "4373a83",
+      "note": "Phase 0.6 done: review records posted as comments on 12 merged PRs (2, 5, 11, 14, 15, 16, 29, 30, 35, 36, 37, 38) copied from the written reports, and on PRs 47 and 48 (code review of this session). Not posted on 25, 27, 28 and 18 to 20: the reports hold only partial or no code-review lines for them. /code-review 48 was run; findings fixed in PR 48. Still for the owner: submit a GitHub review (Approve) on PR 48 and PR 49 before merging.",
+      "steps": [
+        "step 0.6 Done",
+        "task 7 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-01 16:55",
+      "commit": "0f16a5a",
+      "note": "CI of PR 48 failed on booking-notifications: the test compared a date without leading zeros (1.1.2027) with the email's 01.01.2027; it failed because today plus 60 days is 1 January. Fixed in the test on both branches (PR 48 and PR 49); my earlier time-of-day explanation was incomplete.",
+      "steps": []
+    },
+    {
+      "when": "2026-11-01 18:17",
+      "commit": "2024ae1",
+      "note": "Code review of PR 49 (/code-review): fixed the sweep clock and count, on-demand PDF storing, tracker script robustness; documented the deploy order of migration 0027 (apply after the code); rejected 3 findings (dense versions, trader retention, stricter checks on entering a time). Review record posted on PR 49.",
+      "steps": []
+    }
+  ],
+  "mergesSinceWorkbook": [
+    "47"
+  ]
+}

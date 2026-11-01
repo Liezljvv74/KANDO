@@ -14,6 +14,7 @@ import { isUuid, NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
+import { issueQuoteDocument } from '../quotes/issue'
 import { canTransact } from '../payments/rules'
 import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
@@ -34,7 +35,6 @@ export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), reo
     providerId: r.providerId,
     serviceId: r.serviceId,
     description: r.description,
-    preferredDate: r.preferredDate,
     startAt: r.startAt ? iso(r.startAt) : null,
     durationMin: r.durationMin,
     onSite: r.onSite,
@@ -102,6 +102,10 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   answerBy: b.answerBy ? iso(b.answerBy) : null,
   payBy: b.payBy ? iso(b.payBy) : null,
   counterBy: b.counterBy as Booking['counterBy'],
+  pendingTime:
+    b.status === 'awaiting-time' && b.timeProposedBy && b.timeProposedStartAt && b.timeProposedDurationMin !== null && b.timeAnswerBy && b.timeAnswerBy > now
+      ? { by: b.timeProposedBy as 'customer' | 'provider', startAt: iso(b.timeProposedStartAt), durationMin: b.timeProposedDurationMin, onSite: b.timeProposedOnSite ?? true, answerBy: iso(b.timeAnswerBy) }
+      : null,
   finishedAt: b.finishedAt ? iso(b.finishedAt) : null,
   confirmBy: b.confirmBy ? iso(b.confirmBy) : null,
   askedDoneAt: b.askedDoneAt ? iso(b.askedDoneAt) : null,
@@ -169,7 +173,6 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       providerId: provider.id,
       serviceId: input.serviceId ?? null,
       description: input.description,
-      preferredDate: input.preferredDate ?? null,
       startAt,
       durationMin,
       onSite,
@@ -245,11 +248,11 @@ export async function listQuotes(tx: Tx, userId: string, requestId: string, now 
 const unavailable = () => fail(409, { error: 'provider-unavailable' })
 
 /**
- * The customer changes the time of an open or quoted request (flow 1). A change of start, duration or place kind counts as a
- * proposal under the round rule (assertMayPropose), replaces the provider's sent quote (it was for the old time), opens the
- * request again and restarts the provider's answer period; the provider is told. Changing only the address or note is free.
- * The writes run on the owner connection after the checks (the app role may not supersede the provider's quote), under the
- * request lock. 404 for a stranger, 403 for the provider, 409 request-closed for a closed or lapsed request.
+ * The customer changes an OPEN request (flow 1), before any quote exists. A change of start, duration or place kind counts as a
+ * proposal under the round rule (assertMayPropose), restarts the provider's answer period and tells the provider; changing only the
+ * address or note is free. Once a quote was sent (status quoted) the customer cannot change the request (409 quote-sent): changes go
+ * through the chat and the provider's revised quote. The writes run on the owner connection after the checks, under the request
+ * lock. 404 for a stranger, 403 for the provider, 409 request-closed for a closed or lapsed request.
  */
 export async function reviseRequest(tx: Tx, userId: string, requestId: string, input: TimeProposal, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
   const first = await ownRequest(tx, userId, requestId)
@@ -344,6 +347,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
   afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
   afterCommit(() => notifyBookingEvent(proposedOtherTime ? 'time-proposed' : 'quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
+  if (ordinary) afterCommit(async () => void (await issueQuoteDocument(row!.id, now))) // the numbered quote and its PDF (a revision keeps the number, adds _Rev.N)
   return toQuote(row!, now)
 }
 

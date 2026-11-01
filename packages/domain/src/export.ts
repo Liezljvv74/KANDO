@@ -1,6 +1,6 @@
 import { asc, eq, getTableColumns, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import { availabilityWatches, bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quotes, requests, reviews, services, threads, users, type Tx } from '@kando/db'
+import { availabilityWatches, bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quoteDocuments, quotes, requests, reviews, services, threads, users, type Tx } from '@kando/db'
 import { listBlocks } from './chat/blocks'
 import { documentsBucket, photoUrl, storage } from './storage'
 
@@ -58,7 +58,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       docs.map(async (d) => ({ requirement: d.requirement, status: d.status, staffNote: d.note, reviewedAt: d.reviewedAt, createdAt: d.createdAt, downloadUrl: await link(d.key) })),
     ),
     privateFiles: await Promise.all(files.map(async (f) => ({ createdAt: f.createdAt, downloadUrl: await link(f.key) }))),
-    requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.customerId === userId ? r.description : null, preferredDate: r.preferredDate, answerBy: r.answerBy, createdAt: r.createdAt })),
+    requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.customerId === userId ? r.description : null, startAt: r.startAt, durationMin: r.durationMin, onSite: r.onSite, answerBy: r.answerBy, createdAt: r.createdAt })),
     quotes: myQuotes.map((q) => ({ id: q.id, requestId: q.requestId, version: q.version, amount: Number(q.amount), currency: q.currency, scope: q.providerId === own ? q.scope : null, suggestedStart: q.startAt, durationMin: q.durationMin, status: q.status, expiresAt: q.expiresAt, createdAt: q.createdAt })),
     bookings: myBookings.map((b) => ({
       id: b.id,
@@ -76,6 +76,16 @@ export async function exportMyData(tx: Tx, userId: string) {
       note: b.customerId === userId ? b.note : null,
       createdAt: b.createdAt,
     })),
+    // the numbered quote documents of either side (number, role, date); the PDF by a short-lived link
+    quoteDocuments: await Promise.all(
+      (await tx.select().from(quoteDocuments).where(mine(quoteDocuments.customerId, quoteDocuments.providerId)).orderBy(asc(quoteDocuments.issuedAt))).map(async (d) => ({
+        number: d.number,
+        role: roleOf(d.customerId),
+        quoteId: d.quoteId,
+        issuedAt: d.issuedAt,
+        downloadUrl: d.fileKey ? await link(d.fileKey) : null,
+      })),
+    ),
     // only what the person sent themselves; a photo by its file name, not the file
     messages: sent.map(({ m, requestId, bookingId }) => ({ id: m.id, threadId: m.threadId, requestId, bookingId, kind: m.kind, body: m.body, photo: m.photoKey?.split('/').pop() ?? null, card: m.card, createdAt: m.createdAt })),
     // reviews they wrote (those about them are the other person's words)

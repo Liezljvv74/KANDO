@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, DirectBookingInputSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
+import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, DirectBookingInputSchema, PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
 
 const proposal = { startAt: '2026-11-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
@@ -89,10 +89,17 @@ describe('flow 1: a request carries the customer\'s time', () => {
   })
 
   it('a quote list item has a number, a role and a status', () => {
-    const item = { id: 'q1', number: 'ABCD1234-2026-0001', role: 'provider', requestId: 'r1', startAt: null, durationMin: null, amount: 120, currency: 'EUR', counterparty: 'Anna H.', status: 'sent', issuedAt: '2026-11-01T10:00:00.000Z', pdfReady: true }
+    const item = { id: 'q1', quoteId: 'q1', number: 'Q-ABCD1234-2026-0001_Rev.1', role: 'provider', requestId: 'r1', startAt: null, durationMin: null, amount: 120, currency: 'EUR', counterparty: 'Anna H.', status: 'sent', issuedAt: '2026-11-01T10:00:00.000Z', pdfReady: true }
     expect(QuoteListItemSchema.safeParse(item).success).toBe(true)
     expect(QuoteListItemSchema.safeParse({ ...item, role: 'admin' }).success).toBe(false)
     expect(QuoteListItemSchema.safeParse({ ...item, status: 'weird' }).success).toBe(false)
+  })
+
+  it('a pending time has a side, a time and a deadline; a booking may carry none', () => {
+    const pending = { by: 'provider', startAt: '2026-11-05T09:00:00.000Z', durationMin: 90, onSite: true, answerBy: '2026-11-03T09:00:00.000Z' }
+    expect(PendingTimeSchema.safeParse(pending).success).toBe(true)
+    expect(PendingTimeSchema.safeParse({ ...pending, by: 'staff' }).success).toBe(false)
+    expect(PendingTimeSchema.safeParse({ ...pending, answerBy: 'soon' }).success).toBe(false)
   })
 
   it('awaiting-time is a booking status', () => {

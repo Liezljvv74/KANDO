@@ -13,6 +13,7 @@ import { openSystemDispute } from './disputes'
 import { tryApplyDecision } from '../admin/bookings'
 import { describeError } from '../log-error'
 import { issueDueInvoices, withDeferredInvoices } from '../invoices/issue'
+import { storePendingQuoteDocuments } from '../quotes/issue'
 import { withPushBatch } from '../push'
 import { issueCommissionInvoices } from '../invoices/commission'
 
@@ -380,6 +381,7 @@ export function runMoneySteps(exec: typeof db, now: Date, opts: ReleaseOptions =
 export function runDocuments(exec: typeof db, now: Date, opts: ReleaseOptions = {}): Promise<{ invoicesIssued: number; commissionInvoices: number }> {
   const timeUp = budget(opts)
   return withPushBatch(async () => {
+    await storePendingQuoteDocuments(exec, timeUp) // quote PDFs a storage failure left out
     const invoicesIssued = await issueDueInvoices(exec, now, { timeUp })
     const commissionInvoices = await issueCommissionInvoices(exec, now, { timeUp })
     await drainOutbox(exec, now, { timeUp })

@@ -190,6 +190,13 @@
       "when": 1793495514811,
       "tag": "0026_jittery_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793537060518,
+      "tag": "0027_long_silver_sable",
+      "breakpoints": true
     }
   ]
 }

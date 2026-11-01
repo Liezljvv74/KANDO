@@ -12,10 +12,9 @@ import { goReplace } from '@/lib/go'
 import { pickPhoto } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
 
-/** "Request a quote": what needs doing and, optionally, a preferred day. */
+/** "Request a quote": what needs doing (the date and time and place come from the shared when-and-where fields, Task 10a). */
 export function RequestForm({ providerId, serviceId }: { providerId: string; serviceId?: string }) {
   const [description, setDescription] = useState('')
-  const [preferredDate, setPreferredDate] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [photos, setPhotos] = useState<PickedFile[]>([])
@@ -46,13 +45,11 @@ export function RequestForm({ providerId, serviceId }: { providerId: string; ser
   }
 
   async function submit() {
-    const day = preferredDate.trim()
     if (!description.trim()) return setError(t('booking.descriptionMissing'))
-    if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) return setError(t('booking.invalidDate'))
     setBusy(true)
     setError(null)
     try {
-      const r = await createRequest({ providerId, ...(serviceId && { serviceId }), description: description.trim(), ...(day && { preferredDate: day }) })
+      const r = await createRequest({ providerId, ...(serviceId && { serviceId }), description: description.trim() })
       if (photos.length) await attachPhotos(r.id)
       goReplace(`/bookings/request/${r.id}`)
     } catch (e) {
@@ -65,7 +62,6 @@ export function RequestForm({ providerId, serviceId }: { providerId: string; ser
     <>
       <Info text={t('booking.requestHelp')} />
       <Field label={t('booking.description')} value={description} onChangeText={setDescription} multiline editable={!busy} />
-      <Field label={t('booking.preferredDate')} value={preferredDate} onChangeText={setPreferredDate} placeholder="2027-01-31" keyboardType="numbers-and-punctuation" autoCapitalize="none" editable={!busy} />
       <SmallButton label={t('chat.photosForRequest')} onPress={() => askPhotoSource(addPhoto)} disabled={busy} />
       {photos.length > 0 && <Info text={photos.length === 1 ? t('chat.photosAdded.one') : t('chat.photosAdded.other', { n: photos.length })} />}
       {denied && <DeniedNotice />}
