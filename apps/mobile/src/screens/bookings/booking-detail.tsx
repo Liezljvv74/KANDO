@@ -63,7 +63,7 @@ export default function BookingDetail() {
 
   async function act(action: BookingAction) {
     setNotice(null)
-    if (action === 'enterTime') return go('/bookings/agreed-time', { id: b.id })
+    if (action === 'enterTime') return go('/bookings/agreed-time', { id: b.id, onSite: b.onSite ? '1' : '0' })
     if (SHEETS.includes(action)) return setSheet(sheet === action ? null : (action as Sheet))
     const ask = ASK[action]
     if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return

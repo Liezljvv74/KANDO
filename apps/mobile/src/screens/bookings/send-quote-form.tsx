@@ -18,7 +18,8 @@ import { proposalError, WhenWhereFields } from '@/screens/bookings/when-where-fi
 export function SendQuoteForm({ request, onSent }: { request: BookingRequest; onSent: () => void }) {
   const [amount, setAmount] = useState('')
   const [scope, setScope] = useState('')
-  const [confirmed, setConfirmed] = useState(request.startAt !== null)
+  // on only while the customer's time is still ahead; a time that has passed cannot be confirmed in a quote
+  const [confirmed, setConfirmed] = useState(request.startAt !== null && new Date(request.startAt).getTime() > Date.now())
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

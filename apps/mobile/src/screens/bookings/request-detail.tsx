@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
 import { acceptQuote, confirmQuote, declineRequest, getRequest, listQuotes, withdrawRequest } from '@/api/bookings'
-import { Button, ErrorText, Info } from '@/components/auth-ui'
+import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
@@ -76,11 +76,12 @@ export default function RequestDetail() {
       <ErrorText text={accepting.problem} />
       <ErrorText text={closing.problem} />
       {open && !askChat && <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />}
-      {askChat && (
+      {open && askChat && (
         <Card>
           <Text style={styles.text}>{t('booking.talkFirst')}</Text>
-          <OpenChat find={async () => request.threadId ?? null} />
+          {!!request.threadId && <OpenChat find={async () => request.threadId ?? null} />}
           <Button label={t('booking.declineAnyway')} onPress={() => closing.submit(() => withdrawRequest(request.id), retry)} busy={closing.busy} danger />
+          <LinkText label={t('common.cancel')} onPress={() => setAskChat(false)} />
         </Card>
       )}
       {!isCustomer && open && <SendQuoteForm request={request} onSent={retry} />}
