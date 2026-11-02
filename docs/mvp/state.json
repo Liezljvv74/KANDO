@@ -1,13 +1,13 @@
 {
-  "stamp": "2026-11-02 00-03",
+  "stamp": "2026-11-02 06-18",
   "steps": {
-    "0.1": "In progress",
+    "0.1": "Done",
     "0.2": "Done",
-    "0.3": "Waiting for owner",
+    "0.3": "Done",
     "0.5": "Done",
     "0.6": "Done",
-    "0.4": "Waiting for owner",
-    "1.1": "Waiting for owner",
+    "0.4": "Done",
+    "1.1": "Done",
     "1.2": "Done",
     "1.3": "Done",
     "1.4": "Done",
@@ -15,14 +15,18 @@
     "1.6": "In progress"
   },
   "tasks": {
-    "1": "Waiting for owner",
+    "1": "Done",
     "2": "In progress",
     "3": "In progress",
-    "5": "Waiting for owner",
-    "6": "Waiting for owner",
+    "5": "Done",
+    "6": "Done",
     "7": "In progress",
     "15": "Waiting for owner",
-    "20": "In progress"
+    "20": "In progress",
+    "16": "Done",
+    "17": "In progress",
+    "4": "In progress",
+    "35": "In progress"
   },
   "log": [
     {
@@ -192,10 +196,32 @@
         "step 1.6 In progress",
         "merged PR #54"
       ]
+    },
+    {
+      "when": "2026-11-02 06:18",
+      "commit": "f55bff2",
+      "note": "PR 55 merged (step 1.6 app side) and PR 56 (README, documents only, not counted). Workbook brought up to date for PRs 44 to 55: #47/#49 Flow 1 server, #48 CLAUDE.md, .claude folder, evidence note, #51 request form with pickers, #54 answer form, confirm/decline, agreed time, quote lists, #55 Book opens the request form. Step 1.6b (server clean-up) still open",
+      "steps": [
+        "step 0.1 Done",
+        "step 0.3 Done",
+        "step 0.4 Done",
+        "step 1.1 Done",
+        "step 1.6 In progress",
+        "task 1 Done",
+        "task 5 Done",
+        "task 6 Done",
+        "task 16 Done",
+        "task 17 In progress",
+        "task 3 In progress",
+        "task 4 In progress",
+        "task 35 In progress",
+        "merged PR #55"
+      ]
     }
   ],
-  "mergesSinceWorkbook": [
-    "54"
-  ],
-  "workbookMerges": []
+  "mergesSinceWorkbook": [],
+  "workbookMerges": [
+    "54",
+    "55"
+  ]
 }
