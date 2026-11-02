@@ -8,9 +8,8 @@ type Service = ProviderDetail['services'][number]
  */
 export function requestTarget(provider: ProviderDetail, service?: Service): { path: string; params: Record<string, string>; book: boolean } | null {
   if (!provider.providerId) return null
-  if (service?.priceType === 'fixed' && service.price !== null)
-    return { path: '/bookings/new-request', params: { providerId: provider.providerId, serviceId: service.id, ...(provider.worksRemotely && { remote: '1' }) }, book: true }
-  return { path: '/bookings/new-request', params: { providerId: provider.providerId, ...(service && { serviceId: service.id }), ...(provider.worksRemotely && { remote: '1' }) }, book: false }
+  const book = service?.priceType === 'fixed' && service.price !== null
+  return { path: '/bookings/new-request', params: { providerId: provider.providerId, ...(service && { serviceId: service.id }), ...(provider.worksRemotely && { remote: '1' }) }, book }
 }
 
 /** True only when the server says the provider cannot be booked yet; an older cached profile without `canBook` keeps today's buttons. */
