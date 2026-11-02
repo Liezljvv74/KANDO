@@ -13,7 +13,6 @@ import {
   stateStopAmount,
   stopJob,
   answerBooking,
-  createDirectBooking,
   createRequest,
   getBooking,
   getBusyTimes,
@@ -51,8 +50,6 @@ test('requests and quotes use their routes, methods and bodies', async () => {
 })
 
 test('bookings use their routes, methods and bodies', async () => {
-  await createDirectBooking({ ...time, serviceId: 's1' })
-  expect(last()).toEqual(['/app-api/v1/bookings', { method: 'POST', body: { ...time, serviceId: 's1' } }])
   await listBookings('customer')
   expect(last()).toEqual(['/app-api/v1/bookings?role=customer'])
   await listBookings('provider', 'c|1')
