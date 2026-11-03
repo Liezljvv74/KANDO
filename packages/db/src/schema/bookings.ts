@@ -84,10 +84,7 @@ export const quotes = pgTable(
   ],
 )
 
-/**
- * The booking columns the app role writes. The others (money, payment) are staff-only (rls.ts COLUMN_STAFF_ONLY.bookings):
- * a Drizzle insert names every column of its table, so app inserts go through `bookingAppInsert` (../app-tables.ts), this shape.
- */
+/** The booking columns the app role may write; the others (money, payment, endings) are staff-only (rls.ts COLUMN_STAFF_ONLY.bookings). */
 export const bookingAppColumns = () => ({
   id: uuid().primaryKey().defaultRandom(),
   customerId: text('customer_id')
@@ -101,7 +98,7 @@ export const bookingAppColumns = () => ({
   // Filled from the quote by the bookings_fill_amount trigger, never changed (rls.ts).
   requestId: uuid('request_id').references(() => requests.id),
   source: text().notNull(),
-  status: text().notNull().default('proposed'),
+  status: text().notNull(),
   startAt: timestamp('start_at', { withTimezone: true }).notNull(),
   durationMin: integer('duration_min').notNull(),
   onSite: boolean('on_site').notNull().default(true),
@@ -113,7 +110,6 @@ export const bookingAppColumns = () => ({
   payBy: timestamp('pay_by', { withTimezone: true }),
   // When the booking became awaiting-payment: the payment reminders count from here.
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
-  counterBy: text('counter_by'),
   remindedHalfAt: timestamp('reminded_half_at', { withTimezone: true }),
   remindedLastAt: timestamp('reminded_last_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -164,8 +160,7 @@ export const bookings = pgTable(
   },
   (t) => [
     check('bookings_source_check', sql`source in ('quote','direct')`),
-    check('bookings_status_check', sql`status in ('proposed','awaiting-time','awaiting-payment','confirmed','expired','declined','withdrawn','finished','completed','disputed','cancelled','stopped','refunded')`),
-    check('bookings_counter_by_check', sql`counter_by in ('provider','customer')`),
+    check('bookings_status_check', sql`status in ('awaiting-time','awaiting-payment','confirmed','expired','declined','withdrawn','finished','completed','disputed','cancelled','stopped','refunded')`),
     check('bookings_time_proposed_by_check', sql`time_proposed_by in ('provider','customer')`),
     index('bookings_awaiting_time_answer_by_idx').on(t.answerBy).where(sql`status = 'awaiting-time'`),
     check('bookings_pay_by_check', sql`status <> 'awaiting-payment' OR pay_by IS NOT NULL`),
@@ -180,7 +175,6 @@ export const bookings = pgTable(
     index('bookings_parent_booking_id_idx').on(t.parentBookingId),
     index('bookings_service_id_idx').on(t.serviceId),
     index('bookings_quote_id_idx').on(t.quoteId),
-    index('bookings_proposed_answer_by_idx').on(t.answerBy).where(sql`status = 'proposed'`),
     index('bookings_awaiting_pay_by_idx').on(t.payBy).where(sql`status = 'awaiting-payment'`),
     index('bookings_finished_confirm_by_idx').on(t.confirmBy).where(sql`status = 'finished'`),
     uniqueIndex('bookings_payment_ref_idx').on(t.paymentRef),

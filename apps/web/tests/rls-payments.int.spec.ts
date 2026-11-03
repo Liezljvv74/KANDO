@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { getTableColumns, sql } from 'drizzle-orm'
-import { asUser, bookingAppInsert, bookings, COLUMN_STAFF_ONLY, OWNER_ONLY_BOOKING_STATUSES, pool } from '@kando/db'
+import { sql } from 'drizzle-orm'
+import { asUser, COLUMN_STAFF_ONLY, db, OWNER_ONLY_BOOKING_STATUSES, pool } from '@kando/db'
 import { cleanupUsers, seedProvider, seedUser } from './helpers'
 
 const ids = { customer: 'rp-cust', other: 'rp-other', owner: 'rp-owner', owner2: 'rp-owner2' }
@@ -18,6 +18,7 @@ const rls = { cause: { message: expect.stringContaining('row-level security') } 
 const denied = { cause: { message: expect.stringContaining('permission denied') } }
 const run = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, (tx) => tx.execute(q))
 const future = sql`now() + interval '3 days'`
+const owner = (q: ReturnType<typeof sql>) => db.execute(q) // the owner connection: the domain inserts every booking there, the app role none
 // a status move is stopped first by app_status_guard (rls.ts APP_STATUS_MOVES), anything else by bookings_guard_status
 const paymentCodeOnly = { cause: { message: expect.stringMatching(/confirmed.*payment code only|not a move the app makes/) } }
 const unchangeable = { cause: { message: expect.stringContaining('cannot be changed') } }
@@ -39,7 +40,7 @@ beforeAll(async () => {
   otherCustomersQuoteId = await quote(await request(ids.other, providerId), providerId, 55)
   otherProvidersQuoteId = await quote(await request(ids.customer, otherProviderId), otherProviderId, 66)
   bookingId = (
-    await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ($1, $2, $3, 'direct', 'proposed', now() + interval '5 days', 60) RETURNING id", [ids.customer, providerId, serviceId])
+    await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', 'awaiting-payment', now() + interval '5 days', 60, now() + interval '1 day', now()) RETURNING id", [ids.customer, providerId, serviceId])
   ).rows[0].id
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', 10, 'rp-charge-1')", [bookingId, providerId])
   await pool.query("INSERT INTO stripe_events (id, type) VALUES ('evt_rp_1', 'checkout.session.completed') ON CONFLICT DO NOTHING")
@@ -52,7 +53,7 @@ afterAll(async () => {
 
 const insertBooking = (o: { customer?: string; quote?: string | null; service?: string | null; provider?: string; status?: string; extra?: ReturnType<typeof sql> } = {}) =>
   sql`INSERT INTO bookings (customer_id, provider_id, quote_id, service_id, source, status, start_at, duration_min, on_site${o.extra ? sql`, ${o.extra}` : sql``})
-    VALUES (${o.customer ?? ids.customer}, ${o.provider ?? providerId}, ${o.quote ?? null}, ${o.service === undefined ? serviceId : o.service}, ${o.quote ? 'quote' : 'direct'}, ${o.status ?? 'proposed'}, ${future}, 60, false${o.extra ? sql`, 1` : sql``})
+    VALUES (${o.customer ?? ids.customer}, ${o.provider ?? providerId}, ${o.quote ?? null}, ${o.service === undefined ? serviceId : o.service}, ${o.quote ? 'quote' : 'direct'}, ${o.status ?? 'awaiting-time'}, ${future}, 60, false${o.extra ? sql`, 1` : sql``})
     RETURNING amount, currency, request_id`
 
 it('app_user cannot read ledger_entries or stripe_events', async () => {
@@ -84,33 +85,31 @@ it('app_user cannot set amount or payment_ref on a booking', async () => {
   await pool.query('UPDATE bookings SET payment_ref = NULL, commission_rate = NULL WHERE id = $1', [bookingId])
 })
 
-it('the app insert shape of bookings is exactly the columns app_user may write', () => {
-  const all = Object.values(getTableColumns(bookings)).map((c) => c.name)
-  const app = Object.values(getTableColumns(bookingAppInsert)).map((c) => c.name)
+it('the money and payment columns of bookings are staff-only, and the app role inserts no booking at all', async () => {
   for (const c of ['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at']) expect(COLUMN_STAFF_ONLY.bookings).toContain(c) // plan 2d's ending columns: rls-endings
-  expect(app.sort()).toEqual(all.filter((c) => !COLUMN_STAFF_ONLY.bookings!.includes(c)).sort())
+  for (const uid of [ids.customer, ids.owner]) await expect(run(uid, insertBooking())).rejects.toMatchObject(rls)
 })
 
 it("a booking inserted without amount gets the quote's or the service's price", async () => {
-  const fromQuote = (await run(ids.customer, insertBooking({ quote: quoteId }))).rows[0]
+  const fromQuote = (await owner(insertBooking({ quote: quoteId }))).rows[0]
   expect(fromQuote).toEqual({ amount: '100.00', currency: 'EUR', request_id: requestId })
-  const fromService = (await run(ids.customer, insertBooking())).rows[0]
+  const fromService = (await owner(insertBooking())).rows[0]
   expect(fromService).toEqual({ amount: '10.00', currency: 'EUR', request_id: null })
   // the owner connection cannot supply its own price either when a quote or service is named
-  const owner = await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, start_at, duration_min, amount) VALUES ($1, $2, $3, 'direct', now() + interval '3 days', 60, 999) RETURNING amount", [ids.customer, providerId, serviceId])
-  expect(owner.rows[0].amount).toBe('10.00')
+  const forcedPrice = await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount) VALUES ($1, $2, $3, 'direct', 'awaiting-time', now() + interval '3 days', 60, 999) RETURNING amount", [ids.customer, providerId, serviceId])
+  expect(forcedPrice.rows[0].amount).toBe('10.00')
   // neither a quote nor a priced service: no amount, no booking
-  await expect(run(ids.customer, insertBooking({ service: null }))).rejects.toThrow()
+  await expect(owner(insertBooking({ service: null }))).rejects.toThrow()
 })
 
 it('a booking with a forged quote or service id is refused', async () => {
   const forged = { cause: { message: expect.stringMatching(/does not belong/) } }
-  await expect(run(ids.customer, insertBooking({ quote: otherCustomersQuoteId }))).rejects.toMatchObject(forged) // another customer's quote
-  await expect(run(ids.customer, insertBooking({ quote: otherProvidersQuoteId }))).rejects.toMatchObject(forged) // another provider's quote
-  await expect(run(ids.customer, insertBooking({ service: otherServiceId }))).rejects.toMatchObject(forged) // another provider's service
-  await expect(run(ids.customer, insertBooking({ quote: quoteId, service: otherServiceId }))).rejects.toMatchObject(forged)
-  // an app-supplied request_id is overwritten from the quote (none for a direct booking)
-  const supplied = await run(ids.customer, sql`INSERT INTO bookings (customer_id, provider_id, service_id, request_id, source, start_at, duration_min) VALUES (${ids.customer}, ${providerId}, ${serviceId}, ${requestId}, 'direct', ${future}, 60) RETURNING request_id`)
+  await expect(owner(insertBooking({ quote: otherCustomersQuoteId }))).rejects.toMatchObject(forged) // another customer's quote
+  await expect(owner(insertBooking({ quote: otherProvidersQuoteId }))).rejects.toMatchObject(forged) // another provider's quote
+  await expect(owner(insertBooking({ service: otherServiceId }))).rejects.toMatchObject(forged) // another provider's service
+  await expect(owner(insertBooking({ quote: quoteId, service: otherServiceId }))).rejects.toMatchObject(forged)
+  // a supplied request_id is overwritten from the quote (none for a direct booking)
+  const supplied = await owner(sql`INSERT INTO bookings (customer_id, provider_id, service_id, request_id, source, status, start_at, duration_min) VALUES (${ids.customer}, ${providerId}, ${serviceId}, ${requestId}, 'direct', 'awaiting-time', ${future}, 60) RETURNING request_id`)
   expect(supplied.rows).toEqual([{ request_id: null }])
 })
 
@@ -118,7 +117,7 @@ it('quote_id, service_id and request_id are frozen after insert, even when repoi
   // a second quote on the customer's own request and a second service of the same provider: valid for this pair
   const q2 = (await pool.query("INSERT INTO quotes (request_id, provider_id, version, amount, scope, expires_at) VALUES ($1, $2, 2, 5, 'billiger', now() + interval '7 days') RETURNING id", [requestId, providerId])).rows[0].id
   const s2 = (await pool.query("INSERT INTO services (provider_id, category_id, title, price_type, price) SELECT provider_id, category_id, 'Zweiter', 'fixed', 1 FROM services WHERE id = $1 RETURNING id", [serviceId])).rows[0].id
-  const quoted = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, service_id, source, start_at, duration_min) VALUES ($1, $2, $3, $4, 'quote', now() + interval '6 days', 60) RETURNING id", [ids.customer, providerId, quoteId, s2])).rows[0].id
+  const quoted = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, service_id, source, status, start_at, duration_min) VALUES ($1, $2, $3, $4, 'quote', 'awaiting-time', now() + interval '6 days', 60) RETURNING id", [ids.customer, providerId, quoteId, s2])).rows[0].id
   for (const uid of [ids.customer, ids.owner]) {
     await expect(run(uid, sql`UPDATE bookings SET quote_id = ${q2} WHERE id = ${quoted}`)).rejects.toMatchObject(unchangeable)
     await expect(run(uid, sql`UPDATE bookings SET service_id = ${serviceId} WHERE id = ${quoted}`)).rejects.toMatchObject(unchangeable)
@@ -145,19 +144,19 @@ it('app_user cannot set status confirmed; the owner connection can', async () =>
   await expect(run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist rot' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly) // a paid row is frozen for the parties (rls-endings)
   // a paid booking cannot be moved away by a party (that would dodge settlement); the owner connection can
   for (const uid of [ids.customer, ids.owner]) {
-    for (const to of ['withdrawn', 'expired', 'declined', 'proposed']) {
+    for (const to of ['withdrawn', 'expired', 'declined', 'awaiting-time']) {
       await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly)
     }
   }
   expect((await run(ids.customer, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rowCount).toBe(1) // unchanged is fine
-  await pool.query("UPDATE bookings SET status = 'proposed' WHERE id = $1", [bookingId])
+  await pool.query("UPDATE bookings SET status = 'awaiting-payment' WHERE id = $1", [bookingId])
 })
 
 it('an awaiting-payment booking always has a pay-by date and an acceptance time', async () => {
   await expect(pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = NULL, accepted_at = now() WHERE id = $1", [bookingId])).rejects.toThrow(/bookings_pay_by_check/)
   await expect(pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = now() + interval '1 day', accepted_at = NULL WHERE id = $1", [bookingId])).rejects.toThrow(/bookings_accepted_at_check/)
   await pool.query("UPDATE bookings SET status = 'awaiting-payment', pay_by = now() + interval '1 day', accepted_at = now() WHERE id = $1", [bookingId])
-  await pool.query("UPDATE bookings SET status = 'proposed', pay_by = NULL, accepted_at = NULL WHERE id = $1", [bookingId])
+  await pool.query("UPDATE bookings SET status = 'awaiting-time', pay_by = NULL, accepted_at = NULL WHERE id = $1", [bookingId])
 })
 
 it("a quote's price, scope and dates cannot be changed once written; its status and reminder can", async () => {
@@ -192,7 +191,7 @@ it('a customer sees only their own watches', async () => {
 })
 
 it('two bookings cannot share a payment_ref', async () => {
-  const other = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ($1, $2, $3, 'direct', 'proposed', now() + interval '6 days', 60) RETURNING id", [ids.customer, providerId, serviceId])).rows[0].id
+  const other = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ($1, $2, $3, 'direct', 'awaiting-time', now() + interval '6 days', 60) RETURNING id", [ids.customer, providerId, serviceId])).rows[0].id
   await pool.query("UPDATE bookings SET payment_ref = 'pi_rp_dup' WHERE id = $1", [bookingId])
   await expect(pool.query("UPDATE bookings SET payment_ref = 'pi_rp_dup' WHERE id = $1", [other])).rejects.toMatchObject({ code: '23505' })
   await pool.query('UPDATE bookings SET payment_ref = NULL WHERE id = $1', [bookingId])

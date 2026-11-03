@@ -70,8 +70,6 @@ export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): Bo
   const withdraw: BookingAction[] = customer ? ['withdraw'] : []
   const extra: BookingAction[] = b.parentBookingId === null && !b.noShow ? ['additionalTask'] : []
   switch (b.status) {
-    case 'proposed': // no new booking has this status; an old one can only be withdrawn
-      return withdraw
     case 'awaiting-time': {
       // either side enters the agreed time; the other confirms it (never your own entry). Only the customer can walk away: the provider uses the chat or lets it lapse.
       const theirs = !!b.pendingTime && b.pendingTime.by !== viewer

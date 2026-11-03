@@ -172,7 +172,7 @@ it('a rated provider shows its rating and is not new', async () => {
   for (const stars of [4, 5]) {
     const b = (
       await pool.query(
-        "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ('sx-rater', $1, $2, 'direct', 'proposed', now() + interval '3 days', 60) RETURNING id",
+        "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ('sx-rater', $1, $2, 'direct', 'awaiting-time', now() + interval '3 days', 60) RETURNING id",
         [pid, service],
       )
     ).rows[0].id

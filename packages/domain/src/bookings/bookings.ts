@@ -43,7 +43,7 @@ export async function getBooking(tx: Tx, userId: string, id: string): Promise<Bo
   return { booking: view(found.b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
 }
 
-/** "I no longer need this": the customer, from awaiting-payment (and from proposed, until that status goes). */
+/** "I no longer need this": the customer, from awaiting-time or awaiting-payment. */
 export async function withdrawBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
   if ((await partyOf(tx, userId, bookingId)).role !== 'customer') fail(403, { error: 'wrong-side' })
   const b = await lockRow(tx, bookingId)

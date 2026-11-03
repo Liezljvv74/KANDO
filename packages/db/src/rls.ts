@@ -29,8 +29,9 @@ export const PRIVATE_TABLES: Record<string, string> = {
 // Every row starts at its first status: later statuses only through APP_STATUS_MOVES (or the owner connection).
 export const INSERT_RULES: Record<string, string> = {
   requests: `customer_id = app_current_user_id() AND status = 'open'`,
-  // A booking starts as the customer's proposal: accepting (pay_by, accepted_at) and countering (counter_by) are updates.
-  bookings: `customer_id = app_current_user_id() AND status = 'proposed' AND pay_by IS NULL AND accepted_at IS NULL AND counter_by IS NULL`,
+  // No booking is inserted by an app request: the domain creates every booking on the owner connection (confirm, additional
+  // task, agreed time, payment webhook) after its checks. A deny-all rule keeps it that way for the app role.
+  bookings: 'false',
   // Only the provider's owner quotes, and only on a request addressed to that provider (qualified: requests has provider_id too).
   quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id) AND status = 'sent'`,
 }
@@ -39,10 +40,8 @@ export const INSERT_RULES: Record<string, string> = {
  * The status moves app_user may make, per table, keyed '<from>><to>', with the side that makes it (trigger app_status_guard).
  * Only moves made inside a request transaction belong here; the owner connection (expiry, endings, additional tasks, staff)
  * is not affected. Customer: the row's customer_id (quotes: the request's customer); provider: the owner of its provider_id.
- * Answerer (bookings only): the side whose turn it is, as answerBooking decides it from the old counter_by (NULL or
- * 'customer' = the customer proposed last, so the provider answers; 'provider' = the customer answers).
  */
-export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider' | 'answerer'>> = {
+export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record<string, 'customer' | 'provider'>> = {
   requests: {
     'open>quoted': 'provider',
     'quoted>booked': 'customer',
@@ -53,9 +52,6 @@ export const APP_STATUS_MOVES: Record<'requests' | 'quotes' | 'bookings', Record
   },
   quotes: { 'sent>superseded': 'provider', 'sent>accepted': 'customer' },
   bookings: {
-    'proposed>awaiting-payment': 'answerer',
-    'proposed>declined': 'answerer',
-    'proposed>withdrawn': 'customer',
     'awaiting-payment>withdrawn': 'customer',
     'awaiting-time>withdrawn': 'customer',
   },
@@ -97,7 +93,7 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   notifications: ['kind', 'payload', 'user_id'],
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
   // Money and payment: the price comes from the quote or service (bookings_fill_amount), the rest from the payment code.
-  // The app role still reads them; no DTO carries commission_rate or the gateway references. App inserts use bookingAppInsert.
+  // The app role still reads them; no DTO carries commission_rate or the gateway references.
   // The endings (plan 2d) likewise: finishing, cancelling, stopping and disputing run on the owner connection after the
   // domain checked the caller.
   bookings: [
@@ -478,18 +474,10 @@ const BOOKING_TRIGGERS = [
         IF TG_OP = 'UPDATE' AND OLD.status = ANY (${OWNER_ONLY}) AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN
           RAISE EXCEPTION 'bookings: a % booking is changed by the payment code only', OLD.status;
         END IF;
-        -- accepting sets pay_by and accepted_at, once, inside the time: payment due by the start, not before the acceptance
-        IF TG_OP = 'UPDATE' AND OLD.status = 'proposed' AND NEW.status = 'awaiting-payment' THEN
-          IF NOT coalesce(NEW.pay_by <= NEW.start_at AND NEW.accepted_at <= NEW.pay_by AND abs(extract(epoch FROM (NEW.accepted_at - now()))) <= 300, false) THEN
-            RAISE EXCEPTION 'bookings: pay_by must lie between accepted_at and start_at, and accepted_at within 5 minutes of now';
-          END IF;
-        ELSIF TG_OP = 'UPDATE' AND (NEW.pay_by IS DISTINCT FROM OLD.pay_by OR NEW.accepted_at IS DISTINCT FROM OLD.accepted_at) THEN
-          RAISE EXCEPTION 'bookings: pay_by and accepted_at are set by accepting only';
-        END IF;
-        -- the proposal (time, place, who answers by when) changes only while it is a proposal: the counter and the answer
-        IF TG_OP = 'UPDATE' AND OLD.status <> 'proposed' AND (NEW.answer_by, NEW.counter_by, NEW.start_at, NEW.duration_min, NEW.on_site, NEW.address_street, NEW.address_postcode, NEW.address_city)
-            IS DISTINCT FROM (OLD.answer_by, OLD.counter_by, OLD.start_at, OLD.duration_min, OLD.on_site, OLD.address_street, OLD.address_postcode, OLD.address_city) THEN
-          RAISE EXCEPTION 'bookings: answer_by, counter_by, start_at, duration_min, on_site and the address change only while proposed';
+        -- the app role only withdraws (APP_STATUS_MOVES): the payment deadline, the time and the place are set on the owner connection
+        IF TG_OP = 'UPDATE' AND (NEW.pay_by, NEW.accepted_at, NEW.answer_by, NEW.start_at, NEW.duration_min, NEW.on_site, NEW.address_street, NEW.address_postcode, NEW.address_city)
+            IS DISTINCT FROM (OLD.pay_by, OLD.accepted_at, OLD.answer_by, OLD.start_at, OLD.duration_min, OLD.on_site, OLD.address_street, OLD.address_postcode, OLD.address_city) THEN
+          RAISE EXCEPTION 'bookings: pay_by, accepted_at, answer_by, start_at, duration_min, on_site and the address are not changed by the app';
         END IF;
       END IF;
       RETURN NEW;
@@ -497,10 +485,8 @@ const BOOKING_TRIGGERS = [
   `DROP TRIGGER IF EXISTS bookings_guard_status ON bookings`,
   `CREATE TRIGGER bookings_guard_status BEFORE INSERT OR UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_guard_status()`,
   // app_user changes a status only by a move in APP_STATUS_MOVES, from the listed side; a request's answer_by never changes.
-  // A proposed booking's proposal (counter_by, time, place, answer_by) changes only as answerBooking's counter: by the
-  // answering side, which becomes counter_by. Else a party could flip the turn and then answer its own proposal.
   `CREATE OR REPLACE FUNCTION app_status_guard() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
-    DECLARE n jsonb := to_jsonb(NEW); o jsonb := to_jsonb(OLD); side text; answerer text; is_customer boolean; is_provider boolean;
+    DECLARE n jsonb := to_jsonb(NEW); o jsonb := to_jsonb(OLD); side text; is_customer boolean; is_provider boolean;
     BEGIN
       IF current_user <> '${APP_ROLE}' THEN RETURN NEW; END IF;
       IF TG_TABLE_NAME = 'requests' AND (n -> 'answer_by', n -> 'revision', n -> 'revised_at') IS DISTINCT FROM (o -> 'answer_by', o -> 'revision', o -> 'revised_at') THEN
@@ -516,18 +502,10 @@ const BOOKING_TRIGGERS = [
         THEN EXISTS (SELECT 1 FROM requests r WHERE r.id = (n ->> 'request_id')::uuid AND r.customer_id = app_current_user_id())
         ELSE n ->> 'customer_id' = app_current_user_id() END;
       is_provider := EXISTS (SELECT 1 FROM providers p WHERE p.id = (n ->> 'provider_id')::uuid AND p.owner_id = app_current_user_id());
-      answerer := CASE WHEN o ->> 'counter_by' = 'provider' THEN 'customer' ELSE 'provider' END; -- as answerBooking
-      IF TG_TABLE_NAME = 'bookings' AND OLD.status = 'proposed' AND NEW.status = 'proposed'
-          AND (n -> 'counter_by', n -> 'start_at', n -> 'duration_min', n -> 'on_site', n -> 'answer_by')
-            IS DISTINCT FROM (o -> 'counter_by', o -> 'start_at', o -> 'duration_min', o -> 'on_site', o -> 'answer_by')
-          AND NOT coalesce(n ->> 'counter_by' = answerer AND CASE answerer WHEN 'customer' THEN is_customer ELSE is_provider END, false) THEN
-        RAISE EXCEPTION 'bookings: only the answering side counters a proposal, as itself';
-      END IF;
       IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
       side := CASE TG_TABLE_NAME || ':' || OLD.status || '>' || NEW.status
         ${APP_STATUS_MOVE_CASES}
       END;
-      IF side = 'answerer' THEN side := answerer; END IF;
       IF side IS NULL OR NOT coalesce((side = 'customer' AND is_customer) OR (side = 'provider' AND is_provider), false) THEN
         RAISE EXCEPTION '%: % > % is not a move the app makes (as this party)', TG_TABLE_NAME, OLD.status, NEW.status;
       END IF;
@@ -561,7 +539,7 @@ const BOOKING_TRIGGERS = [
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_reopen_request ON bookings`,
   `CREATE TRIGGER bookings_reopen_request AFTER UPDATE OF status ON bookings FOR EACH ROW
-    WHEN (OLD.status IN ('proposed', 'awaiting-time', 'awaiting-payment') AND NEW.status IN ('declined', 'expired', 'withdrawn') AND NEW.quote_id IS NOT NULL AND NEW.parent_booking_id IS NULL)
+    WHEN (OLD.status IN ('awaiting-time', 'awaiting-payment') AND NEW.status IN ('declined', 'expired', 'withdrawn') AND NEW.quote_id IS NOT NULL AND NEW.parent_booking_id IS NULL)
     EXECUTE FUNCTION reopen_quote_request()`,
   // An additional task (a request or booking naming parent_booking_id) belongs to a root booking of the same customer and
   // provider that is paid and not cancelled or refunded (SLOT_HOLDING_STATUSES). A booking made from an additional task's request names that

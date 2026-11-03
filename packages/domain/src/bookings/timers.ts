@@ -28,7 +28,6 @@ export const RELEASES_HARD_CAP = 200
 export type TimerReport = {
   requestsExpired: number
   quotesExpired: number
-  proposalsLapsed: number
   unpaidExpired: number
   timeLapsed: number
   remindersSent: number
@@ -97,7 +96,7 @@ async function sweep(exec: Exec, now: Date, timeUp: () => boolean): Promise<Time
     WITH e AS (UPDATE quotes SET status = 'expired' WHERE status = 'sent' AND expires_at <= ${t}::timestamptz RETURNING id)
     SELECT count(*)::int AS n FROM e`)
 
-  const { proposalsLapsed, unpaidExpired, timeLapsed } = await expireBookings(count, t)
+  const { unpaidExpired, timeLapsed } = await expireBookings(count, t)
 
   // Reminders, each once (the reminded columns), never for a finished item. They count from accepted_at (set when the
   // booking became awaiting-payment), so a later write to the row does not move them.
@@ -145,33 +144,31 @@ async function sweep(exec: Exec, now: Date, timeUp: () => boolean): Promise<Time
   const customersWaiting = paymentsEnabled() ? (await noticeCustomersWaiting(exec, now, CUSTOMERS_WAITING_NOTICE_HOURS - CUSTOMERS_WAITING_CRON_TOLERANCE_HOURS, undefined, true)).length : 0
 
   const endings = await endingRules(exec, now, count, timeUp)
-  return { requestsExpired, quotesExpired, proposalsLapsed, unpaidExpired, timeLapsed, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }
+  return { requestsExpired, quotesExpired, unpaidExpired, timeLapsed, remindersSent: quoteReminders + half + last, ignoredNotices, customersWaiting, reviewsShown, ...endings, autoReleased: 0, noShowsResolved: 0, cancelsSettled: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }
 }
 
 /**
- * The two booking expiries: a proposal past answer_by, and awaiting-payment past pay_by + PAY_GRACE_MINUTES (a payment made
+ * The two booking expiries: awaiting-time past answer_by, and awaiting-payment past pay_by + PAY_GRACE_MINUTES (a payment made
  * at the deadline may still be on its way; the webhook confirms it if the time is still free. The slot itself stops being
  * held at pay_by, slotIsHeld and busy_times, and no pay link is given after it). `only` narrows the rows (expireLapsedRoot).
  * Both lock their rows in id order, as lockFamily and account deletion do (two of one root's additional tasks expiring
  * while the root is cancelled can otherwise deadlock).
  */
 async function expireBookings(count: (q: SQL) => Promise<number>, t: string, only: SQL = sql`TRUE`) {
-  const lapsed = sql`status = 'proposed' AND answer_by <= ${t}::timestamptz AND ${only}`
   const unpaid = sql`status = 'awaiting-payment' AND pay_by + make_interval(mins => ${PAY_GRACE_MINUTES}) <= ${t}::timestamptz AND ${only}`
-  // One statement per lapse: the booking expires, the customer is told (the job reads open again where its quote reopens), and
-  // the provider too unless it was the provider's own proposal that lapsed.
-  const expire = (pred: SQL, tellProvider: boolean) =>
+  // One statement per lapse: the booking expires, and the customer and the provider are told (the job reads open again where
+  // its quote reopens).
+  const expire = (pred: SQL) =>
     count(sql`
     WITH e AS (UPDATE bookings SET status = 'expired', updated_at = ${t}::timestamptz WHERE ${inIdOrder(pred)} AND ${pred} RETURNING ${EXPIRED_COLS}),
     n AS (INSERT INTO notifications (user_id, kind, payload, created_at, mailed_at)
       SELECT e.customer_id, ${customerNotice(t)}, ${t}::timestamptz, NULL::timestamptz FROM e ${reopenedJoin}
-      ${tellProvider ? sql`UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id` : sql``} RETURNING id)
+      UNION ALL SELECT p.owner_id, 'booking-expired', jsonb_build_object('bookingId', e.id), ${t}::timestamptz, NULL FROM e JOIN providers p ON p.id = e.provider_id RETURNING id)
     ${result('e')}`)
-  const proposalsLapsed = await expire(lapsed, false)
-  const unpaidExpired = await expire(unpaid, true)
+  const unpaidExpired = await expire(unpaid)
   // a quote accepted without a time, and no time agreed within AWAITING_TIME_DAYS (or the days left after a late entry)
-  const timeLapsed = await expire(sql`status = 'awaiting-time' AND answer_by <= ${t}::timestamptz AND ${only}`, true)
-  return { proposalsLapsed, unpaidExpired, timeLapsed }
+  const timeLapsed = await expire(sql`status = 'awaiting-time' AND answer_by <= ${t}::timestamptz AND ${only}`)
+  return { unpaidExpired, timeLapsed }
 }
 
 /**
@@ -179,7 +176,7 @@ async function expireBookings(count: (q: SQL) => Promise<number>, t: string, onl
  * sendQuote, closeRequest; the caller holds the request lock, so the order is request lock, then booking rows, as in
  * acceptAdditional). A lapsed root then reopens its request and quote at once (trigger bookings_reopen_request, with the
  * actor's now), and its notices are written unsent for the outbox, exactly as the cron writes them. The owner connection,
- * committing on its own: the app role may not move proposed > expired, and the expiry stands whatever the action answers.
+ * committing on its own: the app role may not move a booking to expired, and the expiry stands whatever the action answers.
  */
 export async function expireLapsedRoot(requestId: string, now: Date): Promise<void> {
   await expireBookings((q) => db.execute(q).then(() => 0), now.toISOString(), sql`request_id = ${requestId}::uuid AND parent_booking_id IS NULL`)
@@ -256,14 +253,14 @@ async function endingRules(exec: Exec, now: Date, count: (q: SQL) => Promise<num
     SELECT count(*)::int AS n FROM i`)
 
   // A provider still published IGNORED_FLAG_DAYS after their latest requests-ignored notice, with no quote sent, no request
-  // declined and no booking answered (accepted, declined or a new time proposed) since: one flag per notice. Nothing is removed
+  // declined and no booking accepted since: one flag per notice. Nothing is removed
   // automatically; staff decide (the existing suspension tool).
   const ignoredNoticeFlags = await count(sql`
     WITH n AS (SELECT user_id, max(created_at) AS at FROM notifications WHERE kind = 'requests-ignored' GROUP BY user_id),
     c AS (SELECT p.id, p.owner_id FROM providers p JOIN n ON n.user_id = p.owner_id
       WHERE p.status = 'published' AND n.at + make_interval(days => ${IGNORED_FLAG_DAYS}) <= ${t}::timestamptz
         AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.provider_id = p.id AND q.created_at > n.at)
-        AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.provider_id = p.id AND (b.accepted_at > n.at OR (b.updated_at > n.at AND (b.status = 'declined' OR b.counter_by = 'provider'))))
+        AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.provider_id = p.id AND b.accepted_at > n.at)
         AND NOT EXISTS (SELECT 1 FROM requests r WHERE r.provider_id = p.id AND r.status = 'declined' AND r.updated_at > n.at)
         AND NOT EXISTS (SELECT 1 FROM staff_flags f WHERE f.kind = 'ignored-requests' AND f.ref_id = p.id::text AND f.created_at >= n.at)),
     i AS (INSERT INTO staff_flags (kind, ref_id, user_id, note, created_at)

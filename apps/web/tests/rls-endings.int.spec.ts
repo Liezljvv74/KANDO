@@ -102,28 +102,29 @@ it('one review per author and booking; stars 1 to 5; the author role is customer
 it('app_user cannot set completed, cancelled or refunded', async () => {
   expect([...OWNER_ONLY_BOOKING_STATUSES].sort()).toEqual(['cancelled', 'completed', 'confirmed', 'disputed', 'finished', 'refunded', 'stopped'])
   const ending = ['finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded']
-  const proposed = await booking({ status: 'proposed' })
+  const waiting = await booking({ status: 'awaiting-time' })
   for (const to of ending) {
     // not on insert, not by moving a booking in, by either party
     await expect(run(U.cust, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES (${U.cust}, ${providerId}, ${serviceId}, 'direct', ${to}, now() + interval '3 days', 60)`)).rejects.toMatchObject(ownerOnly)
     for (const uid of [U.cust, U.owner]) {
-      await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${proposed}`)).rejects.toMatchObject(ownerOnly)
+      await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${waiting}`)).rejects.toMatchObject(ownerOnly)
       await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${rootId}`)).rejects.toMatchObject(ownerOnly)
     }
     // and not out of it either; the owner connection can do both
     const ended = await booking({ status: to })
     for (const uid of [U.cust, U.owner]) {
-      for (const away of ['withdrawn', 'confirmed', 'proposed', ending.find((s) => s !== to)!]) {
+      for (const away of ['withdrawn', 'confirmed', 'awaiting-time', ending.find((s) => s !== to)!]) {
         await expect(run(uid, sql`UPDATE bookings SET status = ${away} WHERE id = ${ended}`)).rejects.toMatchObject(ownerOnly)
       }
     }
     await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [ended])
   }
-  // the app transitions still work: proposed -> awaiting-payment -> withdrawn, proposed -> declined
-  expect((await run(U.owner, sql`UPDATE bookings SET status = 'awaiting-payment', pay_by = now() + interval '1 day', accepted_at = now() WHERE id = ${proposed}`)).rowCount).toBe(1)
-  expect((await run(U.cust, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${proposed}`)).rowCount).toBe(1)
-  const another = await booking({ status: 'proposed' })
-  expect((await run(U.owner, sql`UPDATE bookings SET status = 'declined' WHERE id = ${another}`)).rowCount).toBe(1)
+  // the app transitions still work: the customer withdraws an awaiting-time or an awaiting-payment booking; the provider declines nothing
+  expect((await run(U.cust, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${waiting}`)).rowCount).toBe(1)
+  const paying = await booking({ status: 'awaiting-payment', extra: { pay_by: new Date(Date.now() + 86_400_000), accepted_at: new Date() } })
+  expect((await run(U.cust, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${paying}`)).rowCount).toBe(1)
+  const another = await booking({ status: 'awaiting-time' })
+  await expect(run(U.owner, sql`UPDATE bookings SET status = 'declined' WHERE id = ${another}`)).rejects.toMatchObject(ownerOnly)
 })
 
 const NEW_COLUMNS: [string, string][] = [
@@ -273,13 +274,13 @@ it('a dispute decision is complete and consistent; a person-opened reason names 
 })
 
 it('app_user cannot delete a booking in any status; account deletion on the owner connection still can', async () => {
-  for (const status of ['proposed', 'withdrawn', ...OWNER_ONLY_BOOKING_STATUSES]) {
+  for (const status of ['awaiting-time', 'withdrawn', ...OWNER_ONLY_BOOKING_STATUSES]) {
     const id = await booking({ status })
     for (const uid of [U.cust, U.owner]) await expect(run(uid, sql`DELETE FROM bookings WHERE id = ${id}`)).rejects.toMatchObject(denied)
   }
 })
 
-it('app_user cannot change any column of an owner-only booking; a proposed booking stays writable', async () => {
+it('app_user cannot change any column of an owner-only booking; an awaiting-time booking stays writable (the note only)', async () => {
   for (const status of OWNER_ONLY_BOOKING_STATUSES) {
     const id = await booking({ status })
     for (const uid of [U.cust, U.owner]) {
@@ -290,7 +291,7 @@ it('app_user cannot change any column of an owner-only booking; a proposed booki
     }
     expect((await pool.query("UPDATE bookings SET note = 'Staff' WHERE id = $1", [id])).rowCount).toBe(1) // the owner connection can
   }
-  const proposed = await booking({ status: 'proposed' })
-  expect((await run(U.owner, sql`UPDATE bookings SET start_at = now() + interval '4 days', duration_min = 90, counter_by = 'provider', answer_by = now() + interval '1 day' WHERE id = ${proposed}`)).rowCount).toBe(1)
-  expect((await run(U.cust, sql`UPDATE bookings SET note = 'Tor', address_street = 'Hauptstr. 2' WHERE id = ${proposed}`)).rowCount).toBe(1)
+  const waiting = await booking({ status: 'awaiting-time' })
+  expect((await run(U.cust, sql`UPDATE bookings SET note = 'Tor' WHERE id = ${waiting}`)).rowCount).toBe(1)
+  await expect(run(U.cust, sql`UPDATE bookings SET address_street = 'Hauptstr. 2' WHERE id = ${waiting}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining('not changed by the app') } })
 })

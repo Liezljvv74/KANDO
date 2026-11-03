@@ -23,8 +23,8 @@ import { expireLapsedRoot } from './timers'
  *   the time is checked again under the provider's slot lock, because a quote holds no slot.
  * - A quote without a time makes it `awaiting-time`: no slot, no payment window, no money. The customer's requested time stays
  *   in the row as a stand-in until both sides agree the real one (agreed-time.ts).
- * The writes run on the owner connection after the checks, as additional tasks do (the app role may only insert a `proposed`
- * booking), with the request locked so two confirms of one quote, or a confirm and a revision, have exactly one outcome.
+ * The writes run on the owner connection after the checks, as additional tasks do (the app role inserts no booking at all),
+ * with the request locked so two confirms of one quote, or a confirm and a revision, have exactly one outcome.
  * 404 for a stranger, 403 for the provider, 409 quote-expired / quote-not-open / slot-pending. An additional task's quote keeps
  * its own rules (acceptQuote).
  */

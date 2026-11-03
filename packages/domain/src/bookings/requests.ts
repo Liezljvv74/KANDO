@@ -74,7 +74,7 @@ async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map
   const roots = await tx
     .select({ requestId: bookings.requestId, quoteId: bookings.quoteId, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
     .from(bookings)
-    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['proposed', 'awaiting-time', 'awaiting-payment'])))
+    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['awaiting-time', 'awaiting-payment'])))
   return new Map(roots.filter((b) => bookingShownStatus(b, now) === 'expired').map((b) => [b.requestId!, b.quoteId]))
 }
 
@@ -100,7 +100,6 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   note: b.note,
   answerBy: b.answerBy ? iso(b.answerBy) : null,
   payBy: b.payBy ? iso(b.payBy) : null,
-  counterBy: b.counterBy as Booking['counterBy'],
   pendingTime:
     b.status === 'awaiting-time' && b.timeProposedBy && b.timeProposedStartAt && b.timeProposedDurationMin !== null && b.timeAnswerBy && b.timeAnswerBy > now
       ? { by: b.timeProposedBy as 'customer' | 'provider', startAt: iso(b.timeProposedStartAt), durationMin: b.timeProposedDurationMin, onSite: b.timeProposedOnSite ?? true, answerBy: iso(b.timeAnswerBy) }
@@ -134,7 +133,7 @@ export const lockRequest = (tx: Tx, requestId: string) =>
 /**
  * Abuse limits, checked before anything is saved. The customer's advisory lock (held to the end of the transaction) makes two
  * parallel creates take turns, so both cannot pass. The customer reads all their own rows, so the caller's tx counts them.
- * The messages say nothing about other people. At most MAX_OPEN_REQUESTS_PER_PAIR (5) open requests per customer and provider, and MAX_REQUESTS_PER_DAY a day; a null `providerId` checks only the daily limit.
+ * The messages say nothing about other people. At most MAX_OPEN_REQUESTS_PER_PAIR (5) open requests per customer and provider, and MAX_REQUESTS_PER_DAY a day; `providerId` is null when the given id is no valid id (only the daily limit applies; the create then fails as not found).
  */
 export async function assertWithinLimits(tx: Tx, userId: string, providerId: string | null, now: Date): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('request_limit'), hashtext(${userId}))`)
@@ -145,8 +144,7 @@ export async function assertWithinLimits(tx: Tx, userId: string, providerId: str
   }
   const since = new Date(now.getTime() - DAY)
   const r = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(and(eq(requests.customerId, userId), gt(requests.createdAt, since))))[0]!.n
-  const b = (await tx.select({ n: sql<number>`count(*)::int` }).from(bookings).where(and(eq(bookings.customerId, userId), eq(bookings.source, 'direct'), gt(bookings.createdAt, since))))[0]!.n
-  if (r + b >= MAX_REQUESTS_PER_DAY) fail(409, { error: 'daily-limit' })
+  if (r >= MAX_REQUESTS_PER_DAY) fail(409, { error: 'daily-limit' })
 }
 
 export async function createRequest(tx: Tx, userId: string, input: RequestInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {

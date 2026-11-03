@@ -7,7 +7,6 @@ type BookingStatus = (typeof BOOKING_STATUSES)[number]
 
 export const REQUEST_ANSWER_DAYS = 3
 export const QUOTE_VALID_DAYS = 7
-export const PROPOSAL_ANSWER_HOURS = 24
 export const BUFFER_MINUTES = 30
 export const IGNORED_LIMIT = 3
 export const IGNORED_WINDOW_DAYS = 30
@@ -44,7 +43,6 @@ export const overlaps = (a: Span, b: Span, bufferMin: number): boolean => {
 }
 
 const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
-  proposed: ['awaiting-payment', 'expired', 'declined', 'withdrawn', 'proposed'],
   // -> confirmed only by the payment webhook on the owner connection (trigger bookings_guard_status); plan 2d adds the ways out of confirmed
   // a quote accepted without a time: no slot, no money until both sides agree the time (flow 1)
   'awaiting-time': ['awaiting-payment', 'expired', 'withdrawn'],
@@ -66,11 +64,10 @@ const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
 }
 
 /**
- * The status a read shows: a lapsed proposal or unpaid booking (the same deadlines as the cron's expiry, timers.ts) shows
+ * The status a read shows: a booking whose time or payment lapsed (the same deadlines as the cron's expiry, timers.ts) shows
  * `expired` before the daily cron writes it. Reads never write; the stored row changes in the cron and the write paths.
  */
 export const bookingShownStatus = (b: { status: string; answerBy: Date | null; payBy: Date | null }, now: Date): string => {
-  if (b.status === 'proposed' && b.answerBy && b.answerBy <= now) return 'expired'
   if (b.status === 'awaiting-time' && b.answerBy && b.answerBy <= now) return 'expired'
   if (b.status === 'awaiting-payment' && b.payBy && b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 <= now.getTime()) return 'expired'
   return b.status

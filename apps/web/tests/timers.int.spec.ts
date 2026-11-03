@@ -53,14 +53,13 @@ it('a request open 3 days and 1 minute expires and the customer is notified', as
 it('running the timers twice changes and notifies nothing the second time', async () => {
   await clean()
   await request(prov, at(-1))
-  await booking('proposed', { answerBy: at(-1) })
   await booking('awaiting-payment', { payBy: at(-1) })
   await run(0)
   const count = async () => Number((await pool.query('SELECT count(*) FROM notifications WHERE user_id LIKE $1', ['tm-%'])).rows[0].count)
   const after = await count()
-  expect(await run(0)).toEqual({ requestsExpired: 0, quotesExpired: 0, proposalsLapsed: 0, unpaidExpired: 0, timeLapsed: 0, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }) // the first run took everything due
+  expect(await run(0)).toEqual({ requestsExpired: 0, quotesExpired: 0, unpaidExpired: 0, timeLapsed: 0, remindersSent: 0, ignoredNotices: 0, customersWaiting: 0, confirmReminders: 0, autoReleased: 0, askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0, stopsToStaff: 0, overdueDisputes: 0, ignoredNoticeFlags: 0, reviewsShown: 0, decisionsApplied: 0, invoicesIssued: 0, commissionInvoices: 0 }) // the first run took everything due
   expect(await count()).toBe(after)
-  expect(after).toBe(4) // request, proposal, unpaid (customer and provider)
+  expect(after).toBe(3) // request, unpaid (customer and provider)
 })
 
 it('a run two days late still expires correctly', async () => {
@@ -163,7 +162,7 @@ it('a lapsed request reads expired in the list and alone, the row is untouched, 
   await clean()
   const past = () => new Date(Date.now() - 60_000).toISOString()
   const mine = await request(prov, past())
-  const b = await booking('proposed', { answerBy: past() })
+  const b = await booking('awaiting-time', { answerBy: past() })
   const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // after PAY_GRACE_MINUTES
   expect((await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))).docs.find((r) => r.id === mine)?.status).toBe('expired')
   expect((await asUser(U.owner, (tx) => listRequests(tx, U.owner, 'provider'))).docs.find((r) => r.id === mine)?.status).toBe('expired')
@@ -171,7 +170,7 @@ it('a lapsed request reads expired in the list and alone, the row is untouched, 
   expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).docs.find((x) => x.id === b)?.status).toBe('expired')
   expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).docs.find((x) => x.id === b2)?.status).toBe('expired')
   expect((await asUser(U.cust, (tx) => getBooking(tx, U.cust, b))).booking.status).toBe('expired')
-  expect([await status('requests', mine), await status('bookings', b), await status('bookings', b2)]).toEqual(['open', 'proposed', 'awaiting-payment']) // shown, not written
+  expect([await status('requests', mine), await status('bookings', b), await status('bookings', b2)]).toEqual(['open', 'awaiting-time', 'awaiting-payment']) // shown, not written
   expect(await notes('request-expired')).toHaveLength(0)
   const again = await asUser(U.cust, (tx) => createRequest(tx, U.cust, { providerId: prov, description: 'second try', ...requestTime() }))
   expect(again.status).toBe('open')
@@ -180,7 +179,7 @@ it('a lapsed request reads expired in the list and alone, the row is untouched, 
 it('a list read writes nothing', async () => {
   await clean()
   await booking('awaiting-payment', { acceptedAt: new Date(Date.now() - 20 * 3_600_000).toISOString(), payBy: new Date(Date.now() + 3_600_000).toISOString() }) // a reminder is due
-  await booking('proposed', { answerBy: new Date(Date.now() - 60_000).toISOString() })
+  await booking('awaiting-time', { answerBy: new Date(Date.now() - 60_000).toISOString() })
   for (let i = 0; i < 3; i++) await request(prov, new Date(Date.now() - 60_000 * (i + 1)).toISOString())
   const snapshot = async () => (await pool.query("SELECT (SELECT json_agg(r ORDER BY id) FROM requests r WHERE customer_id LIKE 'tm-%') r, (SELECT json_agg(b ORDER BY id) FROM bookings b WHERE customer_id LIKE 'tm-%') b, (SELECT count(*) FROM notifications WHERE user_id LIKE 'tm-%') n")).rows[0]
   const before = await snapshot()
@@ -247,10 +246,10 @@ it('outbox: a reminder whose deadline has passed or whose item is closed is clai
 })
 
 // A quote-born booking that ends unagreed reopens its request and quote (trigger bookings_reopen_request, rls.ts)
-const quoteBorn = async (status: 'proposed' | 'awaiting-payment', quoteExpiresAt: string, parent: string | null = null) => {
+const quoteBorn = async (status: 'awaiting-time' | 'awaiting-payment', quoteExpiresAt: string, parent: string | null = null) => {
   const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by, parent_booking_id) VALUES ($1, $2, 'x', 'booked', $3, $4) RETURNING id", [U.cust, prov, at(-48), parent])).rows[0].id as string
   const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, start_at, duration_min, expires_at, status) VALUES ($1, $2, 50, 's', $3, 60, $4, 'accepted') RETURNING id", [r, prov, at(24 * 20), quoteExpiresAt])).rows[0].id as string
-  const due = status === 'proposed' ? [at(-1), null, null] : [null, at(-1), at(-49)]
+  const due = status === 'awaiting-time' ? [at(-1), null, null] : [null, at(-1), at(-49)]
   const b = (
     await pool.query(
       "INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at, parent_booking_id) VALUES ($1, $2, $3, 'quote', $4, $5, 60, $6, $7, $8, $9) RETURNING id",
@@ -261,20 +260,20 @@ const quoteBorn = async (status: 'proposed' | 'awaiting-payment', quoteExpiresAt
 }
 const kinds = async (b: string) => (await pool.query("SELECT user_id, kind, payload FROM notifications WHERE payload->>'bookingId' = $1 ORDER BY user_id", [b])).rows
 
-it('a lapsed proposal and an unpaid expiry reopen the request (timer) and send request-reopened through the outbox', async () => {
+it('a lapsed awaiting-time booking and an unpaid expiry reopen the request (timer) and send request-reopened through the outbox', async () => {
   await clean()
-  const lapsed = await quoteBorn('proposed', at(24 * 3))
+  const lapsed = await quoteBorn('awaiting-time', at(24 * 3))
   const unpaid = await quoteBorn('awaiting-payment', at(24 * 3))
   clearOutbox()
   await run(0)
   for (const x of [lapsed, unpaid]) {
     expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'sent'])
   }
-  expect(await kinds(lapsed.b)).toEqual([{ user_id: U.cust, kind: 'request-reopened', payload: { requestId: lapsed.r, bookingId: lapsed.b } }])
-  expect(await kinds(unpaid.b)).toEqual([
-    { user_id: U.cust, kind: 'request-reopened', payload: { requestId: unpaid.r, bookingId: unpaid.b } },
-    { user_id: U.owner, kind: 'booking-expired', payload: { bookingId: unpaid.b } }, // the provider keeps booking-expired
-  ])
+  for (const x of [lapsed, unpaid])
+    expect(await kinds(x.b)).toEqual([
+      { user_id: U.cust, kind: 'request-reopened', payload: { requestId: x.r, bookingId: x.b } },
+      { user_id: U.owner, kind: 'booking-expired', payload: { bookingId: x.b } }, // the provider keeps booking-expired
+    ])
   expect(await unmailed()).toHaveLength(0)
   const reopened = mailsTo(U.cust)
   expect(reopened).toHaveLength(2)
@@ -283,10 +282,10 @@ it('a lapsed proposal and an unpaid expiry reopen the request (timer) and send r
 
 it("reopen at the quote's expiry keeps the quote expired", async () => {
   await clean()
-  const x = await quoteBorn('proposed', at(0)) // the quote expires in the very second the proposal lapses
+  const x = await quoteBorn('awaiting-time', at(0)) // the quote expires in the very second the booking lapses
   await run(0)
   expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'expired'])
-  expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['booking-expired']) // nothing to reopen: the customer hears the booking expired
+  expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['booking-expired', 'booking-expired']) // nothing to reopen: the customer and the provider hear the booking expired
   const res = await asUser(U.cust, (tx) => confirmQuote(tx, U.cust, x.q, {}, new Date(NOW))).catch((e: Response) => e)
   expect(res).toBeInstanceOf(Response)
   expect([(res as Response).status, await (res as Response).json()]).toEqual([409, { error: 'quote-expired' }])
@@ -294,7 +293,7 @@ it("reopen at the quote's expiry keeps the quote expired", async () => {
 
 it('a direct booking and an additional task change no request', async () => {
   await clean()
-  const d = await booking('proposed', { answerBy: at(-1) })
+  const d = await booking('awaiting-time', { answerBy: at(-1) })
   const parent = await booking('confirmed')
   await pool.query('UPDATE bookings SET paid_at = $1 WHERE id = $2', [at(-24), parent])
   const kid = await quoteBorn('awaiting-payment', at(24 * 3), parent)
@@ -306,7 +305,7 @@ it('a direct booking and an additional task change no request', async () => {
   expect((await kinds(kid.b)).map((n) => [n.user_id, n.kind])).toEqual([[U.cust, 'booking-expired'], [U.owner, 'booking-expired']])
 })
 
-// A lapsed root proposal reopens its request as soon as someone acts (no cron needed); reads only show it reopened.
+// A lapsed root booking reopens its request as soon as someone acts (no cron needed); reads only show it reopened.
 const confirm = (q: string) => asUser(U.cust, (tx) => confirmQuote(tx, U.cust, q, {}, new Date(NOW)))
 const shown = async (x: { r: string; q: string }) => [
   (await asUser(U.cust, (tx) => getRequest(tx, U.cust, x.r, new Date(NOW)))).status,
@@ -316,7 +315,7 @@ const shown = async (x: { r: string; q: string }) => [
 ]
 const mailedNull = async (b: string) => (await pool.query("SELECT count(*)::int AS n FROM notifications WHERE payload->>'bookingId' = $1 AND mailed_at IS NULL", [b])).rows[0].n as number
 
-for (const kind of ['proposed', 'awaiting-payment'] as const) {
+for (const kind of ['awaiting-time', 'awaiting-payment'] as const) {
   it(`a lapsed ${kind} quote-born booking: reads show the job open again, and confirming the quote reopens it before any cron`, async () => {
     await clean()
     const x = await quoteBorn(kind, at(24 * 3))
@@ -326,7 +325,7 @@ for (const kind of ['proposed', 'awaiting-payment'] as const) {
     expect(nb.status).toBe('awaiting-payment')
     expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'booked', 'accepted']) // reopened, then booked again
     expect((await kinds(x.b)).filter((n) => n.user_id === U.cust)).toEqual([{ user_id: U.cust, kind: 'request-reopened', payload: { requestId: x.r, bookingId: x.b } }])
-    expect(await mailedNull(x.b)).toBe(kind === 'proposed' ? 1 : 2) // the outbox sends them
+    expect(await mailedNull(x.b)).toBe(2) // the outbox sends them
     const before = await kinds(x.b)
     await run(0) // the cron afterwards: no second notice, nothing reopened again
     expect(await kinds(x.b)).toEqual(before)
@@ -334,27 +333,30 @@ for (const kind of ['proposed', 'awaiting-payment'] as const) {
   })
 }
 
-it('a lapsed quote-born proposal: the provider sends a revised quote before any cron', async () => {
+it('a lapsed quote-born awaiting-time booking: the provider sends a revised quote before any cron', async () => {
   await clean()
-  const x = await quoteBorn('proposed', at(24 * 3))
+  const x = await quoteBorn('awaiting-time', at(24 * 3))
   const q2 = await asUser(U.owner, (tx) => sendQuote(tx, U.owner, x.r, { amount: 80, scope: 'rev' }, new Date(NOW)))
   expect([q2.status, q2.version]).toEqual(['sent', 2])
   expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'superseded'])
-  expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['request-reopened'])
+  expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['request-reopened', 'booking-expired'])
 })
 
-it('a lapsed quote-born proposal whose quote expired too: reads quoted/expired, confirm is 409 quote-expired, one booking-expired notice', async () => {
+it('a lapsed quote-born awaiting-time booking whose quote expired too: reads quoted/expired, confirm is 409 quote-expired, one booking-expired notice each', async () => {
   await clean()
-  const x = await quoteBorn('proposed', at(-0.5))
+  const x = await quoteBorn('awaiting-time', at(-0.5))
   expect(await shown(x)).toEqual(['quoted', 'quoted', 'quoted', 'expired'])
   const res = await confirm(x.q).catch((e: Response) => e)
   expect(res).toBeInstanceOf(Response)
   expect([(res as Response).status, await (res as Response).json()]).toEqual([409, { error: 'quote-expired' }])
   expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'expired'])
-  expect(await kinds(x.b)).toEqual([{ user_id: U.cust, kind: 'booking-expired', payload: { bookingId: x.b } }])
+  expect(await kinds(x.b)).toEqual([
+    { user_id: U.cust, kind: 'booking-expired', payload: { bookingId: x.b } },
+    { user_id: U.owner, kind: 'booking-expired', payload: { bookingId: x.b } },
+  ])
   const updated = (await pool.query('SELECT updated_at FROM requests WHERE id = $1', [x.r])).rows[0]
   await run(0)
-  expect(await kinds(x.b)).toHaveLength(1)
+  expect(await kinds(x.b)).toHaveLength(2)
   expect((await pool.query('SELECT updated_at FROM requests WHERE id = $1', [x.r])).rows[0]).toEqual(updated)
 })
 
