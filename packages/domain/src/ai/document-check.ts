@@ -3,7 +3,7 @@ import { db, documentAiChecks, documents, providers, users } from '@kando/db'
 import { describeError } from '../log-error'
 import { notifyDocumentDecision } from '../notifications'
 import { documentsBucket, storage } from '../storage'
-import { AiUnavailable, openRouterChecker, type DocumentChecker } from './openrouter'
+import { AiUnavailable, FALLBACK_COST_PER_CALL, openRouterChecker, type DocumentChecker } from './openrouter'
 import { minConfidence, monthlyCapEur, providerPin, stripPersonalData, TYPE_NAME, wouldAutoApprove } from './rules'
 
 export { DEFAULT_MIN_CONFIDENCE, DEFAULT_MONTHLY_CAP_EUR, minConfidence, monthlyCapEur, stripPersonalData, wouldAutoApprove } from './rules'
@@ -17,7 +17,7 @@ export const SPOT_CHECK_RATE = 0.1
 export const CHECKS_PER_HOUR = 10
 // Used only when OpenRouter does not report the cost of a call.
 const FALLBACK_EUR_PER_TOKEN = 0.00002
-const FALLBACK_EUR_PER_CALL = 0.02
+const FALLBACK_EUR_PER_CALL = FALLBACK_COST_PER_CALL
 
 const MIME: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
 
