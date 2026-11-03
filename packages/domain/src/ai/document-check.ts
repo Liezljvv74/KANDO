@@ -1,4 +1,4 @@
-import { and, count, eq, gt, gte, isNull, lte, ne, sql, sum } from 'drizzle-orm'
+import { and, count, eq, gt, gte, isNull, lt, lte, ne, sql, sum } from 'drizzle-orm'
 import { db, documentAiChecks, documents, providers, users } from '@kando/db'
 import { describeError } from '../log-error'
 import { notifyDocumentDecision } from '../notifications'
@@ -147,6 +147,21 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
   await notifyDocumentDecision(doc.ownerId, { id: documentId, requirement: doc.requirement, status: 'approved', note: null }).catch((e) => console.error(`[ai-check] document ${documentId} notice failed ${describeError(e)}`))
   deps.afterApproved?.()
   return 'auto-approved'
+}
+
+/**
+ * A check whose function was killed mid-way (the 60 second limit, a deploy) leaves its row undecided for good: the unique row per
+ * document blocks a retry, and the call may already have been billed. Rows older than ten minutes without a decision are closed as
+ * 'interrupted' and sent to staff, with at least the fallback cost booked (errs safe for the cap). The document was pending all along.
+ */
+export async function closeInterruptedChecks(now: Date = new Date()): Promise<number> {
+  const stale = new Date(now.getTime() - 10 * 60_000)
+  const rows = await db
+    .update(documentAiChecks)
+    .set({ failure: 'interrupted', decision: 'sent-to-staff', finishedAt: sql`now()`, costEur: sql`greatest(${documentAiChecks.costEur}, ${FALLBACK_EUR_PER_CALL})` })
+    .where(and(isNull(documentAiChecks.decision), lt(documentAiChecks.createdAt, stale)))
+    .returning({ id: documentAiChecks.id })
+  return rows.length
 }
 
 /**

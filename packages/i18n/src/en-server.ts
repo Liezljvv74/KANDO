@@ -157,6 +157,7 @@ export const en: Record<ServerKey, string> = {
   'admin.ai.failure.error': 'The AI service was not reachable or its answer was unusable',
   'admin.ai.failure.timeout': 'The AI service did not answer in time',
   'admin.ai.failure.no-name': 'The account has no name to compare with',
+  'admin.ai.failure.interrupted': 'The check was interrupted before it finished',
   'admin.ai.failure.staff-decided': 'The team had already decided',
   'admin.ai.model': 'Model',
   'admin.ai.staffDecision': 'Team decision',

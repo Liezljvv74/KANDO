@@ -155,6 +155,7 @@ export const de = {
   'admin.ai.failure.error': 'Der KI-Dienst war nicht erreichbar oder die Antwort war unbrauchbar',
   'admin.ai.failure.timeout': 'Der KI-Dienst hat nicht rechtzeitig geantwortet',
   'admin.ai.failure.no-name': 'Dem Konto fehlt ein Name zum Abgleich',
+  'admin.ai.failure.interrupted': 'Die Prüfung wurde unterbrochen, bevor sie fertig war',
   'admin.ai.failure.staff-decided': 'Das Team hatte schon entschieden',
   'admin.ai.model': 'Modell',
   'admin.ai.staffDecision': 'Entscheidung des Teams',

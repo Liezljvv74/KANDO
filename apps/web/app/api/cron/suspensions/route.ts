@@ -1,5 +1,5 @@
 import { db } from '@kando/db'
-import { endExpiredSuspensions, flushPendingObjects, pruneOldRows, purgeContactAttempts, purgeExpiredRetained, sweepIdImages } from '@kando/domain'
+import { endExpiredSuspensions, flushPendingObjects, pruneOldRows, purgeContactAttempts, purgeExpiredRetained, sweepIdImages, closeInterruptedChecks } from '@kando/domain'
 import { cronAuthorized } from '../../../../lib/cron'
 import { refreshPublicPages } from '../../../../lib/public-cache'
 
@@ -16,5 +16,6 @@ export async function GET(request: Request) {
   const pruned = await pruneOldRows(db, new Date()).catch((e) => (console.error('[cron] old rows clean-up failed', e instanceof Error ? e.name : 'unknown'), null))
   const contactAttempts = await purgeContactAttempts(db, new Date()).catch((e) => (console.error('[cron] contact attempts clean-up failed', e instanceof Error ? e.name : 'unknown'), null))
   const idImages = await sweepIdImages().catch((e) => (console.error('[cron] ID image clean-up failed', e instanceof Error ? e.name : 'unknown'), -1))
-  return Response.json({ ended, pendingObjects, purged, pruned, contactAttempts, idImages })
+  const interruptedChecks = await closeInterruptedChecks().catch((e) => (console.error('[cron] interrupted AI checks clean-up failed', e instanceof Error ? e.name : 'unknown'), -1))
+  return Response.json({ ended, pendingObjects, purged, pruned, contactAttempts, idImages, interruptedChecks })
 }

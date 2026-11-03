@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, pool } from '@kando/db'
-import { AiUnavailable, ID_DOCUMENT, openRouterChecker, runDocumentCheck, stripPersonalData, sweepIdImages, type DocumentCheckOutput, type DocumentChecker } from '@kando/domain'
+import { AiUnavailable, closeInterruptedChecks, ID_DOCUMENT, openRouterChecker, runDocumentCheck, stripPersonalData, sweepIdImages, type DocumentCheckOutput, type DocumentChecker } from '@kando/domain'
 import { setDocumentCheckerForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { adminCall, call, cleanupUsers, EMAIL, memoryStorage, profile, seedUser, sized } from './helpers'
 
@@ -167,6 +167,19 @@ it('an unexpected failure after the claim leaves a reason on the row, and the do
   expect(await runDocumentCheck(d.id, { checker: fake(OK).checker, now: new Date(NaN) })).toBe('skipped')
   expect(await check(d.id)).toMatchObject({ decision: 'sent-to-staff', failure: 'error' })
   expect((await status(d.id)).status).toBe('pending')
+})
+
+it('a check killed mid-way is closed after ten minutes: sent to staff, with a reason and at least the fallback cost', async () => {
+  const young = await pendingDoc()
+  const old = await pendingDoc()
+  await pool.query("INSERT INTO document_ai_checks (document_id, owner_id, model) VALUES ($1, $2, 'm')", [young.id, young.uid])
+  await pool.query("INSERT INTO document_ai_checks (document_id, owner_id, model, created_at) VALUES ($1, $2, 'm', now() - interval '11 minutes')", [old.id, old.uid])
+  expect(await closeInterruptedChecks()).toBe(1)
+  expect(await check(young.id)).toMatchObject({ decision: null, failure: null }) // still running, perhaps
+  expect(await check(old.id)).toMatchObject({ decision: 'sent-to-staff', failure: 'interrupted' })
+  expect(Number((await check(old.id)).cost_eur)).toBeGreaterThanOrEqual(0.02)
+  expect((await status(old.id)).status).toBe('pending')
+  expect(await closeInterruptedChecks()).toBe(0) // once
 })
 
 it('a person without a name cannot be matched: staff decide, nothing is sent', async () => {
