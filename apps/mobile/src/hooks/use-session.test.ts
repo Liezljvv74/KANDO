@@ -178,6 +178,15 @@ test('a failed terms call does not block the names; the acceptance is kept and r
   expect(await loadPending()).toBeNull()
 })
 
+test('a refused terms call (403) is not retried for ever: the names are saved and the record is cleared', async () => {
+  await savePending({ ...pending, pictureUri: null, termsAccepted: true })
+  api.updateMe.mockRejectedValueOnce(new client.ApiError(403, 'FORBIDDEN'))
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(api.updateMe).toHaveBeenCalledWith({ firstName: 'Anna', lastName: 'Berg', language: 'en', address })
+  expect(await loadPending()).toBeNull()
+})
+
 test('a failed upload keeps the record; loadSession retries it once and clears it', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)

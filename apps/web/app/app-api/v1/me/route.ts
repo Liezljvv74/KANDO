@@ -7,8 +7,9 @@ import { refreshPublicPages } from '../../../../lib/public-cache'
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) => Response.json(await getMe(tx, user!.id)))
 
 export const PATCH = appRequest({ auth: 'required', maxBodyBytes: 4096 }, async ({ tx, user, request }) => {
-  const me = await updateMe(tx, user!.id, await parseBody(MePatchSchema, request))
-  refreshPublicPages('providers') // the name on a provider page
+  const patch = await parseBody(MePatchSchema, request)
+  const me = await updateMe(tx, user!.id, patch)
+  if (patch.firstName !== undefined || patch.lastName !== undefined) refreshPublicPages('providers') // the name on a provider page
   return Response.json(me)
 })
 

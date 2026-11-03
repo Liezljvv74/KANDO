@@ -99,7 +99,10 @@ async function finish(p: PendingSignup) {
   try {
     // First, so a refused name below cannot lose it; a network blip here must not block the rest, so it is kept for the next launch.
     let termsOpen = false
-    if (p.termsAccepted) await updateMe({ termsAccepted: true }).catch(() => (termsOpen = true))
+    if (p.termsAccepted) await updateMe({ termsAccepted: true }).catch((e) => {
+      // A refusal that will never pass (4xx other than busy or timeout) is dropped; only a network or server problem is retried.
+      termsOpen = !(e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429)
+    })
     const done = () => (termsOpen ? savePending({ email: p.email, offerServices: p.offerServices, pictureUri: null, termsAccepted: true }) : clearPending())
     if (p.firstName && p.lastName) {
       const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
