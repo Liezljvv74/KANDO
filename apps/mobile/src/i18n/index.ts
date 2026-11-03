@@ -89,6 +89,7 @@ export const errorKeys: Record<string, Key> = {
   'quote-sent': 'error.booking.quote-sent',
   'wrong-side': 'error.booking.wrong-side',
   'request-limit': 'error.booking.request-limit',
+  'additional-limit': 'error.booking.additional-limit',
   'daily-limit': 'error.booking.daily-limit',
   'Unknown service': 'error.booking.unknown-service',
   TOO_FAR_AHEAD: 'error.booking.too-far-ahead',

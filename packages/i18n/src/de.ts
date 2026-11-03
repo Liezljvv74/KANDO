@@ -530,6 +530,7 @@ export const de = {
   'error.booking.quote-not-open': 'Dieses Angebot kann nicht mehr angenommen werden. Öffne die Anfrage, um den aktuellen Stand zu sehen, oder frage den Anbieter im Chat.',
   'error.booking.request-closed': 'Diese Anfrage ist geschlossen. Öffne „Meine Anfragen und Buchungen“, um den Stand zu sehen; wenn du noch Hilfe brauchst, sende eine neue Anfrage.',
   'error.booking.request-limit': 'Du hast bei diesem Anbieter schon 5 offene Anfragen. Warte auf eine Antwort oder ziehe eine Anfrage zurück, bevor du eine neue sendest. Eine unbeantwortete Anfrage läuft nach einigen Tagen von selbst ab.',
+  'error.booking.additional-limit': 'Für diese Buchung wartet schon eine zusätzliche Aufgabe auf eine Antwort. Warte auf die Antwort des Anbieters, bevor du eine weitere sendest. Eine unbeantwortete Anfrage läuft nach einigen Tagen von selbst ab.',
   'error.booking.daily-limit': 'Du hast heute schon sehr viele Anfragen gesendet. Bitte versuche es morgen wieder.',
   'error.booking.unknown-service': 'Diese Leistung gibt es nicht mehr. Geh zurück zur Suche und wähle eine andere.',
   'booking.descriptionMissing': 'Bitte beschreibe kurz, was gemacht werden soll.',

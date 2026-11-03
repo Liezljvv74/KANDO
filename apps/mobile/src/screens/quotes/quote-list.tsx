@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { QuoteListItem } from '@kando/contract'
-import { PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { confirmQuote } from '@/api/bookings'
 import { listQuoteDocuments, quotePdf } from '@/api/quotes'
@@ -27,6 +27,7 @@ export default function QuoteList() {
   const pdf = usePdf()
   const accepting = useSubmit()
   const [asking, setAsking] = useState(false)
+  const askingNow = useRef(false) // set at once, so two taps in one frame cannot both pass
   const title = t('booking.quotes')
   if (!data) return <FormScreen title={title}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
   const { received, sent } = splitQuotes(data)
@@ -36,9 +37,13 @@ export default function QuoteList() {
   const others = otherQuotes(received, now)
   // The customer reads provider, service, price and time before the call; the booking opens at once on success.
   const accept = async (q: QuoteListItem) => {
-    if (asking) return // one question at a time: a second tap while the dialog is open does nothing
+    if (askingNow.current) return // one question at a time: a second tap while the dialog is open does nothing
+    askingNow.current = true
     setAsking(true)
-    const yes = await confirmAction(acceptSummary(q), t('quote.acceptYes')).finally(() => setAsking(false))
+    const yes = await confirmAction(acceptSummary(q), t('quote.acceptYes')).finally(() => {
+      askingNow.current = false
+      setAsking(false)
+    })
     if (!yes) return
     accepting.submit(async () => {
       try {
@@ -94,8 +99,8 @@ const LARGE_FONT_SCALE = 1.2
 
 /** The accepted quotes: provider, date accepted, service, price. A row opens the booking. */
 function AcceptedTable({ rows }: { rows: AcceptedRow[] }) {
-  const { width } = useWindowDimensions()
-  const stacked = width < NARROW_WIDTH || PixelRatio.getFontScale() > LARGE_FONT_SCALE
+  const { width, fontScale } = useWindowDimensions() // re-renders when the window or the system font size changes
+  const stacked = width < NARROW_WIDTH || fontScale > LARGE_FONT_SCALE
   return (
     <Card>
       {!stacked && (

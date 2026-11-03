@@ -531,6 +531,7 @@ export const en: Record<AppKey, string> = {
   'error.booking.quote-not-open': 'This quote can no longer be accepted. Open the request to see its current status, or ask the provider in the chat.',
   'error.booking.request-closed': 'This request is closed. Open "My requests and bookings" to see its status; if you still need help, send a new request.',
   'error.booking.request-limit': 'You already have 5 open requests with this provider. Wait for an answer, or withdraw one request, before you send another. An unanswered request expires on its own after a few days.',
+  'error.booking.additional-limit': 'This booking already has an additional task waiting for an answer. Wait for the provider’s answer before you send another one. An unanswered task request expires on its own after a few days.',
   'error.booking.daily-limit': 'You have sent a lot of requests today. Please try again tomorrow.',
   'error.booking.unknown-service': 'This service no longer exists. Go back to the search and choose another one.',
   'booking.descriptionMissing': 'Please describe briefly what needs to be done.',
