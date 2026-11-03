@@ -82,8 +82,9 @@ describe('flow 1: a request carries the customer\'s time', () => {
   })
 
   it('a quote list item has a number, a role and a status', () => {
-    const item = { id: 'q1', quoteId: 'q1', number: 'Q-ABCD1234-2026-0001_Rev.1', role: 'provider', requestId: 'r1', startAt: null, durationMin: null, amount: 120, currency: 'EUR', counterparty: 'Anna H.', status: 'sent', issuedAt: '2026-11-01T10:00:00.000Z', pdfReady: true }
+    const item = { id: 'q1', quoteId: 'q1', number: 'Q-ABCD1234-2026-0001_Rev.1', role: 'provider', requestId: 'r1', startAt: null, durationMin: null, amount: 120, currency: 'EUR', counterparty: 'Anna H.', service: 'Garden work', scope: 'Mow the lawn', expiresAt: '2026-11-08T10:00:00.000Z', status: 'sent', issuedAt: '2026-11-01T10:00:00.000Z', pdfReady: true, bookingId: null, acceptedAt: null }
     expect(QuoteListItemSchema.safeParse(item).success).toBe(true)
+    expect(QuoteListItemSchema.safeParse({ ...item, service: null, bookingId: 'b1', acceptedAt: '2026-11-02T10:00:00.000Z' }).success).toBe(true)
     expect(QuoteListItemSchema.safeParse({ ...item, role: 'admin' }).success).toBe(false)
     expect(QuoteListItemSchema.safeParse({ ...item, status: 'weird' }).success).toBe(false)
   })

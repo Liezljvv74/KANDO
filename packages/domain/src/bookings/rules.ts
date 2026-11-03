@@ -17,7 +17,8 @@ export const PAY_WINDOW_HOURS = 48
 export const PAY_BEFORE_START_HOURS = 24
 export const SHORT_NOTICE_PAY_HOURS = 6
 export const SHORT_NOTICE_THRESHOLD_HOURS = 24
-export const MAX_OPEN_REQUESTS_PER_PAIR = 1
+/** One request per job: a customer may have several open ones with the same provider; their quotes never affect each other. */
+export const MAX_OPEN_REQUESTS_PER_PAIR = 5
 export const MAX_REQUESTS_PER_DAY = 10
 /** A side that already proposed this many times needs the other side to have written in the chat before it proposes again (the request is the customer's first). */
 export const PROPOSALS_BEFORE_CHAT = 1

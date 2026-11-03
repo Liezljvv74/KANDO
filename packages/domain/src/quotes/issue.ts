@@ -1,5 +1,5 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import { db, quoteDocuments, quotes, requests, users, type Tx } from '@kando/db'
+import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { db, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import type { QuoteListItem } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { invoiceProvider } from '../invoices/issue'
@@ -130,14 +130,32 @@ export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boole
 
 /**
  * The caller's quote documents, as the provider ("Quotes sent") and as the customer ("My received quotes"), newest first. A person who is
- * both gets both. Quotes sent before documents existed are not listed. RLS: the two parties only.
+ * both gets both. Quotes sent before documents existed are not listed. RLS: the two parties only. One query: the job's service title, and
+ * for an accepted quote the booking made from it (the latest one: a booking that lapsed reopens the quote, which can be accepted again)
+ * and when it was made, as `bookingId` and `acceptedAt`.
  */
 export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteListItem[]> {
   const own = await ownProvider(tx, userId)
+  const latestBooking = (col: SQL) => sql`(SELECT ${col} FROM bookings b WHERE b.quote_id = ${quotes.id} AND ${quotes.status} = 'accepted' ORDER BY b.created_at DESC LIMIT 1)`
   const rows = await tx
-    .select({ d: quoteDocuments, status: quotes.status, requestId: quotes.requestId, startAt: quotes.startAt, durationMin: quotes.durationMin, amount: quotes.amount, currency: quotes.currency })
+    .select({
+      d: quoteDocuments,
+      status: quotes.status,
+      requestId: quotes.requestId,
+      startAt: quotes.startAt,
+      durationMin: quotes.durationMin,
+      amount: quotes.amount,
+      currency: quotes.currency,
+      scope: quotes.scope,
+      expiresAt: quotes.expiresAt,
+      service: services.title,
+      bookingId: sql<string | null>`${latestBooking(sql`b.id`)}`,
+      acceptedAt: sql<Date | string | null>`${latestBooking(sql`b.created_at`)}`,
+    })
     .from(quoteDocuments)
     .innerJoin(quotes, eq(quotes.id, quoteDocuments.quoteId))
+    .innerJoin(requests, eq(requests.id, quotes.requestId))
+    .leftJoin(services, eq(services.id, requests.serviceId))
     .where(sql`${quoteDocuments.customerId} = ${userId} ${own ? sql`OR ${quoteDocuments.providerId} = ${own.id}` : sql``}`)
     .orderBy(sql`${quoteDocuments.issuedAt} DESC`, sql`${quoteDocuments.number} DESC`)
   const out: QuoteListItem[] = []
@@ -156,9 +174,14 @@ export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteL
       amount: Number(r.amount),
       currency: r.currency as QuoteListItem['currency'],
       counterparty: role === 'customer' ? draft.issuer.name : draft.customerName,
+      service: r.service,
+      scope: r.scope,
+      expiresAt: r.expiresAt.toISOString(),
       status: r.status as QuoteListItem['status'],
       issuedAt: r.d.issuedAt.toISOString(),
       pdfReady: r.d.fileKey !== null,
+      bookingId: r.bookingId,
+      acceptedAt: r.acceptedAt ? new Date(r.acceptedAt).toISOString() : null,
     })
   }
   return out

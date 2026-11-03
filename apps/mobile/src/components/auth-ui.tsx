@@ -37,12 +37,13 @@ export const Field = ({ label, error, style, hint, ...props }: TextInputProps & 
   </View>
 )
 
-export const Button = ({ label, onPress, busy, disabled, danger }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean; danger?: boolean }) => (
+/** `a11yLabel` is read instead of `label` when several buttons share one text (each says what it acts on). */
+export const Button = ({ label, onPress, busy, disabled, danger, a11yLabel }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean; danger?: boolean; a11yLabel?: string }) => (
   <Pressable
     onPress={onPress}
     disabled={busy || disabled}
     accessibilityRole="button"
-    accessibilityLabel={label}
+    accessibilityLabel={a11yLabel ?? label}
     accessibilityState={{ busy: !!busy, disabled: !!(busy || disabled) }}
     // Dims while pressed, so a tap is visible.
     style={({ pressed }) => [styles.button, danger && styles.danger, (busy || disabled) && styles.busy, pressed && styles.pressed]}>

@@ -26,26 +26,31 @@ const oldDirect = (as: string, n: number) =>
 const count = async (uid: string) =>
   (await pool.query('SELECT (SELECT count(*) FROM requests WHERE customer_id = $1)::int r, (SELECT count(*) FROM bookings WHERE customer_id = $1)::int b', [uid])).rows[0]
 
-it('a second open request to the same provider is 409 request-limit; after it expires or is booked a new one is allowed', async () => {
-  const first = await req(U.c1)
-  expect(first.status).toBe(201)
-  const id = (await first.json()).id as string
-  const second = await req(U.c1)
-  expect(second.status).toBe(409)
-  expect(await second.json()).toEqual({ error: 'request-limit' })
-  expect((await count(U.c1)).r).toBe(1) // nothing was saved
+it('up to 5 open requests to the same provider are allowed, the 6th is 409 request-limit; after one expires or is booked a new one is allowed', async () => {
+  const ids: string[] = []
+  for (let i = 0; i < 5; i++) {
+    const r = await req(U.c1)
+    expect(r.status).toBe(201)
+    ids.push((await r.json()).id as string)
+  }
+  const sixth = await req(U.c1)
+  expect(sixth.status).toBe(409)
+  expect(await sixth.json()).toEqual({ error: 'request-limit' })
+  expect((await count(U.c1)).r).toBe(5) // nothing was saved
   expect((await req(U.c1, pOwner2)).status).toBe(201) // another provider is fine
   expect((await req(U.c2)).status).toBe(201) // another customer is fine
-  expect((await call(quotesRoute.POST, U.owner, 'POST', { amount: 10, scope: 'Fence' }, { id })).status).toBe(201)
+  expect((await call(quotesRoute.POST, U.owner, 'POST', { amount: 10, scope: 'Fence' }, { id: ids[0]! })).status).toBe(201)
   expect((await req(U.c1)).status).toBe(409) // quoted (with a live quote) still counts
-  await pool.query("UPDATE requests SET status = 'expired' WHERE id = $1", [id])
+  await pool.query("UPDATE requests SET status = 'expired' WHERE id = $1", [ids[0]!])
   expect((await req(U.c1)).status).toBe(201)
   await pool.query("UPDATE requests SET status = 'booked' WHERE customer_id = $1 AND provider_id = $2", [U.c1, pOwner])
   expect((await req(U.c1)).status).toBe(201)
 })
 
 it('a quoted request whose quote has expired no longer counts toward the pair limit, before the daily timer runs', async () => {
-  const id = (await (await req(U.c5)).json()).id as string
+  const ids: string[] = []
+  for (let i = 0; i < 5; i++) ids.push((await (await req(U.c5)).json()).id as string)
+  const id = ids[4]!
   expect((await call(quotesRoute.POST, U.owner, 'POST', { amount: 10, scope: 'Fence' }, { id })).status).toBe(201)
   expect((await req(U.c5)).status).toBe(409) // a live quote counts
   await expireQuotes('request_id = $1', [id])
@@ -70,6 +75,7 @@ it('the 11th request in 24 hours (counting old direct bookings) is 409 daily-lim
 })
 
 it('two parallel creates cannot both pass the limit', async () => {
+  for (let i = 0; i < 4; i++) expect((await req(U.c4)).status).toBe(201) // one place left of the 5
   const holder = await pool.connect()
   let both: Promise<Response[]>
   try {
@@ -77,11 +83,11 @@ it('two parallel creates cannot both pass the limit', async () => {
     await holder.query("SELECT pg_advisory_xact_lock(hashtext('request_limit'), hashtext($1))", [U.c4])
     both = Promise.all([req(U.c4), req(U.c4)])
     await new Promise((ok) => setTimeout(ok, 500))
-    expect((await count(U.c4)).r).toBe(0) // both wait for the customer's lock
+    expect((await count(U.c4)).r).toBe(4) // both wait for the customer's lock
     await holder.query('COMMIT')
   } finally {
     holder.release()
   }
   expect((await both).map((x) => x.status).sort()).toEqual([201, 409])
-  expect((await count(U.c4)).r).toBe(1)
+  expect((await count(U.c4)).r).toBe(5)
 })

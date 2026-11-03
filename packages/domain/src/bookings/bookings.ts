@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
-import { bookings, providers, quotes, type Tx } from '@kando/db'
+import { bookings, providers, quoteDocuments, quotes, type Tx } from '@kando/db'
 import { HOUR, LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type Page } from '@kando/contract'
 import { NO_ID } from '../admin/common'
 import { fail, notFound } from '../providers/http'
@@ -43,7 +43,9 @@ export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'p
 export async function getBooking(tx: Tx, userId: string, id: string): Promise<BookingView> {
   const { role } = await partyOf(tx, userId, id) // 404 for anyone else
   const b = (await tx.select().from(bookings).where(eq(bookings.id, id)))[0] ?? notFound()
-  return { booking: view(b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, b) }
+  // the number of the quote this booking was made from, so the provider sees exactly which quote was accepted (both parties may read the document)
+  const quoteNumber = b.quoteId ? ((await tx.select({ n: quoteDocuments.number }).from(quoteDocuments).where(eq(quoteDocuments.quoteId, b.quoteId)))[0]?.n ?? null) : null
+  return { booking: view(b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, b), quoteNumber }
 }
 
 /** Answer the other side's last proposal: accept, decline or counter. Works for quote-born and direct bookings alike. */
