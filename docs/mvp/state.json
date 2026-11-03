@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-03 11-53",
+  "stamp": "2026-11-03 15-41",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -227,11 +227,22 @@
         "merged PR #58",
         "merged PR #59"
       ]
+    },
+    {
+      "when": "2026-11-03 15:41",
+      "commit": "b9fdbec",
+      "note": "PRs 61 (1.6b part 1: answer, counter and chat-first paths removed, quote accept for additional tasks only), 62 (every error text names the problem and the action; unmapped error codes mapped; shared texts split) and 64 (1.6c: up to 5 open requests per customer and provider, an Accept button and card per open quote, a table of accepted quotes, quote number on the provider's booking screen, lapsed bookings no longer shown as accepted) merged; PR 63 (AI disclosure decision, docs only) merged. Production and dev data checked on 3 November 2026: no bookings; production requests, quotes and chats cleared. 1.6b part 2 (the proposed status, migration 0028) is built on branch refactor/retire-proposed-status, waiting for the full web suite and the owner's go-ahead for the migration.",
+      "steps": [
+        "merged PR #61",
+        "merged PR #62",
+        "merged PR #64"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
   "workbookMerges": [
-    "58",
-    "59"
+    "61",
+    "62",
+    "64"
   ]
 }
