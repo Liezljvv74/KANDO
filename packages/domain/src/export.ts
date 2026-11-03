@@ -48,6 +48,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       staffRole: user.staffRole,
       suspendedUntil: user.suspendedUntil,
       suspendedReason: user.suspendedReason,
+      termsAcceptedAt: user.termsAcceptedAt,
       createdAt: user.createdAt,
     },
     provider: provider ?? null,

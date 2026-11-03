@@ -72,7 +72,7 @@ export async function runDocumentCheck(documentId: string, deps: CheckDeps = {})
 async function check(documentId: string, checker: DocumentChecker, deps: CheckDeps): Promise<CheckOutcome> {
   const now = deps.now ?? new Date()
   const [doc] = await db
-    .select({ id: documents.id, ownerId: documents.ownerId, requirement: documents.requirement, key: documents.key, status: documents.status, imageDeletedAt: documents.imageDeletedAt, firstName: users.firstName, lastName: users.lastName, business: providers.businessName })
+    .select({ id: documents.id, ownerId: documents.ownerId, requirement: documents.requirement, key: documents.key, status: documents.status, imageDeletedAt: documents.imageDeletedAt, firstName: users.firstName, lastName: users.lastName, termsAcceptedAt: users.termsAcceptedAt, business: providers.businessName })
     .from(documents)
     .innerJoin(users, eq(users.id, documents.ownerId))
     .leftJoin(providers, eq(providers.ownerId, documents.ownerId))
@@ -87,6 +87,8 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
     return 'sent-to-staff'
   }
 
+  // The only AI disclosure is in the terms accepted at sign-up: without that record (an older account) nothing is sent.
+  if (!doc.termsAcceptedAt) return toStaff({ failure: 'terms-not-accepted' })
   const person = [doc.firstName, doc.lastName].filter(Boolean).join(' ').trim()
   // A photo ID must carry the person's own name; the business name counts only for the other documents.
   const names = (doc.requirement === ID_DOCUMENT ? [person] : [person, (doc.business ?? '').trim()]).filter(Boolean)

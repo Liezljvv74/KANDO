@@ -177,5 +177,5 @@ export function splitName(name: string): { firstName?: string; lastName?: string
 export const getMe = () => api<Me>('/app-api/v1/me')
 
 /** Changes the account name (`name` is split into first and last name; the server derives the public name), the language of emails and/or the private address. */
-export const updateMe = ({ name, ...rest }: { name?: string; firstName?: string; lastName?: string; language?: Me['language']; address?: Address | null }) =>
+export const updateMe = ({ name, ...rest }: { name?: string; firstName?: string; lastName?: string; language?: Me['language']; address?: Address | null; termsAccepted?: true }) =>
   api<Partial<Me>>('/app-api/v1/me', { method: 'PATCH', body: { ...(name !== undefined && splitName(name)), ...rest } })
