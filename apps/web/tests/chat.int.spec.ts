@@ -5,7 +5,7 @@ import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { sendMessage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, EMAIL, insertProposedBooking, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, makeAwaitingPayment, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -14,10 +14,10 @@ const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/rout
 const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
-const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
+const confirm = await import('../app/app-api/v1/quotes/[id]/confirm/route')
 
 const U = { cust: 'ch-cust', owner: 'ch-owner', third: 'ch-third', spam: 'ch-spam' }
-let pOwner: string, sOwner: string
+let pOwner: string
 const store = memoryStorage()
 
 beforeAll(async () => {
@@ -26,7 +26,6 @@ beforeAll(async () => {
   const { categoryId } = await seedBase()
   for (const u of [U.cust, U.third, U.spam]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Ch Owner', categoryId })
-  sOwner = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pOwner])).rows[0].id
 })
 afterAll(async () => {
   setStorageForTests(undefined)
@@ -69,7 +68,7 @@ it('creating a request opens a thread; both parties list it', async () => {
 it("a quote and its acceptance appear as cards in the request's thread", async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 99.5, scope: 'Fence' }, { id: r.id })).json())
-  const acc = await call(accept.POST, U.cust, 'POST', { startAt: day(10), durationMin: 120, onSite: true, address: { postcode: '10115' } }, { id: q.id })
+  const acc = await call(confirm.POST, U.cust, 'POST', {}, { id: q.id })
   expect(acc.status).toBe(200)
   const t = await threadOf(U.cust, r.id)
   const cards = (await list(t.id, U.cust)).docs.filter((m) => m.kind === 'card')
@@ -83,20 +82,13 @@ it("a quote and its acceptance appear as cards in the request's thread", async (
   expect((await pool.query("SELECT count(*)::int AS n FROM messages WHERE thread_id = $1 AND kind = 'card'", [t.id])).rows[0].n).toBe(2)
 })
 
-it("a booking from an accepted quote shares the request's thread; an old direct booking has its own", async () => {
-  const r = await newRequest()
-  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Fence' }, { id: r.id })).json())
-  const b = BookingSchema.parse(await (await call(accept.POST, U.cust, 'POST', { startAt: day(11), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q.id })).json())
-  const t = await threadOf(U.cust, r.id)
+it("a booking from a confirmed quote shares the request's thread and has none of its own", async () => {
+  const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId: pOwner, startAt: day(11) })
+  const t = await threadOf(U.cust, b.requestId!)
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE booking_id = $1', [b.id])).rows[0].n).toBe(0)
   const { threadForBooking } = await import('@kando/domain')
   const { asUser } = await import('@kando/db')
   expect(await asUser(U.owner, (tx) => threadForBooking(tx, b.id))).toBe(t.id)
-  const direct = await insertProposedBooking({ customerId: U.cust, serviceId: sOwner, startAt: day(12), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  const own = (await pool.query('SELECT id, request_id FROM threads WHERE booking_id = $1', [direct.id])).rows
-  expect(own).toHaveLength(1)
-  expect(own[0].request_id).toBeNull()
-  expect(own[0].id).not.toBe(t.id)
 })
 
 it('text message round trip; the other side sees mine: false', async () => {
@@ -207,24 +199,24 @@ it('two first uses of a request thread at once give one thread', async () => {
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE request_id = $1', [id])).rows[0].n).toBe(1)
 })
 
-it('an accept note with contact details is 422 and nothing changes', async () => {
+it('a confirm note with contact details is 422 and nothing changes', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 20, scope: 'Fence' }, { id: r.id })).json())
-  const res = await call(accept.POST, U.cust, 'POST', { startAt: day(14), durationMin: 60, onSite: true, address: { postcode: '10115' }, note: 'mail max@example.com' }, { id: q.id })
+  const res = await call(confirm.POST, U.cust, 'POST', { note: 'mail max@example.com' }, { id: q.id })
   expect([res.status, await res.json()]).toEqual([422, { error: 'CONTACT_DETAILS' }])
   expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('sent')
   expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('quoted')
   expect((await pool.query('SELECT count(*)::int AS n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(0)
 })
 
-it('a failing card write leaves the accept at 200 and the booking created', async () => {
+it('a failing card write leaves the confirm at 200 and the booking created', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 20, scope: 'Fence' }, { id: r.id })).json())
   await pool.query("CREATE OR REPLACE FUNCTION ch_no_cards() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cards are down'; END $$")
   await pool.query("CREATE TRIGGER ch_no_cards BEFORE INSERT ON messages FOR EACH ROW WHEN (NEW.kind = 'card') EXECUTE FUNCTION ch_no_cards()")
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   try {
-    const res = await call(accept.POST, U.cust, 'POST', { startAt: day(15), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q.id })
+    const res = await call(confirm.POST, U.cust, 'POST', {}, { id: q.id })
     expect(res.status).toBe(200)
     expect((await pool.query('SELECT count(*)::int AS n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(1)
     expect(log.mock.calls.some((c) => String(c[0]).includes('could not post a acceptance card'))).toBe(true)

@@ -111,10 +111,10 @@ export const AgreedTimeInputSchema = z.object({ startAt: IsoSchema, durationMin:
 export type AgreedTimeInput = z.infer<typeof AgreedTimeInputSchema>
 
 /**
- * POST /quotes/[id]/accept: the customer's proposed time. An additional task's quote takes no time (an empty body, or a
- * note only): it gets the time, duration, place and address of the booking it adds to.
+ * POST /quotes/[id]/accept: an additional task's quote only (an empty body, or a note): it gets the time, duration, place and
+ * address of the booking it adds to. An ordinary quote is confirmed with /confirm.
  */
-export const AcceptQuoteInputSchema = z.union([TimeProposalSchema, z.object({ note: text(1000).optional() }).strict()])
+export const AcceptQuoteInputSchema = z.object({ note: text(1000).optional() }).strict()
 export type AcceptQuoteInput = z.infer<typeof AcceptQuoteInputSchema>
 
 /** One row of "Quotes sent" (role provider) or "My received quotes" (role customer): the numbered quote document. */
@@ -148,14 +148,6 @@ export const QuoteListItemSchema = z.object({
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })
 export const QuotePdfSchema = z.object({ url: z.string() })
-
-/** The other party's answer to a proposed booking. */
-export const BookingAnswerSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('accept') }),
-  z.object({ type: z.literal('decline') }),
-  z.object({ type: z.literal('counter'), startAt: IsoSchema, durationMin: DurationSchema, onSite: z.boolean() }),
-])
-export type BookingAnswer = z.infer<typeof BookingAnswerSchema>
 
 /** A date and time one side entered for an awaiting-time booking, for the other side to confirm (until answerBy). */
 export const PendingTimeSchema = z.object({

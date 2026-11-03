@@ -139,7 +139,7 @@ export default function ThreadScreen() {
           keyboardShouldPersistTaps="handled"
         />
         {thread.blocked ? (
-          <Text style={styles.blocked}>{t('chat.blocked')}</Text>
+          <Text style={styles.blocked}>{blockedByMe ? t('chat.blockedByYou', { name: thread.otherName }) : t('chat.blockedByThem')}</Text>
         ) : (
           <View style={styles.composer}>
             <ErrorText text={error ?? problem} />

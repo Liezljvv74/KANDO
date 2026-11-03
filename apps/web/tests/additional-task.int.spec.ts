@@ -217,7 +217,7 @@ it('the child is paid, finished and released on its own clock', async () => {
   const child = await paidChildOf(root.id, 40, now) // the parent's slot does not block its own additional task
   expect(await row(child)).toMatchObject({ status: 'confirmed', parent_booking_id: root.id })
   // the customer cannot finish; the provider finishes the child only
-  expect(await refusal(asUser(U.cust, (tx) => finishJob(tx, U.cust, child, {}, now)))).toEqual({ status: 403, body: { error: 'not-your-turn' } })
+  expect(await refusal(asUser(U.cust, (tx) => finishJob(tx, U.cust, child, {}, now)))).toEqual({ status: 403, body: { error: 'wrong-side' } })
   await asUser(U.owner, (tx) => finishJob(tx, U.owner, child, {}, now))
   expect((await row(child)).status).toBe('finished')
   expect((await row(root.id)).status).toBe('confirmed')

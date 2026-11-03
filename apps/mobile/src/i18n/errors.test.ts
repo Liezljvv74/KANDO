@@ -34,14 +34,14 @@ test('the delete and export texts say what happened and have no status numbers',
 })
 
 test('every booking rule code from the server has its own text in both languages', () => {
-  const codes = ['not-your-turn', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service', 'TOO_FAR_AHEAD', 'PAY_WINDOW_TOO_SHORT', 'AMOUNT_TOO_SMALL', 'PAYMENTS_OFF', 'PROVIDER_NOT_READY', 'PAYOUT_SETUP_FIRST', 'ALREADY_BOOKABLE']
+  const codes = ['not-your-turn', 'wrong-side', 'request-closed-provider', 'quote-sent', 'slot-pending', 'provider-unavailable', 'on-site-required', 'address-required', 'start-in-past', 'start-too-far', 'own-service', 'not-open', 'quote-expired', 'quote-not-open', 'use-confirm', 'request-closed', 'request-limit', 'daily-limit', 'Unknown service', 'TOO_FAR_AHEAD', 'PAY_WINDOW_TOO_SHORT', 'AMOUNT_TOO_SMALL', 'PAYMENTS_OFF', 'PROVIDER_NOT_READY', 'PAYOUT_SETUP_FIRST', 'ALREADY_BOOKABLE']
   for (const lang of ['de', 'en'] as const) {
     setLang(lang)
     for (const code of codes) expect(errorText(code)).not.toBe(errorText('unmapped'))
   }
   setLang('en')
   expect(errorText('slot-pending')).toContain('pending booking')
-  expect(errorText('PAYMENTS_OFF')).toBe('Payments are not switched on yet')
+  expect(errorText('PAYMENTS_OFF')).toBe('Payments are not switched on yet. Please check back later.')
   expect(errorText('PAYMENTS_OFF')).not.toBe(errorText('unmapped'))
 })
 
@@ -85,4 +85,14 @@ test('every ending and review code a customer or provider can get has its own te
   setLang('en')
   expect(errorText('NOT_STARTED')).toContain('cancel')
   expect(errorText('REVIEW_FINAL')).not.toMatch(/\b\d{3}\b/)
+})
+
+test('the codes a person can hit through the app each get their own text, never the generic fallback', () => {
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    const codes = ['OPEN_BOOKINGS', 'Too many pending uploads', 'quote-sent', 'wrong-side', 'request-closed-provider']
+    const texts = codes.map(errorText)
+    for (const text of texts) expect(text).not.toBe(errorText('unmapped'))
+    expect(new Set(texts).size).toBe(codes.length)
+  }
 })

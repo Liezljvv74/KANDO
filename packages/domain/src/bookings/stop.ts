@@ -43,7 +43,7 @@ export async function stopJob(tx: Tx, userId: string, bookingId: string, now = n
  * one is 409 ALREADY_STATED). The customer is told, with the date their answer is due (STOP_ANSWER_DAYS, then staff).
  */
 export async function stateStopAmount(tx: Tx, userId: string, bookingId: string, input: StopAmountInput, now = new Date()): Promise<Booking> {
-  if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'not-your-turn' })
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'wrong-side' })
   const note = input.note?.trim() || null
   if (note) await assertNoContactDetails(userId, note)
   const row = await db.transaction(async (o) => {
@@ -80,7 +80,7 @@ export async function answerStop(tx: Tx, userId: string, bookingId: string, answ
  * connection. Step 2 never throws for the money (tryRelease: logged, flagged, retried by the timer).
  */
 export async function beginAnswerStop(tx: Tx, userId: string, bookingId: string, answer: StopAnswer, now = new Date()): Promise<() => Promise<Booking>> {
-  if (((await partyOf(tx, userId, bookingId)).role) !== 'customer') fail(403, { error: 'not-your-turn' })
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'customer') fail(403, { error: 'wrong-side' })
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if ((b.status === 'completed' || b.status === 'refunded') && b.stoppedAt) return null

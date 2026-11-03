@@ -5,7 +5,7 @@ import { appPool } from '@kando/db/src/client'
 import { ProviderDetailSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, getPublicProfile, notifyBookingEvent, payoutStatus, refreshAccount, runDueTimers } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, insertProposedBooking, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, makeAwaitingPayment, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -15,8 +15,7 @@ const notifyMe = await import('../app/app-api/v1/providers/[slug]/notify-me/rout
 const profileRoute = await import('../app/app-api/v1/providers/[slug]/route')
 const requestsRoute = await import('../app/app-api/v1/requests/route')
 const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
-const acceptQuoteRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
-const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
+const confirmRoute = await import('../app/app-api/v1/quotes/[id]/confirm/route')
 const webhook = await import('../app/api/stripe/webhook/route')
 const exportRoute = await import('../app/app-api/v1/me/export/route')
 
@@ -61,7 +60,6 @@ const watch = (slug: string, as: string) => call(notifyMe.POST, as, 'POST', unde
 const unwatch = (slug: string, as: string) => call(notifyMe.DELETE, as, 'DELETE', undefined, { slug })
 const kindsFor = async (uid: string, kind: string) => (await pool.query('SELECT payload FROM notifications WHERE user_id = $1 AND kind = $2 ORDER BY created_at, id', [uid, kind])).rows
 const day = (k: number) => new Date(Date.now() + k * DAY).toISOString()
-const proposal = { startAt: day(10), durationMin: 60, onSite: true, address: { postcode: '10115' } }
 const ready = (id: string) => pool.query('UPDATE providers SET payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1', [id])
 /** With payments off (as before the switch): a request and a quote are made the normal way. */
 async function whilePaymentsOff<T>(fn: () => Promise<T>): Promise<T> {
@@ -78,8 +76,6 @@ const newRequest = async (providerId: string, as = U.c1) => {
   expect(res.status).toBe(201)
   return RequestSchema.parse(await res.json())
 }
-/** An old direct proposal (the only way to get a `proposed` booking without a quote), written directly. */
-const newBooking = (serviceId: string, as = U.c1, startAt = day(10 + ++n / 10)) => insertProposedBooking({ customerId: as, serviceId, ...proposal, startAt })
 const deliver = (accountId: string) => {
   const signed = g.event({ id: `evt_${randomUUID()}`, type: 'account-updated', accountId })
   return webhook.POST(new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: signed.body, headers: { 'stripe-signature': signed.signature } }))
@@ -156,40 +152,26 @@ it('status turns ready and the public profile shows verified', async () => {
   expect(outboxForTests().filter((m) => m.to === EMAIL(p.uid))).toHaveLength(1)
 })
 
-it('a provider without set-up cannot send a quote or accept (409); with set-up they can', async () => {
+it('a provider without set-up cannot send a quote (409); with set-up they can', async () => {
   const p = await provider()
-  const { req, b1, b2 } = await whilePaymentsOff(async () => ({ b1: await newBooking(p.serviceId), b2: await newBooking(p.serviceId), req: await newRequest(p.id) }))
-  const refused = async (res: Response, error: string) => {
-    expect(res.status).toBe(409)
-    expect((await res.json()).error).toBe(error)
-  }
-  await refused(await call(quotesRoute.POST, p.uid, 'POST', { amount: 100, scope: 'Hall' }, { id: req.id }), 'PAYOUT_SETUP_FIRST')
-  await refused(await call(answer.POST, p.uid, 'POST', { type: 'accept' }, { id: b1.id }), 'PAYOUT_SETUP_FIRST')
-  await refused(await call(answer.POST, p.uid, 'POST', { type: 'counter', startAt: day(12), durationMin: 60, onSite: true }, { id: b1.id }), 'PAYOUT_SETUP_FIRST')
-  expect((await call(answer.POST, p.uid, 'POST', { type: 'decline' }, { id: b2.id })).status).toBe(200) // saying no is always possible
+  const req = await whilePaymentsOff(() => newRequest(p.id))
+  const refused = await call(quotesRoute.POST, p.uid, 'POST', { amount: 100, scope: 'Hall' }, { id: req.id })
+  expect(refused.status).toBe(409)
+  expect((await refused.json()).error).toBe('PAYOUT_SETUP_FIRST')
   await ready(p.id)
   expect((await call(quotesRoute.POST, p.uid, 'POST', { amount: 100, scope: 'Hall' }, { id: req.id })).status).toBe(201)
-  const accepted = await call(answer.POST, p.uid, 'POST', { type: 'accept' }, { id: b1.id })
-  expect(accepted.status).toBe(200)
-  expect((await accepted.json()).status).toBe('awaiting-payment')
 })
 
-it('a provider who stops being ready: the customer cannot accept their quote or counter; bookings already accepted stay', async () => {
+it('a provider who stops being ready: the customer cannot confirm their quote; bookings already accepted stay', async () => {
   const p = await provider()
   await ready(p.id)
-  const b = await newBooking(p.serviceId)
-  expect((await call(answer.POST, p.uid, 'POST', { type: 'counter', startAt: day(13), durationMin: 60, onSite: true }, { id: b.id })).status).toBe(200)
-  const kept = await newBooking(p.serviceId)
-  expect((await call(answer.POST, p.uid, 'POST', { type: 'accept' }, { id: kept.id })).status).toBe(200)
-  const req = await newRequest(p.id) // after the bookings: relaxLimits withdraws the customer's open requests
+  const kept = await makeAwaitingPayment({ customerId: U.c1, ownerId: p.uid, providerId: p.id, startAt: day(20) })
+  const req = await newRequest(p.id) // after the booking: relaxLimits withdraws the customer's open requests
   const quote = await (await call(quotesRoute.POST, p.uid, 'POST', { amount: 100, scope: 'Hall' }, { id: req.id })).json()
   await pool.query('UPDATE providers SET payouts_ready_at = NULL WHERE id = $1', [p.id])
-  const q = await call(acceptQuoteRoute.POST, U.c1, 'POST', proposal, { id: quote.id })
+  const q = await call(confirmRoute.POST, U.c1, 'POST', {}, { id: quote.id })
   expect(q.status).toBe(409)
   expect((await q.json()).error).toBe('PROVIDER_NOT_READY')
-  const c = await call(answer.POST, U.c1, 'POST', { type: 'accept' }, { id: b.id })
-  expect(c.status).toBe(409)
-  expect((await c.json()).error).toBe('PROVIDER_NOT_READY')
   expect((await pool.query('SELECT status FROM bookings WHERE id = $1', [kept.id])).rows[0].status).toBe('awaiting-payment') // untouched
 })
 

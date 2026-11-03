@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router'
 
-import { answerBooking, enterAgreedTime } from '@/api/bookings'
+import { enterAgreedTime } from '@/api/bookings'
 import { FormScreen } from '@/components/form-ui'
 import { t, useLang } from '@/i18n'
 import { goReplace } from '@/lib/go'
@@ -21,25 +21,6 @@ export function AgreedTimeScreen() {
         submitLabel={t('booking.enterTime')}
         onSubmit={async (p) => {
           await enterAgreedTime(id, { startAt: p.startAt, durationMin: p.durationMin, onSite: p.onSite })
-          toBooking(id)
-        }}
-      />
-    </FormScreen>
-  )
-}
-
-/** A counter-proposal to the other side's time. */
-export function CounterScreen() {
-  useLang()
-  const { id } = useLocalSearchParams<{ id: string }>()
-  return (
-    <FormScreen title={t('booking.counter')}>
-      <TimeProposalForm
-        canRemote
-        withDetails={false}
-        submitLabel={t('booking.propose')}
-        onSubmit={async (p) => {
-          await answerBooking(id, { type: 'counter', startAt: p.startAt, durationMin: p.durationMin, onSite: p.onSite })
           toBooking(id)
         }}
       />

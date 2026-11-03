@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
+import { QuoteSchema, RequestSchema } from '@kando/contract'
 import { requestTime, call, cleanupUsers, EMAIL, expireQuotes, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -8,6 +8,7 @@ const requests = await import('../app/app-api/v1/requests/route')
 const requestOne = await import('../app/app-api/v1/requests/[id]/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
+const confirm = await import('../app/app-api/v1/quotes/[id]/confirm/route')
 const withdraw = await import('../app/app-api/v1/requests/[id]/withdraw/route')
 const decline = await import('../app/app-api/v1/requests/[id]/decline/route')
 
@@ -28,13 +29,12 @@ beforeAll(async () => {
 afterAll(cleanupUsers)
 
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
-const proposal = (extra: object = {}) => ({ startAt: day(10), durationMin: 120, onSite: true, address: { postcode: '10115' }, ...extra })
 const newRequest = async (providerId = pOwner, as = U.cust) => {
   await relaxLimits(as)
   return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId, description: 'Fix the fence', ...requestTime() })).json())
 }
 const quote = (reqId: string, as: string, body: object = { amount: 100, scope: 'Fence' }) => call(quotes.POST, as, 'POST', body, { id: reqId })
-const accepting = (quoteId: string, as: string, body: object = proposal()) => call(accept.POST, as, 'POST', body, { id: quoteId })
+const confirming = (quoteId: string, as: string, body: object = {}) => call(confirm.POST, as, 'POST', body, { id: quoteId })
 const ids = (j: { docs: { id: string }[] }) => j.docs.map((d) => d.id)
 
 it('customer creates a request; provider sees it incoming', async () => {
@@ -77,75 +77,44 @@ it('provider sends a quote; a second quote supersedes the first', async () => {
   expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('quoted')
   const list = await (await call(quotes.GET, U.cust, 'GET', undefined, { id: r.id })).json()
   expect(list.docs.map((d: { version: number }) => d.version)).toEqual([2, 1])
-  expect((await accepting(q1.id, U.cust)).status).toBe(409) // the superseded quote can no longer be accepted
+  expect((await confirming(q1.id, U.cust)).status).toBe(409) // the superseded quote can no longer be confirmed
 })
 
-it('customer accepts the quote with a time proposal and gets a proposed booking (no payBy yet)', async () => {
+it('an ordinary quote posted to /accept is refused with 409 use-confirm and nothing changes (it is confirmed; /accept is for additional tasks)', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner, { amount: 99.5, scope: 'Fence' })).json())
-  const res = await accepting(q.id, U.cust, { ...proposal(), note: 'Gate code 1234', amount: 1 }) // a client amount is ignored
-  expect(res.status).toBe(200)
-  const b = BookingSchema.parse(await res.json())
-  expect(b).toMatchObject({ status: 'proposed', source: 'quote', quoteId: q.id, customerId: U.cust, providerId: pOwner, amount: 99.5, currency: 'EUR', onSite: true, payBy: null, note: 'Gate code 1234', address: { postcode: '10115' } })
-  expect(new Date(b.answerBy!).getTime() - new Date(b.createdAt).getTime()).toBe(24 * 3_600_000)
-  const st = (await pool.query('SELECT (SELECT status FROM quotes WHERE id = $1) q, (SELECT status FROM requests WHERE id = $2) r', [q.id, r.id])).rows[0]
-  expect(st).toEqual({ q: 'accepted', r: 'booked' })
+  const res = await call(accept.POST, U.cust, 'POST', {}, { id: q.id })
+  expect([res.status, (await res.json()).error]).toEqual([409, 'use-confirm'])
+  expect((await call(accept.POST, U.cust, 'POST', { startAt: day(10), durationMin: 60, onSite: true }, { id: q.id })).status).toBe(400) // a time is no longer part of the body
+  expect((await call(accept.POST, U.third, 'POST', {}, { id: q.id })).status).toBe(404) // a stranger still learns nothing
+  const st = (await pool.query('SELECT (SELECT status FROM quotes WHERE id = $1) q, (SELECT status FROM requests WHERE id = $2) r, (SELECT count(*)::int FROM bookings WHERE quote_id = $1) b', [q.id, r.id])).rows[0]
+  expect(st).toEqual({ q: 'sent', r: 'quoted', b: 0 })
+  expect((await confirming(q.id, U.cust)).status).toBe(200) // the way to book it
 })
 
-it("a quote's suggested time can be kept or replaced by the customer", async () => {
-  const suggested = day(20)
-  const withSuggestion = async () => {
-    const r = await newRequest()
-    return QuoteSchema.parse(await (await quote(r.id, U.owner, { amount: 50, scope: 's', startAt: suggested, durationMin: 60 })).json())
-  }
-  const q = await withSuggestion()
-  expect(q).toMatchObject({ startAt: suggested, durationMin: 60 })
-  const kept = BookingSchema.parse(await (await accepting(q.id, U.cust, proposal({ startAt: suggested, durationMin: 60 }))).json())
-  expect(kept.startAt).toBe(suggested)
-  const q2 = await withSuggestion()
-  const other = day(25)
-  const replaced = BookingSchema.parse(await (await accepting(q2.id, U.cust, proposal({ startAt: other, durationMin: 90 }))).json())
-  expect([replaced.startAt, replaced.durationMin]).toEqual([other, 90])
-})
-
-it('onSite false is refused when the provider does not work remotely', async () => {
+it('a quote with a past time or a negative amount is 400', async () => {
   const r = await newRequest()
-  const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
-  expect((await accepting(q.id, U.cust, { startAt: day(10), durationMin: 60, onSite: false })).status).toBe(400)
-  const rr = await newRequest(pRemote)
-  const qr = QuoteSchema.parse(await (await quote(rr.id, U.remote)).json())
-  const ok = await accepting(qr.id, U.cust, { startAt: day(10), durationMin: 60, onSite: false })
-  expect(ok.status).toBe(200)
-  expect(BookingSchema.parse(await ok.json())).toMatchObject({ onSite: false, address: null })
-})
-
-it('past times, absurd durations and an address-less on-site proposal are 400', async () => {
-  const r = await newRequest()
-  const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
-  for (const bad of [{ startAt: day(-1) }, { startAt: day(400) }, { durationMin: 5000 }, { address: undefined }]) {
-    expect((await accepting(q.id, U.cust, proposal(bad))).status).toBe(400)
-  }
   expect((await quote(r.id, U.owner, { amount: 10, scope: 's', startAt: day(-1) })).status).toBe(400)
   expect((await quote(r.id, U.owner, { amount: -5, scope: 's' })).status).toBe(400)
 })
 
-it('accepting an expired quote is 409', async () => {
+it('confirming an expired quote is 409', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
   await expireQuotes('id = $1', [q.id])
-  expect((await accepting(q.id, U.cust)).status).toBe(409)
+  expect((await confirming(q.id, U.cust)).status).toBe(409)
 })
 
-it('two concurrent accepts: one 200, one 409', async () => {
+it('two concurrent confirms: one 200, one 409', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
-  // hold the request's advisory lock: both accepts must wait for it (proves they take it), then exactly one wins
+  // hold the request's advisory lock: both confirms must wait for it (proves they take it), then exactly one wins
   const holder = await pool.connect()
   let both: Promise<Response[]>
   try {
     await holder.query('BEGIN')
     await holder.query("SELECT pg_advisory_xact_lock(hashtext('booking_request'), hashtext($1))", [r.id])
-    both = Promise.all([accepting(q.id, U.cust), accepting(q.id, U.cust)])
+    both = Promise.all([confirming(q.id, U.cust), confirming(q.id, U.cust)])
     await new Promise((ok) => setTimeout(ok, 500))
     expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(0)
     await holder.query('COMMIT')
@@ -159,14 +128,14 @@ it('two concurrent accepts: one 200, one 409', async () => {
   expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(1)
 })
 
-it('a third user gets 404 on every route; the provider cannot accept', async () => {
+it('a third user gets 404 on every route; the provider cannot confirm', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
   expect((await call(requestOne.GET, U.third, 'GET', undefined, { id: r.id })).status).toBe(404)
   expect((await call(quotes.GET, U.third, 'GET', undefined, { id: r.id })).status).toBe(404)
   expect((await quote(r.id, U.third)).status).toBe(404)
-  expect((await accepting(q.id, U.third)).status).toBe(404)
-  expect((await accepting(q.id, U.owner)).status).toBe(404)
+  expect((await confirming(q.id, U.third)).status).toBe(404)
+  expect((await confirming(q.id, U.owner)).status).toBe(403) // the provider read it, only the customer confirms
   expect((await call(requestOne.GET, U.cust, 'GET', undefined, { id: r.id })).status).toBe(200)
   expect((await call(requestOne.GET, U.owner, 'GET', undefined, { id: r.id })).status).toBe(200)
   expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q.id])).rows[0].status).toBe('sent')
@@ -193,22 +162,22 @@ it('the 3-day deadline binds the first quote only; a revision follows while the 
 it('a booked request takes no further quote', async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
-  expect((await accepting(q.id, U.cust)).status).toBe(200)
+  expect((await confirming(q.id, U.cust)).status).toBe(200)
   expect((await quote(r.id, U.owner)).status).toBe(409)
 })
 
-it('a provider suspended or unpublished after the request cannot quote, and the quote cannot be accepted', async () => {
+it('a provider suspended or unpublished after the request cannot quote, and the quote cannot be confirmed', async () => {
   const gone = async (change: string) => {
     const r = await newRequest(pRemote)
     const q = QuoteSchema.parse(await (await quote(r.id, U.remote)).json())
     const r2 = await newRequest(pRemote, U.third) // another customer: one open request per pair
     await pool.query(change)
-    const out = [(await quote(r2.id, U.remote)).status, (await accepting(q.id, U.cust)).status]
+    const out = [(await quote(r2.id, U.remote)).status, (await confirming(q.id, U.cust)).status]
     await pool.query("UPDATE providers SET status = 'published', suspended_until = NULL WHERE id = $1", [pRemote])
     return out
   }
-  expect(await gone(`UPDATE providers SET suspended_until = now() + interval '1 day' WHERE id = '${pRemote}'`)).toEqual([409, 409])
-  expect(await gone(`UPDATE providers SET status = 'draft' WHERE id = '${pRemote}'`)).toEqual([409, 409])
+  expect(await gone(`UPDATE providers SET suspended_until = now() + interval '1 day' WHERE id = '${pRemote}'`)).toEqual([409, 404]) // confirm: the suspended provider's row is hidden from the customer
+  expect(await gone(`UPDATE providers SET status = 'draft' WHERE id = '${pRemote}'`)).toEqual([409, 404])
 })
 
 const closing = (route: typeof withdraw, reqId: string, as: string) => call(route.POST, as, 'POST', undefined, { id: reqId })
@@ -227,7 +196,7 @@ it('the customer withdraws an open and a quoted request; the provider is told', 
   expect((await closing(withdraw, quoted.id, U.cust)).status).toBe(200)
   expect([await statusOf('requests', quoted.id), await statusOf('quotes', q.id)]).toEqual(['withdrawn', 'declined'])
   expect(await told(U.owner, 'request-withdrawn', quoted.id)).toBe(1)
-  expect((await accepting(q.id, U.cust)).status).toBe(409) // nothing left to accept
+  expect((await confirming(q.id, U.cust)).status).toBe(409) // nothing left to confirm
   expect((await quote(quoted.id, U.owner)).status).toBe(409) // nor to quote
 })
 
@@ -247,16 +216,16 @@ it('the other side gets 403, a stranger 404, a booked request 409', async () => 
   const r = await newRequest()
   for (const [route, wrong] of [[withdraw, U.owner], [decline, U.cust]] as const) {
     const res = await closing(route, r.id, wrong)
-    expect([res.status, (await res.json()).error]).toEqual([403, 'not-your-turn'])
+    expect([res.status, (await res.json()).error]).toEqual([403, 'wrong-side'])
     expect((await closing(route, r.id, U.third)).status).toBe(404)
     expect((await closing(route, 'not-a-uuid', U.cust)).status).toBe(404)
   }
   expect(await statusOf('requests', r.id)).toBe('open')
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
-  expect((await accepting(q.id, U.cust)).status).toBe(200)
-  for (const [route, as] of [[withdraw, U.cust], [decline, U.owner]] as const) {
+  expect((await confirming(q.id, U.cust)).status).toBe(200)
+  for (const [route, as, code] of [[withdraw, U.cust, 'request-closed'], [decline, U.owner, 'request-closed-provider']] as const) {
     const res = await closing(route, r.id, as)
-    expect([res.status, (await res.json()).error]).toEqual([409, 'request-closed'])
+    expect([res.status, (await res.json()).error]).toEqual([409, code])
   }
   expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
 })
@@ -279,7 +248,7 @@ it('withdraw racing sendQuote leaves no sent quote', async () => {
   expect(w.status).toBe(200)
   expect(await statusOf('requests', r.id)).toBe('withdrawn')
   if (s.status === 201) expect(await statusOf('quotes', QuoteSchema.parse(await s.json()).id)).toBe('declined')
-  else expect([s.status, (await s.json()).error]).toEqual([409, 'request-closed'])
+  else expect([s.status, (await s.json()).error]).toEqual([409, 'request-closed-provider'])
   expect((await pool.query("SELECT count(*)::int n FROM quotes WHERE request_id = $1 AND status = 'sent'", [r.id])).rows[0].n).toBe(0)
 })
 

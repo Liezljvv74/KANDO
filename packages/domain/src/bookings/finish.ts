@@ -25,7 +25,7 @@ export const reload = async (id: string) => toBooking((await db.select().from(bo
  * INVALID_MATERIAL_AMOUNT). Owner connection (finished is an owner-only status), the row locked and re-checked.
  */
 export async function finishJob(tx: Tx, userId: string, bookingId: string, input: FinishInput, now = new Date()): Promise<Booking> {
-  if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'not-your-turn' })
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'wrong-side' })
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
@@ -58,7 +58,7 @@ export async function confirmJob(tx: Tx, userId: string, bookingId: string, now 
  * for the money (tryRelease: logged, flagged, retried by the timer).
  */
 export async function beginConfirmJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<() => Promise<Booking>> {
-  if (((await partyOf(tx, userId, bookingId)).role) !== 'customer') fail(403, { error: 'not-your-turn' })
+  if (((await partyOf(tx, userId, bookingId)).role) !== 'customer') fail(403, { error: 'wrong-side' })
   const b = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status === 'completed') return b

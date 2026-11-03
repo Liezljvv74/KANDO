@@ -1,5 +1,5 @@
-import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm'
-import { bookingAppInsert, bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
+import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
 import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -7,16 +7,15 @@ import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
 import { threadForRequest, threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
-import { notifyBookingEvent, notifyProposal } from './notify'
+import { notifyBookingEvent } from './notify'
 import { timeIsAcceptable } from './busy'
-import { assertMayPropose } from './rounds'
 import { isUuid, NO_ID } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { issueQuoteDocument } from '../quotes/issue'
 import { canTransact } from '../payments/rules'
-import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, PROPOSAL_ANSWER_HOURS, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
+import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
@@ -248,15 +247,15 @@ export async function listQuotes(tx: Tx, userId: string, requestId: string, now 
 const unavailable = () => fail(409, { error: 'provider-unavailable' })
 
 /**
- * The customer changes an OPEN request (flow 1), before any quote exists. A change of start, duration or place kind counts as a
- * proposal under the round rule (assertMayPropose), restarts the provider's answer period and tells the provider; changing only the
+ * The customer changes an OPEN request (flow 1), before any quote exists. A change of start, duration or place kind
+ * restarts the provider's answer period and tells the provider; changing only the
  * address or note is free. Once a quote was sent (status quoted) the customer cannot change the request (409 quote-sent): changes go
  * through the chat and the provider's revised quote. The writes run on the owner connection after the checks, under the request
  * lock. 404 for a stranger, 403 for the provider, 409 request-closed for a closed or lapsed request.
  */
 export async function reviseRequest(tx: Tx, userId: string, requestId: string, input: TimeProposal, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
   const first = await ownRequest(tx, userId, requestId)
-  if (first.customerId !== userId) fail(403, { error: 'not-your-turn' })
+  if (first.customerId !== userId) fail(403, { error: 'wrong-side' })
   await lockRequest(tx, requestId)
   const row = (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] ?? notFound() // read again after the lock
   if (row.status === 'quoted') fail(409, { error: 'quote-sent' }) // a sent quote is final for the customer: changes go through the chat and the provider's revised quote
@@ -272,7 +271,6 @@ export async function reviseRequest(tx: Tx, userId: string, requestId: string, i
   if (!timeChanged && !otherChange) return toRequest(row, now)
   if (input.note) await assertNoContactDetails(userId, input.note)
   if (timeChanged) {
-    await assertMayPropose(tx, row, 'customer', provider.ownerId)
     await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin: input.durationMin, onSite: input.onSite, now, clash: false })
   }
   const updated = await db.transaction(async (o) => {
@@ -308,10 +306,10 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   const req = (await own())[0]! // read again after the lock
   if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
   if (!canTransact(provider)) fail(409, { error: 'PAYOUT_SETUP_FIRST' })
-  if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed' })
+  if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed-provider' })
   // The 3-day answer deadline binds the first quote only; a revision may follow while the last quote is still valid.
   const open = (await tx.select({ e: quotes.expiresAt }).from(quotes).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent'))))[0]
-  if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed' })
+  if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed-provider' })
   // flow 1: an ordinary request's quote may carry a time (checked like any offered time, clash included) or none ("to be confirmed").
   // A time other than the request's is the provider's proposal under the round rule. An additional task keeps its old rules.
   const startAt = input.startAt ? new Date(input.startAt) : null
@@ -321,7 +319,6 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     if (ordinary) await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin: input.durationMin!, onSite: req.onSite ?? true, now })
     else assertFuture(startAt, now)
   }
-  if (proposedOtherTime) await assertMayPropose(tx, req, 'provider', req.customerId)
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
   const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${provider.country}`)).rows[0]!.currency
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
@@ -360,19 +357,20 @@ async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'cust
   const read = async () => (isUuid(requestId) ? (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] : undefined) ?? notFound()
   const first = await read() // party check before the lock: a stranger cannot make anyone wait
   const side = first.customerId === userId ? 'customer' : (await ownProvider(tx, userId))?.id === first.providerId ? 'provider' : notFound()
-  if (side !== by) fail(403, { error: 'not-your-turn' })
+  if (side !== by) fail(403, { error: 'wrong-side' })
+  const closedError = by === 'customer' ? 'request-closed' : 'request-closed-provider' // the provider's text does not tell them to send a new request
   await lockRequest(tx, requestId)
   if (first.status === 'booked') await expireLapsedRoot(requestId, now) // a lapsed proposal gives the job back first
   const req = await read() // read again after the lock
   // a lapsed open request is the cron's to expire (it counts toward requests-ignored), never withdrawn or declined
-  if (!['open', 'quoted'].includes(req.status) || (req.status === 'open' && req.answerBy <= now)) fail(409, { error: 'request-closed' })
+  if (!['open', 'quoted'].includes(req.status) || (req.status === 'open' && req.answerBy <= now)) fail(409, { error: closedError })
   // the timers' expiry takes no request lock: it may commit after the read, so the UPDATE re-checks the status
   const [row] = await tx
     .update(requests)
     .set({ status: by === 'customer' ? 'withdrawn' : 'declined', updatedAt: now })
     .where(and(eq(requests.id, requestId), inArray(requests.status, ['open', 'quoted'])))
     .returning()
-  if (!row) fail(409, { error: 'request-closed' })
+  if (!row) fail(409, { error: closedError })
   afterCommit(async () => {
     if (by === 'provider') return notifyBookingEvent('request-declined', req.customerId, { requestId })
     // the owner connection: RLS may hide a suspended provider's row from its customer
@@ -388,6 +386,10 @@ export const withdrawRequest = (tx: Tx, userId: string, requestId: string, now =
 export const declineRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>
   closeRequest(tx, userId, requestId, 'provider', now, afterCommit)
 
+/**
+ * The customer accepts an additional task's quote: the parent booking's time and place, awaiting payment at once (additional.ts).
+ * An ordinary quote is confirmed with confirmQuote (confirm.ts), which calls this for an additional task: 409 `use-confirm` here.
+ */
 export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input: AcceptQuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   const find = async () => {
     const q = isUuid(quoteId) ? (await tx.select().from(quotes).where(eq(quotes.id, quoteId)))[0] : undefined
@@ -395,6 +397,7 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
     return q && r ? { quote: q, req: r } : null
   }
   const pre = (await find()) ?? notFound() // party check before the lock: a stranger cannot make anyone wait
+  if (!pre.req.parentBookingId) fail(409, { error: 'use-confirm' })
   if (await blockedWithProvider(tx, userId, pre.req.providerId)) fail(403, { error: 'BLOCKED' })
   if (input.note) await assertNoContactDetails(userId, input.note)
   await lockRequest(tx, pre.req.id)
@@ -408,40 +411,8 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   // a suspended or unpublished provider row is hidden from the customer by RLS: that is unavailable too
   if (!provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) return unavailable()
   if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // the provider's payouts stopped being ready since the quote
-  if (req.parentBookingId) {
-    // an additional task: the parent's time and place, awaiting payment at once (additional.ts)
-    const child = await acceptAdditional(quote, req, input.note ?? null, now)
-    const threadId = await threadForRequest(tx, req.id) // the parent's thread
-    afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
-    return toBooking(child, now)
-  }
-  if (!('startAt' in input)) return fail(400, { error: 'time-required' })
-  const startAt = new Date(input.startAt)
-  assertFuture(startAt, now)
-  if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
-  await tx.update(quotes).set({ status: 'accepted' }).where(eq(quotes.id, quote.id))
-  await tx.update(requests).set({ status: 'booked', updatedAt: now }).where(eq(requests.id, req.id))
-  const [row] = await tx
-    .insert(bookingAppInsert) // the price comes from the quote (trigger bookings_fill_amount), never from the client
-    .values({
-      customerId: userId,
-      providerId: provider.id,
-      serviceId: req.serviceId,
-      quoteId: quote.id,
-      source: 'quote',
-      status: 'proposed',
-      startAt,
-      durationMin: input.durationMin,
-      onSite: input.onSite,
-      ...(input.onSite && input.address && { addressStreet: input.address.street ?? null, addressPostcode: input.address.postcode, addressCity: input.address.city ?? null }),
-      note: input.note ?? null,
-      answerBy: new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning(getTableColumns(bookings))
-  const threadId = await threadForRequest(tx, req.id)
-  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: row!.id, amount: Number(row!.amount), currency: row!.currency as 'EUR' }))
-  notifyProposal(afterCommit, provider, row!)
-  return toBooking(row!, now)
+  const child = await acceptAdditional(quote, req, input.note ?? null, now)
+  const threadId = await threadForRequest(tx, req.id) // the parent's thread
+  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
+  return toBooking(child, now)
 }

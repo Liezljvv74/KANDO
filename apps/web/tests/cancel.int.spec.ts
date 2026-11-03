@@ -262,7 +262,7 @@ it('an objection within 48 hours opens a dispute and moves no money', async () =
   const at = new Date(T.getTime() + HOUR)
   await report(U.cust, id, at)
   // only the reported side objects; a third person sees nothing
-  expect(await refusal(object(U.cust, id, at))).toEqual({ status: 403, body: { error: 'not-your-turn' } })
+  expect(await refusal(object(U.cust, id, at))).toEqual({ status: 403, body: { error: 'wrong-side' } })
   expect((await call(objectRoute.POST, U.third, 'POST', { description: 'x' }, { id })).status).toBe(404)
   expect((await call(objectRoute.POST, U.owner, 'POST', { description: 'Ruf mich an: 0170 1234567' }, { id })).status).toBe(422)
   expect((await call(objectRoute.POST, U.owner, 'POST', { description: '' }, { id })).status).toBe(400)

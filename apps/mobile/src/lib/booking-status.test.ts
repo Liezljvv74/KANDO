@@ -41,18 +41,12 @@ test('awaiting the agreed time: either side enters one, only the other side conf
   expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('customer') }), 'provider')).toEqual(['confirmTime', 'enterTime'])
 })
 
-test('a new proposal waits for the provider; the customer can only withdraw', () => {
-  expect(bookingStatusText(b({}), 'customer')).toBe('bookingStatus.waitProvider')
+test('an old proposed booking has a neutral status and can only be withdrawn by the customer (no answering or countering any more)', () => {
+  expect(bookingStatusText(b({}), 'customer')).toBe('bookingStatus.proposed')
+  expect(bookingStatusText(b({}), 'provider')).toBe('bookingStatus.proposed')
   expect(bookingActions(b({}), 'customer')).toEqual(['withdraw'])
-  expect(bookingStatusText(b({}), 'provider')).toBe('bookingStatus.answerNow')
-  expect(bookingActions(b({}), 'provider')).toEqual(['accept', 'decline', 'counter'])
-})
-
-test('after the provider countered it is the customer\'s turn, after the customer countered back the provider\'s', () => {
-  expect(bookingActions(b({ counterBy: 'provider' }), 'customer')).toEqual(['accept', 'decline', 'counter', 'withdraw'])
-  expect(bookingActions(b({ counterBy: 'provider' }), 'provider')).toEqual([])
-  expect(bookingStatusText(b({ counterBy: 'provider' }), 'provider')).toBe('bookingStatus.waitCustomer')
-  expect(bookingActions(b({ counterBy: 'customer' }), 'provider')).toEqual(['accept', 'decline', 'counter'])
+  expect(bookingActions(b({}), 'provider')).toEqual([])
+  expect(bookingActions(b({ counterBy: 'provider' }), 'customer')).toEqual(['withdraw'])
 })
 
 test('awaiting payment names the pay-by date for the customer and allows withdrawing', () => {
