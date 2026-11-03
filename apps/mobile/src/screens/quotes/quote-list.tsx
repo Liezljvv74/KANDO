@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import type { QuoteListItem } from '@kando/contract'
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
@@ -13,7 +13,9 @@ import { t, useLang } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
 import { confirmAction } from '@/lib/confirm'
 import { go, goReplace } from '@/lib/go'
+import { asksStillWanted } from '@/lib/lapse'
 import { acceptedRows, acceptSummary, openQuotes, otherQuotes, quoteLines, quoteWhen, splitQuotes, type AcceptedRow, price } from '@/lib/quotes'
+import { LapseBanner } from '@/screens/bookings/lapse-banner'
 import { DocRow, usePdf } from '@/screens/invoices/invoice-list'
 
 /**
@@ -63,7 +65,10 @@ export default function QuoteList() {
       {data.length === 0 && <Empty text={t('quote.none')} />}
       {open.length > 0 && <SectionTitle text={t('quote.openTitle')} />}
       {open.map((q) => (
-        <OfferCard key={q.id} q={q} busy={accepting.busy || asking} onAccept={() => accept(q)} onPdf={() => pdf.open(q.id, () => quotePdf(q.id))} />
+        <Fragment key={q.id}>
+          {asksStillWanted(q, now) && <LapseBanner q={q} onBookAgain={() => accept(q)} onClosed={retry} busy={accepting.busy || asking} />}
+          <OfferCard q={q} asked={asksStillWanted(q, now)} busy={accepting.busy || asking} onAccept={() => accept(q)} onPdf={() => pdf.open(q.id, () => quotePdf(q.id))} />
+        </Fragment>
       ))}
       {accepted.length > 0 && <SectionTitle text={t('quote.acceptedTitle')} />}
       {accepted.length > 0 && <AcceptedTable rows={accepted} />}
@@ -75,8 +80,8 @@ export default function QuoteList() {
   )
 }
 
-/** One open quote with everything that is accepted by its button: provider, service, price, time, scope and last valid day. */
-function OfferCard({ q, busy, onAccept, onPdf }: { q: QuoteListItem; busy: boolean; onAccept: () => void; onPdf: () => void }) {
+/** One open quote with everything that is accepted by its button: provider, service, price, time, scope and last valid day. `asked`: its lapse banner above carries the buttons instead. */
+function OfferCard({ q, asked, busy, onAccept, onPdf }: { q: QuoteListItem; asked: boolean; busy: boolean; onAccept: () => void; onPdf: () => void }) {
   const total = price(q)
   return (
     <Card>
@@ -86,7 +91,7 @@ function OfferCard({ q, busy, onAccept, onPdf }: { q: QuoteListItem; busy: boole
       <Text style={styles.small}>{q.startAt ? t('booking.quoteSuggested', { when: quoteWhen(q) }) : quoteWhen(q)}</Text>
       <Text style={styles.text}>{q.scope}</Text>
       <Text style={styles.small}>{t('booking.quoteValidUntil', { date: formatWhen(q.expiresAt) })}</Text>
-      <Button label={t('quote.accept')} a11yLabel={t('quote.acceptLabel', { number: q.number, provider: q.counterparty, price: total })} onPress={onAccept} busy={busy} />
+      {!asked && <Button label={t('quote.accept')} a11yLabel={t('quote.acceptLabel', { number: q.number, provider: q.counterparty, price: total })} onPress={onAccept} busy={busy} />}
       <LinkText label={t('invoice.open', { name: `${t('quote.label')} ${q.number}` })} onPress={onPdf} />
       <LinkText label={t('quote.openRequest')} onPress={() => go(`/bookings/request/${q.requestId}`)} />
     </Card>

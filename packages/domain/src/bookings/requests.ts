@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
-import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
+import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
@@ -15,7 +15,7 @@ import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { issueQuoteDocument } from '../quotes/issue'
 import { canTransact } from '../payments/rules'
-import { assertFuture, bookingShownStatus, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
+import { assertFuture, bookingShownStatus, lapseReason, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
@@ -23,11 +23,12 @@ import { ratingsOf } from '../reviews'
 const iso = (d: Date) => d.toISOString()
 
 /**
- * The mappers show a lapsed row as expired (reads never write; the daily cron does): see bookingShownStatus. `reopened`: the
- * request's root booking lapsed (lapsedRoots), so the rows read as trigger bookings_reopen_request will write them.
+ * The mappers show a lapsed row as expired (reads never write; the daily cron does): see bookingShownStatus. `lapse`: the
+ * request's root booking lapsed (lapsedRoots), so the rows read as trigger bookings_reopen_request will write them; `lapsed` on the
+ * request is its reason while the job reads open again and the quote it came from can still be booked (the app asks "still want it?").
  */
-export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), reopened = false): BookingRequest => {
-  const status = reopened && r.status === 'booked' ? 'quoted' : r.status
+export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), lapse?: Lapse): BookingRequest => {
+  const status = lapse && r.status === 'booked' ? 'quoted' : r.status
   return {
     id: r.id,
     customerId: r.customerId,
@@ -44,6 +45,7 @@ export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), reo
     revision: r.revision,
     parentBookingId: r.parentBookingId,
     status: (status === 'open' && r.answerBy <= now ? 'expired' : status) as BookingRequest['status'],
+    lapsed: status === 'quoted' && lapse?.open ? lapse.reason : null, // the provider's view carries it too; only the customer's app asks
     answerBy: iso(r.answerBy),
     createdAt: iso(r.createdAt),
     updatedAt: iso(r.updatedAt),
@@ -68,14 +70,31 @@ export const toQuote = (q: typeof quotes.$inferSelect, now = new Date(), reopene
   }
 }
 
-/** Request id > quote id, for each request whose live root booking reads expired: the job reads open again (no write). */
-async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, string | null>> {
-  if (!requestIds.length) return new Map()
+/** A request's lapsed root booking: its quote, why it lapsed, and whether that quote can still be booked (sent or accepted, and valid). */
+type Lapse = { quoteId: string | null; reason: LapseReason; open: boolean }
+
+/**
+ * Request id > lapse, for each request whose latest root booking reads expired (not yet written by the timer, or written already):
+ * the job reads open again (no write). One query for all the requests; only the latest root booking of a request counts, so a job
+ * booked again after a lapse is not lapsed.
+ */
+async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, Lapse>> {
+  const out = new Map<string, Lapse>()
+  if (!requestIds.length) return out
   const roots = await tx
-    .select({ requestId: bookings.requestId, quoteId: bookings.quoteId, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
+    .select({ requestId: bookings.requestId, quoteId: bookings.quoteId, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy, quoteStatus: quotes.status, expiresAt: quotes.expiresAt })
     .from(bookings)
-    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['awaiting-time', 'awaiting-payment'])))
-  return new Map(roots.filter((b) => bookingShownStatus(b, now) === 'expired').map((b) => [b.requestId!, b.quoteId]))
+    .leftJoin(quotes, eq(quotes.id, bookings.quoteId))
+    .where(and(inArray(bookings.requestId, requestIds), isNull(bookings.parentBookingId), inArray(bookings.status, ['awaiting-time', 'awaiting-payment', 'expired'])))
+    .orderBy(desc(bookings.createdAt))
+  const seen = new Set<string>()
+  for (const b of roots) {
+    if (seen.has(b.requestId!)) continue
+    seen.add(b.requestId!)
+    const reason = lapseReason(b, now)
+    if (reason) out.set(b.requestId!, { quoteId: b.quoteId, reason, open: (b.quoteStatus === 'accepted' || b.quoteStatus === 'sent') && b.expiresAt! > now })
+  }
+  return out
 }
 
 /** Null address parts are left out, as the contract has them optional. */
@@ -207,7 +226,7 @@ export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'p
     .limit(LIST_PAGE + 1)
   const { rows, next } = pageOf(found)
   const lapsed = await lapsedRoots(tx, rows.map(({ r }) => r.id), now)
-  const list = rows.map(({ r }) => toRequest(r, now, lapsed.has(r.id)))
+  const list = rows.map(({ r }) => toRequest(r, now, lapsed.get(r.id)))
   return { docs: role === 'provider' ? await withCustomerRatings(tx, list.map(hideStreet)) : list, next }
 }
 
@@ -231,14 +250,14 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   // an additional task talks in its booking's thread
   const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
   const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
-  const dto = { ...toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).has(row.id)), threadId }
+  const dto = { ...toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id)), threadId }
   return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }
 
 /** Quotes of a request, newest version first, for either party. */
 export async function listQuotes(tx: Tx, userId: string, requestId: string, now = new Date()): Promise<Quote[]> {
   await ownRequest(tx, userId, requestId)
-  const reopened = (await lapsedRoots(tx, [requestId], now)).get(requestId)
+  const reopened = (await lapsedRoots(tx, [requestId], now)).get(requestId)?.quoteId
   return (await tx.select().from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version))).map((q) => toQuote(q, now, q.id === reopened))
 }
 

@@ -1,4 +1,4 @@
-import { HOUR, type BOOKING_STATUSES } from '@kando/contract'
+import { HOUR, type BOOKING_STATUSES, type LapseReason } from '@kando/contract'
 
 import { MAX_PAY_AHEAD_DAYS, PAY_GRACE_MINUTES, paymentsEnabled } from '../payments/rules'
 import { fail } from '../providers/http'
@@ -72,6 +72,14 @@ export const bookingShownStatus = (b: { status: string; answerBy: Date | null; p
   if (b.status === 'awaiting-payment' && b.payBy && b.payBy.getTime() + PAY_GRACE_MINUTES * 60_000 <= now.getTime()) return 'expired'
   return b.status
 }
+
+/**
+ * Why a booking reads expired (null: it does not): awaiting-payment past its pay-by is a payment lapse, awaiting-time past its answer-by
+ * a time lapse. Once the timer has written `expired` the stored row tells the same: a pay_by is only ever set for a booking that reached
+ * awaiting-payment.
+ */
+export const lapseReason = (b: { status: string; answerBy: Date | null; payBy: Date | null }, now: Date): LapseReason | null =>
+  bookingShownStatus(b, now) !== 'expired' ? null : b.status === 'awaiting-payment' || (b.status === 'expired' && b.payBy) ? 'payment' : 'time'
 
 export const canTransition = (from: BookingStatus, to: BookingStatus): boolean => TRANSITIONS[from].includes(to)
 

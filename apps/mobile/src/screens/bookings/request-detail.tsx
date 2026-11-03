@@ -15,6 +15,7 @@ import { confirmDanger } from '@/lib/confirm'
 import { goReplace } from '@/lib/go'
 import { placeText } from '@/lib/place'
 import { OpenChat } from '@/screens/chat/open-chat'
+import { LapsedAsk } from '@/screens/bookings/lapse-banner'
 import { QuoteCard } from '@/screens/bookings/quote-card'
 import { SendQuoteForm } from '@/screens/bookings/send-quote-form'
 
@@ -66,6 +67,7 @@ export default function RequestDetail() {
         <Text style={styles.small}>{t(`requestStatus.${request.status}` as Key)}</Text>
         {open && <Text style={styles.small}>{t('booking.answerBy', { date: formatWhen(request.answerBy) })}</Text>}
       </Card>
+      {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       <OpenChat find={async () => request.threadId ?? null} />
       <SectionTitle text={t('booking.quotes')} />
       {quotes.length === 0 && <Text style={styles.small}>{t('booking.noQuotes')}</Text>}

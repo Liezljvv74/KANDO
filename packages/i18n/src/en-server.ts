@@ -340,6 +340,6 @@ export const en: Record<ServerKey, string> = {
   'email.timeToConfirm.body': 'A date and time was entered for your booking. Please open the app to confirm it.',
   'email.quoteConfirmed.subject': 'The customer accepted your quote',
   'email.quoteConfirmed.body': 'The customer accepted your quote. Please open the app. If no date and time was set yet, agree it with the customer in the chat.',
-  'email.requestReopened.subject': 'Quote open again',
-  'email.requestReopened.body': 'The time was not agreed. The quote is open again until {date}. Please propose another time.',
+  'email.requestReopened.subject': 'Your booking lapsed: do you still want it?',
+  'email.requestReopened.body': "A booking lapsed: the payment time passed or no time was agreed. The quote is open again until {date}. Do you still want it? Open the quote to book again, or tell the provider you don't need it.",
 }

@@ -26,6 +26,7 @@ const q = (over: Partial<QuoteListItem>): QuoteListItem => ({
   pdfReady: true,
   bookingId: null,
   bookedAt: null,
+  lapsed: null,
   ...over,
 })
 
