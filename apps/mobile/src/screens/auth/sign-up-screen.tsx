@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router'
-import { useState } from 'react'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useEffect, useState } from 'react'
 import { Image, StyleSheet, Text, View } from 'react-native'
 
 import { ApiError } from '@/api/client'
@@ -15,6 +15,7 @@ import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 export default function SignUpScreen() {
   useLang()
   const router = useRouter()
+  const { offer } = useLocalSearchParams<{ offer?: string }>() // the welcome card "I offer my skills" presets the switch
   const { signUp } = useSession()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -22,7 +23,8 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('')
   const [pictureUri, setPictureUri] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
-  const [offerServices, setOfferServices] = useState(false)
+  const [offerServices, setOfferServices] = useState(offer === '1')
+  useEffect(() => setOfferServices(offer === '1'), [offer]) // a screen that stays mounted still follows the card tapped
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

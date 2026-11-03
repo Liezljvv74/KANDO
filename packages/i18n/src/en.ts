@@ -1,7 +1,7 @@
 import type { AppKey } from './app'
 
 export const en: Record<AppKey, string> = {
-  'brand.name': 'SkillWeb',
+  'brand.name': 'KANDO',
   'brand.tagline': 'Find skilled people near you',
   'common.language': 'Language',
   'common.email': 'Email',
@@ -286,6 +286,16 @@ export const en: Record<AppKey, string> = {
   'home.soon': 'Coming soon',
   'home.ctaTitle': 'Ready? Get the app.',
   'home.ctaText': 'Free for iPhone and Android.',
+  'welcome.logInRegister': 'Log in/Register',
+  'welcome.needHelp': 'I need help',
+  'welcome.needHelpText': 'Describe what you need for free and get quotes from providers near you.',
+  'welcome.offer': 'I offer my skills',
+  'welcome.offerText': 'Create your profile and find new customers. No lead fees, no subscription.',
+  'welcome.learn': 'Learn more',
+  'welcome.learnText': 'See how {brand} works and how it keeps both sides safe.',
+  'welcome.backHome': 'Back to home',
+  'welcome.howTitle': 'How it works',
+  'welcome.register': 'Register to get started',
   'notification.profileLive': 'Your profile is live. Tell people about it.',
   'notification.requestReceived': 'You have a new request with a date, time and place. Send a quote or decline within 3 days.',
   'notification.quoteReceived': 'A quote is ready for your request. Confirm it to book; it is valid for 7 days.',

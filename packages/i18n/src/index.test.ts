@@ -65,13 +65,12 @@ describe('catalogue', () => {
     }
   })
 
-  it('the product name is only written in brand.name', () => {
+  it('only the KANDO name appears in texts, no other brand', () => {
     for (const [key, text] of [...Object.entries(de), ...Object.entries(en)]) {
-      if (key === 'brand.name') continue
       expect(text, key).not.toMatch(/skillweb/i)
       expect(text, key).not.toMatch(/Skilled/)
     }
-    expect(de['brand.name']).toBe('SkillWeb')
+    expect(de['brand.name']).toBe('KANDO')
   })
 })
 
@@ -84,7 +83,7 @@ describe('t', () => {
 
   it('fills the brand name without a parameter', () => {
     expect(t('en', 'email.verify.body', { code: '123456' })).toBe(
-      'Welcome to SkillWeb! Your confirmation code is: 123456',
+      'Welcome to KANDO! Your confirmation code is: 123456',
     )
   })
 
