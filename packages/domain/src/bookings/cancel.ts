@@ -162,7 +162,7 @@ export async function objectNoShow(tx: Tx, userId: string, bookingId: string, in
   const opened = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (!b.noShow) fail(409, { error: 'not-open' })
-    if (b.noShow !== side) fail(403, { error: 'not-your-turn' })
+    if (b.noShow !== side) fail(403, { error: 'wrong-side' })
     if (await parentNoShow(o, b)) fail(409, { error: 'not-open' }) // covered by the root's report: the objection goes there
     if (b.status === 'disputed' && (await o.select({ id: disputes.id }).from(disputes).where(and(eq(disputes.bookingId, b.id), eq(disputes.reason, 'no-show-objection')))).length) return null
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })

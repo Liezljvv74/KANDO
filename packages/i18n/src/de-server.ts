@@ -36,7 +36,7 @@ export const de = {
   'email.bookingDeclined.body':
     'Der Anbieter hat Deine Buchung abgelehnt. Du kannst diesem oder einem anderen Anbieter eine neue Anfrage senden.',
   'email.bookingExpired.subject': 'Eine Buchung ist abgelaufen',
-  'email.bookingExpired.body': 'Eine Buchungsanfrage wurde nicht rechtzeitig beantwortet oder bezahlt und ist abgelaufen. Der Termin ist wieder frei. Wenn du den Auftrag noch brauchst, sende eine neue Anfrage.',
+  'email.bookingExpired.body': 'Eine Buchungsanfrage wurde nicht rechtzeitig beantwortet oder bezahlt und ist abgelaufen. Der Termin ist wieder frei. Wenn du die Anfrage gestellt hattest und den Auftrag noch brauchst, sende eine neue Anfrage.',
   'email.paymentReminder.subject': 'Bitte bezahle Deine Buchung',
   'email.paymentReminder.body':
     'Deine Buchung ist angenommen, aber noch nicht bezahlt. Bitte zahle bis {date} Uhr, sonst läuft sie ab und der Termin wird für andere frei.',
@@ -125,7 +125,7 @@ export const de = {
   'admin.signIn.title': 'Anmeldung für Mitarbeitende',
   'admin.signIn.denied': 'Dieses Konto hat keinen Zugang zur Verwaltung. Melde dich mit einem Mitarbeiterkonto an oder bitte einen Administrator um eine Rolle.',
   'admin.signIn.failed': 'Anmeldung fehlgeschlagen. Bitte prüfe E-Mail und Passwort.',
-  'admin.forbidden': 'Du hast keine Berechtigung für diese Aktion. Bitte einen Administrator um die passende Rolle.',
+  'admin.forbidden': 'Du hast keine Berechtigung für diese Aktion. Frag einen Administrator nach der passenden Rolle.',
   'admin.resource.users': 'Nutzer',
   'admin.resource.providers': 'Anbieter',
   'admin.resource.categories': 'Kategorien',
@@ -170,7 +170,7 @@ export const de = {
   'admin.type.private': 'Privatperson',
   'admin.type.business': 'Unternehmen',
   'admin.noAccess': 'Kein Zugriff',
-  'admin.noAccess.body': 'Du bist angemeldet, aber dein Konto hat keine Mitarbeiterrolle. Bitte einen Administrator um eine Rolle oder melde dich ab und mit einem anderen Konto an.',
+  'admin.noAccess.body': 'Du bist angemeldet, aber dein Konto hat keine Mitarbeiterrolle. Frag einen Administrator nach einer Rolle oder melde dich ab und mit einem anderen Konto an.',
   'admin.signOut': 'Abmelden',
   'admin.signIn.submit': 'Anmelden',
   'admin.dashboard': 'Übersicht',

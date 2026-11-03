@@ -95,7 +95,7 @@ export async function answerBooking(tx: Tx, userId: string, bookingId: string, a
 
 /** "I no longer need this": the customer, from proposed or awaiting-payment. */
 export async function withdrawBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
-  if ((await partyOf(tx, userId, bookingId)).role !== 'customer') fail(403, { error: 'not-your-turn' })
+  if ((await partyOf(tx, userId, bookingId)).role !== 'customer') fail(403, { error: 'wrong-side' })
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()

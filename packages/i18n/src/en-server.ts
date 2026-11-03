@@ -38,7 +38,7 @@ export const en: Record<ServerKey, string> = {
   'email.bookingDeclined.body':
     'The provider declined your booking. You can send a new request to this or another provider.',
   'email.bookingExpired.subject': 'A booking expired',
-  'email.bookingExpired.body': 'A booking request was not answered or not paid in time and has expired. The time is free again. If you still need the job, send a new request.',
+  'email.bookingExpired.body': 'A booking request was not answered or not paid in time and has expired. The time is free again. If you made the request and still need the job, send a new request.',
   'email.paymentReminder.subject': 'Please pay for your booking',
   'email.paymentReminder.body':
     'Your booking is accepted but not paid yet. Please pay by {date}, otherwise it expires and the time becomes free for others.',

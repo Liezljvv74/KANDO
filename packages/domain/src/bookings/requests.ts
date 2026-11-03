@@ -256,7 +256,7 @@ const unavailable = () => fail(409, { error: 'provider-unavailable' })
  */
 export async function reviseRequest(tx: Tx, userId: string, requestId: string, input: TimeProposal, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> {
   const first = await ownRequest(tx, userId, requestId)
-  if (first.customerId !== userId) fail(403, { error: 'not-your-turn' })
+  if (first.customerId !== userId) fail(403, { error: 'wrong-side' })
   await lockRequest(tx, requestId)
   const row = (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] ?? notFound() // read again after the lock
   if (row.status === 'quoted') fail(409, { error: 'quote-sent' }) // a sent quote is final for the customer: changes go through the chat and the provider's revised quote
@@ -308,10 +308,10 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   const req = (await own())[0]! // read again after the lock
   if (provider.status !== 'published' || (await isSuspendedNow(tx, provider.id))) unavailable()
   if (!canTransact(provider)) fail(409, { error: 'PAYOUT_SETUP_FIRST' })
-  if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed' })
+  if (!['open', 'quoted'].includes(req.status)) fail(409, { error: 'request-closed-provider' })
   // The 3-day answer deadline binds the first quote only; a revision may follow while the last quote is still valid.
   const open = (await tx.select({ e: quotes.expiresAt }).from(quotes).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent'))))[0]
-  if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed' })
+  if (open ? open.e <= now : req.answerBy <= now) fail(409, { error: 'request-closed-provider' })
   // flow 1: an ordinary request's quote may carry a time (checked like any offered time, clash included) or none ("to be confirmed").
   // A time other than the request's is the provider's proposal under the round rule. An additional task keeps its old rules.
   const startAt = input.startAt ? new Date(input.startAt) : null
@@ -360,19 +360,20 @@ async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'cust
   const read = async () => (isUuid(requestId) ? (await tx.select().from(requests).where(eq(requests.id, requestId)))[0] : undefined) ?? notFound()
   const first = await read() // party check before the lock: a stranger cannot make anyone wait
   const side = first.customerId === userId ? 'customer' : (await ownProvider(tx, userId))?.id === first.providerId ? 'provider' : notFound()
-  if (side !== by) fail(403, { error: 'not-your-turn' })
+  if (side !== by) fail(403, { error: 'wrong-side' })
+  const closedError = by === 'customer' ? 'request-closed' : 'request-closed-provider' // the provider's text does not tell them to send a new request
   await lockRequest(tx, requestId)
   if (first.status === 'booked') await expireLapsedRoot(requestId, now) // a lapsed proposal gives the job back first
   const req = await read() // read again after the lock
   // a lapsed open request is the cron's to expire (it counts toward requests-ignored), never withdrawn or declined
-  if (!['open', 'quoted'].includes(req.status) || (req.status === 'open' && req.answerBy <= now)) fail(409, { error: 'request-closed' })
+  if (!['open', 'quoted'].includes(req.status) || (req.status === 'open' && req.answerBy <= now)) fail(409, { error: closedError })
   // the timers' expiry takes no request lock: it may commit after the read, so the UPDATE re-checks the status
   const [row] = await tx
     .update(requests)
     .set({ status: by === 'customer' ? 'withdrawn' : 'declined', updatedAt: now })
     .where(and(eq(requests.id, requestId), inArray(requests.status, ['open', 'quoted'])))
     .returning()
-  if (!row) fail(409, { error: 'request-closed' })
+  if (!row) fail(409, { error: closedError })
   afterCommit(async () => {
     if (by === 'provider') return notifyBookingEvent('request-declined', req.customerId, { requestId })
     // the owner connection: RLS may hide a suspended provider's row from its customer

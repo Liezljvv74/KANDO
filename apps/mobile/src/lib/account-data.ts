@@ -6,12 +6,12 @@ export const exportText = (data: unknown) => (typeof data === 'string' ? data : 
 
 /** What the person sees when deleting or exporting fails: the known refusals, else "nothing was deleted/exported, try again". */
 export const accountError = (action: 'delete' | 'export', code: string) =>
-  action === 'delete' && (code === 'WRONG_PASSWORD' || code === 'AUTH_BUSY' || code === 'LAST_ADMIN') ? errorText(code) : t(action === 'delete' ? 'account.deleteFailed' : 'account.exportFailed')
+  action === 'delete' && (code === 'WRONG_PASSWORD' || code === 'AUTH_BUSY' || code === 'LAST_ADMIN' || code === 'OPEN_BOOKINGS') ? errorText(code) : t(action === 'delete' ? 'account.deleteFailed' : 'account.exportFailed')
 
 export type DeleteFailure = { deleted: true } | { deleted: false; text: string }
 
 /**
- * A DELETE that did not answer ok. A refusal (403 WRONG_PASSWORD, 409 LAST_ADMIN, 503 AUTH_BUSY: the password check did not run) means nothing was deleted. No answer (offline, the time limit)
+ * A DELETE that did not answer ok. A refusal (403 WRONG_PASSWORD, 409 LAST_ADMIN, 409 OPEN_BOOKINGS, 503 AUTH_BUSY: the password check did not run) means nothing was deleted. No answer (offline, the time limit)
  * or a server error means the server may have committed: ask `check` (a call with the session) and take a 401 as "gone".
  * Anything else there says the deletion is unconfirmed, never "not deleted".
  */
