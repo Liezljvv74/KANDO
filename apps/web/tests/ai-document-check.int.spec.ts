@@ -67,6 +67,16 @@ it('key missing: the feature is off, nothing is asked, the document waits for st
   expect((await status(d.id)).status).toBe('pending')
 })
 
+it('a mistyped provider pin switches the check off instead of widening where documents go', async () => {
+  vi.stubEnv('OPENROUTER_API_KEY', 'test-key-not-real')
+  vi.stubEnv('AI_DOCUMENT_MODEL', 'x/y')
+  vi.stubEnv('AI_DOCUMENT_PROVIDER', 'google vertex!')
+  const d = await pendingDoc()
+  expect(await runDocumentCheck(d.id)).toBe('off')
+  expect((await status(d.id)).status).toBe('pending')
+  vi.stubEnv('AI_DOCUMENT_PROVIDER', '')
+})
+
 it('the translate key alone does not switch it on: a model must be chosen too', async () => {
   vi.stubEnv('OPENROUTER_API_KEY', 'test-key-not-real')
   vi.stubEnv('AI_DOCUMENT_MODEL', '')
@@ -358,12 +368,15 @@ it('the OpenRouter client: privacy options, key in the header only, validated an
   expect(seen[0]!.url).toBe('https://openrouter.ai/api/v1/chat/completions')
   expect(sent.provider).toEqual({ data_collection: 'deny', zdr: true, allow_fallbacks: false })
   expect(sent.model).toBe('x/y')
+  const pinned = answer({ choices: [{ message: { content: JSON.stringify(OK) } }] })
+  await openRouterChecker({ apiKey: 'k', model: 'x/y', provider: 'google-vertex', fetchImpl: pinned as unknown as typeof fetch }).check(input)
+  expect(JSON.parse(seen[seen.length - 1]!.init.body as string).provider).toEqual({ data_collection: 'deny', zdr: true, allow_fallbacks: false, only: ['google-vertex'] })
   expect(sent.messages[1].content[1]).toMatchObject({ type: 'file', file: { file_data: expect.stringMatching(/^data:application\/pdf;base64,/) } })
   expect((seen[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer k-test')
   expect(JSON.stringify(sent)).not.toContain('k-test')
   const png = answer({ choices: [{ message: { content: JSON.stringify(OK) } }] })
   await openRouterChecker({ apiKey: 'k', model: 'm', fetchImpl: png as unknown as typeof fetch }).check({ ...input, mime: 'image/png' })
-  expect(JSON.parse(seen[1]!.init.body as string).messages[1].content[1]).toMatchObject({ type: 'image_url' })
+  expect(JSON.parse(seen[2]!.init.body as string).messages[1].content[1]).toMatchObject({ type: 'image_url' })
 
   const bad = (body: unknown, ok = true) => openRouterChecker({ apiKey: 'k', model: 'm', fetchImpl: answer(body, ok) as unknown as typeof fetch }).check(input)
   await expect(bad({ choices: [{ message: { content: JSON.stringify({ ...OK, confidence: 7 }) } }] })).rejects.toBeInstanceOf(AiUnavailable) // fails the shape

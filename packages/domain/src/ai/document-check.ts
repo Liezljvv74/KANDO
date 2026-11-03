@@ -35,7 +35,9 @@ export function documentChecker(): DocumentChecker | null {
   if (override) return override
   const apiKey = process.env.OPENROUTER_API_KEY
   const model = process.env.AI_DOCUMENT_MODEL?.trim()
-  return apiKey && model ? openRouterChecker({ apiKey, model }) : null
+  const provider = process.env.AI_DOCUMENT_PROVIDER?.trim() || undefined
+  if (provider && !/^[a-z0-9][a-z0-9._-]*(\/[a-z0-9._-]+)?$/i.test(provider)) return null // a mistyped pin switches the check off, never widens where documents go
+  return apiKey && model ? openRouterChecker({ apiKey, model, provider }) : null
 }
 
 export type CheckDeps = {

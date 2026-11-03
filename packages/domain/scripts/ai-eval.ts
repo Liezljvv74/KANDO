@@ -51,7 +51,7 @@ console.log(`Evaluating ${models.length} model(s) on ${set.length} made-up docum
 type Row = { id: string; expected: 'ok' | 'problem'; approved: boolean | null; verdict: string; confidence: number | null; ms: number; costUsd: number | null; error: string | null }
 const results = new Map<string, Row[]>()
 for (const model of models) {
-  const checker = openRouterChecker({ apiKey, model })
+  const checker = openRouterChecker({ apiKey, model, provider: process.env.AI_DOCUMENT_PROVIDER?.trim() || undefined })
   const rows: Row[] = []
   for (const f of set) {
     const { bytes, mime } = await f.render()

@@ -38,6 +38,7 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `OPENROUTER_API_KEY` | yes | web | OpenRouter key, server only. Translate button (without it the original texts are shown) and, together with `AI_DOCUMENT_MODEL`, the AI check of documents. Set it on Production and Preview. |
 | `AI_DOCUMENT_MODEL` | no | web | OpenRouter model id for the AI check of uploaded documents (must read images and PDFs; pick it after `pnpm ai:eval`). The check is **off** until this and `OPENROUTER_API_KEY` are both set: the key is shared with the translate button, so the key alone never sends a document to a model nobody chose. Off means documents go to staff as before, with no error. |
 | `AI_MIN_CONFIDENCE` | no | web | Confidence (0 to 1) the AI needs to approve a document by itself (default 0.8). |
+| `AI_DOCUMENT_PROVIDER` | no | web | Pins the AI check to one OpenRouter provider (slug from the model page, for example `google-vertex`); documents are then sent to no other provider. Requests already ask for no training and zero retention. A malformed value switches the check off. |
 | `AI_MONTHLY_CAP_EUR` | no | web | Most the AI document checks may cost per calendar month, in euro (default 20); when reached, documents go to staff until the next month. OpenRouter reports dollars; they are counted one to one. |
 | `AI_EVAL_MODELS` | no | `pnpm ai:eval` only | Comma separated OpenRouter model ids to compare on made-up documents. Never needed on Vercel. |
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |

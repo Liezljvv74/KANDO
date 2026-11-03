@@ -57,9 +57,9 @@ const userText = (i: DocumentCheckInput) =>
  * OpenRouter chat completions, called from the server only. Privacy settings go with every request: `data_collection: deny` and
  * `zdr: true` limit routing to endpoints that neither store nor train on the data (checked against
  * https://openrouter.ai/docs/guides/routing/provider-selection on 3 Nov 2026), and no fallback to other providers.
- * The image or PDF is sent once, as base64. Throws AiUnavailable.
+ * `opts.provider` (AI_DOCUMENT_PROVIDER) pins one provider: nothing is sent to any other. The image or PDF is sent once, as base64. Throws AiUnavailable.
  */
-export function openRouterChecker(opts: { apiKey: string; model: string; timeoutMs?: number; fetchImpl?: typeof fetch }): DocumentChecker {
+export function openRouterChecker(opts: { apiKey: string; model: string; provider?: string; timeoutMs?: number; fetchImpl?: typeof fetch }): DocumentChecker {
   const doFetch = opts.fetchImpl ?? fetch
   return {
     model: opts.model,
@@ -80,7 +80,7 @@ export function openRouterChecker(opts: { apiKey: string; model: string; timeout
             temperature: 0,
             max_tokens: 400,
             response_format: { type: 'json_object' },
-            provider: { data_collection: 'deny', zdr: true, allow_fallbacks: false },
+            provider: { data_collection: 'deny', zdr: true, allow_fallbacks: false, ...(opts.provider && { only: [opts.provider] }) },
             usage: { include: true },
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
