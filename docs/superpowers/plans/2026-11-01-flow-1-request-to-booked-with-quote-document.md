@@ -297,3 +297,10 @@ Payments, payouts, the 24-hour free cancellation, finishing, disputes, reviews, 
 3. Quote validity is 7 days or until the start time, whichever is earlier.
 4. **Payment for a quote without a time.** Recommended and built by default: the customer accepts the quote, the time is agreed afterwards, and payment is asked only after that (so no money is taken for an unknown time, and the 24-hour free-cancellation and no-show rules always have a real start). The alternative is to pay at acceptance; it needs the cancellation, no-show and release rules to cope with a missing start, which is a larger change. Say if you want the alternative.
 5. A quote without a time stays unchanged as a document. Should a second PDF (a booking confirmation with the agreed time) be issued once the time is agreed? Not in this plan; say if you want it.
+
+## Decisions recorded (owner, 3 November 2026, MVP plan step 1.8)
+
+- **Street privacy:** keep the current behaviour for the MVP. The street is stored on the request and hidden in the API output until the booking is accepted and paid; the provider sees only the postcode and city before that. Storing the street separately is a later improvement.
+- **Second PDF:** no booking confirmation PDF with the agreed time in the MVP (a quote without a time stays unchanged as a document).
+- **PDF language:** the provider's language (default German), one language per PDF.
+- Open points 1, 4 and 5 above are decided as written (provider's language PDF; pay after the time is agreed for a quote without a time; no second PDF).

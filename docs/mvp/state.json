@@ -12,7 +12,8 @@
     "1.3": "Done",
     "1.4": "Done",
     "1.5": "Done",
-    "1.6": "Done"
+    "1.6": "Done",
+    "1.8": "Done"
   },
   "tasks": {
     "1": "Done",
@@ -236,6 +237,14 @@
         "merged PR #61",
         "merged PR #62",
         "merged PR #64"
+      ]
+    },
+    {
+      "when": "2026-11-03 16:46",
+      "commit": "afa3979",
+      "note": "Step 1.8 decided by the owner on 3 November 2026: street privacy as built (hidden until accepted and paid), no second PDF, PDF in the provider's language (default German). Migration 0028 applied to Neon dev and production; production leftovers (6 dangling notices, 4 quote PDFs) deleted; new Android build started (preview profile).",
+      "steps": [
+        "step 1.8 Done"
       ]
     }
   ],
