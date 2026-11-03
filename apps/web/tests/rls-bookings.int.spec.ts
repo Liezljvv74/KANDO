@@ -48,13 +48,19 @@ it('app_user cannot insert a booking at all: not for another customer, not for t
       tx.execute(sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site)
         VALUES (${customer}, ${providerId}, ${serviceId}, 'direct', 'awaiting-time', now() + interval '3 days', 60, false)`),
     )
-  const denied = { cause: { message: expect.stringContaining('row-level security') } }
+  // layer 1: no INSERT privilege (permission denied); layer 2: the deny-all insert policy stays
+  const denied = { cause: { message: expect.stringContaining('permission denied') } }
   await expect(insert(ids.other, ids.customer)).rejects.toMatchObject(denied)
   await expect(insert(ids.customer, ids.customer)).rejects.toMatchObject(denied)
   await expect(insert(ids.owner, ids.customer)).rejects.toMatchObject(denied)
+  const priv = await pool.query("SELECT has_table_privilege('app_user', 'bookings', 'INSERT') AS t, has_any_column_privilege('app_user', 'bookings', 'INSERT') AS c")
+  expect(priv.rows[0]).toEqual({ t: false, c: false })
+  const pol = await pool.query("SELECT 1 FROM pg_policies WHERE tablename = 'bookings' AND policyname = 'insert_rule' AND cmd = 'INSERT'")
+  expect(pol.rowCount).toBe(1)
 })
 
 const rls = { cause: { message: expect.stringContaining('row-level security') } }
+const permission = { cause: { message: expect.stringContaining('permission denied') } }
 const run = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, (tx) => tx.execute(q))
 const future = sql`now() + interval '3 days'`
 const insertBooking = (customer: string) =>
@@ -67,7 +73,7 @@ const insertQuote = (provider: string, request: string, version = 2) =>
 
 it('the provider owner cannot forge a customer on a request or a booking', async () => {
   await expect(run(ids.owner, insertRequest(ids.other))).rejects.toMatchObject(rls)
-  await expect(run(ids.owner, insertBooking(ids.other))).rejects.toMatchObject(rls)
+  await expect(run(ids.owner, insertBooking(ids.other))).rejects.toMatchObject({ cause: { message: expect.stringContaining('permission denied') } })
 })
 
 it('a customer cannot forge a provider on a quote, and cannot quote at all', async () => {
@@ -136,8 +142,8 @@ it('app_user cannot make a status move the domain does not make', async () => {
   const book = (cols: ReturnType<typeof sql>) =>
     run(ids.customer, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, start_at, duration_min, on_site, status, pay_by, accepted_at)
       VALUES (${ids.customer}, ${providerId}, ${serviceId}, 'direct', ${future}, 60, false, ${cols})`)
-  await expect(book(sql`'awaiting-payment', now() + interval '1 day', now()`)).rejects.toMatchObject(rls)
-  await expect(book(sql`'awaiting-time', NULL, NULL`)).rejects.toMatchObject(rls)
+  await expect(book(sql`'awaiting-payment', now() + interval '1 day', now()`)).rejects.toMatchObject(permission)
+  await expect(book(sql`'awaiting-time', NULL, NULL`)).rejects.toMatchObject(permission)
 })
 
 it('app_user may move a request to withdrawn (customer) and declined (provider), not the other way round', async () => {

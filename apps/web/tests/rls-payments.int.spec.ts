@@ -87,7 +87,7 @@ it('app_user cannot set amount or payment_ref on a booking', async () => {
 
 it('the money and payment columns of bookings are staff-only, and the app role inserts no booking at all', async () => {
   for (const c of ['amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at']) expect(COLUMN_STAFF_ONLY.bookings).toContain(c) // plan 2d's ending columns: rls-endings
-  for (const uid of [ids.customer, ids.owner]) await expect(run(uid, insertBooking())).rejects.toMatchObject(rls)
+  for (const uid of [ids.customer, ids.owner]) await expect(run(uid, insertBooking())).rejects.toMatchObject(denied)
 })
 
 it("a booking inserted without amount gets the quote's or the service's price", async () => {
@@ -137,7 +137,7 @@ it('app_user cannot set status confirmed; the owner connection can', async () =>
   for (const uid of [ids.customer, ids.owner]) {
     await expect(run(uid, sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`)).rejects.toMatchObject(paymentCodeOnly)
   }
-  await expect(run(ids.customer, insertBooking({ status: 'confirmed' }))).rejects.toMatchObject(paymentCodeOnly)
+  await expect(run(ids.customer, insertBooking({ status: 'confirmed' }))).rejects.toMatchObject(denied)
   // other changes by the parties still work
   expect((await run(ids.customer, sql`UPDATE bookings SET note = 'Tor ist blau' WHERE id = ${bookingId}`)).rowCount).toBe(1)
   await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [bookingId])
