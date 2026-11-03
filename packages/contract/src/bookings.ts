@@ -8,6 +8,10 @@ export const REQUEST_STATUSES = ['open', 'quoted', 'booked', 'expired', 'withdra
 export const QUOTE_STATUSES = ['sent', 'accepted', 'superseded', 'expired', 'declined'] as const
 export const BOOKING_STATUSES = ['awaiting-time', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
 
+/** Why a quote-born booking lapsed: its payment time passed, or the time was never agreed. */
+export const LAPSE_REASONS = ['payment', 'time'] as const
+export type LapseReason = (typeof LAPSE_REASONS)[number]
+
 const IsoSchema = z.string().datetime({ offset: true })
 const DurationSchema = z.number().int().min(15).max(720)
 
@@ -64,6 +68,11 @@ export const RequestSchema = z.object({
   answerBy: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /**
+   * Set (customer's own request and the provider's view alike) while the job reads open again because its booking lapsed and the quote
+   * it came from can still be booked: the app then asks "Do you still want it?". Null otherwise.
+   */
+  lapsed: z.enum(LAPSE_REASONS).nullable(),
   /** On the provider's view only: what providers' visible reviews say about this customer (null: none yet). */
   customerRating: RatingSchema.nullish(),
   /** On GET /requests/:id only: the request's chat (an additional task's is its booking's). */
@@ -144,6 +153,8 @@ export const QuoteListItemSchema = z.object({
   /** Accepted quotes only: the booking made from it and when it was made (its creation; not the start of its payment window); null for any other quote, and for one whose booking has lapsed. */
   bookingId: z.string().nullable(),
   bookedAt: z.string().nullable(),
+  /** Set while the quote reads open again because its booking lapsed (payment time passed, or the time was never agreed) and the quote is still valid: the customer is asked if they still want it. Null otherwise. */
+  lapsed: z.enum(LAPSE_REASONS).nullable(),
 })
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })

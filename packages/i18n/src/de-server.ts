@@ -338,8 +338,8 @@ export const de = {
   'email.timeToConfirm.body': 'Für Deine Buchung wurde ein Datum mit Uhrzeit eingetragen. Bitte öffne die App und bestätige es.',
   'email.quoteConfirmed.subject': 'Der Kunde hat Dein Angebot angenommen',
   'email.quoteConfirmed.body': 'Der Kunde hat Dein Angebot angenommen. Bitte öffne die App. Falls noch kein Datum mit Uhrzeit festgelegt wurde, sprecht im Chat darüber.',
-  'email.requestReopened.subject': 'Angebot wieder offen',
-  'email.requestReopened.body': 'Der Termin wurde nicht vereinbart. Das Angebot ist wieder offen bis {date}. Bitte schlage einen anderen Termin vor.',
+  'email.requestReopened.subject': 'Deine Buchung ist verfallen: noch gewünscht?',
+  'email.requestReopened.body': 'Eine Buchung ist verfallen: Die Zahlungsfrist ist abgelaufen oder es wurde kein Termin vereinbart. Das Angebot ist wieder offen bis {date}. Möchtest du sie noch? Öffne das Angebot, um erneut zu buchen, oder sag dem Anbieter, dass du sie nicht mehr brauchst.',
 }
 
 export type ServerKey = keyof typeof de

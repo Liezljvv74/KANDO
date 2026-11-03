@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertFuture, bookingShownStatus, canTransition, overlaps, payBy } from './rules'
+import { assertFuture, bookingShownStatus, canTransition, lapseReason, overlaps, payBy } from './rules'
 import { PAY_GRACE_MINUTES } from '../payments/rules'
 
 const d = (s: string) => new Date(`2026-11-${s}:00.000Z`)
@@ -20,6 +20,22 @@ describe('bookingShownStatus', () => {
   })
   it('other statuses unchanged', () => {
     for (const status of ['confirmed', 'declined', 'withdrawn', 'expired']) expect(bookingShownStatus({ status, answerBy: min(-60), payBy: min(-60) }, now)).toBe(status)
+  })
+})
+
+describe('lapseReason', () => {
+  const now = d('10T12:00')
+  const min = (m: number) => new Date(now.getTime() + m * 60_000)
+  it('names payment or time before the timer writes expired, and the same after', () => {
+    expect(lapseReason({ status: 'awaiting-payment', answerBy: null, payBy: min(-PAY_GRACE_MINUTES) }, now)).toBe('payment')
+    expect(lapseReason({ status: 'awaiting-time', answerBy: min(-1), payBy: null }, now)).toBe('time')
+    expect(lapseReason({ status: 'expired', answerBy: min(-60), payBy: min(-60) }, now)).toBe('payment') // was awaiting payment: it has a pay_by
+    expect(lapseReason({ status: 'expired', answerBy: min(-60), payBy: null }, now)).toBe('time')
+  })
+  it('is null for a booking that has not lapsed or ended another way', () => {
+    expect(lapseReason({ status: 'awaiting-payment', answerBy: null, payBy: min(-PAY_GRACE_MINUTES + 1) }, now)).toBeNull()
+    expect(lapseReason({ status: 'awaiting-time', answerBy: min(1), payBy: null }, now)).toBeNull()
+    for (const status of ['confirmed', 'declined', 'withdrawn']) expect(lapseReason({ status, answerBy: min(-60), payBy: min(-60) }, now)).toBeNull()
   })
 })
 

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { bookings, db, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import type { QuoteListItem } from '@kando/contract'
 import { isUuid } from '../admin/common'
@@ -7,7 +7,7 @@ import { formatQuoteNumber, isTestNumber, nextNumber, quoteSeries, yearOf } from
 import { describeError } from '../log-error'
 import { LIVE_PAYMENTS_ALLOWED } from '../payments/rules'
 import type { Exec } from '../providers/eligibility'
-import { bookingShownStatus } from '../bookings/rules'
+import { lapseReason } from '../bookings/rules'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
@@ -140,9 +140,9 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
   const own = await ownProvider(tx, userId)
   // the latest booking made from an accepted quote, joined per row (LATERAL) so the list stays one query
   const latest = tx
-    .select({ id: bookings.id, createdAt: bookings.createdAt, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
+    .select({ id: bookings.id, createdAt: bookings.createdAt, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy, parentBookingId: bookings.parentBookingId })
     .from(bookings)
-    .where(and(eq(bookings.quoteId, quotes.id), eq(quotes.status, 'accepted')))
+    .where(and(eq(bookings.quoteId, quotes.id), inArray(quotes.status, ['accepted', 'sent'])))
     .orderBy(desc(bookings.createdAt))
     .limit(1)
     .as('latest')
@@ -158,7 +158,7 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
       scope: quotes.scope,
       expiresAt: quotes.expiresAt,
       service: services.title,
-      booking: { id: latest.id, createdAt: latest.createdAt, status: latest.status, answerBy: latest.answerBy, payBy: latest.payBy },
+      booking: { id: latest.id, createdAt: latest.createdAt, status: latest.status, answerBy: latest.answerBy, payBy: latest.payBy, parentBookingId: latest.parentBookingId },
     })
     .from(quoteDocuments)
     .innerJoin(quotes, eq(quotes.id, quoteDocuments.quoteId))
@@ -173,8 +173,11 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
     // as the customer the quote is "received" (the issuer is the other side); as the provider it is "sent" (the customer is). Nobody is both sides of one quote.
     const role = r.d.customerId === userId ? 'customer' : 'provider'
     const b = r.booking // null when the quote has no booking (the LATERAL join found none)
-    const lapsed = !!b && bookingShownStatus({ status: b.status, answerBy: b.answerBy ?? null, payBy: b.payBy ?? null }, now) === 'expired'
+    const reason = b ? lapseReason({ status: b.status, answerBy: b.answerBy ?? null, payBy: b.payBy ?? null }, now) : null
+    const lapsed = reason !== null
     const status = lapsed ? (r.expiresAt > now ? 'sent' : 'expired') : r.status
+    // the customer is asked "do you still want it?" only about a root booking's quote that can still be booked (an additional task's is not reopened)
+    const asked = role === 'customer' && lapsed && b!.parentBookingId === null && r.expiresAt > now ? reason : null
     out.push({
       id: r.d.id,
       quoteId: r.d.quoteId,
@@ -192,8 +195,9 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
       status: status as QuoteListItem['status'],
       issuedAt: r.d.issuedAt.toISOString(),
       pdfReady: r.d.fileKey !== null,
-      bookingId: b && !lapsed ? b.id : null,
-      bookedAt: b && !lapsed ? b.createdAt.toISOString() : null,
+      bookingId: b && !lapsed && r.status === 'accepted' ? b.id : null,
+      bookedAt: b && !lapsed && r.status === 'accepted' ? b.createdAt.toISOString() : null,
+      lapsed: asked,
     })
   }
   return out

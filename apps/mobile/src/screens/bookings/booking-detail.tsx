@@ -17,6 +17,7 @@ import { go } from '@/lib/go'
 import { placeText } from '@/lib/place'
 import { CancelSheet } from '@/screens/bookings/cancel-sheet'
 import { DescriptionForm, DisputeInfo } from '@/screens/bookings/dispute-form'
+import { LapsedAsk } from '@/screens/bookings/lapse-banner'
 import { FinishSheet } from '@/screens/bookings/finish-sheet'
 import { PayPanel } from '@/screens/bookings/pay-card'
 import { StopSheet } from '@/screens/bookings/stop-sheet'
@@ -101,6 +102,7 @@ export default function BookingDetail() {
         {!!b.note && <Text style={styles.small}>{b.note}</Text>}
         {!!b.parentBookingId && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
       </Card>
+      {viewer === 'customer' && b.status === 'expired' && !b.parentBookingId && !!b.requestId && <LapsedAsk requestId={b.requestId} onClosed={retry} />}
       <PayPanel booking={b} viewer={viewer} onRefresh={retry} />
       <BookingInvoiceRow booking={b} />
       {b.status === 'disputed' && <DisputeInfo booking={b} />}
