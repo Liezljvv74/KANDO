@@ -141,9 +141,9 @@ export const QuoteListItemSchema = z.object({
   status: z.enum(QUOTE_STATUSES),
   issuedAt: z.string(),
   pdfReady: z.boolean(),
-  /** Accepted quotes only: the booking made from it and when (the booking's creation); null for any other quote. */
+  /** Accepted quotes only: the booking made from it and when it was made (its creation; not the start of its payment window); null for any other quote, and for one whose booking has lapsed. */
   bookingId: z.string().nullable(),
-  acceptedAt: z.string().nullable(),
+  bookedAt: z.string().nullable(),
 })
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })

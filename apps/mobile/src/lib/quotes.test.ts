@@ -25,7 +25,7 @@ const q = (over: Partial<QuoteListItem>): QuoteListItem => ({
   issuedAt: '2026-11-01T10:00:00.000Z',
   pdfReady: true,
   bookingId: null,
-  acceptedAt: null,
+  bookedAt: null,
   ...over,
 })
 
@@ -59,7 +59,7 @@ test('an open quote past its last valid day reads expired and is no longer an of
 test('every open received quote is its own offer; the others stay documents', () => {
   const list = [
     q({ id: 'a' }),
-    q({ id: 'b', status: 'accepted', bookingId: 'bk1', acceptedAt: '2026-11-02T10:00:00.000Z' }),
+    q({ id: 'b', status: 'accepted', bookingId: 'bk1', bookedAt: '2026-11-02T10:00:00.000Z' }),
     q({ id: 'c' }),
     q({ id: 'd', status: 'superseded' }),
     q({ id: 'e', status: 'declined' }),
@@ -72,20 +72,20 @@ test('every open received quote is its own offer; the others stay documents', ()
 })
 
 test('the accept question names provider, service, price and time exactly', () => {
-  expect(acceptSummary(q({}))).toBe('quote.acceptSummary Ayse Y. Fence repair EUR 120.00 when:2027-01-05T09:00:00.000Z')
-  expect(acceptSummary(q({ startAt: null, service: null }))).toBe('quote.acceptSummary Ayse Y. quote.noService EUR 120.00 booking.quoteTimeOpen')
+  expect(acceptSummary(q({}))).toBe('quote.acceptSummary Q-AB12CD34-2026-0001 Ayse Y. Fence repair EUR 120.00 when:2027-01-05T09:00:00.000Z')
+  expect(acceptSummary(q({ startAt: null, service: null }))).toBe('quote.acceptSummary Q-AB12CD34-2026-0001 Ayse Y. quote.noService EUR 120.00 booking.quoteTimeOpen')
 })
 
 test('the accepted table has provider, date accepted, service and price, newest first, and needs a booking', () => {
   const list = [
-    q({ id: 'old', status: 'accepted', bookingId: 'b1', acceptedAt: '2026-10-30T08:00:00.000Z', counterparty: 'Anna H.', amount: 80 }),
-    q({ id: 'new', status: 'accepted', bookingId: 'b2', acceptedAt: '2026-11-02T08:00:00.000Z', service: null }),
+    q({ id: 'old', status: 'accepted', bookingId: 'b1', bookedAt: '2026-10-30T08:00:00.000Z', counterparty: 'Anna H.', amount: 80 }),
+    q({ id: 'new', status: 'accepted', bookingId: 'b2', bookedAt: '2026-11-02T08:00:00.000Z', service: null }),
     q({ id: 'open' }),
     q({ id: 'nobooking', status: 'accepted' }),
-    q({ id: 'mine', role: 'provider', status: 'accepted', bookingId: 'b3', acceptedAt: '2026-11-02T09:00:00.000Z' }),
+    q({ id: 'mine', role: 'provider', status: 'accepted', bookingId: 'b3', bookedAt: '2026-11-02T09:00:00.000Z' }),
   ]
   expect(acceptedRows(list)).toEqual([
-    { id: 'new', bookingId: 'b2', provider: 'Ayse Y.', acceptedAt: '2026-11-02T08:00:00.000Z', service: null, price: 'EUR 120.00' },
-    { id: 'old', bookingId: 'b1', provider: 'Anna H.', acceptedAt: '2026-10-30T08:00:00.000Z', service: 'Fence repair', price: 'EUR 80.00' },
+    { id: 'new', number: 'Q-AB12CD34-2026-0001', bookingId: 'b2', provider: 'Ayse Y.', bookedAt: '2026-11-02T08:00:00.000Z', service: null, price: 'EUR 120.00' },
+    { id: 'old', number: 'Q-AB12CD34-2026-0001', bookingId: 'b1', provider: 'Anna H.', bookedAt: '2026-10-30T08:00:00.000Z', service: 'Fence repair', price: 'EUR 80.00' },
   ])
 })

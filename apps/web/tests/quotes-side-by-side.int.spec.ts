@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
+import { db, pool } from '@kando/db'
+import { runExpiryAndReminders } from '@kando/domain'
 import { BookingViewSchema, QuoteListSchema, QuoteSchema, RequestSchema } from '@kando/contract'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, memoryStorage, requestTime, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, memoryStorage, requestTime, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -113,9 +114,9 @@ it('the quote list carries service, scope, expiry, and for an accepted quote the
   const o = mine.find((d) => d.quoteId === q2.id)!
   expect(a).toMatchObject({ role: 'customer', status: 'accepted', service: 'Sb Owner service', scope: 'Scope 111', bookingId: b1.id })
   const created = (await pool.query('SELECT created_at FROM bookings WHERE id = $1', [b1.id])).rows[0].created_at as Date
-  expect(new Date(a.acceptedAt!).getTime()).toBe(created.getTime())
+  expect(new Date(a.bookedAt!).getTime()).toBe(created.getTime())
   expect(new Date(a.expiresAt).getTime()).toBe(new Date(q1.expiresAt).getTime())
-  expect(o).toMatchObject({ status: 'sent', service: null, bookingId: null, acceptedAt: null, scope: 'Scope 222' })
+  expect(o).toMatchObject({ status: 'sent', service: null, bookingId: null, bookedAt: null, scope: 'Scope 222' })
 
   // the provider's "Quotes sent" still works and also knows the booking; an outsider sees nothing of it
   const sent = (await listing(U.owner)).filter((d) => [q1.id, q2.id].includes(d.quoteId))
@@ -133,4 +134,40 @@ it('a booking made from a quote tells both sides the number of that quote', asyn
     const view = BookingViewSchema.parse(await (await call(bookingRoute.GET, uid, 'GET', undefined, { id: b.id })).json())
     expect(view.quoteNumber).toBe(number)
   }
+})
+
+it('a quote whose booking has lapsed reads open again at once, before the cron runs, and the same after it', async () => {
+  const r = await newRequest(pOwner, U.other)
+  const q = await sendQuote(U.owner, r, 140)
+  const b = await (await confirming(q.id, U.other)).json()
+  const row = async () => (await listing(U.other)).find((d) => d.quoteId === q.id)!
+  expect(await row()).toMatchObject({ status: 'accepted', bookingId: b.id })
+  await pool.query("UPDATE bookings SET pay_by = now() - interval '1 day' WHERE id = $1", [b.id]) // the pay window has passed; no cron yet
+  expect(await state('quotes', q.id)).toBe('accepted') // still stored as accepted
+  expect(await row()).toMatchObject({ status: 'sent', bookingId: null, bookedAt: null })
+  await runExpiryAndReminders(db, new Date())
+  expect(await state('quotes', q.id)).toBe('sent') // the trigger wrote what the list showed
+  expect(await row()).toMatchObject({ status: 'sent', bookingId: null, bookedAt: null })
+})
+
+it('two quotes with overlapping times confirmed at the same moment: one booking, one slot-pending', async () => {
+  await relaxLimits(U.cust) // the earlier tests left open requests: keep the abuse limits out of the way
+  const when = day()
+  const r1 = await newRequest(pOwner, U.cust, { startAt: when })
+  const r2 = await newRequest(pOwner, U.cust, { startAt: when })
+  const q1 = await sendQuote(U.owner, r1, 100)
+  const q2 = await sendQuote(U.owner, r2, 110)
+  const res = await Promise.all([confirming(q1.id), confirming(q2.id)])
+  expect(res.map((x) => x.status).sort()).toEqual([200, 409])
+  const lost = res.find((x) => x.status === 409)!
+  expect((await lost.json()).error).toBe('slot-pending')
+  expect([await state('quotes', q1.id), await state('quotes', q2.id)].sort()).toEqual(['accepted', 'sent'])
+})
+
+it('the same quote confirmed twice at once makes one booking', async () => {
+  await relaxLimits(U.cust)
+  const q = await sendQuote(U.owner, await newRequest(), 150)
+  const res = await Promise.all([confirming(q.id), confirming(q.id)])
+  expect(res.map((x) => x.status).sort()).toEqual([200, 409])
+  expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(1)
 })

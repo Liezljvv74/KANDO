@@ -1,5 +1,5 @@
 import type { QuoteListItem } from '@kando/contract'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { confirmQuote } from '@/api/bookings'
 import { listQuoteDocuments, quotePdf } from '@/api/quotes'
@@ -77,36 +77,60 @@ function OfferCard({ q, busy, onAccept, onPdf }: { q: QuoteListItem; busy: boole
       <Text style={styles.small}>{q.startAt ? t('booking.quoteSuggested', { when: quoteWhen(q) }) : quoteWhen(q)}</Text>
       <Text style={styles.text}>{q.scope}</Text>
       <Text style={styles.small}>{t('booking.quoteValidUntil', { date: formatWhen(q.expiresAt) })}</Text>
-      <Button label={t('quote.accept')} a11yLabel={t('quote.acceptLabel', { provider: q.counterparty, price: total })} onPress={onAccept} busy={busy} />
+      <Button label={t('quote.accept')} a11yLabel={t('quote.acceptLabel', { number: q.number, provider: q.counterparty, price: total })} onPress={onAccept} busy={busy} />
       <LinkText label={t('invoice.open', { name: `${t('quote.label')} ${q.number}` })} onPress={onPdf} />
       <LinkText label={t('quote.openRequest')} onPress={() => go(`/bookings/request/${q.requestId}`)} />
     </Card>
   )
 }
 
+/** Below this width, or with large text, a row takes two lines (provider and service, then date and price) instead of four columns. */
+const NARROW_WIDTH = 380
+const LARGE_FONT_SCALE = 1.2
+
 /** The accepted quotes: provider, date accepted, service, price. A row opens the booking. */
 function AcceptedTable({ rows }: { rows: AcceptedRow[] }) {
+  const { width } = useWindowDimensions()
+  const stacked = width < NARROW_WIDTH || PixelRatio.getFontScale() > LARGE_FONT_SCALE
   return (
     <Card>
-      <View style={styles.tr} accessibilityRole="header">
-        <Text style={[styles.cell, styles.provider, styles.head]}>{t('quote.col.provider')}</Text>
-        <Text style={[styles.cell, styles.date, styles.head]}>{t('quote.col.date')}</Text>
-        <Text style={[styles.cell, styles.service, styles.head]}>{t('quote.col.service')}</Text>
-        <Text style={[styles.cell, styles.price, styles.head]}>{t('quote.col.price')}</Text>
-      </View>
-      {rows.map((r) => (
-        <Pressable
-          key={r.id}
-          onPress={() => go(`/bookings/${r.bookingId}`)}
-          accessibilityRole="button"
-          accessibilityLabel={t('quote.openBooking', { provider: r.provider, service: r.service ?? t('quote.noService'), price: r.price, date: formatDay(r.acceptedAt) })}
-          style={({ pressed }) => [styles.tr, styles.body, pressed && styles.pressed]}>
-          <Text style={[styles.cell, styles.provider]}>{r.provider}</Text>
-          <Text style={[styles.cell, styles.date]}>{formatDay(r.acceptedAt)}</Text>
-          <Text style={[styles.cell, styles.service]}>{r.service ?? '-'}</Text>
-          <Text style={[styles.cell, styles.price]}>{r.price}</Text>
-        </Pressable>
-      ))}
+      {!stacked && (
+        <View style={styles.tr}>
+          <Text style={[styles.cell, styles.provider, styles.head]}>{t('quote.col.provider')}</Text>
+          <Text style={[styles.cell, styles.date, styles.head]}>{t('quote.col.date')}</Text>
+          <Text style={[styles.cell, styles.service, styles.head]}>{t('quote.col.service')}</Text>
+          <Text style={[styles.cell, styles.price, styles.head]}>{t('quote.col.price')}</Text>
+        </View>
+      )}
+      {rows.map((r) => {
+        const service = r.service ?? (stacked ? t('quote.noService') : '-')
+        const day = formatDay(r.bookedAt)
+        return (
+          <Pressable
+            key={r.id}
+            onPress={() => go(`/bookings/${r.bookingId}`)}
+            accessibilityRole="button"
+            accessibilityLabel={t('quote.openBooking', { number: r.number, provider: r.provider, service: r.service ?? t('quote.noService'), price: r.price, date: day })}
+            style={({ pressed }) => [styles.body, pressed && styles.pressed]}>
+            {stacked ? (
+              <>
+                <Text style={styles.cell}>{`${r.provider} · ${service}`}</Text>
+                <View style={styles.tr}>
+                  <Text style={[styles.cell, styles.date]}>{day}</Text>
+                  <Text style={[styles.cell, styles.price]}>{r.price}</Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.tr}>
+                <Text style={[styles.cell, styles.provider]}>{r.provider}</Text>
+                <Text style={[styles.cell, styles.date]}>{day}</Text>
+                <Text style={[styles.cell, styles.service]}>{service}</Text>
+                <Text style={[styles.cell, styles.price]}>{r.price}</Text>
+              </View>
+            )}
+          </Pressable>
+        )
+      })}
     </Card>
   )
 }
@@ -126,7 +150,7 @@ const styles = StyleSheet.create({
   amount: { fontSize: 20, fontWeight: '700', color: '#0E8A6B' },
   small: { fontSize: 14, color: '#5C7A72' },
   tr: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  body: { minHeight: 44, borderTopWidth: 1, borderTopColor: '#E3F1EC' },
+  body: { minHeight: 44, justifyContent: 'center', gap: 2, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#E3F1EC' },
   cell: { fontSize: 13, color: '#14352E' },
   head: { fontWeight: '700', color: '#5C7A72' },
   provider: { flex: 3 },

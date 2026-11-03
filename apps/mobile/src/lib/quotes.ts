@@ -21,20 +21,20 @@ export const openQuotes = (received: QuoteListItem[], now = new Date()): QuoteLi
 /** The received quotes that are not an open offer (accepted, expired, declined, replaced): they stay as document rows with their PDF. */
 export const otherQuotes = (received: QuoteListItem[], now = new Date()): QuoteListItem[] => received.filter((q) => !openQuotes([q], now).length)
 
-export type AcceptedRow = { id: string; bookingId: string; provider: string; acceptedAt: string; service: string | null; price: string }
+export type AcceptedRow = { id: string; number: string; bookingId: string; provider: string; bookedAt: string; service: string | null; price: string }
 
 /** The table of accepted quotes: provider, date accepted (when the booking was made), service, price; newest first. A row opens the booking. */
 export function acceptedRows(received: QuoteListItem[]): AcceptedRow[] {
   return received
-    .flatMap((q) => (q.role === 'customer' && q.status === 'accepted' && q.bookingId && q.acceptedAt ? [{ id: q.id, bookingId: q.bookingId, provider: q.counterparty, acceptedAt: q.acceptedAt, service: q.service, price: price(q) }] : []))
-    .sort((a, b) => new Date(b.acceptedAt).getTime() - new Date(a.acceptedAt).getTime())
+    .flatMap((q) => (q.role === 'customer' && q.status === 'accepted' && q.bookingId && q.bookedAt ? [{ id: q.id, number: q.number, bookingId: q.bookingId, provider: q.counterparty, bookedAt: q.bookedAt, service: q.service, price: price(q) }] : []))
+    .sort((a, b) => new Date(b.bookedAt).getTime() - new Date(a.bookedAt).getTime())
 }
 
 /** The time a quote offers, or that it is still to be agreed. */
 export const quoteWhen = (q: Pick<QuoteListItem, 'startAt'>): string => (q.startAt ? formatWhen(q.startAt) : t('booking.quoteTimeOpen'))
 
 /** What the confirmation says before accepting: provider, service, price and time, exactly. */
-export const acceptSummary = (q: QuoteListItem): string => t('quote.acceptSummary', { provider: q.counterparty, service: q.service ?? t('quote.noService'), price: price(q), when: quoteWhen(q) })
+export const acceptSummary = (q: QuoteListItem): string => t('quote.acceptSummary', { number: q.number, provider: q.counterparty, service: q.service ?? t('quote.noService'), price: price(q), when: quoteWhen(q) })
 
 /** The lines under a quote's number: who, the time (or that it is still to be confirmed), the date, the total and the state. */
 export function quoteLines(q: QuoteListItem, now = new Date()): string[] {

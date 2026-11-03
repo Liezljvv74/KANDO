@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import type { QuoteListItem } from '@kando/contract'
 import { isUuid } from '../admin/common'
@@ -7,6 +7,7 @@ import { formatQuoteNumber, isTestNumber, nextNumber, quoteSeries, yearOf } from
 import { describeError } from '../log-error'
 import { LIVE_PAYMENTS_ALLOWED } from '../payments/rules'
 import type { Exec } from '../providers/eligibility'
+import { bookingShownStatus } from '../bookings/rules'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
@@ -132,11 +133,12 @@ export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boole
  * The caller's quote documents, as the provider ("Quotes sent") and as the customer ("My received quotes"), newest first. A person who is
  * both gets both. Quotes sent before documents existed are not listed. RLS: the two parties only. One query: the job's service title, and
  * for an accepted quote the booking made from it (the latest one: a booking that lapsed reopens the quote, which can be accepted again)
- * and when it was made, as `bookingId` and `acceptedAt`.
+ * as `bookingId` and when it was made as `bookedAt`. Reads never write: a quote whose booking has lapsed (bookingShownStatus, the same rule
+ * as listQuotes) shows as the trigger bookings_reopen_request will write it, open again (or expired) and with no booking.
  */
-export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteListItem[]> {
+type LatestBooking = { id: string; created_at: string; status: string; answer_by: string | null; pay_by: string | null }
+export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date()): Promise<QuoteListItem[]> {
   const own = await ownProvider(tx, userId)
-  const latestBooking = (col: SQL) => sql`(SELECT ${col} FROM bookings b WHERE b.quote_id = ${quotes.id} AND ${quotes.status} = 'accepted' ORDER BY b.created_at DESC LIMIT 1)`
   const rows = await tx
     .select({
       d: quoteDocuments,
@@ -149,8 +151,7 @@ export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteL
       scope: quotes.scope,
       expiresAt: quotes.expiresAt,
       service: services.title,
-      bookingId: sql<string | null>`${latestBooking(sql`b.id`)}`,
-      acceptedAt: sql<Date | string | null>`${latestBooking(sql`b.created_at`)}`,
+      booking: sql<LatestBooking | null>`(SELECT to_jsonb(x) FROM (SELECT b.id, b.created_at, b.status, b.answer_by, b.pay_by FROM bookings b WHERE b.quote_id = ${quotes.id} AND ${quotes.status} = 'accepted' ORDER BY b.created_at DESC LIMIT 1) x)`,
     })
     .from(quoteDocuments)
     .innerJoin(quotes, eq(quotes.id, quoteDocuments.quoteId))
@@ -163,6 +164,9 @@ export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteL
     const draft = r.d.draft as QuoteDraft
     // as the customer the quote is "received" (the issuer is the other side); as the provider it is "sent" (the customer is). Nobody is both sides of one quote.
     const role = r.d.customerId === userId ? 'customer' : 'provider'
+    const b = r.booking
+    const lapsed = !!b && bookingShownStatus({ status: b.status, answerBy: b.answer_by ? new Date(b.answer_by) : null, payBy: b.pay_by ? new Date(b.pay_by) : null }, now) === 'expired'
+    const status = lapsed ? (r.expiresAt > now ? 'sent' : 'expired') : r.status
     out.push({
       id: r.d.id,
       quoteId: r.d.quoteId,
@@ -177,11 +181,11 @@ export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteL
       service: r.service,
       scope: r.scope,
       expiresAt: r.expiresAt.toISOString(),
-      status: r.status as QuoteListItem['status'],
+      status: status as QuoteListItem['status'],
       issuedAt: r.d.issuedAt.toISOString(),
       pdfReady: r.d.fileKey !== null,
-      bookingId: r.bookingId,
-      acceptedAt: r.acceptedAt ? new Date(r.acceptedAt).toISOString() : null,
+      bookingId: b && !lapsed ? b.id : null,
+      bookedAt: b && !lapsed ? new Date(b.created_at).toISOString() : null,
     })
   }
   return out
