@@ -3,7 +3,10 @@ import { db, documentAiChecks, documents, providers, users } from '@kando/db'
 import { describeError } from '../log-error'
 import { notifyDocumentDecision } from '../notifications'
 import { documentsBucket, storage } from '../storage'
-import { AiUnavailable, openRouterChecker, type DocumentCheckResult, type DocumentChecker } from './openrouter'
+import { AiUnavailable, openRouterChecker, type DocumentChecker } from './openrouter'
+import { minConfidence, monthlyCapEur, stripPersonalData, TYPE_NAME, wouldAutoApprove } from './rules'
+
+export { DEFAULT_MIN_CONFIDENCE, DEFAULT_MONTHLY_CAP_EUR, minConfidence, monthlyCapEur, stripPersonalData, wouldAutoApprove } from './rules'
 
 /** The requirement code of a photo ID: its image is kept only 30 days after the check. */
 export const ID_DOCUMENT = 'id-document'
@@ -12,33 +15,11 @@ export const ID_IMAGE_KEEP_DAYS = 30
 export const SPOT_CHECK_RATE = 0.1
 /** Checks per provider and hour: an upload loop must not run up the bill. */
 export const CHECKS_PER_HOUR = 10
-export const DEFAULT_MIN_CONFIDENCE = 0.8
-export const DEFAULT_MONTHLY_CAP_EUR = 20
 // Used only when OpenRouter does not report the cost of a call.
 const FALLBACK_EUR_PER_TOKEN = 0.00002
 const FALLBACK_EUR_PER_CALL = 0.02
 
-const TYPE_NAME: Record<string, string> = {
-  'id-document': 'photo ID (identity card, passport or driving licence)',
-  'trade-registration': 'trade registration (Gewerbeanmeldung)',
-  'liability-insurance': 'liability insurance certificate',
-  'police-certificate': 'police clearance certificate (Führungszeugnis)',
-  'hygiene-certificate': 'hygiene certificate',
-  'food-business-registration': 'food business registration',
-  permit: 'official permit',
-  'craft-qualification': 'craft qualification certificate',
-  'first-aid-certificate': 'first aid certificate',
-}
 const MIME: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
-
-/** A number from the environment inside [min, max], else the default (an unset, empty or bad value never switches a limit off). */
-function envNumber(name: string, fallback: number, min: number, max: number): number {
-  const raw = process.env[name]
-  const n = raw === undefined || raw.trim() === '' ? NaN : Number(raw)
-  return Number.isFinite(n) && n >= min && n <= max ? n : fallback
-}
-export const minConfidence = () => envNumber('AI_MIN_CONFIDENCE', DEFAULT_MIN_CONFIDENCE, 0, 1)
-export const monthlyCapEur = () => envNumber('AI_MONTHLY_CAP_EUR', DEFAULT_MONTHLY_CAP_EUR, 0, 100_000)
 
 let override: DocumentChecker | undefined
 /** Test hook (via '@kando/domain/src/testing'): a fake model client. Setting it also switches the feature on. */
@@ -56,25 +37,6 @@ export function documentChecker(): DocumentChecker | null {
   const model = process.env.AI_DOCUMENT_MODEL?.trim()
   return apiKey && model ? openRouterChecker({ apiKey, model }) : null
 }
-
-/**
- * Defensive clean-up of the "why not approved" text before it is stored: dates and long digit runs (ID, document and phone numbers,
- * also written with spaces or dashes) are replaced, the length is capped. The prompt already forbids them; this is the second wall.
- */
-export function stripPersonalData(text: string): string {
-  return text
-    .replace(/\b\d{1,2}[./-]\s?\d{1,2}[./-]\s?\d{2,4}\b/g, '[date]')
-    .replace(/\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b/g, '[date]')
-    .replace(/\b\d{1,2}\.?\s+(?:[A-Za-zÄÖÜäöüß]{3,12})\.?\s+\d{2,4}\b/g, '[date]')
-    .replace(/\d(?:[\s.\-/]?\d){5,}/g, '[number]')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 300)
-}
-
-/** The rule: auto-approve only when the AI found no problem and is sure enough. (The random spot check comes after, and can reverse it.) */
-export const wouldAutoApprove = (r: DocumentCheckResult, min: number) =>
-  r.verdict === 'ok' && r.confidence >= min && r.documentTypeMatches && r.nameMatches && r.notExpired !== false
 
 export type CheckDeps = {
   checker?: DocumentChecker
