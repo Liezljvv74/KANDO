@@ -71,6 +71,8 @@ export const MePatchSchema = z
     lastName: requiredText(60),
     language: LangSchema,
     address: AddressSchema.nullable(),
+    /** Sign-up: the person ticked the Terms and Privacy Policy box; the server stores the time. */
+    termsAccepted: z.literal(true),
   })
   .partial()
 export type MePatch = z.infer<typeof MePatchSchema>

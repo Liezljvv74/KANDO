@@ -155,6 +155,14 @@ test('verify finishes the sign-up: names and address, then the picture, then the
   expect(await loadPending()).toBeNull()
 })
 
+test('verify saves the accepted Terms first, so a refused name cannot lose them', async () => {
+  await savePending({ ...pending, termsAccepted: true })
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(api.updateMe).toHaveBeenNthCalledWith(1, { termsAccepted: true })
+  expect(api.updateMe).toHaveBeenNthCalledWith(2, { firstName: 'Anna', lastName: 'Berg', language: 'en', address })
+})
+
 test('a failed upload keeps the record; loadSession retries it once and clears it', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)

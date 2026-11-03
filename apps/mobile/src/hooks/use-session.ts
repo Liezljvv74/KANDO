@@ -97,6 +97,7 @@ export async function completeSignup(user: User) {
 
 async function finish(p: PendingSignup) {
   try {
+    if (p.termsAccepted) await updateMe({ termsAccepted: true }) // first: a refused name below must not lose it
     if (p.firstName && p.lastName) {
       const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
       // A postcode the server refuses must not block the names for good (the form cannot show it any more): saved without the address.
