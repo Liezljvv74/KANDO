@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { BookingSchema, RequestSchema, ThreadSchema } from '@kando/contract'
+import { RequestSchema, ThreadSchema } from '@kando/contract'
 import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
 import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
 import { requestTime, call, cleanupUsers, EMAIL, fakeSession, insertProposedBooking, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
