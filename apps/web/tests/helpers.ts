@@ -1,6 +1,6 @@
-import { asUser, db, pool } from '@kando/db'
-import { HOUR, type Booking } from '@kando/contract'
-import { getBooking, PROPOSAL_ANSWER_HOURS, threadForBooking, type Storage } from '@kando/domain'
+import { pool } from '@kando/db'
+import { BookingSchema, QuoteSchema, RequestSchema, type Booking, type BookingRequest, type Quote } from '@kando/contract'
+import type { Storage } from '@kando/domain'
 
 // Fake session: cookie "uid=<id>:<email>" is a confirmed session, plus "verified=0" an unconfirmed one and "name=<name>"
 // the account name (each test file mocks lib/auth/server with `fakeSession`).
@@ -208,31 +208,42 @@ export const seedUser = (id: string, staffRole: string | null = null, name: stri
   return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null])
 }
 
-/**
- * A `proposed` booking with source 'direct', as old rows from the removed direct booking still exist (new jobs only come from
- * requests). Written on the owner connection like the removed domain function did: provider and price (trigger
- * bookings_fill_amount) come from the service, answer window 24 hours, its own chat thread. Returns the booking as the customer sees it.
- */
-export async function insertProposedBooking(o: {
+/** A request and the provider's quote for the same time (no booking yet), made through the real routes; the owner and id are the provider's. */
+export async function makeQuote(o: {
   customerId: string
-  serviceId: string
+  ownerId: string
+  providerId: string
   startAt: string | Date
-  durationMin: number
-  onSite: boolean
-  address?: { postcode: string; street?: string; city?: string }
-  note?: string
-  now?: Date
-}): Promise<Booking> {
-  const now = o.now ?? new Date()
-  const a = o.onSite ? o.address : undefined
-  const { rows } = await pool.query(
-    `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, note, answer_by, created_at, updated_at)
-     SELECT $1, provider_id, id, 'direct', 'proposed', $3, $4, $5, $6, $7, $8, $9, $10, $11, $11 FROM services WHERE id = $2 RETURNING id`,
-    [o.customerId, o.serviceId, new Date(o.startAt), o.durationMin, o.onSite, a?.street ?? null, a?.postcode ?? null, a?.city ?? null, o.note ?? null, new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR), now],
-  )
-  const id = rows[0].id as string
-  await threadForBooking(db, id)
-  return (await asUser(o.customerId, (tx) => getBooking(tx, o.customerId, id))).booking
+  durationMin?: number
+  onSite?: boolean
+  amount?: number
+}): Promise<{ request: BookingRequest; quote: Quote }> {
+  const requests = await import('../app/app-api/v1/requests/route')
+  const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
+  const startAt = new Date(o.startAt).toISOString()
+  const durationMin = o.durationMin ?? 60
+  const onSite = o.onSite ?? true
+  await relaxLimits(o.customerId)
+  const place = onSite ? { onSite, address: { postcode: '10115' } } : { onSite }
+  const rq = await call(requests.POST, o.customerId, 'POST', { providerId: o.providerId, description: 'Test job', startAt, durationMin, ...place })
+  if (!rq.ok) throw new Error(`makeQuote: request ${rq.status} ${await rq.text()}`)
+  const request = RequestSchema.parse(await rq.json())
+  const qr = await call(quotes.POST, o.ownerId, 'POST', { amount: o.amount ?? 100, scope: 'Test job', startAt, durationMin }, { id: request.id })
+  if (!qr.ok) throw new Error(`makeQuote: quote ${qr.status} ${await qr.text()}`)
+  return { request, quote: QuoteSchema.parse(await qr.json()) }
+}
+
+/**
+ * A booking in status awaiting-payment made through the real flow: the customer's request, the provider's quote for the same
+ * time, the customer's confirm (see makeQuote). Returns the booking as the customer sees it. Throws with the status of the
+ * first refused step. relaxLimits runs first, so a test may make many of them for one customer.
+ */
+export async function makeAwaitingPayment(o: Parameters<typeof makeQuote>[0] & { note?: string }): Promise<Booking> {
+  const confirm = await import('../app/app-api/v1/quotes/[id]/confirm/route')
+  const { quote } = await makeQuote(o)
+  const cr = await call(confirm.POST, o.customerId, 'POST', o.note ? { note: o.note } : {}, { id: quote.id })
+  if (!cr.ok) throw new Error(`makeAwaitingPayment: confirm ${cr.status} ${await cr.text()}`)
+  return BookingSchema.parse(await cr.json())
 }
 
 /**

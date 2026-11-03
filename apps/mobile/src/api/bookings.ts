@@ -2,7 +2,6 @@ import type {
   AcceptQuoteInput,
   AgreedTimeInput,
   Booking,
-  BookingAnswer,
   BookingRequest,
   BookingView,
   BusyTime,
@@ -29,6 +28,7 @@ export const withdrawRequest = (id: string) => api<BookingRequest>(`${BASE}/requ
 export const declineRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${encodeURIComponent(id)}/decline`, json('POST'))
 export const listQuotes = async (requestId: string) => (await api<{ docs: Quote[] }>(`${BASE}/requests/${requestId}/quotes`)).docs
 export const sendQuote = (requestId: string, body: QuoteInput) => api<Quote>(`${BASE}/requests/${requestId}/quotes`, json('POST', body))
+/** An additional task's quote only (the server answers 409 use-confirm for an ordinary quote: that is confirmQuote). */
 export const acceptQuote = (quoteId: string, body: AcceptQuoteInput) => api<Booking>(`${BASE}/quotes/${quoteId}/accept`, json('POST', body))
 /** The customer confirms the quote as it is (its time, or none yet): the booking waits for payment, or for the agreed time. */
 export const confirmQuote = (quoteId: string) => api<Booking>(`${BASE}/quotes/${quoteId}/confirm`, json('POST', {}))
@@ -37,7 +37,6 @@ export const enterAgreedTime = (id: string, body: AgreedTimeInput) => api<Bookin
 export const confirmAgreedTime = (id: string) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time/confirm`, json('POST'))
 export const listBookings = (role: Role, cursor?: string) => api<Page<Booking>>(list('bookings', role, cursor))
 export const getBooking = (id: string) => api<BookingView>(`${BASE}/bookings/${encodeURIComponent(id)}`)
-export const answerBooking = (id: string, answer: BookingAnswer) => api<Booking>(`${BASE}/bookings/${id}/answer`, json('POST', answer))
 export const withdrawBooking = (id: string) => api<Booking>(`${BASE}/bookings/${id}/withdraw`, json('POST'))
 export const getBusyTimes = async (slug: string, from: Date, to: Date) =>
   (await api<{ docs: BusyTime[] }>(`${BASE}/providers/${encodeURIComponent(slug)}/busy?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)).docs

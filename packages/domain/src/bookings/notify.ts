@@ -2,13 +2,11 @@ import { REQUEST_SCREEN_KINDS } from '@kando/contract'
 import { eq } from 'drizzle-orm'
 import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t, type Key } from '@kando/i18n'
-import type { AfterCommit } from '../app-request'
 import { sendEmail, type BookingTemplate, type Template } from '../email'
 import { describeError } from '../log-error'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime, providerUrl } from '../notifications'
 import { pushReaches, sendPush } from '../push'
-import { slotIsHeld } from './busy'
 
 /** The notification kinds that have an email template (a kind without one cannot be sent from here). */
 export type BookingKind = Extract<NotificationKind, BookingTemplate>
@@ -75,20 +73,4 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }
-}
-
-/**
- * A customer's new proposal: tells the provider, and when its time overlaps a booking of theirs that still awaits payment
- * (same overlap rule as accepting, read-only), that another customer asked for that time too. The overlap is read on the
- * owner connection after commit: the customer's own transaction cannot see the provider's other bookings.
- */
-export function notifyProposal(afterCommit: AfterCommit, provider: { id: string; ownerId: string }, b: typeof bookings.$inferSelect): void {
-  afterCommit(async () => {
-    await notifyBookingEvent('booking-proposed', provider.ownerId, { bookingId: b.id })
-    try {
-      if (await slotIsHeld(db, provider.id, b.startAt, b.durationMin, b.onSite, new Date(), b.id, true)) await notifyBookingEvent('pending-slot-requested', provider.ownerId, { bookingId: b.id })
-    } catch (e) {
-      console.error('[notify] pending slot check failed', describeError(e))
-    }
-  })
 }

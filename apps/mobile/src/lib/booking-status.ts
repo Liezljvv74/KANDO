@@ -6,9 +6,6 @@ import { formatPrice } from '@/lib/format'
 
 export type Viewer = 'customer' | 'provider'
 export type BookingAction =
-  | 'accept'
-  | 'decline'
-  | 'counter'
   | 'withdraw'
   | 'enterTime'
   | 'confirmTime'
@@ -27,9 +24,6 @@ const ms = (iso: string | null) => (iso ? new Date(iso).getTime() : NaN)
 const money = (b: Pick<Booking, 'currency'>, cents: number) => formatPrice({ priceType: 'fixed', price: cents / 100, currency: b.currency })
 const cents = (x: number) => Math.round(x * 100)
 
-/** Whose answer a proposal waits for: the customer made the first proposal (counterBy null), so the provider answers it. The server enforces this; the app only chooses what to show. */
-export const waitingFor = (b: Pick<Booking, 'counterBy'>): Viewer => (b.counterBy === 'provider' ? 'customer' : 'provider')
-
 /** Whole days left until `iso` (a started day counts), never below 0: the confirmation countdown. */
 export const daysLeft = (iso: string, now = new Date()): number => Math.max(0, Math.ceil((ms(iso) - now.getTime()) / DAY))
 
@@ -40,8 +34,6 @@ export const lateFee = (amount: number): number => Math.round(cents(amount) * LA
 export function bookingStatusText(b: Booking, viewer: Viewer, now = new Date()): string {
   const date = (iso: string | null) => (iso ? formatWhen(iso) : '')
   switch (b.status) {
-    case 'proposed':
-      return t(waitingFor(b) === viewer ? 'bookingStatus.answerNow' : viewer === 'customer' ? 'bookingStatus.waitProvider' : 'bookingStatus.waitCustomer')
     case 'awaiting-payment':
       return t(viewer === 'customer' ? 'bookingStatus.payBy' : 'bookingStatus.waitPayment', { date: date(b.payBy) })
     case 'confirmed':
@@ -78,8 +70,8 @@ export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): Bo
   const withdraw: BookingAction[] = customer ? ['withdraw'] : []
   const extra: BookingAction[] = b.parentBookingId === null && !b.noShow ? ['additionalTask'] : []
   switch (b.status) {
-    case 'proposed':
-      return waitingFor(b) === viewer ? ['accept', 'decline', 'counter', ...withdraw] : withdraw
+    case 'proposed': // no new booking has this status; an old one can only be withdrawn
+      return withdraw
     case 'awaiting-time': {
       // either side enters the agreed time; the other confirms it (never your own entry). Only the customer can walk away: the provider uses the chat or lets it lapse.
       const theirs = !!b.pendingTime && b.pendingTime.by !== viewer

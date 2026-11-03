@@ -13,7 +13,7 @@ const reportRoute = await import('../app/app-api/v1/messages/[id]/report/route')
 const blocksRoute = await import('../app/app-api/v1/blocks/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
-const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
+const confirmRoute = await import('../app/app-api/v1/quotes/[id]/confirm/route')
 const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 
 const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other', twin: 'cs-twin', fast: 'cs-fast', race: 'cs-race' }
@@ -87,7 +87,7 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
 })
 
 const quote = (reqId: string) => call(quotesRoute.POST, U.owner, 'POST', { amount: 40, scope: 'Fence' }, { id: reqId })
-const accept = (quoteId: string) => call(acceptRoute.POST, U.cust, 'POST', { startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: quoteId })
+const accept = (quoteId: string) => call(confirmRoute.POST, U.cust, 'POST', {}, { id: quoteId })
 const stored = async (reqId: string) => (await pool.query('SELECT (SELECT count(*) FROM quotes WHERE request_id = $1)::int q, (SELECT count(*) FROM bookings b JOIN quotes x ON x.id = b.quote_id WHERE x.request_id = $1)::int b', [reqId])).rows[0]
 
 it('a block, in either direction, stops quotes and acceptances (403 BLOCKED, nothing stored); unblocking restores them', async () => {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { acceptQuote, clearOutbox, createRequest, drainOutbox, getBooking, getRequest, listBookings, listQuotes, listRequests, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
+import { clearOutbox, confirmQuote, createRequest, drainOutbox, getBooking, getRequest, listBookings, listQuotes, listRequests, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
 import { requestTime, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -249,7 +249,7 @@ it('outbox: a reminder whose deadline has passed or whose item is closed is clai
 // A quote-born booking that ends unagreed reopens its request and quote (trigger bookings_reopen_request, rls.ts)
 const quoteBorn = async (status: 'proposed' | 'awaiting-payment', quoteExpiresAt: string, parent: string | null = null) => {
   const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by, parent_booking_id) VALUES ($1, $2, 'x', 'booked', $3, $4) RETURNING id", [U.cust, prov, at(-48), parent])).rows[0].id as string
-  const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 50, 's', $3, 'accepted') RETURNING id", [r, prov, quoteExpiresAt])).rows[0].id as string
+  const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, start_at, duration_min, expires_at, status) VALUES ($1, $2, 50, 's', $3, 60, $4, 'accepted') RETURNING id", [r, prov, at(24 * 20), quoteExpiresAt])).rows[0].id as string
   const due = status === 'proposed' ? [at(-1), null, null] : [null, at(-1), at(-49)]
   const b = (
     await pool.query(
@@ -287,7 +287,7 @@ it("reopen at the quote's expiry keeps the quote expired", async () => {
   await run(0)
   expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'expired'])
   expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['booking-expired']) // nothing to reopen: the customer hears the booking expired
-  const res = await asUser(U.cust, (tx) => acceptQuote(tx, U.cust, x.q, { startAt: at(24 * 30), durationMin: 60, onSite: true, address: { postcode: '10115' } }, new Date(NOW))).catch((e: Response) => e)
+  const res = await asUser(U.cust, (tx) => confirmQuote(tx, U.cust, x.q, {}, new Date(NOW))).catch((e: Response) => e)
   expect(res).toBeInstanceOf(Response)
   expect([(res as Response).status, await (res as Response).json()]).toEqual([409, { error: 'quote-expired' }])
 })
@@ -307,7 +307,7 @@ it('a direct booking and an additional task change no request', async () => {
 })
 
 // A lapsed root proposal reopens its request as soon as someone acts (no cron needed); reads only show it reopened.
-const accept = (q: string) => asUser(U.cust, (tx) => acceptQuote(tx, U.cust, q, { startAt: at(24 * 5), durationMin: 60, onSite: true, address: { postcode: '10115' } }, new Date(NOW)))
+const confirm = (q: string) => asUser(U.cust, (tx) => confirmQuote(tx, U.cust, q, {}, new Date(NOW)))
 const shown = async (x: { r: string; q: string }) => [
   (await asUser(U.cust, (tx) => getRequest(tx, U.cust, x.r, new Date(NOW)))).status,
   (await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer', undefined, new Date(NOW)))).docs.find((r) => r.id === x.r)?.status,
@@ -317,20 +317,20 @@ const shown = async (x: { r: string; q: string }) => [
 const mailedNull = async (b: string) => (await pool.query("SELECT count(*)::int AS n FROM notifications WHERE payload->>'bookingId' = $1 AND mailed_at IS NULL", [b])).rows[0].n as number
 
 for (const kind of ['proposed', 'awaiting-payment'] as const) {
-  it(`a lapsed ${kind} quote-born booking: reads show the job open again, and accepting the quote reopens it before any cron`, async () => {
+  it(`a lapsed ${kind} quote-born booking: reads show the job open again, and confirming the quote reopens it before any cron`, async () => {
     await clean()
     const x = await quoteBorn(kind, at(24 * 3))
     expect(await shown(x)).toEqual(['quoted', 'quoted', 'quoted', 'sent'])
     expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual([kind, 'booked', 'accepted']) // shown, not written
-    const nb = await accept(x.q)
-    expect(nb.status).toBe('proposed')
+    const nb = await confirm(x.q)
+    expect(nb.status).toBe('awaiting-payment')
     expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'booked', 'accepted']) // reopened, then booked again
     expect((await kinds(x.b)).filter((n) => n.user_id === U.cust)).toEqual([{ user_id: U.cust, kind: 'request-reopened', payload: { requestId: x.r, bookingId: x.b } }])
     expect(await mailedNull(x.b)).toBe(kind === 'proposed' ? 1 : 2) // the outbox sends them
     const before = await kinds(x.b)
     await run(0) // the cron afterwards: no second notice, nothing reopened again
     expect(await kinds(x.b)).toEqual(before)
-    expect([await status('bookings', nb.id), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['proposed', 'booked', 'accepted'])
+    expect([await status('bookings', nb.id), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['awaiting-payment', 'booked', 'accepted'])
   })
 }
 
@@ -343,11 +343,11 @@ it('a lapsed quote-born proposal: the provider sends a revised quote before any 
   expect((await kinds(x.b)).map((n) => n.kind)).toEqual(['request-reopened'])
 })
 
-it('a lapsed quote-born proposal whose quote expired too: reads quoted/expired, accept is 409 quote-expired, one booking-expired notice', async () => {
+it('a lapsed quote-born proposal whose quote expired too: reads quoted/expired, confirm is 409 quote-expired, one booking-expired notice', async () => {
   await clean()
   const x = await quoteBorn('proposed', at(-0.5))
   expect(await shown(x)).toEqual(['quoted', 'quoted', 'quoted', 'expired'])
-  const res = await accept(x.q).catch((e: Response) => e)
+  const res = await confirm(x.q).catch((e: Response) => e)
   expect(res).toBeInstanceOf(Response)
   expect([(res as Response).status, await (res as Response).json()]).toEqual([409, { error: 'quote-expired' }])
   expect([await status('bookings', x.b), await status('requests', x.r), await status('quotes', x.q)]).toEqual(['expired', 'quoted', 'expired'])

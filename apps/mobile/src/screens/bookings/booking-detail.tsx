@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
-import { answerBooking, confirmAgreedTime, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
+import { confirmAgreedTime, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -25,9 +25,9 @@ import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
 
 /** Actions that open a form or statement below the booking before anything is sent. */
-type Sheet = 'counter' | 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
-const SHEETS: readonly BookingAction[] = ['counter', 'finish', 'cancel', 'dispute', 'objectNoShow', 'additionalTask', 'stateStopAmount', 'answerStop']
-const DANGER: readonly BookingAction[] = ['decline', 'withdraw', 'cancel']
+type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
+const SHEETS: readonly BookingAction[] = ['finish', 'cancel', 'dispute', 'objectNoShow', 'additionalTask', 'stateStopAmount', 'answerStop']
+const DANGER: readonly BookingAction[] = ['withdraw', 'cancel']
 
 /** A booking: plain-words status, the proposed time and the actions allowed now. */
 export default function BookingDetail() {
@@ -54,7 +54,6 @@ export default function BookingDetail() {
 
   /** Steps without a form ask first (they cannot be undone), then call the server. */
   const ASK: Partial<Record<BookingAction, [Key, Key, () => Promise<unknown>]>> = {
-    decline: ['booking.confirmDecline', 'booking.decline', () => answerBooking(b.id, { type: 'decline' })],
     withdraw: ['booking.confirmWithdraw', 'booking.withdraw', () => withdrawBooking(b.id)],
     confirm: ['booking.confirmAsk', 'booking.confirmYes', () => confirmJob(b.id)],
     stop: ['booking.stopAsk', 'booking.stopYes', () => stopJob(b.id)],
@@ -67,7 +66,7 @@ export default function BookingDetail() {
     if (SHEETS.includes(action)) return setSheet(sheet === action ? null : (action as Sheet))
     const ask = ASK[action]
     if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return
-    submit(ask ? ask[2] : action === 'confirmTime' ? () => confirmAgreedTime(b.id) : () => answerBooking(b.id, { type: 'accept' }), retry)
+    submit(ask ? ask[2] : () => confirmAgreedTime(b.id), retry) // the one action left without a form or a question is confirmTime
   }
 
   const descriptionSheet = (label: Key, hint: Key | undefined, submitLabel: Key, call: (text: string) => Promise<unknown>, after = closeAndReload) => (
@@ -110,12 +109,6 @@ export default function BookingDetail() {
       {bookingActions(b, viewer, now).map((a) => (
         <Button key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={sheet !== null && sheet !== a} danger={DANGER.includes(a)} />
       ))}
-      {sheet === 'counter' && (
-        <>
-          <OpenChat find={async () => data.threadId} />
-          <Button label={t('booking.counterEnter')} onPress={() => go('/bookings/counter', { id: b.id })} />
-        </>
-      )}
       {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
       {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
       {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
