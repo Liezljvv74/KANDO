@@ -519,7 +519,6 @@ export const de = {
   'payouts.taxNumberHint': 'Nötig für Kleinunternehmer und Unternehmen ohne USt-IdNr.: Die Nummer steht auf deinen Rechnungen.',
   'payouts.invoiceConsent': 'Die Plattform stellt Rechnungen und Quittungen zu meinen Aufträgen in meinem Namen aus. [WORTLAUT: PRÜFUNG DURCH ANWALT]',
   'payouts.invoiceConsentNeeded': 'Bevor du Angebote senden und Buchungen annehmen kannst, stimme zu, dass Rechnungen in deinem Namen ausgestellt werden.',
-  'error.booking.not-bookable': 'Diese Leistung kann nicht direkt gebucht werden. Bitte frage ein Angebot an.',
   'error.booking.own-service': 'Du kannst Deine eigene Leistung nicht buchen.',
   'error.booking.not-open': 'Das ist nicht mehr offen: Es wurde schon beantwortet oder ist abgelaufen. Bitte lade die Seite neu.',
   'error.booking.quote-expired': 'Dieses Angebot ist abgelaufen.',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema,PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
+import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
 
 const proposal = { startAt: '2026-11-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
