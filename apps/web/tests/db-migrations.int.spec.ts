@@ -215,6 +215,8 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m28-p', 'published') RETURNING id")).rows[0].id
   const booking = async (status: string) =>
     (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, pay_by, accepted_at) VALUES ('m28-c', $1, 'direct', $2, now() + interval '9 days', 60, 80, now() + interval '1 day', now()) RETURNING id", [p, status])).rows[0].id as string
+  // a database that was migrated and had its row-level security applied before 0028 has this policy, which reads counter_by
+  await pool.query("CREATE POLICY insert_rule ON bookings AS RESTRICTIVE FOR INSERT WITH CHECK (status = 'proposed' AND counter_by IS NULL)")
   const proposed = await booking('proposed')
   const waiting = await booking('awaiting-payment')
   await pool.query("INSERT INTO threads (booking_id, customer_id, provider_id) VALUES ($1, 'm28-c', $2)", [proposed, p])
@@ -230,6 +232,7 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q28])).rows).toEqual([{ status: 'sent' }])
   expect((await pool.query('SELECT kind FROM notifications')).rows).toEqual([{ kind: 'booking-accepted' }])
   expect(await columns('bookings')).not.toHaveProperty('counter_by')
+  expect((await pool.query("SELECT with_check FROM pg_policies WHERE tablename = 'bookings' AND policyname = 'insert_rule'")).rows).toEqual([{ with_check: 'false' }]) // dropped by the migration, created again by applyRls as deny-all
   // the new checks: no proposed status, no default status, none of the removed kinds
   const insert = (status: string | null) =>
     pool.query(`INSERT INTO bookings (customer_id, provider_id, source${status ? ', status' : ''}, start_at, duration_min, amount) VALUES ('m28-c', $1, 'direct'${status ? `, '${status}'` : ''}, now() + interval '9 days', 60, 80)`, [p])

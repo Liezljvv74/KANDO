@@ -13,6 +13,8 @@ ALTER TABLE "bookings" DROP CONSTRAINT "bookings_counter_by_check";--> statement
 ALTER TABLE "bookings" DROP CONSTRAINT "bookings_status_check";--> statement-breakpoint
 DROP INDEX "bookings_proposed_answer_by_idx";--> statement-breakpoint
 ALTER TABLE "bookings" ALTER COLUMN "status" DROP DEFAULT;--> statement-breakpoint
+-- The row-level-security insert policy of a database migrated before this one reads counter_by and would block the drop; applyRls (run right after the migrator) creates it again with the new deny-all rule.
+DROP POLICY IF EXISTS "insert_rule" ON "bookings";--> statement-breakpoint
 ALTER TABLE "bookings" DROP COLUMN "counter_by";--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_kind_check" CHECK (kind in ('profile-live','request-received','quote-received','booking-accepted','booking-expired','payment-reminder','quote-expiring','request-expired','requests-ignored','message-received','booking-paid','payment-received','payment-late-refunded','payout-setup-complete','customers-waiting','provider-available','refund-issued','job-finished','confirm-reminder','payment-released','was-job-done','booking-cancelled','no-show-reported','dispute-opened','dispute-decided','job-stopped','stop-amount-stated','additional-task-requested','review-requested','review-visible','provider-warning','invoice-ready','commission-invoice-ready','request-withdrawn','request-declined','request-reopened','request-updated','time-proposed','time-to-confirm','quote-confirmed'));--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_status_check" CHECK (status in ('awaiting-time','awaiting-payment','confirmed','expired','declined','withdrawn','finished','completed','disputed','cancelled','stopped','refunded'));
