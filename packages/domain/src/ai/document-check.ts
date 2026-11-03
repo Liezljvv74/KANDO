@@ -62,7 +62,9 @@ export async function runDocumentCheck(documentId: string, deps: CheckDeps = {})
   try {
     return await check(documentId, checker, deps)
   } catch (e) {
-    console.error(`[ai-check] document ${documentId} failed ${describeError(e)}`) // the claimed row stays undecided: staff decide
+    console.error(`[ai-check] document ${documentId} failed ${describeError(e)}`)
+    // A row claimed before the failure must not stay undecided without a reason: staff see why. Best effort; the document is pending either way.
+    await db.update(documentAiChecks).set({ failure: 'error', decision: 'sent-to-staff', finishedAt: sql`now()` }).where(and(eq(documentAiChecks.documentId, documentId), isNull(documentAiChecks.decision))).catch(() => {})
     return 'skipped'
   }
 }

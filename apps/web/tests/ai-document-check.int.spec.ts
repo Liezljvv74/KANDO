@@ -161,6 +161,14 @@ it('a failing provider, a timeout and a bad answer never block: the document wai
   expect(logged.mock.calls.flat().join(' ')).not.toContain('123456789')
 })
 
+it('an unexpected failure after the claim leaves a reason on the row, and the document pending', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const d = await pendingDoc()
+  expect(await runDocumentCheck(d.id, { checker: fake(OK).checker, now: new Date(NaN) })).toBe('skipped')
+  expect(await check(d.id)).toMatchObject({ decision: 'sent-to-staff', failure: 'error' })
+  expect((await status(d.id)).status).toBe('pending')
+})
+
 it('a person without a name cannot be matched: staff decide, nothing is sent', async () => {
   const f = fake(OK)
   const d = await pendingDoc('permit', null)
