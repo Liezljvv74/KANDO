@@ -5,10 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { LanguageSwitch } from '@/components/language-switch'
 import { t, useLang, type Key } from '@/i18n'
 
-type Card = { title: Key; text: Key; href: '/sign-up' | '/how-it-works'; tone: 'green' | 'sand' | 'mint' }
+type Card = { title: Key; text: Key; href: '/sign-up' | '/sign-up?offer=1' | '/how-it-works'; tone: 'green' | 'sand' | 'mint' }
 const CARDS: Card[] = [
   { title: 'welcome.needHelp', text: 'welcome.needHelpText', href: '/sign-up', tone: 'green' },
-  { title: 'welcome.offer', text: 'welcome.offerText', href: '/sign-up', tone: 'sand' },
+  { title: 'welcome.offer', text: 'welcome.offerText', href: '/sign-up?offer=1', tone: 'sand' },
   { title: 'welcome.learn', text: 'welcome.learnText', href: '/how-it-works', tone: 'mint' },
 ]
 
