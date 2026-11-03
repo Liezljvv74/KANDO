@@ -11,7 +11,7 @@ test('texts come from the shared catalogue, in the chosen language, with placeho
   expect(t('brand.tagline')).toBe('Fachleute in deiner Nähe finden')
   expect(t('myProfile.portfolioCount', { n: 2, max: 6 })).toBe('2 von 6')
   setLang('en')
-  expect(t('myProfile.portfolioMax', { max: 6 })).toBe('You can add at most 6 photos.')
+  expect(t('myProfile.portfolioMax', { max: 6 })).toBe('You can add at most 6 photos. Remove one to add another.')
 })
 
 test('the translate button texts exist in both languages', () => {

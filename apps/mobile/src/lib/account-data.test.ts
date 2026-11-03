@@ -56,7 +56,7 @@ test('a 503 AUTH_BUSY shows the busy text, not "unconfirmed", and does not ask t
 
 test('a wrong password shows the wrong-password text', () => {
   setLang('en')
-  expect(accountError('delete', 'WRONG_PASSWORD')).toBe('The password is not correct. Nothing was deleted.')
+  expect(accountError('delete', 'WRONG_PASSWORD')).toBe('The password is not correct. Nothing was deleted. Check your password and try again.')
 })
 
 test('AUTH_BUSY shows the busy text', () => {
@@ -66,6 +66,6 @@ test('AUTH_BUSY shows the busy text', () => {
 
 test('a 403 WRONG_PASSWORD means not deleted', async () => {
   const check = jest.fn(ok)
-  expect(await afterDeleteFailure(new ApiError(403, 'WRONG_PASSWORD'), check)).toEqual({ deleted: false, text: 'The password is not correct. Nothing was deleted.' })
+  expect(await afterDeleteFailure(new ApiError(403, 'WRONG_PASSWORD'), check)).toEqual({ deleted: false, text: 'The password is not correct. Nothing was deleted. Check your password and try again.' })
   expect(check).not.toHaveBeenCalled()
 })

@@ -41,7 +41,7 @@ test('every booking rule code from the server has its own text in both languages
   }
   setLang('en')
   expect(errorText('slot-pending')).toContain('pending booking')
-  expect(errorText('PAYMENTS_OFF')).toBe('Payments are not switched on yet')
+  expect(errorText('PAYMENTS_OFF')).toBe('Payments are not switched on yet. Please check back later.')
   expect(errorText('PAYMENTS_OFF')).not.toBe(errorText('unmapped'))
 })
 
