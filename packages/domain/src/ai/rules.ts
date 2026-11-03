@@ -29,18 +29,30 @@ export const monthlyCapEur = () => envNumber('AI_MONTHLY_CAP_EUR', DEFAULT_MONTH
  * Defensive clean-up of the "why not approved" text before it is stored: dates and long digit runs (ID, document and phone numbers,
  * also written with spaces or dashes) are replaced, the length is capped. The prompt already forbids them; this is the second wall.
  */
-export function stripPersonalData(text: string): string {
-  return text
+export function stripPersonalData(text: string, names: string[] = []): string {
+  // The person's own names (each word of two letters or more), as the model may quote them.
+  const own = names.flatMap((n) => n.split(/\s+/)).filter((w) => w.length >= 2).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const withoutNames = own.length ? text.replace(new RegExp(`(?<!\\p{L})(?:${own.join('|')})(?!\\p{L})`, 'giu'), '[name]') : text
+  return withoutNames
+    .replace(/\S*<\S*/g, '[number]') // the machine-readable lines of an ID
     .replace(/\b\d{1,2}[./-]\s?\d{1,2}[./-]\s?\d{2,4}\b/g, '[date]')
     .replace(/\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b/g, '[date]')
     .replace(/\b\d{1,2}\.?\s+(?:[A-Za-zÄÖÜäöüß]{3,12})\.?\s+\d{2,4}\b/g, '[date]')
     .replace(/\d(?:[\s.\-/]?\d){5,}/g, '[number]')
+    .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{6,}\b/g, '[number]') // an ID number that mixes letters and digits
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 300)
 }
 
 /** The rule: auto-approve only when the AI found no problem and is sure enough. (The random spot check comes after, and can reverse it.) */
-export const wouldAutoApprove = (r: DocumentCheckResult, min: number) =>
-  r.verdict === 'ok' && r.confidence >= min && r.documentTypeMatches && r.nameMatches && r.notExpired !== false
+export const wouldAutoApprove = (r: DocumentCheckResult, min: number, needsExpiry = false) =>
+  r.verdict === 'ok' && r.confidence >= min && r.documentTypeMatches && r.nameMatches && (needsExpiry ? r.notExpired === true : r.notExpired !== false)
+
+/** AI_DOCUMENT_PROVIDER: undefined when not set, false when malformed (the check then stays off), else the provider slug. */
+export function providerPin(raw = process.env.AI_DOCUMENT_PROVIDER): string | undefined | false {
+  const v = raw?.trim()
+  if (!v) return undefined
+  return /^[a-z0-9][a-z0-9._-]*(\/[a-z0-9._-]+)?$/i.test(v) ? v : false
+}
 

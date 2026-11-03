@@ -82,6 +82,8 @@ export function openRouterChecker(opts: { apiKey: string; model: string; provide
             response_format: { type: 'json_object' },
             provider: { data_collection: 'deny', zdr: true, allow_fallbacks: false, ...(opts.provider && { only: [opts.provider] }) },
             usage: { include: true },
+            // A PDF is read by the model itself: OpenRouter's own parser (another company, outside the provider pin) is never used.
+            ...(input.mime === 'application/pdf' && { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }),
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: [{ type: 'text', text: userText(input) }, file] },

@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { openRouterChecker } from '../src/ai/openrouter'
-import { minConfidence, TYPE_NAME, wouldAutoApprove } from '../src/ai/rules'
+import { minConfidence, providerPin, TYPE_NAME, wouldAutoApprove } from '../src/ai/rules'
 import { fixtures } from './ai-eval-fixtures'
 
 const REPORTS = join(import.meta.dirname, '..', '..', '..', 'Reports')
@@ -43,6 +43,7 @@ if (!apiKey || !models.length) {
   process.exit(0)
 }
 
+const pin = providerPin()
 const today = new Date().toISOString().slice(0, 10)
 const set = fixtures()
 const min = minConfidence()
@@ -51,14 +52,15 @@ console.log(`Evaluating ${models.length} model(s) on ${set.length} made-up docum
 type Row = { id: string; expected: 'ok' | 'problem'; approved: boolean | null; verdict: string; confidence: number | null; ms: number; costUsd: number | null; error: string | null }
 const results = new Map<string, Row[]>()
 for (const model of models) {
-  const checker = openRouterChecker({ apiKey, model, provider: process.env.AI_DOCUMENT_PROVIDER?.trim() || undefined })
+  if (pin === false) { console.error('AI_DOCUMENT_PROVIDER is malformed: use a slug such as google-vertex.'); process.exit(1) }
+  const checker = openRouterChecker({ apiKey, model, provider: pin })
   const rows: Row[] = []
   for (const f of set) {
     const { bytes, mime } = await f.render()
     const started = Date.now()
     try {
       const out = await checker.check({ bytes, mime, documentType: TYPE_NAME[f.type] ?? f.type, names: f.names, today })
-      rows.push({ id: f.id, expected: f.expected, approved: wouldAutoApprove(out.result, min), verdict: out.result.verdict, confidence: out.result.confidence, ms: Date.now() - started, costUsd: out.costUsd, error: null })
+      rows.push({ id: f.id, expected: f.expected, approved: wouldAutoApprove(out.result, min, f.type === 'id-document'), verdict: out.result.verdict, confidence: out.result.confidence, ms: Date.now() - started, costUsd: out.costUsd, error: null })
     } catch (e) {
       rows.push({ id: f.id, expected: f.expected, approved: null, verdict: '-', confidence: null, ms: Date.now() - started, costUsd: null, error: e instanceof Error ? e.message : 'error' })
     }

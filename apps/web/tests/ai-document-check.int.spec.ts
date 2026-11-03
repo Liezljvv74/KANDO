@@ -194,8 +194,10 @@ it('rate limit: ten checks per person and hour, then staff decide', async () => 
   const first = await pendingDoc()
   for (let i = 0; i < 10; i++) {
     const old = (await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ($1, 'permit', 'documents/x.pdf', 'rejected') RETURNING id", [first.uid])).rows[0].id
-    await pool.query("INSERT INTO document_ai_checks (document_id, model, decision, finished_at) VALUES ($1, 'm', 'sent-to-staff', now())", [old])
+    await pool.query("INSERT INTO document_ai_checks (document_id, owner_id, model, decision, finished_at) VALUES ($1, $2, 'm', 'sent-to-staff', now())", [old, first.uid])
   }
+  // deleting the documents does not give the calls back
+  await pool.query("DELETE FROM documents WHERE owner_id = $1 AND status = 'rejected'", [first.uid])
   const f = fake(OK)
   expect(await runDocumentCheck(first.id, { checker: f.checker })).toBe('sent-to-staff')
   expect(f.asked).toHaveLength(0)
@@ -272,11 +274,28 @@ it('row-level security: the provider, even the owner of the document, cannot rea
   expect(rows[0].r).toBe(false)
 })
 
-it('deleting a document deletes its AI result with it', async () => {
+it('deleting a document clears the AI result but keeps the cost record, so the limits cannot be reset', async () => {
   const d = await pendingDoc()
-  await runDocumentCheck(d.id, { checker: fake({ verdict: 'problem' }).checker })
+  await runDocumentCheck(d.id, { checker: fake({ verdict: 'problem', reasons: 'Name differs' }).checker })
+  expect((await check(d.id)).explanation).toBeTruthy()
   await pool.query('DELETE FROM documents WHERE id = $1', [d.id])
   expect(await check(d.id)).toBeUndefined()
+  const kept = (await pool.query('SELECT * FROM document_ai_checks WHERE owner_id = $1', [d.uid])).rows
+  expect(kept).toHaveLength(1)
+  expect(kept[0]).toMatchObject({ document_id: null, verdict: null, confidence: null, explanation: null })
+  expect(Number(kept[0].cost_eur)).toBeGreaterThan(0)
+  await pool.query('DELETE FROM users WHERE id = $1', [d.uid]) // the account goes: the cost row stays, without an owner
+  expect((await pool.query('SELECT owner_id FROM document_ai_checks WHERE id = $1', [kept[0].id])).rows[0].owner_id).toBeNull()
+})
+
+it('a photo ID needs a certain expiry date and the person own name; other documents may have no date', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  const id = await pendingDoc('id-document')
+  const noDate = fake({ notExpired: null })
+  expect(await runDocumentCheck(id.id, { checker: noDate.checker })).toBe('sent-to-staff')
+  expect(noDate.asked[0]!.names).toEqual(['Anna Muster'])
+  const other = await pendingDoc('trade-registration')
+  expect(await runDocumentCheck(other.id, { checker: fake({ notExpired: null }).checker })).toBe('auto-approved')
 })
 
 const day = 86_400_000
@@ -352,7 +371,9 @@ it('a deleted ID image: the person gets a clean 404 for the link, the export say
 it('stripPersonalData: dates and long digit runs go, short numbers stay, the length is capped', () => {
   expect(stripPersonalData('Expired on 31.12.2020')).toBe('Expired on [date]')
   expect(stripPersonalData('born 1990-02-01 / 02/03/89')).toBe('born [date] / [date]')
-  expect(stripPersonalData('ID L01X00T47 and C01X00T47 no 1234 5678 9')).toBe('ID L01X00T47 and C01X00T47 no [number]')
+  expect(stripPersonalData('ID L01X00T47 and C01X00T47 no 1234 5678 9')).toBe('ID [number] and [number] no [number]')
+  expect(stripPersonalData('Line IDD<<L01X00T47<<<< seen')).toBe('Line [number] seen')
+  expect(stripPersonalData('Name Anna Muster differs, anna is not muster-free', ['Anna Muster'])).toBe('Name [name] [name] differs, [name] is not [name]-free')
   expect(stripPersonalData('Page 2 of 3, 12 digits 123456789012')).toBe('Page 2 of 3, 12 digits [number]')
   expect(stripPersonalData('x'.repeat(1000))).toHaveLength(300)
 })
@@ -368,6 +389,7 @@ it('the OpenRouter client: privacy options, key in the header only, validated an
   expect(seen[0]!.url).toBe('https://openrouter.ai/api/v1/chat/completions')
   expect(sent.provider).toEqual({ data_collection: 'deny', zdr: true, allow_fallbacks: false })
   expect(sent.model).toBe('x/y')
+  expect(sent.plugins).toEqual([{ id: 'file-parser', pdf: { engine: 'native' } }]) // a PDF is never parsed by a third party
   const pinned = answer({ choices: [{ message: { content: JSON.stringify(OK) } }] })
   await openRouterChecker({ apiKey: 'k', model: 'x/y', provider: 'google-vertex', fetchImpl: pinned as unknown as typeof fetch }).check(input)
   expect(JSON.parse(seen[seen.length - 1]!.init.body as string).provider).toEqual({ data_collection: 'deny', zdr: true, allow_fallbacks: false, only: ['google-vertex'] })
@@ -377,6 +399,7 @@ it('the OpenRouter client: privacy options, key in the header only, validated an
   const png = answer({ choices: [{ message: { content: JSON.stringify(OK) } }] })
   await openRouterChecker({ apiKey: 'k', model: 'm', fetchImpl: png as unknown as typeof fetch }).check({ ...input, mime: 'image/png' })
   expect(JSON.parse(seen[2]!.init.body as string).messages[1].content[1]).toMatchObject({ type: 'image_url' })
+  expect(JSON.parse(seen[2]!.init.body as string).plugins).toBeUndefined()
 
   const bad = (body: unknown, ok = true) => openRouterChecker({ apiKey: 'k', model: 'm', fetchImpl: answer(body, ok) as unknown as typeof fetch }).check(input)
   await expect(bad({ choices: [{ message: { content: JSON.stringify({ ...OK, confidence: 7 }) } }] })).rejects.toBeInstanceOf(AiUnavailable) // fails the shape

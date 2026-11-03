@@ -4,7 +4,7 @@ import { describeError } from '../log-error'
 import { notifyDocumentDecision } from '../notifications'
 import { documentsBucket, storage } from '../storage'
 import { AiUnavailable, openRouterChecker, type DocumentChecker } from './openrouter'
-import { minConfidence, monthlyCapEur, stripPersonalData, TYPE_NAME, wouldAutoApprove } from './rules'
+import { minConfidence, monthlyCapEur, providerPin, stripPersonalData, TYPE_NAME, wouldAutoApprove } from './rules'
 
 export { DEFAULT_MIN_CONFIDENCE, DEFAULT_MONTHLY_CAP_EUR, minConfidence, monthlyCapEur, stripPersonalData, wouldAutoApprove } from './rules'
 
@@ -35,8 +35,8 @@ export function documentChecker(): DocumentChecker | null {
   if (override) return override
   const apiKey = process.env.OPENROUTER_API_KEY
   const model = process.env.AI_DOCUMENT_MODEL?.trim()
-  const provider = process.env.AI_DOCUMENT_PROVIDER?.trim() || undefined
-  if (provider && !/^[a-z0-9][a-z0-9._-]*(\/[a-z0-9._-]+)?$/i.test(provider)) return null // a mistyped pin switches the check off, never widens where documents go
+  const provider = providerPin()
+  if (provider === false) return null // a mistyped pin switches the check off, never widens where documents go
   return apiKey && model ? openRouterChecker({ apiKey, model, provider }) : null
 }
 
@@ -76,7 +76,7 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
     .leftJoin(providers, eq(providers.ownerId, documents.ownerId))
     .where(eq(documents.id, documentId))
   if (!doc || doc.status !== 'pending' || doc.imageDeletedAt) return 'skipped'
-  const [claim] = await db.insert(documentAiChecks).values({ documentId, model: checker.model }).onConflictDoNothing().returning({ id: documentAiChecks.id })
+  const [claim] = await db.insert(documentAiChecks).values({ documentId, ownerId: doc.ownerId, model: checker.model }).onConflictDoNothing().returning({ id: documentAiChecks.id })
   if (!claim) return 'skipped' // already checked or being checked
 
   const toStaff = async (patch: { failure?: string; verdict?: string; confidence?: number; explanation?: string | null; sampled?: boolean; costEur?: number }): Promise<CheckOutcome> => {
@@ -85,15 +85,16 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
     return 'sent-to-staff'
   }
 
-  const names = [[doc.firstName, doc.lastName].filter(Boolean).join(' '), doc.business ?? ''].map((n) => n.trim()).filter(Boolean)
+  const person = [doc.firstName, doc.lastName].filter(Boolean).join(' ').trim()
+  // A photo ID must carry the person's own name; the business name counts only for the other documents.
+  const names = (doc.requirement === ID_DOCUMENT ? [person] : [person, (doc.business ?? '').trim()]).filter(Boolean)
   if (!names.length) return toStaff({ failure: 'no-name' })
 
   const hourAgo = new Date(now.getTime() - 3_600_000)
   const [recentRow] = await db
     .select({ n: count() })
     .from(documentAiChecks)
-    .innerJoin(documents, eq(documents.id, documentAiChecks.documentId))
-    .where(and(eq(documents.ownerId, doc.ownerId), gt(documentAiChecks.createdAt, hourAgo), ne(documentAiChecks.id, claim.id)))
+    .where(and(eq(documentAiChecks.ownerId, doc.ownerId), gt(documentAiChecks.createdAt, hourAgo), ne(documentAiChecks.id, claim.id)))
   if ((recentRow?.n ?? 0) >= CHECKS_PER_HOUR) return toStaff({ failure: 'rate-limit' })
 
   // ponytail: concurrent checks can overshoot the cap by a few calls; a lock would only be needed at much higher volume.
@@ -118,11 +119,11 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
 
   const { result } = out
   const costEur = out.costUsd ?? (out.tokens ? out.tokens * FALLBACK_EUR_PER_TOKEN : FALLBACK_EUR_PER_CALL)
-  const auto = wouldAutoApprove(result, minConfidence())
+  const auto = wouldAutoApprove(result, minConfidence(), doc.requirement === ID_DOCUMENT)
   const sampled = auto && (deps.random ?? Math.random)() < SPOT_CHECK_RATE
   if (!auto || sampled) {
     // The "why not approved" text is kept only when the AI itself had a problem or doubt, never a content copy.
-    const explanation = !auto ? stripPersonalData(result.reasons) || null : null
+    const explanation = !auto ? stripPersonalData(result.reasons, [person, doc.business ?? '']) || null : null
     return toStaff({ verdict: result.verdict, confidence: result.confidence, explanation, sampled, costEur })
   }
 

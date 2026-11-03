@@ -211,6 +211,13 @@
       "when": 1793721199920,
       "tag": "0029_ai_document_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793737693782,
+      "tag": "0030_ai_checks_keep_cost",
+      "breakpoints": true
     }
   ]
 }

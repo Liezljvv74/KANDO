@@ -77,9 +77,11 @@ export const documentAiChecks = pgTable(
   'document_ai_checks',
   {
     id: uuid().primaryKey().defaultRandom(),
-    documentId: uuid('document_id')
-      .notNull()
-      .references(() => documents.id, { onDelete: 'cascade' }),
+    // Null once the document is gone: the row stays as the record of what the call cost (verdict, confidence and reason are cleared by
+    // a trigger when the document is deleted), so deleting documents cannot reset the monthly cap or the hourly limit.
+    documentId: uuid('document_id').references(() => documents.id, { onDelete: 'set null' }),
+    // Whose call it was, for the hourly limit; null after the account is deleted.
+    ownerId: text('owner_id').references(() => users.id, { onDelete: 'set null' }),
     verdict: text(),
     confidence: real(),
     explanation: text(),
@@ -98,6 +100,7 @@ export const documentAiChecks = pgTable(
   (t) => [
     uniqueIndex('document_ai_checks_document_id_idx').on(t.documentId),
     index('document_ai_checks_created_at_idx').on(t.createdAt),
+    index('document_ai_checks_owner_idx').on(t.ownerId, t.createdAt),
     check('document_ai_checks_verdict_check', sql`verdict is null or verdict in ('ok','problem')`),
     check('document_ai_checks_decision_check', sql`decision is null or decision in ('auto-approved','sent-to-staff')`),
     check('document_ai_checks_staff_decision_check', sql`staff_decision is null or staff_decision in ('approved','rejected')`),

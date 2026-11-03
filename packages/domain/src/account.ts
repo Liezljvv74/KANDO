@@ -11,7 +11,7 @@ import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
 /** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'push_tokens', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'push_tokens', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers', 'document_ai_checks'] // document_ai_checks: only the owner is set to null by the foreign key; the cost record stays (see migration 0030)
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
