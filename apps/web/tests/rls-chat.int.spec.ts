@@ -133,7 +133,7 @@ it('messages hold the content of their kind only', async () => {
 
 it('threads: a booking thread passes the policy, a forged booking does not; exactly one parent; one thread per request', async () => {
   const bookingOf = async (customer: string, provider: string) =>
-    (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, currency, on_site) VALUES ($1, $2, 'direct', 'proposed', now() + interval '3 days', 60, 50, 'EUR', false) RETURNING id", [customer, provider])).rows[0].id
+    (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, currency, on_site) VALUES ($1, $2, 'direct', 'awaiting-time', now() + interval '3 days', 60, 50, 'EUR', false) RETURNING id", [customer, provider])).rows[0].id
   const mine = await bookingOf(ids.customer, providerId)
   const theirs = await bookingOf(ids.other, otherProviderId)
   const open = (uid: string, booking: string) => run(uid, sql`INSERT INTO threads (booking_id, customer_id, provider_id) VALUES (${booking}, ${ids.customer}, ${providerId})`)

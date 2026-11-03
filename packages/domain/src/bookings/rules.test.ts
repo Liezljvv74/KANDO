@@ -8,9 +8,9 @@ const d = (s: string) => new Date(`2026-11-${s}:00.000Z`)
 describe('bookingShownStatus', () => {
   const now = d('10T12:00')
   const min = (m: number) => new Date(now.getTime() + m * 60_000)
-  it('proposed past answerBy', () => {
-    expect(bookingShownStatus({ status: 'proposed', answerBy: now, payBy: null }, now)).toBe('expired')
-    expect(bookingShownStatus({ status: 'proposed', answerBy: min(1), payBy: null }, now)).toBe('proposed')
+  it('awaiting-time past answerBy', () => {
+    expect(bookingShownStatus({ status: 'awaiting-time', answerBy: now, payBy: null }, now)).toBe('expired')
+    expect(bookingShownStatus({ status: 'awaiting-time', answerBy: min(1), payBy: null }, now)).toBe('awaiting-time')
   })
   it('awaiting-payment past payBy plus grace', () => {
     expect(bookingShownStatus({ status: 'awaiting-payment', answerBy: null, payBy: min(-PAY_GRACE_MINUTES) }, now)).toBe('expired')
@@ -64,13 +64,11 @@ describe('overlaps', () => {
 })
 
 describe('canTransition', () => {
-  const all = ['proposed', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
+  const all = ['awaiting-time', 'awaiting-payment', 'confirmed', 'expired', 'declined', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded'] as const
   const allowed = new Set([
-    'proposed>proposed',
-    'proposed>awaiting-payment',
-    'proposed>expired',
-    'proposed>declined',
-    'proposed>withdrawn',
+    'awaiting-time>awaiting-payment',
+    'awaiting-time>expired',
+    'awaiting-time>withdrawn',
     'awaiting-payment>expired',
     'awaiting-payment>withdrawn',
     'awaiting-payment>confirmed', // the payment webhook (owner connection)

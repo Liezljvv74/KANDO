@@ -130,13 +130,11 @@ it('0017 on a database with data: accepted_at and request_id backfilled, an awai
     (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, pay_by, updated_at) VALUES ('m17-c', $1, $2, $3, $4, now() + interval '9 days', 60, 80, $5, '2026-10-01T10:00:00Z') RETURNING id", [p, quote, quote ? 'quote' : 'direct', status, payBy])).rows[0].id as string
   const paying = await booking('awaiting-payment', q, '2026-10-03T10:00:00Z')
   const noDeadline = await booking('awaiting-payment', null, null)
-  const proposed = await booking('proposed', null, null)
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m17-c', 'booking-accepted')")
   await migrate()
   const rows = Object.fromEntries((await pool.query('SELECT id, accepted_at, request_id, pay_by, amount, commission_rate, payment_ref, paid_at FROM bookings')).rows.map((b) => [b.id, b]))
   expect(rows[paying]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), request_id: r, pay_by: new Date('2026-10-03T10:00:00Z'), amount: '80.00', commission_rate: null, payment_ref: null, paid_at: null })
   expect(rows[noDeadline]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), pay_by: new Date('2026-10-01T10:00:00Z'), request_id: null }) // lapses at the next sweep
-  expect(rows[proposed]).toMatchObject({ accepted_at: null, pay_by: null })
   expect((await pool.query("SELECT stripe_account_id, payouts_ready_at FROM providers WHERE owner_id = 'm17-p'")).rows).toEqual([{ stripe_account_id: null, payouts_ready_at: null }])
   // the existing rows still satisfy every check, and the new kinds are accepted
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m17-c', 'payment-received')")
@@ -173,7 +171,7 @@ it('0018 on a database with data: existing bookings keep their status and get sa
 
 it('0022 creates every listed index', async () => {
   const names = (await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname = $1', ['public'])).rows.map((r) => r.indexname)
-  expect(names).toEqual(expect.arrayContaining(['threads_customer_id_idx', 'threads_provider_id_idx', 'messages_sender_id_idx', 'blocks_blocked_id_idx', 'staff_flags_user_id_idx', 'staff_flags_kind_ref_id_idx', 'contact_attempts_user_id_created_at_idx', 'contact_attempts_thread_id_idx', 'bookings_service_id_idx', 'bookings_quote_id_idx', 'requests_service_id_idx', 'requests_parent_booking_id_idx', 'services_category_id_idx', 'photos_owner_id_idx', 'private_files_owner_id_idx', 'reviews_author_id_idx', 'ledger_entries_provider_id_created_at_idx', 'providers_location_gist', 'requests_open_answer_by_idx', 'quotes_sent_expires_at_idx', 'bookings_proposed_answer_by_idx', 'bookings_awaiting_pay_by_idx', 'bookings_finished_confirm_by_idx', 'disputes_open_decide_by_idx', 'reviews_reveal_pending_idx', 'notifications_requests_ignored_idx', 'users_suspended_until_idx', 'providers_suspended_until_idx', 'retained_records_delete_after_idx', 'bookings_payment_ref_idx']))
+  expect(names).toEqual(expect.arrayContaining(['threads_customer_id_idx', 'threads_provider_id_idx', 'messages_sender_id_idx', 'blocks_blocked_id_idx', 'staff_flags_user_id_idx', 'staff_flags_kind_ref_id_idx', 'contact_attempts_user_id_created_at_idx', 'contact_attempts_thread_id_idx', 'bookings_service_id_idx', 'bookings_quote_id_idx', 'requests_service_id_idx', 'requests_parent_booking_id_idx', 'services_category_id_idx', 'photos_owner_id_idx', 'private_files_owner_id_idx', 'reviews_author_id_idx', 'ledger_entries_provider_id_created_at_idx', 'providers_location_gist', 'requests_open_answer_by_idx', 'quotes_sent_expires_at_idx', 'bookings_awaiting_pay_by_idx', 'bookings_finished_confirm_by_idx', 'disputes_open_decide_by_idx', 'reviews_reveal_pending_idx', 'notifications_requests_ignored_idx', 'users_suspended_until_idx', 'providers_suspended_until_idx', 'retained_records_delete_after_idx', 'bookings_payment_ref_idx']))
   const def = (await pool.query("SELECT indexdef FROM pg_indexes WHERE indexname = 'providers_location_gist'")).rows[0].indexdef
   expect(def).toContain('gist')
   expect(def).toContain('geography')
@@ -200,4 +198,40 @@ it('0023: requests accept declined, notifications have mailed_at, services have 
   expect((await pool.query("SELECT mailed_at FROM notifications WHERE user_id = 'm23-c'")).rows[0].mailed_at).not.toBeNull()
   expect((await columns('services')).offerable).toBe(false) // NOT NULL
   await pool.query('DELETE FROM notifications; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
+}, 60_000)
+
+it('0028 on a database with data: proposed bookings (and their chat) and the three removed notice kinds are deleted, the rest stays, the new checks hold', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const upTo27 = mkdtempSync(join(tmpdir(), 'mig27-'))
+  cpSync(join(process.cwd(), '../../packages/db/migrations'), upTo27, { recursive: true })
+  const journalPath = join(upTo27, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0028')
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo27 })
+  await pool.query("INSERT INTO users (id, email) VALUES ('m28-c', 'm28-c@test.skilled.invalid'), ('m28-p', 'm28-p@test.skilled.invalid')")
+  const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m28-p', 'published') RETURNING id")).rows[0].id
+  const booking = async (status: string) =>
+    (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, pay_by, accepted_at) VALUES ('m28-c', $1, 'direct', $2, now() + interval '9 days', 60, 80, now() + interval '1 day', now()) RETURNING id", [p, status])).rows[0].id as string
+  const proposed = await booking('proposed')
+  const waiting = await booking('awaiting-payment')
+  await pool.query("INSERT INTO threads (booking_id, customer_id, provider_id) VALUES ($1, 'm28-c', $2)", [proposed, p])
+  await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m28-c', 'booking-proposed'), ('m28-c', 'booking-declined'), ('m28-p', 'pending-slot-requested'), ('m28-c', 'booking-accepted')")
+  await migrate()
+  expect((await pool.query('SELECT id, status FROM bookings')).rows).toEqual([{ id: waiting, status: 'awaiting-payment' }])
+  expect((await pool.query('SELECT 1 FROM threads')).rows).toHaveLength(0)
+  expect((await pool.query('SELECT kind FROM notifications')).rows).toEqual([{ kind: 'booking-accepted' }])
+  expect(await columns('bookings')).not.toHaveProperty('counter_by')
+  // the new checks: no proposed status, no default status, none of the removed kinds
+  const insert = (status: string | null) =>
+    pool.query(`INSERT INTO bookings (customer_id, provider_id, source${status ? ', status' : ''}, start_at, duration_min, amount) VALUES ('m28-c', $1, 'direct'${status ? `, '${status}'` : ''}, now() + interval '9 days', 60, 80)`, [p])
+  await expect(insert('proposed')).rejects.toThrow(/bookings_status_check/)
+  await expect(insert(null)).rejects.toThrow(/null value/)
+  for (const kind of ['booking-proposed', 'booking-declined', 'pending-slot-requested']) {
+    await expect(pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m28-c', $1)", [kind])).rejects.toThrow(/notifications_kind_check/)
+  }
+  expect((await pool.query("SELECT 1 FROM pg_indexes WHERE indexname = 'bookings_proposed_answer_by_idx'")).rows).toHaveLength(0)
+  await pool.query('DELETE FROM notifications; DELETE FROM bookings; DELETE FROM providers; DELETE FROM users')
 }, 60_000)

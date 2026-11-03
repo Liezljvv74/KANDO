@@ -40,7 +40,7 @@ const waiting = async (as = U.cust) => {
   return BookingSchema.parse(await (await call(confirm.POST, as, 'POST', {}, { id: q.id })).json())
 }
 const withdrawing = (id: string, as: string) => call(withdraw.POST, as, 'POST', undefined, { id })
-const row = async (id: string) => (await pool.query('SELECT status, pay_by, answer_by, counter_by, start_at, on_site, accepted_at FROM bookings WHERE id = $1', [id])).rows[0]
+const row = async (id: string) => (await pool.query('SELECT status, pay_by, answer_by, start_at, on_site, accepted_at FROM bookings WHERE id = $1', [id])).rows[0]
 const listAs = async (uid: string, role: string) =>
   (
     await (
@@ -54,7 +54,7 @@ it('POST /bookings is gone: a new job is a request (the route only lists)', () =
 
 it('a booking from the request flow: amount from the quote, payBy set, listed for both parties and not for a stranger', async () => {
   const b = await made(day(nextDay++), U.cust, { amount: 120 })
-  expect(b).toMatchObject({ status: 'awaiting-payment', source: 'quote', customerId: U.cust, providerId: pOwner, amount: 120, currency: 'EUR', onSite: true, counterBy: null, answerBy: null, address: { postcode: '10115' } })
+  expect(b).toMatchObject({ status: 'awaiting-payment', source: 'quote', customerId: U.cust, providerId: pOwner, amount: 120, currency: 'EUR', onSite: true, answerBy: null, address: { postcode: '10115' } })
   expect(b.payBy).not.toBeNull()
   expect((await listAs(U.cust, 'customer')).map((x) => x.id)).toContain(b.id)
   expect((await listAs(U.owner, 'provider')).map((x) => x.id)).toContain(b.id)

@@ -77,7 +77,7 @@ async function tellCancelled(b: Row): Promise<void> {
  * 24 hours to go). Money (settle, through cancelShare): the customer cancelling in time gets everything back, late the
  * provider keeps LATE_CANCEL_SHARE (commission only on that share); the provider cancelling refunds everything and a late
  * one counts on their public reliability line (roots only). Its additional tasks go with it, in id order under the same
- * lock: unpaid ones (proposed, awaiting-payment) are withdrawn, paid (`confirmed`) ones cancelled by the same rule on their
+ * lock: unpaid ones (awaiting-time, awaiting-payment) are withdrawn, paid (`confirmed`) ones cancelled by the same rule on their
  * own amount and start. Others (finished ...) keep their own clock.
  * Step 1 records all of it in one owner transaction (so the click is never lost); step 2 settles each, the root first; a
  * failed settle leaves the booking `cancelled` and unsettled, flags staff, and the timer retries. A second tap returns the
@@ -109,7 +109,7 @@ export async function beginCancelBooking(tx: Tx, userId: string, bookingId: stri
     const cancel = async (r: Row) =>
       (await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, cancelledBy: side, lateCancel: isLate(r.startAt, now), updatedAt: now }).where(eq(bookings.id, r.id)).returning())[0]!
     const out = [await cancel(b)]
-    const unpaid = kids.filter((k) => k.status === 'proposed' || k.status === 'awaiting-time' || k.status === 'awaiting-payment').map((k) => k.id)
+    const unpaid = kids.filter((k) => k.status === 'awaiting-time' || k.status === 'awaiting-payment').map((k) => k.id)
     if (unpaid.length) await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(inArray(bookings.id, unpaid))
     for (const k of kids) if (k.status === 'confirmed') out.push(await cancel(k))
     return out
@@ -193,7 +193,7 @@ export async function resolveNoShow(exec: Exec, bookingId: string, now: Date): P
     for (const k of kids) {
       if (k.status === 'confirmed')
         await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, noShow: k.noShow ?? b.noShow, noShowReportedAt: k.noShowReportedAt ?? b.noShowReportedAt, updatedAt: now }).where(eq(bookings.id, k.id))
-      else if (k.status === 'proposed' || k.status === 'awaiting-time' || k.status === 'awaiting-payment') await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
+      else if (k.status === 'awaiting-time' || k.status === 'awaiting-payment') await o.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, k.id))
     }
     return { row: row!, warn: await providerNoShowRule(o, row!, now) }
   })

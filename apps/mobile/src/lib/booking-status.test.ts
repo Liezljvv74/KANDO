@@ -9,8 +9,7 @@ jest.mock('@/lib/format', () => ({ formatPrice: (s: { price: number }) => `EUR $
 
 const b = (over: Partial<Booking>) =>
   ({
-    status: 'proposed',
-    counterBy: null,
+    status: 'awaiting-payment',
     payBy: null,
     parentBookingId: null,
     amount: 100,
@@ -39,14 +38,6 @@ test('awaiting the agreed time: either side enters one, only the other side conf
   expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('provider') }), 'customer')).toEqual(['confirmTime', 'enterTime', 'withdraw'])
   expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('provider') }), 'provider')).toEqual(['enterTime'])
   expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('customer') }), 'provider')).toEqual(['confirmTime', 'enterTime'])
-})
-
-test('an old proposed booking has a neutral status and can only be withdrawn by the customer (no answering or countering any more)', () => {
-  expect(bookingStatusText(b({}), 'customer')).toBe('bookingStatus.proposed')
-  expect(bookingStatusText(b({}), 'provider')).toBe('bookingStatus.proposed')
-  expect(bookingActions(b({}), 'customer')).toEqual(['withdraw'])
-  expect(bookingActions(b({}), 'provider')).toEqual([])
-  expect(bookingActions(b({ counterBy: 'provider' }), 'customer')).toEqual(['withdraw'])
 })
 
 test('awaiting payment names the pay-by date for the customer and allows withdrawing', () => {

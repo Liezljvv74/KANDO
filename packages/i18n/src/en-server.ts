@@ -29,14 +29,9 @@ export const en: Record<ServerKey, string> = {
   'email.quoteReceived.subject': 'You have received a quote',
   'email.quoteReceived.body':
     'A provider sent you a quote (or a revised quote) for your request. Please look at it in the app and confirm it to book. It is valid for 7 days, until {date}. If it has no date and time yet, you agree them after you confirm; payment is asked once both sides have confirmed the date and time.',
-  'email.bookingProposed.subject': 'A new time was proposed',
-  'email.bookingProposed.body': 'A new date and time has been proposed for your booking request. Please answer in the app within 24 hours.',
   'email.bookingAccepted.subject': 'Payment due for your booking',
   'email.bookingAccepted.body':
     'The date and time are confirmed by both sides. Payment is due by {date}. Open the app to pay; you will see the pay link there as soon as payment is available.',
-  'email.bookingDeclined.subject': 'Your booking was declined',
-  'email.bookingDeclined.body':
-    'The provider declined your booking. You can send a new request to this or another provider.',
   'email.bookingExpired.subject': 'A booking expired',
   'email.bookingExpired.body': 'A booking request was not answered or not paid in time and has expired. The time is free again. If you made the request and still need the job, send a new request.',
   'email.paymentReminder.subject': 'Please pay for your booking',
@@ -50,9 +45,6 @@ export const en: Record<ServerKey, string> = {
     'Your request was not answered in time. The provider is not available at the moment. Please contact a different provider.',
   'email.requestsIgnored.subject': 'Please answer your requests',
   'email.requestsIgnored.body': 'Several requests to you went unanswered. This hurts your business: customers leave, trust and visibility suffer, and the app shows you as unavailable. Please write to {contact} to confirm that you still want to be on the platform, or to withdraw your services.',
-  'email.pendingSlotRequested.subject': 'Another customer asked for a taken time',
-  'email.pendingSlotRequested.body':
-    'Another customer asked for a time that overlaps a booking still waiting for payment. If the first customer does not pay in time, the time becomes free again and you can answer.',
   'email.paymentReceived.subject': 'Your payment was received',
   'email.paymentReceived.body':
     'Thank you, your payment was received. Your booking on {date} is confirmed. The money is paid to the provider only when the work is done.',
@@ -295,7 +287,6 @@ export const en: Record<ServerKey, string> = {
   'admin.field.noShow': 'Reported as not turning up',
   'admin.field.dispute': 'Dispute of this booking',
   'admin.field.system': 'The system',
-  'admin.bookingStatus.proposed': 'Proposed, not yet accepted',
   'admin.bookingStatus.awaitingPayment': 'Accepted, awaiting payment',
   'admin.dispute.overdue': 'Overdue',
   'admin.dispute.undecided': 'Not decided',

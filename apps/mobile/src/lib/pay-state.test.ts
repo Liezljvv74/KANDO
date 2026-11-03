@@ -29,6 +29,5 @@ test('after payBy without confirmation: neither card, an explanation instead', (
 })
 
 test('other statuses show nothing', () => {
-  expect(payCard({ status: 'proposed', payBy: null }, 'customer', null, false, now)).toBe('none')
   expect(payCard({ status: 'expired', payBy: null }, 'customer', null, false, now)).toBe('none')
 })

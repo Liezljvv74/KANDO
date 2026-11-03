@@ -134,11 +134,11 @@ it('the checkout session is created with no request transaction open', async () 
 })
 
 it('no pay link before acceptance or after payBy (409)', async () => {
-  const proposed = await awaiting({ status: 'proposed', payBy: undefined })
-  await pool.query('UPDATE bookings SET pay_by = NULL, accepted_at = NULL WHERE id = $1', [proposed.id])
+  const waitingForTime = await awaiting({ status: 'awaiting-time', payBy: undefined })
+  await pool.query('UPDATE bookings SET pay_by = NULL, accepted_at = NULL WHERE id = $1', [waitingForTime.id])
   const lapsed = await awaiting({ payBy: new Date(Date.now() - 60_000) })
   const withdrawn = await awaiting({ status: 'withdrawn' })
-  for (const b of [proposed, lapsed, withdrawn]) {
+  for (const b of [waitingForTime, lapsed, withdrawn]) {
     const res = await payLink(b.id)
     expect(res.status).toBe(409)
     expect((await res.json()).error).toBe('not-open')

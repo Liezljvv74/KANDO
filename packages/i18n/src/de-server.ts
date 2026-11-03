@@ -27,14 +27,9 @@ export const de = {
   'email.quoteReceived.subject': 'Du hast ein Angebot erhalten',
   'email.quoteReceived.body':
     'Ein Anbieter hat Dir ein Angebot (oder ein überarbeitetes Angebot) für Deine Anfrage geschickt. Sieh es Dir bitte in der App an und bestätige es, um zu buchen. Es gilt 7 Tage, bis zum {date}. Hat es noch kein Datum mit Uhrzeit, legt ihr beides nach Deiner Bestätigung fest; die Zahlung wird erst verlangt, wenn beide Seiten Datum und Uhrzeit bestätigt haben.',
-  'email.bookingProposed.subject': 'Ein neuer Termin wurde vorgeschlagen',
-  'email.bookingProposed.body': 'Für Deine Buchungsanfrage wurde ein neues Datum mit Uhrzeit vorgeschlagen. Bitte antworte innerhalb von 24 Stunden in der App.',
   'email.bookingAccepted.subject': 'Zahlung fällig für Deine Buchung',
   'email.bookingAccepted.body':
     'Datum und Uhrzeit sind von beiden Seiten bestätigt. Die Zahlung ist bis {date} Uhr fällig. Öffne die App zum Bezahlen; dort siehst Du den Zahlungslink, sobald die Zahlung möglich ist.',
-  'email.bookingDeclined.subject': 'Deine Buchung wurde abgelehnt',
-  'email.bookingDeclined.body':
-    'Der Anbieter hat Deine Buchung abgelehnt. Du kannst diesem oder einem anderen Anbieter eine neue Anfrage senden.',
   'email.bookingExpired.subject': 'Eine Buchung ist abgelaufen',
   'email.bookingExpired.body': 'Eine Buchungsanfrage wurde nicht rechtzeitig beantwortet oder bezahlt und ist abgelaufen. Der Termin ist wieder frei. Wenn du die Anfrage gestellt hattest und den Auftrag noch brauchst, sende eine neue Anfrage.',
   'email.paymentReminder.subject': 'Bitte bezahle Deine Buchung',
@@ -48,9 +43,6 @@ export const de = {
     'Deine Anfrage wurde nicht rechtzeitig beantwortet. Der Anbieter ist im Moment nicht verfügbar. Bitte wende Dich an einen anderen Anbieter.',
   'email.requestsIgnored.subject': 'Bitte beantworte Deine Anfragen',
   'email.requestsIgnored.body': 'Mehrere Anfragen an Dich blieben unbeantwortet. Das schadet Deinem Geschäft: Kunden wandern ab, Vertrauen und Sichtbarkeit leiden, und die App zeigt Dich als nicht verfügbar an. Bitte schreib an {contact}, um zu bestätigen, dass Du weiter auf der Plattform sein möchtest, oder um Deine Leistungen zurückzuziehen.',
-  'email.pendingSlotRequested.subject': 'Ein weiterer Kunde fragt einen belegten Termin an',
-  'email.pendingSlotRequested.body':
-    'Ein weiterer Kunde hat einen Termin angefragt, der sich mit einer Buchung überschneidet, die noch auf Zahlung wartet. Zahlt der erste Kunde nicht rechtzeitig, wird der Termin wieder frei und Du kannst antworten.',
   'email.paymentReceived.subject': 'Deine Zahlung ist eingegangen',
   'email.paymentReceived.body':
     'Danke, deine Zahlung ist eingegangen. Deine Buchung am {date} Uhr ist bestätigt. Das Geld wird erst an den Anbieter ausgezahlt, wenn die Arbeit erledigt ist.',
@@ -293,7 +285,6 @@ export const de = {
   'admin.field.noShow': 'Als nicht erschienen gemeldet',
   'admin.field.dispute': 'Streitfall dieser Buchung',
   'admin.field.system': 'Das System',
-  'admin.bookingStatus.proposed': 'Vorgeschlagen, noch nicht angenommen',
   'admin.bookingStatus.awaitingPayment': 'Angenommen, wartet auf Zahlung',
   'admin.dispute.overdue': 'Überfällig',
   'admin.dispute.undecided': 'Nicht entschieden',

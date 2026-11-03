@@ -169,7 +169,7 @@ it('no push before the commit, none after a rollback', async () => {
     return Response.json({})
   })
   const failing = appRequest({ auth: 'required' }, async ({ afterCommit }) => {
-    afterCommit(() => notifyBookingEvent('booking-declined', U.cust, { bookingId: crypto.randomUUID() }))
+    afterCommit(() => notifyBookingEvent('booking-expired', U.cust, { bookingId: crypto.randomUUID() }))
     throw new Error('boom')
   })
   expect((await call(failing, U.cust, 'POST', {})).status).toBe(500)

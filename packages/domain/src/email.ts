@@ -9,7 +9,7 @@ const REPLY_TO = 'info@skillweb.space'
 const APP_LINK = 'skilled://my-profile'
 
 /** One email per booking event kind (see bookings/notify.ts). */
-export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-proposed' | 'booking-accepted' | 'booking-declined' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'pending-slot-requested' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning' | 'dispute-opened' | 'job-stopped' | 'stop-amount-stated' | 'additional-task-requested' | 'dispute-decided' | 'refund-issued' | 'review-visible' | 'invoice-ready' | 'commission-invoice-ready' | 'request-withdrawn' | 'request-declined' | 'request-reopened' | 'request-updated' | 'time-proposed' | 'time-to-confirm' | 'quote-confirmed'
+export type BookingTemplate = 'request-received' | 'quote-received' | 'booking-accepted' | 'booking-expired' | 'payment-reminder' | 'quote-expiring' | 'request-expired' | 'requests-ignored' | 'message-received' | 'payment-received' | 'booking-paid' | 'payment-late-refunded' | 'payout-setup-complete' | 'customers-waiting' | 'provider-available' | 'job-finished' | 'confirm-reminder' | 'payment-released' | 'was-job-done' | 'review-requested' | 'booking-cancelled' | 'no-show-reported' | 'provider-warning' | 'dispute-opened' | 'job-stopped' | 'stop-amount-stated' | 'additional-task-requested' | 'dispute-decided' | 'refund-issued' | 'review-visible' | 'invoice-ready' | 'commission-invoice-ready' | 'request-withdrawn' | 'request-declined' | 'request-reopened' | 'request-updated' | 'time-proposed' | 'time-to-confirm' | 'quote-confirmed'
 export type Template = 'document-approved' | 'document-rejected' | 'document-approved-visible' | 'document-approved-offline' | 'document-approved-suspended' | 'profile-live' | 'suspended' | 'published-again' | 'photo-removed' | 'photo-removed-draft' | 'account-deleted' | 'account-deleted-retained' | 'payment-released-provider' | 'additional-task-requested-provider' | 'payment-released-stop' | 'payment-released-stop-provider' | 'payment-released-stop-refund' | 'payment-released-stop-refund-provider' | 'refund-issued-provider' | CancelTemplate | BookingTemplate
 /** booking-cancelled variants (bookings/cancel.ts: who cancelled, what happens to the money). */
 export type CancelTemplate = 'booking-cancelled-late' | 'booking-cancelled-by-provider' | 'booking-cancelled-no-show-customer' | 'booking-cancelled-no-show-provider'
@@ -40,15 +40,12 @@ export const EMAIL_KEYS: Record<Template, string> = {
   'account-deleted-retained': 'email.accountDeleted.retained',
   'request-received': 'email.requestReceived',
   'quote-received': 'email.quoteReceived',
-  'booking-proposed': 'email.bookingProposed',
   'booking-accepted': 'email.bookingAccepted',
-  'booking-declined': 'email.bookingDeclined',
   'booking-expired': 'email.bookingExpired',
   'payment-reminder': 'email.paymentReminder',
   'quote-expiring': 'email.quoteExpiring',
   'request-expired': 'email.requestExpired',
   'requests-ignored': 'email.requestsIgnored',
-  'pending-slot-requested': 'email.pendingSlotRequested',
   'message-received': 'email.messageReceived',
   'payment-received': 'email.paymentReceived',
   'booking-paid': 'email.bookingPaid',
