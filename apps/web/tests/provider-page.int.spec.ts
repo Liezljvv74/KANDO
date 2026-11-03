@@ -184,7 +184,7 @@ describe('translate link', () => {
     await pool.query('DELETE FROM translations WHERE key = ANY($1)', [hashes]) // nothing stored from the test above
     const html = await render(deSlug, { lang: 'en', translate: '1' })
     expect(html).toContain('Translation is not available right now.')
-    expect(t('de', 'web.translationUnavailable')).toBe('Übersetzung ist gerade nicht verfügbar.')
+    expect(t('de', 'web.translationUnavailable')).toBe('Übersetzung ist gerade nicht verfügbar. Bitte versuche es in ein paar Minuten noch einmal.')
     expect(html).toContain('selbstständige Fotografin')
     expect(html).not.toContain(t('en', 'web.translatedLabel'))
   })

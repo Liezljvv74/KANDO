@@ -37,7 +37,7 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
   const pre = (await read()) ?? notFound() // party check before the lock: a stranger cannot make anyone wait
   if (pre.req.customerId !== userId) {
     if ((await ownProvider(tx, userId))?.id !== pre.req.providerId) return notFound()
-    return fail(403, { error: 'not-your-turn' }) // the provider read it, but only the customer confirms
+    return fail(403, { error: 'wrong-side' }) // the provider read it, but only the customer confirms
   }
   if (pre.req.parentBookingId) return acceptQuote(tx, userId, quoteId, input.note ? { note: input.note } : {}, now, afterCommit)
   if (await blockedWithProvider(tx, userId, pre.req.providerId)) fail(403, { error: 'BLOCKED' })

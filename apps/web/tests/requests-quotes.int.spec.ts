@@ -214,16 +214,16 @@ it('the other side gets 403, a stranger 404, a booked request 409', async () => 
   const r = await newRequest()
   for (const [route, wrong] of [[withdraw, U.owner], [decline, U.cust]] as const) {
     const res = await closing(route, r.id, wrong)
-    expect([res.status, (await res.json()).error]).toEqual([403, 'not-your-turn'])
+    expect([res.status, (await res.json()).error]).toEqual([403, 'wrong-side'])
     expect((await closing(route, r.id, U.third)).status).toBe(404)
     expect((await closing(route, 'not-a-uuid', U.cust)).status).toBe(404)
   }
   expect(await statusOf('requests', r.id)).toBe('open')
   const q = QuoteSchema.parse(await (await quote(r.id, U.owner)).json())
   expect((await confirming(q.id, U.cust)).status).toBe(200)
-  for (const [route, as] of [[withdraw, U.cust], [decline, U.owner]] as const) {
+  for (const [route, as, code] of [[withdraw, U.cust, 'request-closed'], [decline, U.owner, 'request-closed-provider']] as const) {
     const res = await closing(route, r.id, as)
-    expect([res.status, (await res.json()).error]).toEqual([409, 'request-closed'])
+    expect([res.status, (await res.json()).error]).toEqual([409, code])
   }
   expect([await statusOf('requests', r.id), await statusOf('quotes', q.id)]).toEqual(['booked', 'accepted'])
 })
@@ -246,7 +246,7 @@ it('withdraw racing sendQuote leaves no sent quote', async () => {
   expect(w.status).toBe(200)
   expect(await statusOf('requests', r.id)).toBe('withdrawn')
   if (s.status === 201) expect(await statusOf('quotes', QuoteSchema.parse(await s.json()).id)).toBe('declined')
-  else expect([s.status, (await s.json()).error]).toEqual([409, 'request-closed'])
+  else expect([s.status, (await s.json()).error]).toEqual([409, 'request-closed-provider'])
   expect((await pool.query("SELECT count(*)::int n FROM quotes WHERE request_id = $1 AND status = 'sent'", [r.id])).rows[0].n).toBe(0)
 })
 

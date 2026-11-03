@@ -70,6 +70,8 @@ export const errorKeys: Record<string, Key> = {
   OFFER_NOT_SAVED: 'error.offerNotSaved',
   LAST_ADMIN: 'account.lastAdmin',
   REPLACEMENT_FIRST: 'error.replacementFirst',
+  OPEN_BOOKINGS: 'account.openBookings',
+  'Too many pending uploads': 'error.uploadsPending',
   // Booking rules (`error`)
   'not-your-turn': 'error.booking.not-your-turn',
   'slot-pending': 'error.booking.slot-pending',
@@ -83,6 +85,9 @@ export const errorKeys: Record<string, Key> = {
   'quote-expired': 'error.booking.quote-expired',
   'quote-not-open': 'error.booking.quote-not-open',
   'request-closed': 'error.booking.request-closed',
+  'request-closed-provider': 'error.booking.request-closed-provider',
+  'quote-sent': 'error.booking.quote-sent',
+  'wrong-side': 'error.booking.wrong-side',
   'request-limit': 'error.booking.request-limit',
   'daily-limit': 'error.booking.daily-limit',
   'Unknown service': 'error.booking.unknown-service',

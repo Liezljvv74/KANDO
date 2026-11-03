@@ -56,7 +56,7 @@ test('a 503 AUTH_BUSY shows the busy text, not "unconfirmed", and does not ask t
 
 test('a wrong password shows the wrong-password text', () => {
   setLang('en')
-  expect(accountError('delete', 'WRONG_PASSWORD')).toBe('The password is not correct. Nothing was deleted.')
+  expect(accountError('delete', 'WRONG_PASSWORD')).toBe('The password is not correct. Nothing was deleted. Check your password and try again.')
 })
 
 test('AUTH_BUSY shows the busy text', () => {
@@ -64,8 +64,17 @@ test('AUTH_BUSY shows the busy text', () => {
   expect(accountError('delete', 'AUTH_BUSY')).toBe('The login service is busy for a moment. Please try again in a minute.')
 })
 
+test('a 409 OPEN_BOOKINGS says what to finish first, not "check your connection"', async () => {
+  setLang('en')
+  const check = jest.fn(ok)
+  expect(await afterDeleteFailure(new ApiError(409, 'OPEN_BOOKINGS'), check)).toEqual({ deleted: false, text: accountError('delete', 'OPEN_BOOKINGS') })
+  expect(accountError('delete', 'OPEN_BOOKINGS')).toContain('open or unpaid')
+  expect(accountError('delete', 'OPEN_BOOKINGS')).not.toContain('connection')
+  expect(check).not.toHaveBeenCalled()
+})
+
 test('a 403 WRONG_PASSWORD means not deleted', async () => {
   const check = jest.fn(ok)
-  expect(await afterDeleteFailure(new ApiError(403, 'WRONG_PASSWORD'), check)).toEqual({ deleted: false, text: 'The password is not correct. Nothing was deleted.' })
+  expect(await afterDeleteFailure(new ApiError(403, 'WRONG_PASSWORD'), check)).toEqual({ deleted: false, text: 'The password is not correct. Nothing was deleted. Check your password and try again.' })
   expect(check).not.toHaveBeenCalled()
 })
