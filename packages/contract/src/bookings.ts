@@ -141,10 +141,6 @@ export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })
 export const QuotePdfSchema = z.object({ url: z.string() })
 
-/** POST /bookings: a booking without a prior request. */
-export const DirectBookingInputSchema = z.intersection(TimeProposalSchema, z.object({ serviceId: z.string().uuid() }))
-export type DirectBookingInput = z.infer<typeof DirectBookingInputSchema>
-
 /** The other party's answer to a proposed booking. */
 export const BookingAnswerSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('accept') }),

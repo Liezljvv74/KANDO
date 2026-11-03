@@ -12,20 +12,18 @@ const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/rout
 const reportRoute = await import('../app/app-api/v1/messages/[id]/report/route')
 const blocksRoute = await import('../app/app-api/v1/blocks/route')
 const requests = await import('../app/app-api/v1/requests/route')
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
 const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 
 const U = { cust: 'cs-cust', owner: 'cs-owner', third: 'cs-third', other: 'cs-other', twin: 'cs-twin', fast: 'cs-fast', race: 'cs-race' }
-let pOwner: string, sOwner: string
+let pOwner: string
 
 beforeAll(async () => {
   await cleanupUsers()
   const { categoryId } = await seedBase()
   for (const u of [U.cust, U.third, U.other, U.twin, U.fast, U.race]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Cs Owner', categoryId })
-  sOwner = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pOwner])).rows[0].id
 })
 afterAll(cleanupUsers)
 
@@ -84,10 +82,6 @@ it("a blocked customer cannot create a request to the blocker's provider (404)",
   await relaxLimits(U.cust)
   const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Another job', ...requestTime() })
   expect([res.status, await res.json()]).toEqual([404, { error: 'Not found' }])
-  const direct = await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  expect([direct.status, await direct.json()]).toEqual([404, { error: 'Not found' }])
-  const control = await call(bookingsRoute.POST, U.third, 'POST', { serviceId: sOwner, startAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  expect(control.status).toBe(201) // the same booking by an unblocked user works
   expect((await call(requests.POST, U.third, 'POST', { providerId: pOwner, description: 'Third job', ...requestTime() })).status).toBe(201) // others are not affected
   await unblock(U.owner, t.id)
 })

@@ -78,7 +78,6 @@ export const errorKeys: Record<string, Key> = {
   'address-required': 'error.booking.address-required',
   'start-in-past': 'error.booking.start-in-past',
   'start-too-far': 'error.booking.start-too-far',
-  'not-bookable': 'error.booking.not-bookable',
   'own-service': 'error.booking.own-service',
   'not-open': 'error.booking.not-open',
   'quote-expired': 'error.booking.quote-expired',

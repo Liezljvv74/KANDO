@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { BookingSchema, BusyTimeSchema } from '@kando/contract'
-import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { BusyTimeSchema } from '@kando/contract'
+import { call, cleanupUsers, insertProposedBooking, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const withdraw = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
 const busyRoute = await import('../app/app-api/v1/providers/[slug]/busy/route')
@@ -24,8 +23,8 @@ beforeAll(async () => {
 afterAll(cleanupUsers)
 
 const day = (n: number, h = 0) => new Date(Date.now() + n * 86_400_000 + h * 3_600_000).toISOString()
-const book = async (startAt: string, as = U.cust) =>
-  BookingSchema.parse(await (await call(bookingsRoute.POST, as, 'POST', { serviceId: sOwner, startAt, durationMin: 60, onSite: true, address: { postcode: '10115', street: 'Hauptstr. 1' } })).json())
+const book = (startAt: string, as = U.cust) =>
+  insertProposedBooking({ customerId: as, serviceId: sOwner, startAt, durationMin: 60, onSite: true, address: { postcode: '10115', street: 'Hauptstr. 1' } })
 const accept = (id: string) => call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id })
 const busy = (slug: string, from: string, to: string, headers: HeadersInit = {}) =>
   busyRoute.GET(new Request(`http://localhost/app-api/v1/providers/${slug}/busy?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { headers }), { params: Promise.resolve({ slug }) })

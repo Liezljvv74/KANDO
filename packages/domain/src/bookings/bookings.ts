@@ -1,19 +1,16 @@
-import { and, asc, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm'
-import { bookingAppInsert, bookings, providers, quotes, services, type Tx } from '@kando/db'
-import { HOUR, LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type DirectBookingInput, type Page } from '@kando/contract'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { bookings, providers, quotes, type Tx } from '@kando/db'
+import { HOUR, LIST_PAGE, type Booking, type BookingAnswer, type BookingView, type Page } from '@kando/contract'
 import { NO_ID } from '../admin/common'
-import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import type { AfterCommit } from '../app-request'
-import { blockedWithProvider } from '../chat/blocks'
-import { assertNoContactDetails } from '../chat/flags'
-import { threadForBooking, threadIdOf } from '../chat/threads'
+import { threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { assertSlotFree, lockProviderSlots } from './busy'
 import { lockRow, partyOf } from './party'
-import { notifyBookingEvent, notifyProposal } from './notify'
-import { assertWithinLimits, toBooking } from './requests'
+import { notifyBookingEvent } from './notify'
+import { toBooking } from './requests'
 import { canTransact } from '../payments/rules'
 import { assertFuture, canTransition, PROPOSAL_ANSWER_HOURS, payBy } from './rules'
 
@@ -23,41 +20,6 @@ type Row = typeof bookings.$inferSelect
 export const view = (b: Row, userId: string, now = new Date()): Booking => {
   const dto = toBooking(b, now)
   return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
-}
-
-export async function createDirectBooking(tx: Tx, userId: string, input: DirectBookingInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
-  await assertWithinLimits(tx, userId, null, now)
-  const service = (await tx.select().from(services).where(eq(services.id, input.serviceId)))[0]
-  const provider = service && (await tx.select().from(providers).where(eq(providers.id, service.providerId)))[0]
-  if (!service || !provider || provider.status !== 'published' || (await isSuspendedNow(tx, provider.id)) || (await blockedWithProvider(tx, userId, provider.id))) return notFound()
-  if (provider.ownerId === userId) fail(400, { error: 'own-service' })
-  if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // payout set-up unfinished: the app offers "notify me"
-  if (service.priceType !== 'fixed' || service.price === null || !(await offerableServiceIds(tx, provider.id)).includes(service.id)) return fail(400, { error: 'not-bookable' })
-  const startAt = new Date(input.startAt)
-  assertFuture(startAt, now)
-  if (!input.onSite && !provider.worksRemotely) fail(400, { error: 'on-site-required' })
-  if (input.note) await assertNoContactDetails(userId, input.note)
-  const [row] = await tx
-    .insert(bookingAppInsert) // the price comes from the service (trigger bookings_fill_amount), never from the client
-    .values({
-      customerId: userId,
-      providerId: provider.id,
-      serviceId: service.id,
-      source: 'direct',
-      status: 'proposed',
-      startAt,
-      durationMin: input.durationMin,
-      onSite: input.onSite,
-      ...(input.onSite && input.address && { addressStreet: input.address.street ?? null, addressPostcode: input.address.postcode, addressCity: input.address.city ?? null }),
-      note: input.note ?? null,
-      answerBy: new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning(getTableColumns(bookings))
-  await threadForBooking(tx, row!.id) // a direct booking gets its own chat
-  notifyProposal(afterCommit, provider, row!)
-  return view(row!, userId, now)
 }
 
 /**

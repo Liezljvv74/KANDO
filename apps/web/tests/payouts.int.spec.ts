@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
-import { BookingSchema, ProviderDetailSchema, RequestSchema } from '@kando/contract'
+import { ProviderDetailSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, getPublicProfile, notifyBookingEvent, payoutStatus, refreshAccount, runDueTimers } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, insertProposedBooking, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -16,7 +16,6 @@ const profileRoute = await import('../app/app-api/v1/providers/[slug]/route')
 const requestsRoute = await import('../app/app-api/v1/requests/route')
 const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const acceptQuoteRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const webhook = await import('../app/api/stripe/webhook/route')
 const exportRoute = await import('../app/app-api/v1/me/export/route')
@@ -64,7 +63,7 @@ const kindsFor = async (uid: string, kind: string) => (await pool.query('SELECT 
 const day = (k: number) => new Date(Date.now() + k * DAY).toISOString()
 const proposal = { startAt: day(10), durationMin: 60, onSite: true, address: { postcode: '10115' } }
 const ready = (id: string) => pool.query('UPDATE providers SET payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1', [id])
-/** With payments off (as before the switch): a request, a direct booking and a quote are made the normal way. */
+/** With payments off (as before the switch): a request and a quote are made the normal way. */
 async function whilePaymentsOff<T>(fn: () => Promise<T>): Promise<T> {
   vi.stubEnv('PAYMENTS_ENABLED', 'false')
   try {
@@ -79,12 +78,8 @@ const newRequest = async (providerId: string, as = U.c1) => {
   expect(res.status).toBe(201)
   return RequestSchema.parse(await res.json())
 }
-const newBooking = async (serviceId: string, as = U.c1, startAt = day(10 + ++n / 10)) => {
-  await relaxLimits(as)
-  const res = await call(bookingsRoute.POST, as, 'POST', { ...proposal, startAt, serviceId })
-  expect(res.status).toBe(201)
-  return BookingSchema.parse(await res.json())
-}
+/** An old direct proposal (the only way to get a `proposed` booking without a quote), written directly. */
+const newBooking = (serviceId: string, as = U.c1, startAt = day(10 + ++n / 10)) => insertProposedBooking({ customerId: as, serviceId, ...proposal, startAt })
 const deliver = (accountId: string) => {
   const signed = g.event({ id: `evt_${randomUUID()}`, type: 'account-updated', accountId })
   return webhook.POST(new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: signed.body, headers: { 'stripe-signature': signed.signature } }))
@@ -198,15 +193,12 @@ it('a provider who stops being ready: the customer cannot accept their quote or 
   expect((await pool.query('SELECT status FROM bookings WHERE id = $1', [kept.id])).rows[0].status).toBe('awaiting-payment') // untouched
 })
 
-it('a customer cannot request or book an unready provider (409) but can watch it', async () => {
+it('a customer cannot request an unready provider (409) but can watch it', async () => {
   const p = await provider()
   await relaxLimits(U.c1)
   const r = await call(requestsRoute.POST, U.c1, 'POST', { providerId: p.id, description: 'Paint the hall', ...requestTime() })
   expect(r.status).toBe(409)
   expect((await r.json()).error).toBe('PROVIDER_NOT_READY')
-  const b = await call(bookingsRoute.POST, U.c1, 'POST', { ...proposal, serviceId: p.serviceId })
-  expect(b.status).toBe(409)
-  expect((await b.json()).error).toBe('PROVIDER_NOT_READY')
   expect((await watch(p.slug, U.c1)).status).toBe(204)
   expect((await watch(p.slug, U.c1)).status).toBe(204) // idempotent
   expect((await pool.query('SELECT count(*)::int n FROM availability_watches WHERE provider_id = $1', [p.id])).rows[0].n).toBe(1)

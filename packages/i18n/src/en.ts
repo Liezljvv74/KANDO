@@ -520,7 +520,6 @@ export const en: Record<AppKey, string> = {
   'payouts.taxNumberHint': 'Needed if you are a small business (Kleinunternehmer) or a business without a VAT ID: it is printed on your invoices.',
   'payouts.invoiceConsent': 'The platform issues invoices and receipts for my jobs in my name. [WORDING: LAWYER TO APPROVE]',
   'payouts.invoiceConsentNeeded': 'Before you can send quotes and accept bookings, agree that invoices are issued in your name.',
-  'error.booking.not-bookable': 'This service cannot be booked directly. Please request a quote.',
   'error.booking.own-service': 'You cannot book your own service.',
   'error.booking.not-open': 'This is no longer open: it was already answered or has expired. Please reload the page.',
   'error.booking.quote-expired': 'This quote has expired.',

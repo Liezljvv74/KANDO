@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, DirectBookingInputSchema, PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
+import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
 
 const proposal = { startAt: '2026-11-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
@@ -27,13 +27,6 @@ describe('TimeProposalSchema', () => {
     expect(TimeProposalSchema.safeParse({ ...proposal, onSite: true }).success).toBe(false)
     expect(AcceptQuoteInputSchema.safeParse({ ...proposal, onSite: true }).success).toBe(false)
     expect(TimeProposalSchema.safeParse({ ...proposal, onSite: false }).success).toBe(true)
-  })
-
-  it('a direct booking also needs a service', () => {
-    const serviceId = '3f1c2a52-6a40-4a2c-9f44-6d1f5a8c9b11'
-    expect(DirectBookingInputSchema.safeParse({ ...proposal, serviceId }).success).toBe(true)
-    expect(DirectBookingInputSchema.safeParse(proposal).success).toBe(false)
-    expect(DirectBookingInputSchema.safeParse({ ...proposal, onSite: true, serviceId }).success).toBe(false)
   })
 })
 
