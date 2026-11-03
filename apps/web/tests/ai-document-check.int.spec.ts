@@ -169,6 +169,15 @@ it('an unexpected failure after the claim leaves a reason on the row, and the do
   expect((await status(d.id)).status).toBe('pending')
 })
 
+it('without a recorded acceptance of the terms nothing is sent: staff decide', async () => {
+  const d = await pendingDoc('id-document')
+  await pool.query('UPDATE users SET terms_accepted_at = NULL WHERE id = $1', [d.uid])
+  const f = fake(OK)
+  expect(await runDocumentCheck(d.id, { checker: f.checker })).toBe('sent-to-staff')
+  expect(f.asked).toHaveLength(0)
+  expect((await check(d.id)).failure).toBe('terms-not-accepted')
+})
+
 it('a person without a name cannot be matched: staff decide, nothing is sent', async () => {
   const f = fake(OK)
   const d = await pendingDoc('permit', null)
@@ -244,7 +253,7 @@ it('through the upload route: the check runs after the submit, the answer stays 
   vi.spyOn(Math, 'random').mockReturnValue(0.5)
   const uid = 'ai-route'
   await call(profileRoute.PUT, uid, 'PUT', profile)
-  await pool.query("UPDATE users SET first_name = 'Rea', last_name = 'Route' WHERE id = $1", [uid])
+  await pool.query("UPDATE users SET first_name = 'Rea', last_name = 'Route', terms_accepted_at = now() WHERE id = $1", [uid])
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(PDF)]), 'u.pdf')
   const up = await files.POST(await sized(new Request('http://localhost/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${uid}:${EMAIL(uid)}` }, body: form })), { params: Promise.resolve({}) })

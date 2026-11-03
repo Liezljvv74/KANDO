@@ -119,7 +119,7 @@ export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<
       ...(patch.firstName !== undefined && { firstName: patch.firstName }),
       ...(patch.lastName !== undefined && { lastName: patch.lastName }),
       ...(patch.language !== undefined && { language: patch.language }),
-      ...(patch.termsAccepted && { termsAcceptedAt: new Date() }),
+      ...(patch.termsAccepted && { termsAcceptedAt: sql`COALESCE(${users.termsAcceptedAt}, now())` }), // the first acceptance stays
       ...(a !== undefined && {
         addressStreet: a?.street ?? null,
         addressPostcode: a?.postcode ?? null,

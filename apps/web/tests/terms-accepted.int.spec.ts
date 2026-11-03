@@ -11,6 +11,7 @@ beforeAll(async () => {
   setStorageForTests(memoryStorage())
   await seedBase()
   await seedUser('tc1')
+  await pool.query('UPDATE users SET terms_accepted_at = NULL WHERE id = $1', ['tc1'])
 })
 afterAll(async () => {
   setStorageForTests(undefined)
@@ -25,6 +26,9 @@ it('stores the time the Terms were accepted, only when asked, and the export sho
   expect(await accepted()).toBeNull() // other edits never set it
   expect((await call(meRoute.PATCH, 'tc1', 'PATCH', { termsAccepted: true })).status).toBe(200)
   expect(Math.abs(Date.now() - (await accepted())!.getTime())).toBeLessThan(60_000)
+  const first = await accepted()
+  await call(meRoute.PATCH, 'tc1', 'PATCH', { termsAccepted: true })
+  expect((await accepted())!.getTime()).toBe(first!.getTime()) // a repeat never moves the first acceptance
   const exported = await (await call(exportRoute.GET, 'tc1')).json()
   expect(exported.user.termsAcceptedAt).toBeTruthy()
 })

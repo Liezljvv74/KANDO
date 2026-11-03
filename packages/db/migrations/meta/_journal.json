@@ -218,6 +218,13 @@
       "when": 1793737693782,
       "tag": "0030_ai_checks_keep_cost",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793738192669,
+      "tag": "0031_signup_terms_accepted",
+      "breakpoints": true
     }
   ]
 }
