@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { type AnyPgColumn, check, index, integer, jsonb, pgTable, uniqueIndex, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, boolean, check, index, integer, jsonb, numeric, pgTable, real, uniqueIndex, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { providers } from './providers'
 import { users } from './users'
 
@@ -58,6 +58,8 @@ export const documents = pgTable(
     note: text(),
     reviewedBy: text('reviewed_by'),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    // Set when the stored image was deleted on purpose (a photo ID, 30 days after the check); the row stays as the record. Staff-only column.
+    imageDeletedAt: timestamp('image_deleted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -65,6 +67,40 @@ export const documents = pgTable(
     index('documents_owner_id_idx').on(t.ownerId),
     // Backstop for the one-pending-check rule (the domain also checks, under a per-user lock).
     uniqueIndex('documents_one_pending_idx').on(t.ownerId, t.requirement).where(sql`status = 'pending'`),
+  ],
+)
+
+// The AI's suggestion for one document (one row per document, so one check per version). Staff-only: the verdict, a short "why not
+// approved" text without personal data from the document, the model id and the cost; nothing read from the document is kept.
+// decision is null while the check runs (a run that died leaves it null: the document stays pending for staff, as without AI).
+export const documentAiChecks = pgTable(
+  'document_ai_checks',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    verdict: text(),
+    confidence: real(),
+    explanation: text(),
+    model: text().notNull(),
+    sampled: boolean().notNull().default(false),
+    decision: text(),
+    // Why there is no verdict: rate-limit, cap, error, timeout, no-name, staff-decided.
+    failure: text(),
+    // What the call cost, in euro (OpenRouter reports US dollars, counted one to one: slightly more than it is worth, so the cap errs safe).
+    costEur: numeric('cost_eur', { precision: 10, scale: 6 }).notNull().default('0'),
+    // What staff decided afterwards ('approved' or 'rejected'), to compare with the suggestion.
+    staffDecision: text('staff_decision'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('document_ai_checks_document_id_idx').on(t.documentId),
+    index('document_ai_checks_created_at_idx').on(t.createdAt),
+    check('document_ai_checks_verdict_check', sql`verdict is null or verdict in ('ok','problem')`),
+    check('document_ai_checks_decision_check', sql`decision is null or decision in ('auto-approved','sent-to-staff')`),
+    check('document_ai_checks_staff_decision_check', sql`staff_decision is null or staff_decision in ('approved','rejected')`),
   ],
 )
 

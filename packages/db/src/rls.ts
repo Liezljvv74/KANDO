@@ -91,7 +91,7 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   providers: ['status', 'suspended_until', 'slug', 'public_name', 'location', 'stripe_account_id', 'payouts_ready_at'],
   // Rows are created on the owner connection; the app only sets seen_at and dismissed_at.
   notifications: ['kind', 'payload', 'user_id'],
-  documents: ['status', 'note', 'reviewed_by', 'reviewed_at'],
+  documents: ['status', 'note', 'reviewed_by', 'reviewed_at', 'image_deleted_at'],
   // Money and payment: the price comes from the quote or service (bookings_fill_amount), the rest from the payment code.
   // The app role still reads them; no DTO carries commission_rate or the gateway references.
   // The endings (plan 2d) likewise: finishing, cancelling, stopping and disputing run on the owner connection after the
@@ -169,7 +169,7 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'translations']
 
 // Tables app requests never touch: all privileges revoked.
-export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters', 'translation_requests']
+export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters', 'translation_requests', 'document_ai_checks']
 
 // Tables that exist but are not in the Drizzle schema.
 const SYSTEM_TABLES = ['__drizzle_migrations', 'spatial_ref_sys']

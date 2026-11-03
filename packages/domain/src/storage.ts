@@ -4,6 +4,8 @@ import { getSignedUrl as presign } from '@aws-sdk/s3-request-presigner'
 
 export interface Storage {
   put(bucket: string, key: string, body: Buffer, contentType: string): Promise<void>
+  /** The object's bytes (server side only: the AI check of a document). */
+  get(bucket: string, key: string): Promise<Buffer>
   getSignedUrl(bucket: string, key: string, seconds: number): Promise<string>
   delete(bucket: string, key: string): Promise<void>
   /** Public URL of an object in the media bucket. */
@@ -25,6 +27,10 @@ function s3Storage(): Storage {
   return {
     async put(Bucket, Key, Body, ContentType) {
       await client.send(new PutObjectCommand({ Bucket, Key, Body, ContentType }))
+    },
+    async get(Bucket, Key) {
+      const out = await client.send(new GetObjectCommand({ Bucket, Key }))
+      return Buffer.from(await out.Body!.transformToByteArray())
     },
     // Documents (the only signed links) are saved, never shown inside the page: the response override makes browsers download them.
     getSignedUrl: (Bucket, Key, expiresIn) => presign(client, new GetObjectCommand({ Bucket, Key, ResponseContentDisposition: 'attachment' }), { expiresIn }),

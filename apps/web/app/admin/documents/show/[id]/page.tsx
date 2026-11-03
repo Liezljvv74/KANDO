@@ -7,7 +7,8 @@ import { Button, Descriptions, Input, Space, Tag } from 'antd'
 import { LOCALE } from '@kando/i18n'
 import { useAdminLang, useAt } from '../../../../../lib/admin/t'
 
-type Doc = { id: string; ownerEmail: string; requirement: string; status: string; note: string | null; reviewedAt: string | null; link: string }
+type Ai = { verdict: string | null; confidence: number | null; explanation: string | null; sampled: boolean; decision: string | null; failure: string | null; model: string; staffDecision: string | null }
+type Doc = { id: string; ownerEmail: string; requirement: string; status: string; note: string | null; reviewedAt: string | null; link: string | null; imageDeletedAt: string | null; ai: Ai | null }
 
 export default function DocumentShow() {
   const at = useAt()
@@ -31,10 +32,31 @@ export default function DocumentShow() {
             <Descriptions.Item label={at('admin.field.reviewedAt')}>{result.reviewedAt && new Date(result.reviewedAt).toLocaleString(LOCALE[lang])}</Descriptions.Item>
           </Descriptions>
           <p>
-            <a href={result.link} target="_blank" rel="noreferrer">
-              {at('admin.action.openDocument')}
-            </a>
+            {result.link ? (
+              <a href={result.link} target="_blank" rel="noreferrer">
+                {at('admin.action.openDocument')}
+              </a>
+            ) : (
+              result.imageDeletedAt && at('admin.document.imageDeleted', { date: new Date(result.imageDeletedAt).toLocaleDateString(LOCALE[lang]) })
+            )}
           </p>
+          <Descriptions column={1} bordered size="small" title={at('admin.ai.title')}>
+            {!result.ai ? (
+              <Descriptions.Item label={at('admin.ai.verdict')}>{at('admin.ai.none')}</Descriptions.Item>
+            ) : (
+              <>
+                <Descriptions.Item label={at('admin.ai.verdict')}>{at(`admin.ai.verdict.${result.ai.verdict ?? 'none'}` as 'admin.ai.verdict.ok')}</Descriptions.Item>
+                <Descriptions.Item label={at('admin.ai.confidence')}>{result.ai.confidence === null ? '' : `${Math.round(result.ai.confidence * 100)} %`}</Descriptions.Item>
+                <Descriptions.Item label={at('admin.ai.decision')}>{at(`admin.ai.decision.${result.ai.decision ?? 'running'}` as 'admin.ai.decision.auto-approved')}</Descriptions.Item>
+                <Descriptions.Item label={at('admin.ai.sampled')}>{at(result.ai.sampled ? 'admin.ai.sampled.yes' : 'admin.ai.sampled.no')}</Descriptions.Item>
+                {result.ai.failure && <Descriptions.Item label={at('admin.ai.failure')}>{at(`admin.ai.failure.${result.ai.failure}` as 'admin.ai.failure.cap')}</Descriptions.Item>}
+                {result.ai.explanation && <Descriptions.Item label={at('admin.ai.explanation')}>{result.ai.explanation}</Descriptions.Item>}
+                {result.ai.staffDecision && <Descriptions.Item label={at('admin.ai.staffDecision')}>{at(`admin.status.${result.ai.staffDecision}` as 'admin.status.approved')}</Descriptions.Item>}
+                <Descriptions.Item label={at('admin.ai.model')}>{result.ai.model}</Descriptions.Item>
+              </>
+            )}
+          </Descriptions>
+          <br />
           {result.status === 'pending' && (
             <Space direction="vertical" style={{ width: '100%' }}>
               <Input.TextArea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={at('admin.field.note')} />

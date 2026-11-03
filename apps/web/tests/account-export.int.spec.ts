@@ -47,7 +47,7 @@ it('exports only the caller own data, with signed links, and logs one line witho
   expect(body.references.map((r: { clientName: string }) => r.clientName)).toEqual(['Ada client'])
   expect(body.photos).toEqual([{ kind: 'profile', url: 'https://media.test/people/ex1/p.jpg', createdAt: expect.any(String) }])
   expect(body.documents).toEqual([
-    { requirement: 'permit', status: 'rejected', staffNote: 'blurry', reviewedAt: null, createdAt: expect.any(String), downloadUrl: 'https://signed.test/documents/documents/ex1/d.pdf?expires=300' },
+    { requirement: 'permit', status: 'rejected', staffNote: 'blurry', reviewedAt: null, createdAt: expect.any(String), imageDeletedAt: null, downloadUrl: 'https://signed.test/documents/documents/ex1/d.pdf?expires=300' },
   ])
   expect(body.privateFiles[0].downloadUrl).toBe('https://signed.test/documents/documents/ex1/f.pdf?expires=300')
   expect(body.notifications).toHaveLength(1)
@@ -158,4 +158,19 @@ it('format=csv neutralises spreadsheet formulas (the leading quote is intentiona
   expect(rows.find((r) => r[0] === 'notifications' && r[2] === 'payload')?.[3]).toBe('{}')
   expect(rows.find((r) => r[0] === 'user' && r[2] === 'suspendedUntil')).toEqual(['user', '1', 'suspendedUntil', ''])
   await pool.query('DELETE FROM provider_references WHERE client_name = ANY($1)', [names])
+})
+
+it('the export lists the AI checks of the caller own documents only (verdict, confidence, decision, short reason, dates), no model or cost', async () => {
+  const mine = (await pool.query("SELECT id FROM documents WHERE owner_id = 'ex1'")).rows[0].id
+  const theirs = (await pool.query("SELECT id FROM documents WHERE owner_id = 'ex2'")).rows[0].id
+  await pool.query("INSERT INTO document_ai_checks (document_id, model, verdict, confidence, explanation, decision, finished_at, cost_eur) VALUES ($1, 'secret/model', 'problem', 0.6, 'Name does not match', 'sent-to-staff', now(), 0.01)", [mine])
+  await pool.query("INSERT INTO document_ai_checks (document_id, model, verdict, decision, finished_at) VALUES ($1, 'm', 'ok', 'auto-approved', now())", [theirs])
+  const json = await (await call(exportRoute.GET, 'ex1')).json()
+  expect(json.aiDocumentChecks).toEqual([
+    { requirement: 'permit', documentCreatedAt: expect.any(String), verdict: 'problem', confidence: expect.closeTo(0.6), decision: 'sent-to-staff', explanation: 'Name does not match', checkedAt: expect.any(String) },
+  ])
+  expect(JSON.stringify(json)).not.toMatch(/secret\/model|cost/)
+  const rows = parseCsv(Buffer.from(await (await csv('ex1')).arrayBuffer()).toString('utf8').slice(1))
+  expect(rows.find((r) => r[0] === 'aiDocumentChecks' && r[2] === 'decision')?.[3]).toBe('sent-to-staff')
+  await pool.query('DELETE FROM document_ai_checks WHERE document_id = ANY($1)', [[mine, theirs]])
 })

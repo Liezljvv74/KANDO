@@ -34,7 +34,7 @@ it('ends a past suspension once: both columns cleared, one email; a future one i
   await pool.query("UPDATE providers SET suspended_until = now() + interval '1 day' WHERE owner_id = 'cr-future'")
   const res = await get('Bearer s3cret')
   expect(res.status).toBe(200)
-  expect(await res.json()).toEqual({ ended: expect.arrayContaining(['cr-past', 'cr-cust']), pendingObjects: 0, purged: 0, pruned: { notifications: expect.any(Number), stripeEvents: expect.any(Number), pushTokens: expect.any(Number) }, contactAttempts: expect.any(Number) })
+  expect(await res.json()).toEqual({ ended: expect.arrayContaining(['cr-past', 'cr-cust']), pendingObjects: 0, purged: 0, pruned: { notifications: expect.any(Number), stripeEvents: expect.any(Number), pushTokens: expect.any(Number) }, contactAttempts: expect.any(Number), idImages: 0 })
   expect(outboxForTests().map((m) => [m.to, m.subject])).toEqual([[EMAIL('cr-past'), 'Dein Profil ist wieder veröffentlicht']])
   expect((await pool.query("SELECT suspended_until, suspended_reason FROM users WHERE id = 'cr-past'")).rows[0]).toEqual({ suspended_until: null, suspended_reason: null })
   expect((await pool.query("SELECT suspended_until FROM providers WHERE owner_id = 'cr-past'")).rows[0].suspended_until).toBeNull()
