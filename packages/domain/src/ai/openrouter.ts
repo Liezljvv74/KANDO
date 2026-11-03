@@ -30,10 +30,10 @@ export interface DocumentChecker {
   check(input: DocumentCheckInput): Promise<DocumentCheckOutput>
 }
 
-/** The model could not be asked or gave no usable answer. The message holds a reason word or a status only, never document content. */
-/** Counted for an answered call whose cost is not reported. */
-const FALLBACK_USD_PER_CALL = 0.02
+/** Counted for a call whose cost is not reported (dollars, counted one to one as euro by the monthly cap, which errs safe). */
+export const FALLBACK_COST_PER_CALL = 0.02
 
+/** The model could not be asked or gave no usable answer. The message holds a reason word or a status only, never document content. */
 export class AiUnavailable extends Error {
   /** `costUsd`: what the provider charged for a call that came back unusable (a billed answer is still money spent). */
   constructor(readonly reason: 'timeout' | 'error', message: string, readonly costUsd: number | null = null) {
@@ -100,7 +100,7 @@ export function openRouterChecker(opts: { apiKey: string; model: string; provide
         const cost = body.usage?.cost
         const costUsd = typeof cost === 'number' && Number.isFinite(cost) ? cost : null
         // From here on the call was answered, so it was billed: a bad answer carries the cost to the monthly cap.
-        const bad = (why: string) => new AiUnavailable('error', why, costUsd ?? FALLBACK_USD_PER_CALL)
+        const bad = (why: string) => new AiUnavailable('error', why, costUsd ?? FALLBACK_COST_PER_CALL)
         const content = body.choices?.[0]?.message?.content
         if (typeof content !== 'string') throw bad('AI service gave no answer')
         let json: unknown
