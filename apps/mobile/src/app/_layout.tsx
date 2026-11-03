@@ -39,7 +39,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         {/* SDK 58 sends a closed guard to "/" by default, which only exists while logged in: logout showed "Unmatched Route". */}
-        <Stack.Protected guard={!!user} redirectTo="/login">
+        <Stack.Protected guard={!!user} redirectTo="/welcome">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="provider/[slug]" />
           <Stack.Screen name="my-profile" />

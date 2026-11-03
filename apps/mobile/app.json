@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SkillWeb",
+    "name": "KANDO",
     "slug": "skilled",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -37,8 +37,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "SkillWeb uses your photos for your provider profile.",
-          "cameraPermission": "SkillWeb uses the camera for your provider profile and documents.",
+          "photosPermission": "KANDO uses your photos for your provider profile.",
+          "cameraPermission": "KANDO uses the camera for your provider profile and documents.",
           "microphonePermission": false
         }
       ],
