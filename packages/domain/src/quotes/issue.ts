@@ -1,5 +1,5 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import { db, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { bookings, db, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import type { QuoteListItem } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { invoiceProvider } from '../invoices/issue'
@@ -136,9 +136,16 @@ export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boole
  * as `bookingId` and when it was made as `bookedAt`. Reads never write: a quote whose booking has lapsed (bookingShownStatus, the same rule
  * as listQuotes) shows as the trigger bookings_reopen_request will write it, open again (or expired) and with no booking.
  */
-type LatestBooking = { id: string; created_at: string; status: string; answer_by: string | null; pay_by: string | null }
 export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date()): Promise<QuoteListItem[]> {
   const own = await ownProvider(tx, userId)
+  // the latest booking made from an accepted quote, joined per row (LATERAL) so the list stays one query
+  const latest = tx
+    .select({ id: bookings.id, createdAt: bookings.createdAt, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
+    .from(bookings)
+    .where(and(eq(bookings.quoteId, quotes.id), eq(quotes.status, 'accepted')))
+    .orderBy(desc(bookings.createdAt))
+    .limit(1)
+    .as('latest')
   const rows = await tx
     .select({
       d: quoteDocuments,
@@ -151,12 +158,13 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
       scope: quotes.scope,
       expiresAt: quotes.expiresAt,
       service: services.title,
-      booking: sql<LatestBooking | null>`(SELECT to_jsonb(x) FROM (SELECT b.id, b.created_at, b.status, b.answer_by, b.pay_by FROM bookings b WHERE b.quote_id = ${quotes.id} AND ${quotes.status} = 'accepted' ORDER BY b.created_at DESC LIMIT 1) x)`,
+      booking: { id: latest.id, createdAt: latest.createdAt, status: latest.status, answerBy: latest.answerBy, payBy: latest.payBy },
     })
     .from(quoteDocuments)
     .innerJoin(quotes, eq(quotes.id, quoteDocuments.quoteId))
     .innerJoin(requests, eq(requests.id, quotes.requestId))
     .leftJoin(services, eq(services.id, requests.serviceId))
+    .leftJoinLateral(latest, sql`true`)
     .where(sql`${quoteDocuments.customerId} = ${userId} ${own ? sql`OR ${quoteDocuments.providerId} = ${own.id}` : sql``}`)
     .orderBy(sql`${quoteDocuments.issuedAt} DESC`, sql`${quoteDocuments.number} DESC`)
   const out: QuoteListItem[] = []
@@ -164,8 +172,8 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
     const draft = r.d.draft as QuoteDraft
     // as the customer the quote is "received" (the issuer is the other side); as the provider it is "sent" (the customer is). Nobody is both sides of one quote.
     const role = r.d.customerId === userId ? 'customer' : 'provider'
-    const b = r.booking
-    const lapsed = !!b && bookingShownStatus({ status: b.status, answerBy: b.answer_by ? new Date(b.answer_by) : null, payBy: b.pay_by ? new Date(b.pay_by) : null }, now) === 'expired'
+    const b = r.booking // null when the quote has no booking (the LATERAL join found none)
+    const lapsed = !!b && bookingShownStatus({ status: b.status, answerBy: b.answerBy ?? null, payBy: b.payBy ?? null }, now) === 'expired'
     const status = lapsed ? (r.expiresAt > now ? 'sent' : 'expired') : r.status
     out.push({
       id: r.d.id,
@@ -185,7 +193,7 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
       issuedAt: r.d.issuedAt.toISOString(),
       pdfReady: r.d.fileKey !== null,
       bookingId: b && !lapsed ? b.id : null,
-      bookedAt: b && !lapsed ? new Date(b.created_at).toISOString() : null,
+      bookedAt: b && !lapsed ? b.createdAt.toISOString() : null,
     })
   }
   return out

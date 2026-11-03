@@ -11,7 +11,7 @@ import { useLoad } from '@/hooks/use-load'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
-import { confirmDanger } from '@/lib/confirm'
+import { confirmAction } from '@/lib/confirm'
 import { go, goReplace } from '@/lib/go'
 import { acceptedRows, acceptSummary, openQuotes, otherQuotes, quoteLines, quoteWhen, splitQuotes, type AcceptedRow, price } from '@/lib/quotes'
 import { DocRow, usePdf } from '@/screens/invoices/invoice-list'
@@ -38,7 +38,7 @@ export default function QuoteList() {
   const accept = async (q: QuoteListItem) => {
     if (asking) return // one question at a time: a second tap while the dialog is open does nothing
     setAsking(true)
-    const yes = await confirmDanger(acceptSummary(q), t('quote.acceptYes'), false).finally(() => setAsking(false))
+    const yes = await confirmAction(acceptSummary(q), t('quote.acceptYes')).finally(() => setAsking(false))
     if (!yes) return
     accepting.submit(async () => {
       try {
