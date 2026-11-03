@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-02 06-18",
+  "stamp": "2026-11-03 11-53",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -12,7 +12,7 @@
     "1.3": "Done",
     "1.4": "Done",
     "1.5": "Done",
-    "1.6": "In progress"
+    "1.6": "Done"
   },
   "tasks": {
     "1": "Done",
@@ -217,11 +217,21 @@
         "task 35 In progress",
         "merged PR #55"
       ]
+    },
+    {
+      "when": "2026-11-03 11:53",
+      "commit": "d5442fd",
+      "note": "PR 58 (welcome screen, How it works, app name KANDO, offer preset on sign-up) and PR 59 (POST /bookings and direct booking removed; the proposed path stays for old rows) merged. Step 1.6 done in the plan size; the full removal of the proposed path (answer, counter, rounds, status) is step 1.6b.",
+      "steps": [
+        "step 1.6 Done",
+        "merged PR #58",
+        "merged PR #59"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
   "workbookMerges": [
-    "54",
-    "55"
+    "58",
+    "59"
   ]
 }
