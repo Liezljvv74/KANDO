@@ -22,7 +22,7 @@ export default function HowItWorksScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable accessibilityRole="link" onPress={() => router.back()} hitSlop={12}>
+        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))} hitSlop={12}>
           <Text style={styles.link}>← {t('welcome.backHome')}</Text>
         </Pressable>
         <Text style={styles.title}>{t('welcome.howTitle')}</Text>

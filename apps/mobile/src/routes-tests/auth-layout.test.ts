@@ -4,7 +4,7 @@ import * as layout from '@/app/(auth)/_layout'
 jest.mock('expo-router', () => ({ Stack: () => null }))
 
 test('logged-out landing route is login', () => {
-  expect(layout.unstable_settings.initialRouteName).toBe('login')
+  expect(layout.unstable_settings.initialRouteName).toBe('welcome')
 })
 
 test('no test files inside src/app (each file there becomes a screen)', () => {

@@ -68,7 +68,7 @@ describe('catalogue', () => {
   it('the product name is only written in brand.name', () => {
     for (const [key, text] of [...Object.entries(de), ...Object.entries(en)]) {
       if (key === 'brand.name') continue
-      expect(text, key).not.toMatch(/kando/i)
+      expect(text, key).not.toMatch(/skillweb|kando/i)
       expect(text, key).not.toMatch(/Skilled/)
     }
     expect(de['brand.name']).toBe('KANDO')
