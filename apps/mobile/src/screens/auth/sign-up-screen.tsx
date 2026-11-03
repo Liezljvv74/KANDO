@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Image, StyleSheet, Text, View } from 'react-native'
 
 import { ApiError } from '@/api/client'
@@ -24,6 +24,7 @@ export default function SignUpScreen() {
   const [pictureUri, setPictureUri] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
   const [offerServices, setOfferServices] = useState(offer === '1')
+  useEffect(() => setOfferServices(offer === '1'), [offer]) // a screen that stays mounted still follows the card tapped
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
