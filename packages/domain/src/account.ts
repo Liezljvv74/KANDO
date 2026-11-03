@@ -1,4 +1,4 @@
-import { asc, eq, inArray, lte, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm'
 import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, pushTokens, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
@@ -10,8 +10,8 @@ import { fail } from './providers/http'
 import { documentsBucket, mediaBucket, storage } from './storage'
 import { activeAdmins, lockAdmins } from './users'
 
-/** Every table with a foreign key to users or providers, deleted below in this order; a test fails when the schema grows another. */
-export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'push_tokens', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers']
+/** Every table with a foreign key to users or providers, handled below or by the foreign key itself (document_ai_checks: the owner is set to null and the cost record stays); a test fails when the schema grows another. */
+export const ACCOUNT_TABLES = ['availability_watches', 'contact_attempts', 'staff_flags', 'messages', 'threads', 'blocks', 'reviews', 'bookings', 'quotes', 'requests', 'notifications', 'push_tokens', 'documents', 'private_files', 'photos', 'provider_references', 'services', 'providers', 'document_ai_checks'] // document_ai_checks: only the owner is set to null by the foreign key; the cost record stays (see migration 0030)
 
 /** Better Auth's email-OTP plugin keys a pending code as `<type>-otp-<email>`; these are the types it uses. */
 export const OTP_TYPES = ['email-verification', 'forget-password', 'sign-in', 'change-email']
@@ -124,13 +124,17 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
     // Every object key first: after the rows are gone nothing says where the files are.
     const media = await tx.select({ key: photos.key }).from(photos).where(eq(photos.ownerId, userId))
     const files = await tx.select({ key: privateFiles.key }).from(privateFiles).where(eq(privateFiles.ownerId, userId))
-    const docs = await tx.select({ key: documents.key }).from(documents).where(eq(documents.ownerId, userId))
+    const docs = await tx.select({ id: documents.id, key: documents.key }).from(documents).where(eq(documents.ownerId, userId))
     // The numbered quote PDFs of either side (the table has no foreign keys): rows and files go with the person.
     const quoteFiles = await tx.select({ key: quoteDocuments.fileKey }).from(quoteDocuments).where(sql`${quoteDocuments.customerId} = ${userId} OR ${quoteDocuments.providerId} IN ${own}`)
     // A provider or a person with submitted documents is a trader: basic details and the document metadata are kept for the
     // retention period, and the document objects stay in storage until then (everything else is deleted as before).
     const [provider] = await tx.select().from(providers).where(eq(providers.ownerId, userId))
-    const docRows = await tx.select().from(documents).where(eq(documents.ownerId, userId))
+    // A photo ID image goes with the account at once, checked by the AI or not, retention or not (the promise made in the terms; owner decision 3 Nov 2026); it is not part of the retained record.
+    const idNow = new Set(
+      (await tx.select({ id: documents.id }).from(documents).where(and(eq(documents.ownerId, userId), eq(documents.requirement, 'id-document')))).map((r) => r.id),
+    )
+    const docRows = (await tx.select().from(documents).where(eq(documents.ownerId, userId))).filter((d) => !idNow.has(d.id))
     let keepUntil: Date | null = null
     if (months > 0 && (provider || docRows.length)) {
       const [record] = await tx
@@ -188,7 +192,7 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
     const owed = [
       ...media.map((m) => ({ bucket: mediaBucket(), key: m.key })),
       // The submitted documents' objects stay while they are retained.
-      ...[...files, ...(keepUntil ? [] : docs)].map((f) => ({ bucket: documentsBucket(), key: f.key })),
+      ...[...files, ...docs.filter((d) => !keepUntil || idNow.has(d.id))].map((f) => ({ bucket: documentsBucket(), key: f.key })),
       // Chat photos of the person's threads (both sides' photos: the thread goes).
       ...chatPhotos.map((m) => ({ bucket: documentsBucket(), key: m.key! })),
       ...quoteFiles.filter((q) => q.key).map((q) => ({ bucket: documentsBucket(), key: q.key! })),

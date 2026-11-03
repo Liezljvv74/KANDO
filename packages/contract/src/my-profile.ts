@@ -138,3 +138,15 @@ export const OwnServicesListSchema = docsOf(OwnServiceSchema)
 export const ReferencesListSchema = docsOf(OwnReferenceSchema)
 export const PhotosListSchema = docsOf(PhotoSchema)
 export const DocumentsListSchema = docsOf(DocumentSchema)
+
+/** What the AI model must answer when it checks an uploaded document. `reasons` is short English text without ID numbers, birth dates or addresses (the prompt says so, the job strips it again). */
+export const DocumentCheckResultSchema = z.object({
+  verdict: z.enum(['ok', 'problem']),
+  reasons: z.string().max(600),
+  documentTypeMatches: z.boolean(),
+  nameMatches: z.boolean(),
+  /** null: the document shows no expiry date. */
+  notExpired: z.boolean().nullable(),
+  confidence: z.number().min(0).max(1),
+})
+export type DocumentCheckResult = z.infer<typeof DocumentCheckResultSchema>

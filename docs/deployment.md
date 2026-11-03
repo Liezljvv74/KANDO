@@ -35,7 +35,12 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `AWS_ENDPOINT` | no | web | Object storage endpoint. |
 | `MEDIA_BUCKET` | no | web | Public photo bucket name. |
 | `DOCUMENTS_BUCKET` | no | web | Private documents bucket name. |
-| `OPENROUTER_API_KEY` | yes | web | Translate button. Without it the original texts are shown. |
+| `OPENROUTER_API_KEY` | yes | web | OpenRouter key, server only. Translate button (without it the original texts are shown) and, together with `AI_DOCUMENT_MODEL`, the AI check of documents. Set it on Production and Preview. |
+| `AI_DOCUMENT_MODEL` | no | web | OpenRouter model id for the AI check of uploaded documents (must read images and PDFs; pick it after `pnpm ai:eval`). The check is **off** until this and `OPENROUTER_API_KEY` are both set: the key is shared with the translate button, so the key alone never sends a document to a model nobody chose. Off means documents go to staff as before, with no error. |
+| `AI_MIN_CONFIDENCE` | no | web | Confidence (0 to 1) the AI needs to approve a document by itself (default 0.8). |
+| `AI_DOCUMENT_PROVIDER` | no | web | Pins the AI check to one OpenRouter provider (slug from the model page, for example `google-vertex`); documents are then sent to no other provider. Requests already ask for no training and zero retention. A malformed value switches the check off. |
+| `AI_MONTHLY_CAP_EUR` | no | web | Most the AI document checks may cost per calendar month, in euro (default 20); when reached, documents go to staff until the next month. OpenRouter reports dollars; they are counted one to one. |
+| `AI_EVAL_MODELS` | no | `pnpm ai:eval` only | Comma separated OpenRouter model ids to compare on made-up documents. Never needed on Vercel. |
 | `TRANSLATE_MODEL` | no | web | Model used for translation. |
 | `TRANSLATE_LIMIT_PER_HOUR` | no | web | Translate calls allowed per user or visitor per hour (default 30). |
 | `TRANSLATE_GLOBAL_LIMIT_PER_DAY` | no | web | Translate calls allowed across all visitors together per 24 hours (default 2000); caps the bill if someone spreads calls over many addresses. |

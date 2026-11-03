@@ -137,6 +137,11 @@ export function memoryStorage(): Storage & { objects: Map<string, Buffer>; types
       objects.set(`${bucket}/${key}`, body)
       types.set(`${bucket}/${key}`, contentType)
     },
+    async get(bucket, key) {
+      const body = objects.get(`${bucket}/${key}`)
+      if (!body) throw new Error('NoSuchKey')
+      return body
+    },
     getSignedUrl: async (bucket, key, seconds) => `https://signed.test/${bucket}/${key}?expires=${seconds}`,
     async delete(bucket, key) {
       objects.delete(`${bucket}/${key}`)

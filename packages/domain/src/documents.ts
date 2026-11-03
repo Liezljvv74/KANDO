@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm'
 import sharp from 'sharp'
 import { db, documents, pendingObjectDeletes, privateFiles, type Tx } from '@kando/db'
 import { DOCUMENT_TYPES, type Document } from '@kando/contract'
@@ -7,6 +7,7 @@ import { flushPendingObjects } from './account'
 import { fail } from './providers/http'
 import { lockProfile } from './providers/profile'
 import { MAX_PIXELS } from './photos'
+import { runDocumentCheck } from './ai/document-check'
 import type { AfterCommit } from './app-request'
 import { documentsBucket, removeObject, storage } from './storage'
 
@@ -73,7 +74,7 @@ export async function fileLink(tx: Tx, userId: string, id: string): Promise<stri
   if (!UUID.test(id)) return null
   const key =
     (await tx.select({ key: privateFiles.key }).from(privateFiles).where(and(eq(privateFiles.id, id), eq(privateFiles.ownerId, userId))))[0]?.key ??
-    (await tx.select({ key: documents.key }).from(documents).where(and(eq(documents.id, id), eq(documents.ownerId, userId))))[0]?.key
+    (await tx.select({ key: documents.key }).from(documents).where(and(eq(documents.id, id), eq(documents.ownerId, userId), isNull(documents.imageDeletedAt))))[0]?.key
   return key ? storage().getSignedUrl(documentsBucket(), key, 300) : null
 }
 
@@ -104,9 +105,10 @@ export async function listDocuments(tx: Tx, userId: string): Promise<Document[]>
 
 /**
  * Opens a check for an uploaded file. 400 for an unknown requirement or file; 409 when a check for it is already
- * pending: then the file is removed (that answer is returned, not thrown, so the removal commits).
+ * pending: then the file is removed (that answer is returned, not thrown, so the removal commits). After the commit the AI check
+ * runs (a no-op while the feature is off); `afterApproved` is called when it approved the document by itself.
  */
-export async function submitDocument(tx: Tx, userId: string, requirement: string, fileId: string, afterCommit: AfterCommit): Promise<Response | Document> {
+export async function submitDocument(tx: Tx, userId: string, requirement: string, fileId: string, afterCommit: AfterCommit, afterApproved?: () => void): Promise<Response | Document> {
   if (!(DOCUMENT_TYPES as readonly string[]).includes(requirement)) return fail(400, { error: 'Invalid requirement' })
   await lockProfile(tx, userId) // per user: a double tap cannot pass the pending check twice
   const file = UUID.test(fileId)
@@ -128,6 +130,7 @@ export async function submitDocument(tx: Tx, userId: string, requirement: string
   )
   const doc = (await tx.select().from(documents).where(eq(documents.id, rows[0]!.id)))[0]!
   await tx.delete(privateFiles).where(eq(privateFiles.id, file.id)) // the object stays: the document owns it now
+  afterCommit(async () => void (await runDocumentCheck(doc.id, { afterApproved })))
   return toDocument(doc)
 }
 
