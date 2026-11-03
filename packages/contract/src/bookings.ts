@@ -215,7 +215,7 @@ export const BookingViewSchema = z.object({
   viewer: z.enum(['customer', 'provider']),
   threadId: z.string().nullable(),
   /** The number of the quote document this booking was made from (`Q-...`), so a provider sees exactly which quote was accepted; null when none. */
-  quoteNumber: z.string().nullable().optional(),
+  quoteNumber: z.string().nullable(),
 })
 export type BookingView = z.infer<typeof BookingViewSchema>
 

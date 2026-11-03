@@ -16,10 +16,11 @@ export const shownStatus = (q: Pick<QuoteListItem, 'status' | 'expiresAt'>, now 
   q.status === 'sent' && new Date(q.expiresAt) <= now ? 'expired' : q.status
 
 /** The quotes the customer can accept now: received, open and not expired, each with its own Accept button. */
-export const openQuotes = (received: QuoteListItem[], now = new Date()): QuoteListItem[] => received.filter((q) => q.role === 'customer' && shownStatus(q, now) === 'sent')
+const isOpen = (q: QuoteListItem, now: Date): boolean => q.role === 'customer' && shownStatus(q, now) === 'sent'
+export const openQuotes = (received: QuoteListItem[], now = new Date()): QuoteListItem[] => received.filter((q) => isOpen(q, now))
 
 /** The received quotes that are not an open offer (accepted, expired, declined, replaced): they stay as document rows with their PDF. */
-export const otherQuotes = (received: QuoteListItem[], now = new Date()): QuoteListItem[] => received.filter((q) => !openQuotes([q], now).length)
+export const otherQuotes = (received: QuoteListItem[], now = new Date()): QuoteListItem[] => received.filter((q) => !isOpen(q, now))
 
 export type AcceptedRow = { id: string; number: string; bookingId: string; provider: string; bookedAt: string; service: string | null; price: string }
 
