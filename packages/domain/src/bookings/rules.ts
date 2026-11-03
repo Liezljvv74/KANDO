@@ -17,7 +17,8 @@ export const PAY_WINDOW_HOURS = 48
 export const PAY_BEFORE_START_HOURS = 24
 export const SHORT_NOTICE_PAY_HOURS = 6
 export const SHORT_NOTICE_THRESHOLD_HOURS = 24
-export const MAX_OPEN_REQUESTS_PER_PAIR = 1
+/** One request per job: a customer may have several open ones with the same provider; their quotes never affect each other. */
+export const MAX_OPEN_REQUESTS_PER_PAIR = 5
 export const MAX_REQUESTS_PER_DAY = 10
 /** Days a booking may wait in awaiting-time (a quote accepted without a time) for both sides to agree it. */
 export const AWAITING_TIME_DAYS = 7

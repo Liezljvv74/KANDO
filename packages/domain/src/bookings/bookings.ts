@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
-import { bookings, type Tx } from '@kando/db'
+import { bookings, quoteDocuments, type Tx } from '@kando/db'
 import { LIST_PAGE, type Booking, type BookingView, type Page } from '@kando/contract'
 import { NO_ID } from '../admin/common'
 import { fail, notFound } from '../providers/http'
@@ -38,8 +38,9 @@ export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'p
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */
 export async function getBooking(tx: Tx, userId: string, id: string): Promise<BookingView> {
   const { role } = await partyOf(tx, userId, id) // 404 for anyone else
-  const b = (await tx.select().from(bookings).where(eq(bookings.id, id)))[0] ?? notFound()
-  return { booking: view(b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, b) }
+  // joined with the quote's document number, so the provider sees exactly which quote was accepted (both parties may read the document)
+  const found = (await tx.select({ b: bookings, quoteNumber: quoteDocuments.number }).from(bookings).leftJoin(quoteDocuments, eq(quoteDocuments.quoteId, bookings.quoteId)).where(eq(bookings.id, id)))[0] ?? notFound()
+  return { booking: view(found.b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
 }
 
 /** "I no longer need this": the customer, from awaiting-payment (and from proposed, until that status goes). */

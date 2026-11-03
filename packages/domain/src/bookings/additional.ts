@@ -45,7 +45,7 @@ export async function lockFamily(o: Exec, id: string): Promise<[Row, Row[]]> {
 /**
  * "Additional task" (the customer) or "Scope/quote review" (the provider) on a `confirmed` or `finished` root booking (else
  * 409 not-open): a request for the extra work with `parentBookingId`, the same customer, provider and service, answered by
- * the provider's quote (sendQuote) within REQUEST_ANSWER_DAYS. One open one per booking (409 request-limit). The
+ * the provider's quote (sendQuote) within REQUEST_ANSWER_DAYS. One open one per booking (409 additional-limit). The
  * description runs the contact check (422). An `additional-task` card goes into the booking's thread and the other side is
  * told. A third person 404. The request is written on the owner connection (the app role's insert rule is the customer's)
  * with the booking row locked, so a racing cancel or no-show report has exactly one outcome.
@@ -58,7 +58,7 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
   const r = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (!takesAdditional(b)) fail(409, { error: 'not-open' })
-    if ((await o.select({ id: requests.id }).from(requests).where(and(eq(requests.parentBookingId, b.id), liveRequest(now)))).length) fail(409, { error: 'request-limit' })
+    if ((await o.select({ id: requests.id }).from(requests).where(and(eq(requests.parentBookingId, b.id), liveRequest(now)))).length) fail(409, { error: 'additional-limit' })
     const [row] = await o
       .insert(requests)
       .values({ customerId: b.customerId, providerId: b.providerId, serviceId: b.serviceId, parentBookingId: b.id, description: input.description, answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY), createdAt: now, updatedAt: now })

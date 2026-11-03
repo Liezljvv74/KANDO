@@ -200,14 +200,16 @@ it('the customer withdraws an open and a quoted request; the provider is told', 
   expect((await quote(quoted.id, U.owner)).status).toBe(409) // nor to quote
 })
 
-it('the provider declines; the customer is told; the request leaves the pair limit', async () => {
+it('the provider declines; the customer is told; the request leaves the pair limit (5 live requests per pair)', async () => {
   const r = await newRequest()
-  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again', ...requestTime() })).status).toBe(409) // one live request per pair
+  const again = () => call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again', ...requestTime() })
+  for (let i = 0; i < 4; i++) expect((await again()).status).toBe(201) // several requests to one provider: one per job
+  expect((await again()).status).toBe(409) // the 6th live request
   const res = await closing(decline, r.id, U.owner)
   expect(res.status).toBe(200)
   expect(RequestSchema.parse(await res.json())).toMatchObject({ id: r.id, status: 'declined' })
   expect(await told(U.cust, 'request-declined', r.id)).toBe(1)
-  expect((await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Again', ...requestTime() })).status).toBe(201)
+  expect((await again()).status).toBe(201)
 })
 
 it('the other side gets 403, a stranger 404, a booked request 409', async () => {
