@@ -286,3 +286,25 @@ it('chat photos of the deleted person\'s threads are owed and removed from the p
   await runCron()
   expect(store.objects.has(`documents/${key}`)).toBe(false)
 })
+
+it('the AI results go with the account, and every photo ID image is deleted at once, checked by the AI or not, even where documents are retained', async () => {
+  vi.stubEnv('DELETE_RETENTION_MONTHS', '6')
+  await fullPerson('ad30')
+  const idKey = 'documents/ad30/id.jpg'
+  store.objects.set(`documents/${idKey}`, Buffer.from('x'))
+  const idDoc = (await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('ad30', 'id-document', $1, 'approved') RETURNING id", [idKey])).rows[0].id
+  const permitDoc = (await pool.query("SELECT id FROM documents WHERE owner_id = 'ad30' AND requirement = 'permit'")).rows[0].id
+  const plainKey = 'documents/ad30/id2.jpg' // an ID the AI never checked
+  store.objects.set(`documents/${plainKey}`, Buffer.from('y'))
+  await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('ad30', 'id-document', $1, 'pending')", [plainKey])
+  for (const id of [idDoc, permitDoc]) await pool.query("INSERT INTO document_ai_checks (document_id, model, verdict, decision, finished_at) VALUES ($1, 'm', 'ok', 'auto-approved', now())", [id])
+  expect(await count('SELECT count(*) n FROM document_ai_checks WHERE document_id = ANY($1)', [[idDoc, permitDoc]])).toBe(2)
+  expect((await del('ad30')).status).toBe(200)
+  expect(await count('SELECT count(*) n FROM document_ai_checks WHERE document_id = ANY($1)', [[idDoc, permitDoc]])).toBe(0)
+  expect(store.objects.has(`documents/${idKey}`)).toBe(false) // the ID image is gone now
+  expect(store.objects.has(`documents/${plainKey}`)).toBe(false) // also the one never AI-checked
+  expect(store.objects.has('documents/documents/ad30/d.pdf')).toBe(true) // the permit is retained as before
+  const kept = (await pool.query("SELECT documents FROM retained_records WHERE former_user_id = 'ad30'")).rows[0].documents as { requirement: string }[]
+  expect(kept.map((d) => d.requirement)).toEqual(['permit']) // the retained record does not list the ID
+  await pool.query("DELETE FROM retained_records WHERE former_user_id = 'ad30'")
+})

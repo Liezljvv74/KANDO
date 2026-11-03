@@ -2,4 +2,5 @@
 export { outboxForTests } from './email'
 export { pushOutboxForTests } from './push'
 export { setStorageForTests } from './storage'
+export { setDocumentCheckerForTests } from './ai/document-check'
 export { setGatewayForTests } from './payments/gateway'

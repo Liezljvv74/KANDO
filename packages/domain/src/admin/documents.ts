@@ -1,5 +1,5 @@
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm'
-import { documents, users, type Tx } from '@kando/db'
+import { documentAiChecks, documents, users, type Tx } from '@kando/db'
 import type { AdminListQuery, DocumentReviewInput } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { notifyDocumentDecision } from '../notifications'
@@ -41,14 +41,29 @@ export async function listDocuments(tx: Tx, q: AdminListQuery) {
   return ok(rows.map(dto), total)
 }
 
-/** One document with a short-lived link to the file in the private bucket. */
+/**
+ * One document with a short-lived link to the file in the private bucket (null once a photo ID image was deleted, `imageDeletedAt` says when)
+ * and the AI's suggestion, when there is one. Staff only: the explanation is shown here and nowhere else.
+ */
 export async function getDocument(tx: Tx, id: string) {
   const row = isUuid(id)
-    ? (await tx.select({ ...cols, key: documents.key }).from(documents).innerJoin(users, eq(users.id, documents.ownerId)).where(eq(documents.id, id)))[0]
+    ? (
+        await tx
+          .select({ ...cols, key: documents.key, imageDeletedAt: documents.imageDeletedAt, ai: documentAiChecks })
+          .from(documents)
+          .innerJoin(users, eq(users.id, documents.ownerId))
+          .leftJoin(documentAiChecks, eq(documentAiChecks.documentId, documents.id))
+          .where(eq(documents.id, id))
+      )[0]
     : undefined
   if (!row) return notFound()
-  const { key, ...rest } = row
-  return ok({ ...dto(rest), link: await storage().getSignedUrl(documentsBucket(), key, 300) })
+  const { key, imageDeletedAt, ai, ...rest } = row
+  return ok({
+    ...dto(rest),
+    link: imageDeletedAt ? null : await storage().getSignedUrl(documentsBucket(), key, 300),
+    imageDeletedAt: imageDeletedAt?.toISOString() ?? null,
+    ai: ai && { verdict: ai.verdict, confidence: ai.confidence, explanation: ai.explanation, sampled: ai.sampled, decision: ai.decision, failure: ai.failure, model: ai.model, staffDecision: ai.staffDecision, finishedAt: ai.finishedAt?.toISOString() ?? null },
+  })
 }
 
 /** Approves or rejects a pending document; the owner is told once the decision has committed. */
@@ -65,6 +80,8 @@ export async function reviewDocument(tx: Tx, staff: StaffUser, id: string, input
     .set({ status: input.decision, note, reviewedBy: staff.id, reviewedAt: sql`now()` })
     .where(eq(documents.id, id))
     .returning()
+  // The decision is logged next to the AI's suggestion (who decided is documents.reviewed_by), to compare them later.
+  await tx.update(documentAiChecks).set({ staffDecision: input.decision }).where(eq(documentAiChecks.documentId, id))
   afterCommit(() => notifyDocumentDecision(done!.ownerId, { id, requirement: done!.requirement, status: input.decision, note }))
   return getDocument(tx, id)
 }

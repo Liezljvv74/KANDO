@@ -1,6 +1,6 @@
 import { asc, eq, getTableColumns, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import { availabilityWatches, bookings, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quoteDocuments, quotes, requests, reviews, services, threads, users, type Tx } from '@kando/db'
+import { availabilityWatches, bookings, db, documentAiChecks, documents, messages, notifications, photos, privateFiles, providerReferences, providers, quoteDocuments, quotes, requests, reviews, services, threads, users, type Tx } from '@kando/db'
 import { listBlocks } from './chat/blocks'
 import { documentsBucket, photoUrl, storage } from './storage'
 
@@ -55,7 +55,17 @@ export async function exportMyData(tx: Tx, userId: string) {
     references: own ? await tx.select().from(providerReferences).where(eq(providerReferences.providerId, own)).orderBy(asc(providerReferences.createdAt)) : [],
     photos: (await tx.select().from(photos).where(eq(photos.ownerId, userId)).orderBy(asc(photos.createdAt))).map((p) => ({ kind: p.kind, url: photoUrl(p.key), createdAt: p.createdAt })),
     documents: await Promise.all(
-      docs.map(async (d) => ({ requirement: d.requirement, status: d.status, staffNote: d.note, reviewedAt: d.reviewedAt, createdAt: d.createdAt, downloadUrl: await link(d.key) })),
+      docs.map(async (d) => ({ requirement: d.requirement, status: d.status, staffNote: d.note, reviewedAt: d.reviewedAt, createdAt: d.createdAt, imageDeletedAt: d.imageDeletedAt, downloadUrl: d.imageDeletedAt ? null : await link(d.key) })),
+    ),
+    // The AI's suggestion for each of their documents: the table is staff-only, so it is read on the owner connection, filtered by this person.
+    // The short "why not approved" text is included: it is data about them (access right) and holds nothing read from the document.
+    aiDocumentChecks: (
+      await db
+        .select({ requirement: documents.requirement, documentCreatedAt: documents.createdAt, verdict: documentAiChecks.verdict, confidence: documentAiChecks.confidence, decision: documentAiChecks.decision, explanation: documentAiChecks.explanation, checkedAt: documentAiChecks.finishedAt })
+        .from(documentAiChecks)
+        .innerJoin(documents, eq(documents.id, documentAiChecks.documentId))
+        .where(eq(documents.ownerId, userId))
+        .orderBy(asc(documents.createdAt))
     ),
     privateFiles: await Promise.all(files.map(async (f) => ({ createdAt: f.createdAt, downloadUrl: await link(f.key) }))),
     requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.customerId === userId ? r.description : null, startAt: r.startAt, durationMin: r.durationMin, onSite: r.onSite, answerBy: r.answerBy, createdAt: r.createdAt })),
@@ -103,6 +113,7 @@ export async function exportMyData(tx: Tx, userId: string) {
     notifications: await tx.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(asc(notifications.createdAt)),
     notes: [
       'Not included: your password (the sign-in service keeps only a one-way hash) and the sign-in sessions.',
+      'The AI document checks list what an automated check suggested for each of your documents: its verdict, how sure it was, the decision, a short reason when it did not approve, and the date. Nothing read from the document is stored.',
       'Not included: rate-limit records (a time stamp per translation request, an address hash for others), kept for 24 hours.',
       'Not included: messages other people wrote to you, contact details of other people, and notes kept by the support team.',
       'Not included: emails already sent to you, which the email provider holds.',
@@ -128,7 +139,7 @@ export function exportRows(data: Export): string[][] {
   add('export', 1, { exportedAt: data.exportedAt })
   if (data.user) add('user', 1, data.user)
   if (data.provider) add('provider', 1, data.provider)
-  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'reviews', 'messages', 'blocks', 'watches', 'photos', 'documents', 'privateFiles', 'notifications'] as const) {
+  for (const section of ['services', 'references', 'requests', 'quotes', 'bookings', 'reviews', 'messages', 'blocks', 'watches', 'photos', 'documents', 'aiDocumentChecks', 'privateFiles', 'notifications'] as const) {
     data[section].forEach((r, i) => add(section, i + 1, r))
   }
   data.notes.forEach((n, i) => rows.push(['notes', String(i + 1), 'text', n]))

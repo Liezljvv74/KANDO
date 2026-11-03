@@ -9,6 +9,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "test": "pnpm -r --if-present test",
+    "ai:eval": "pnpm --filter @kando/domain ai:eval",
     "db:migrate": "pnpm --filter @kando/db migrate",
     "db:generate": "pnpm --filter @kando/db generate",
     "db:import:postcodes": "pnpm --filter @kando/db import:postcodes",
