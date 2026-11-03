@@ -158,7 +158,6 @@ export const en: Record<ServerKey, string> = {
   'admin.ai.failure.timeout': 'The AI service did not answer in time',
   'admin.ai.failure.no-name': 'The account has no name to compare with',
   'admin.ai.failure.terms-not-accepted': 'The person has no recorded acceptance of the terms, so nothing was sent to the AI',
-  'admin.ai.failure.terms-not-accepted': 'The person has no recorded acceptance of the terms, so nothing was sent to the AI',
   'admin.ai.failure.interrupted': 'The check was interrupted before it finished',
   'admin.ai.failure.staff-decided': 'The team had already decided',
   'admin.ai.model': 'Model',
