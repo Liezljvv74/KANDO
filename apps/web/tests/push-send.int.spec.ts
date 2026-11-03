@@ -3,17 +3,16 @@ import { db, pool } from '@kando/db'
 import { RequestSchema, ThreadSchema } from '@kando/contract'
 import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
 import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, EMAIL, fakeSession, insertProposedBooking, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, fakeSession, makeAwaitingPayment, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
 const threadsRoute = await import('../app/app-api/v1/threads/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
-const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 
 const U = { cust: 'ps-cust', owner: 'ps-owner' }
 const TOKEN = (s: string) => `ExponentPushToken[${s}]`
-let prov: string, service: string
+let prov: string
 const pushes = (uid: string) => pushOutboxForTests().filter((m) => m.to.startsWith(TOKEN(uid).slice(0, -1)))
 const mails = (uid: string) => outboxForTests().filter((m) => m.to === EMAIL(uid))
 const rows = async (uid: string) => (await pool.query('SELECT kind FROM notifications WHERE user_id = $1', [uid])).rows.map((r) => r.kind)
@@ -31,7 +30,6 @@ beforeAll(async () => {
   const { categoryId } = await seedBase()
   await seedUser(U.cust)
   prov = await seedProvider(U.owner, { name: 'Ps Owner', categoryId })
-  service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [prov])).rows[0].id
 })
 beforeEach(async () => {
   vi.stubEnv('RESEND_API_KEY', '')
@@ -194,8 +192,7 @@ it('a suspended person still gets booking pushes; an unknown or deleted account 
 
 it('a timer reminder pushes once; the next run sends nothing again', async () => {
   await giveTokens(U.cust)
-  const b = await insertProposedBooking({ customerId: U.cust, serviceId: service, startAt: new Date(Date.now() + 40 * 86_400_000), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: b.id })
+  const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId: prov, startAt: new Date(Date.now() + 40 * 86_400_000) })
   clearPushOutbox()
   const payBy = (await pool.query('SELECT pay_by FROM bookings WHERE id = $1', [b.id])).rows[0].pay_by as Date
   const at = new Date(payBy.getTime() - 3_600_000)

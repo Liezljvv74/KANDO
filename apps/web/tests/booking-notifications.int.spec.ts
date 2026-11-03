@@ -1,18 +1,16 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
+import { QuoteSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, notifyBookingEvent, runDueTimers } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, insertProposedBooking, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, makeAwaitingPayment, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
-const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
-const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
 
 const U = { cust: 'bn-cust', cust2: 'bn-cust2', owner: 'bn-owner' }
-let prov: string, service: string
+let prov: string
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
 const rows = async (uid: string) => (await pool.query('SELECT kind, payload FROM notifications WHERE user_id = $1 ORDER BY created_at', [uid])).rows
 const subjects = (to: string) => outboxForTests().filter((m) => m.to === `${to}@test.skilled.invalid`)
@@ -23,7 +21,6 @@ beforeAll(async () => {
   await seedUser(U.cust)
   await seedUser(U.cust2)
   prov = await seedProvider(U.owner, { name: 'Bn Owner', categoryId })
-  service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [prov])).rows[0].id
 })
 beforeEach(async () => {
   vi.stubEnv('RESEND_API_KEY', '')
@@ -34,8 +31,6 @@ beforeEach(async () => {
   clearOutbox()
 })
 afterAll(cleanupUsers)
-
-const proposal = (n: number, extra: object = {}) => ({ serviceId: service, startAt: day(n), durationMin: 60, onSite: true, address: { postcode: '10115' }, ...extra })
 
 it('a request: one in-app row and one German email for the provider', async () => {
   const res = await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'Bitte helfen', ...requestTime() })
@@ -58,33 +53,13 @@ it('a quote: the customer gets one row and an English email naming the 7-day exp
   expect(mail[0]!.text).toContain('7 days')
 })
 
-it('accepting a quote tells the provider of the proposal; a second proposal on a time awaiting payment also sends pending-slot-requested', async () => {
-  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x', ...requestTime() })).json())
-  const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r.id })).json())
-  await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
-  const b = BookingSchema.parse(await (await call(accept.POST, U.cust, 'POST', { startAt: day(30), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q.id })).json())
-  expect((await rows(U.owner)).map((x) => x.kind)).toEqual(['booking-proposed'])
-  expect((await rows(U.owner))[0]!.payload).toEqual({ bookingId: b.id })
-  // the provider accepts: the customer is told, with the pay-by date
+it('confirming a quote with a time tells the provider and sends the customer "Payment due" with the pay-by date', async () => {
   clearOutbox()
-  await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: b.id })
-  expect((await rows(U.cust)).map((x) => x.kind)).toContain('booking-accepted')
-  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Zahlung fällig für Deine Buchung'])
-  // another customer proposes an overlapping time
-  await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
-  const r2 = RequestSchema.parse(await (await call(requests.POST, U.cust2, 'POST', { providerId: prov, description: 'y', ...requestTime() })).json())
-  const q2 = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r2.id })).json())
-  await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
-  const other = BookingSchema.parse(await (await call(accept.POST, U.cust2, 'POST', { startAt: day(30), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q2.id })).json())
-  expect((await rows(U.owner)).map((x) => x.kind).sort()).toEqual(['booking-proposed', 'pending-slot-requested'])
-  expect(other.status).toBe('proposed')
-})
-
-it('declining a booking tells the customer once', async () => {
-  const b = await insertProposedBooking({ customerId: U.cust, ...proposal(40) })
-  await call(answer.POST, U.owner, 'POST', { type: 'decline' }, { id: b.id })
-  expect((await rows(U.cust)).map((x) => x.kind)).toEqual(['booking-declined'])
-  expect(subjects(U.cust)).toHaveLength(1)
+  const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId: prov, startAt: day(30) })
+  const owner = (await rows(U.owner)).filter((x) => x.kind === 'quote-confirmed')
+  expect(owner).toEqual([{ kind: 'quote-confirmed', payload: { bookingId: b.id } }])
+  expect((await rows(U.cust)).filter((x) => x.kind === 'booking-accepted')).toHaveLength(1)
+  expect(subjects(U.cust).map((m) => m.subject)).toContain('Zahlung fällig für Deine Buchung')
 })
 
 it('timer events: the SQL writes the one row, notifyBookingEvent adds only the email (no duplicate row)', async () => {
@@ -111,22 +86,6 @@ it('never throws: unknown user, broken ids', async () => {
   await expect(notifyBookingEvent('payment-reminder', U.cust, { bookingId: 'not-a-uuid' }, { written: true })).resolves.toBeUndefined()
 })
 
-it('a counter notifies the other side, in both directions, with one row and one email each', async () => {
-  const b = await insertProposedBooking({ customerId: U.cust, ...proposal(50) })
-  await pool.query("DELETE FROM notifications WHERE user_id LIKE 'bn-%'")
-  clearOutbox()
-  await call(answer.POST, U.owner, 'POST', { type: 'counter', startAt: day(51), durationMin: 60, onSite: true }, { id: b.id })
-  expect(await rows(U.cust)).toEqual([{ kind: 'booking-proposed', payload: { bookingId: b.id } }])
-  expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Ein neuer Termin wurde vorgeschlagen'])
-  expect(await rows(U.owner)).toEqual([])
-  await pool.query("DELETE FROM notifications WHERE user_id LIKE 'bn-%'")
-  clearOutbox()
-  await call(answer.POST, U.cust, 'POST', { type: 'counter', startAt: day(52), durationMin: 60, onSite: true }, { id: b.id })
-  expect(await rows(U.owner)).toEqual([{ kind: 'booking-proposed', payload: { bookingId: b.id } }])
-  expect(subjects(U.owner)).toHaveLength(1)
-  expect(await rows(U.cust)).toEqual([])
-})
-
 it('the quote email states the 7-day expiry in German too', async () => {
   const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x', ...requestTime() })).json())
   clearOutbox()
@@ -142,9 +101,9 @@ it('real sweeps: quote-expiring and payment-reminder emails carry their dates, o
   const stamp = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 60, 6, 0))
   const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', 'quoted', $3) RETURNING id", [U.cust, prov, new Date(stamp.getTime() + 86_400_000)])).rows[0].id
   const expires = new Date(stamp.getTime() + 12 * 3_600_000)
-  await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at) VALUES ($1, $2, 50, 's', $3)", [r, prov, expires])
+  const quoteId = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at) VALUES ($1, $2, 50, 's', $3) RETURNING id", [r, prov, expires])).rows[0].id
   const payBy = new Date(stamp.getTime() + 2 * 3_600_000)
-  await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', 'awaiting-payment', $4, 60, $5, $6)", [U.cust, prov, service, new Date(stamp.getTime() + 5 * 86_400_000), payBy, new Date(stamp.getTime() - 86_400_000)])
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', $4, 60, $5, $6)", [U.cust, prov, quoteId, new Date(stamp.getTime() + 5 * 86_400_000), payBy, new Date(stamp.getTime() - 86_400_000)])
   await runDueTimers(db, stamp)
   expect((await rows(U.cust)).map((x) => x.kind).sort()).toEqual(['payment-reminder', 'quote-expiring'])
   const de = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' })
