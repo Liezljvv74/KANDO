@@ -65,11 +65,9 @@ describe('catalogue', () => {
     }
   })
 
-  it('the product name is only written in brand.name', () => {
+  it('only the KANDO name appears in texts, no other brand', () => {
     for (const [key, text] of [...Object.entries(de), ...Object.entries(en)]) {
-      if (key === 'brand.name') continue
-      expect(text, key).not.toMatch(/skillweb|kando/i)
-      expect(text, key).not.toMatch(/Skilled/)
+      expect(text, key).not.toMatch(/skillweb|Skilled/i)
     }
     expect(de['brand.name']).toBe('KANDO')
   })
