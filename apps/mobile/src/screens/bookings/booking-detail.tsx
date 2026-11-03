@@ -66,7 +66,8 @@ export default function BookingDetail() {
     if (SHEETS.includes(action)) return setSheet(sheet === action ? null : (action as Sheet))
     const ask = ASK[action]
     if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return
-    submit(ask ? ask[2] : () => confirmAgreedTime(b.id), retry) // the one action left without a form or a question is confirmTime
+    if (ask) return submit(ask[2], retry)
+    if (action === 'confirmTime') return submit(() => confirmAgreedTime(b.id), retry)
   }
 
   const descriptionSheet = (label: Key, hint: Key | undefined, submitLabel: Key, call: (text: string) => Promise<unknown>, after = closeAndReload) => (
