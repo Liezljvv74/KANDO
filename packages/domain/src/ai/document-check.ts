@@ -19,7 +19,7 @@ export const CHECKS_PER_HOUR = 10
 const FALLBACK_EUR_PER_TOKEN = 0.00002
 const FALLBACK_EUR_PER_CALL = 0.02
 
-const MIME: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
+const MIME: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
 
 let override: DocumentChecker | undefined
 /** Test hook (via '@kando/domain/src/testing'): a fake model client. Setting it also switches the feature on. */
@@ -97,14 +97,14 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
     .where(and(eq(documentAiChecks.ownerId, doc.ownerId), gt(documentAiChecks.createdAt, hourAgo), ne(documentAiChecks.id, claim.id)))
   if ((recentRow?.n ?? 0) >= CHECKS_PER_HOUR) return toStaff({ failure: 'rate-limit' })
 
-  // ponytail: concurrent checks can overshoot the cap by a few calls; a lock would only be needed at much higher volume.
+  // ponytail: concurrent checks can overshoot the hourly limit and the cap by a few calls (check, then act); a lock would only be needed at much higher volume.
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const [spentRow] = await db.select({ spent: sum(documentAiChecks.costEur) }).from(documentAiChecks).where(gte(documentAiChecks.createdAt, monthStart))
   if (Number(spentRow?.spent ?? 0) >= monthlyCapEur()) return toStaff({ failure: 'cap' })
 
   let out
   try {
-    const ext = doc.key.split('.').pop() ?? ''
+    const ext = doc.key.includes('.') ? doc.key.split('.').pop()!.toLowerCase() : ''
     out = await checker.check({
       bytes: await storage().get(documentsBucket(), doc.key),
       mime: MIME[ext] ?? 'application/octet-stream',
@@ -114,7 +114,9 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
     })
   } catch (e) {
     const timeout = e instanceof AiUnavailable && e.reason === 'timeout'
-    return toStaff({ failure: timeout ? 'timeout' : 'error', costEur: timeout ? FALLBACK_EUR_PER_CALL : 0 })
+    // A timeout may still have been billed; so was an answer that came back unusable (it carries its cost). A refusal or network error was not.
+    const costEur = e instanceof AiUnavailable && e.costUsd !== null ? e.costUsd : timeout ? FALLBACK_EUR_PER_CALL : 0
+    return toStaff({ failure: timeout ? 'timeout' : 'error', costEur })
   }
 
   const { result } = out
@@ -139,14 +141,15 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
   })
   console.log(JSON.stringify({ event: 'ai-document-check', documentId, verdict: result.verdict, decision: approved ? 'auto-approved' : 'sent-to-staff' }))
   if (!approved) return 'sent-to-staff'
-  await notifyDocumentDecision(doc.ownerId, { id: documentId, requirement: doc.requirement, status: 'approved', note: null })
+  // The approval is committed: a failing email or push must not skip refreshing the public pages.
+  await notifyDocumentDecision(doc.ownerId, { id: documentId, requirement: doc.requirement, status: 'approved', note: null }).catch((e) => console.error(`[ai-check] document ${documentId} notice failed ${describeError(e)}`))
   deps.afterApproved?.()
   return 'auto-approved'
 }
 
 /**
- * The daily clean-up of photo ID images: 30 days after the check is finished (the AI's decision, or the staff decision for a
- * document sent to staff) the object is deleted and the row marked. Only documents the AI checked, so with the feature off nothing
+ * The daily clean-up of photo ID images: 30 days after the AI check finished (as the terms say; a person's later decision does not
+ * move the date, and a document still waiting for staff is included) the object is deleted and the row marked. Only documents the AI checked, so with the feature off nothing
  * changes. A failing delete leaves the row for tomorrow. Owner connection. Returns how many images went.
  */
 export async function sweepIdImages(now: Date = new Date(), limit = 100): Promise<number> {
@@ -155,7 +158,7 @@ export async function sweepIdImages(now: Date = new Date(), limit = 100): Promis
     .select({ id: documents.id, key: documents.key })
     .from(documents)
     .innerJoin(documentAiChecks, eq(documentAiChecks.documentId, documents.id))
-    .where(and(eq(documents.requirement, ID_DOCUMENT), isNull(documents.imageDeletedAt), ne(documents.status, 'pending'), lte(sql`coalesce(${documents.reviewedAt}, ${documentAiChecks.finishedAt})`, before)))
+    .where(and(eq(documents.requirement, ID_DOCUMENT), isNull(documents.imageDeletedAt), lte(sql`coalesce(${documentAiChecks.finishedAt}, ${documentAiChecks.createdAt})`, before)))
     .limit(limit)
   let gone = 0
   for (const d of due) {

@@ -320,13 +320,13 @@ it('retention: a photo ID image is deleted 30 days after the check, not before, 
 
   expect(await sweepIdImages(new Date(base.getTime() + 30 * day - 1000))).toBe(0) // day 29.99: nothing
   expect(exists(id)).toBe(true)
-  expect(await sweepIdImages(new Date(base.getTime() + 30 * day))).toBe(1)
+  // day 30: the approved ID, the one still waiting for staff and the one staff decided on day 20 all go: the clock is the check
+  expect(await sweepIdImages(new Date(base.getTime() + 30 * day))).toBe(3)
   expect(exists(id)).toBe(false)
   expect((await pool.query('SELECT image_deleted_at FROM documents WHERE id = $1', [id.id])).rows[0].image_deleted_at).not.toBeNull()
-  for (const kept of [other, pendingId, noCheck, staffLater]) expect(exists(kept)).toBe(true)
-  expect(await sweepIdImages(new Date(base.getTime() + 60 * day))).toBe(1) // the staff-decided one: day 20 + 30
+  expect(exists(pendingId)).toBe(false)
   expect(exists(staffLater)).toBe(false)
-  expect(exists(pendingId)).toBe(true) // still waiting for a person
+  for (const kept of [other, noCheck]) expect(exists(kept)).toBe(true) // not an ID / never AI-checked
   expect(await sweepIdImages(new Date(base.getTime() + 90 * day))).toBe(0) // each only once
 })
 
@@ -368,6 +368,41 @@ it('a deleted ID image: the person gets a clean 404 for the link, the export say
   expect(admin.data).toMatchObject({ link: null, imageDeletedAt: expect.any(String) })
 })
 
+it('a billed but unusable answer still counts towards the cap; a refusal does not', async () => {
+  const billed = fake(new AiUnavailable('error', 'AI answer had the wrong shape', 0.0123))
+  const d = await pendingDoc()
+  expect(await runDocumentCheck(d.id, { checker: billed.checker })).toBe('sent-to-staff')
+  expect(Number((await check(d.id)).cost_eur)).toBeCloseTo(0.0123)
+  const refused = fake(new AiUnavailable('error', 'AI service answered 502'))
+  const d2 = await pendingDoc()
+  await runDocumentCheck(d2.id, { checker: refused.checker })
+  expect(Number((await check(d2.id)).cost_eur)).toBe(0)
+})
+
+it('a failing notice after an AI approval does not skip the follow-up, and the approval stays', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const notifications = await import('@kando/domain/src/notifications')
+  vi.spyOn(notifications, 'notifyDocumentDecision').mockRejectedValue(new Error('mail down'))
+  const after = vi.fn()
+  const d = await pendingDoc()
+  expect(await runDocumentCheck(d.id, { checker: fake(OK).checker, afterApproved: after })).toBe('auto-approved')
+  expect(after).toHaveBeenCalledTimes(1)
+  expect((await status(d.id)).status).toBe('approved')
+})
+
+it('the file type comes from a lower-cased extension; no extension is not mistaken for one', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  for (const [key, mime] of [['documents/x/SCAN.JPG', 'image/jpeg'], ['documents/x/scan.jpeg', 'image/jpeg'], ['documents/x/scan.PDF', 'application/pdf']] as const) {
+    const d = await pendingDoc()
+    await pool.query('UPDATE documents SET key = $2 WHERE id = $1', [d.id, key])
+    store.objects.set(`documents/${key}`, PDF)
+    const f = fake(OK)
+    await runDocumentCheck(d.id, { checker: f.checker })
+    expect(f.asked[0]!.mime).toBe(mime)
+  }
+})
+
 it('stripPersonalData: dates and long digit runs go, short numbers stay, the length is capped', () => {
   expect(stripPersonalData('Expired on 31.12.2020')).toBe('Expired on [date]')
   expect(stripPersonalData('born 1990-02-01 / 02/03/89')).toBe('born [date] / [date]')
@@ -403,7 +438,7 @@ it('the OpenRouter client: privacy options, key in the header only, validated an
 
   const bad = (body: unknown, ok = true) => openRouterChecker({ apiKey: 'k', model: 'm', fetchImpl: answer(body, ok) as unknown as typeof fetch }).check(input)
   await expect(bad({ choices: [{ message: { content: JSON.stringify({ ...OK, confidence: 7 }) } }] })).rejects.toBeInstanceOf(AiUnavailable) // fails the shape
-  await expect(bad({ choices: [{ message: { content: 'not json 123456789' } }] })).rejects.toThrow('AI call failed') // no content in the message
+  await expect(bad({ choices: [{ message: { content: 'not json 123456789' } }] })).rejects.toThrow('AI answer was not JSON') // no content in the message
   await expect(bad({}, false)).rejects.toThrow('AI service answered 502')
   const slow = openRouterChecker({ apiKey: 'k', model: 'm', timeoutMs: 5, fetchImpl: ((_u: string, init: RequestInit) => new Promise((_r, rej) => init.signal!.addEventListener('abort', () => rej(Object.assign(new Error('x'), { name: 'AbortError' }))))) as unknown as typeof fetch })
   await expect(slow.check(input)).rejects.toMatchObject({ reason: 'timeout' })

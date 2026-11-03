@@ -31,8 +31,12 @@ export interface DocumentChecker {
 }
 
 /** The model could not be asked or gave no usable answer. The message holds a reason word or a status only, never document content. */
+/** Counted for an answered call whose cost is not reported. */
+const FALLBACK_USD_PER_CALL = 0.02
+
 export class AiUnavailable extends Error {
-  constructor(readonly reason: 'timeout' | 'error', message: string) {
+  /** `costUsd`: what the provider charged for a call that came back unusable (a billed answer is still money spent). */
+  constructor(readonly reason: 'timeout' | 'error', message: string, readonly costUsd: number | null = null) {
     super(message)
   }
 }
@@ -93,12 +97,21 @@ export function openRouterChecker(opts: { apiKey: string; model: string; provide
         })
         if (!res.ok) throw new AiUnavailable('error', `AI service answered ${res.status}`)
         const body = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { cost?: number; total_tokens?: number } }
-        const content = body.choices?.[0]?.message?.content
-        if (typeof content !== 'string') throw new AiUnavailable('error', 'AI service gave no answer')
-        const parsed = DocumentCheckResultSchema.safeParse(JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')))
-        if (!parsed.success) throw new AiUnavailable('error', 'AI answer had the wrong shape')
         const cost = body.usage?.cost
-        return { result: parsed.data, costUsd: typeof cost === 'number' && Number.isFinite(cost) ? cost : null, tokens: body.usage?.total_tokens ?? null }
+        const costUsd = typeof cost === 'number' && Number.isFinite(cost) ? cost : null
+        // From here on the call was answered, so it was billed: a bad answer carries the cost to the monthly cap.
+        const bad = (why: string) => new AiUnavailable('error', why, costUsd ?? FALLBACK_USD_PER_CALL)
+        const content = body.choices?.[0]?.message?.content
+        if (typeof content !== 'string') throw bad('AI service gave no answer')
+        let json: unknown
+        try {
+          json = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
+        } catch {
+          throw bad('AI answer was not JSON') // the parse error may quote the answer: not passed on
+        }
+        const parsed = DocumentCheckResultSchema.safeParse(json)
+        if (!parsed.success) throw bad('AI answer had the wrong shape')
+        return { result: parsed.data, costUsd, tokens: body.usage?.total_tokens ?? null }
       } catch (e) {
         if (e instanceof AiUnavailable) throw e
         if (e instanceof Error && e.name === 'AbortError') throw new AiUnavailable('timeout', 'AI service timed out')

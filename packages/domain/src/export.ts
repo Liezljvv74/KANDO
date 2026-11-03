@@ -66,7 +66,7 @@ export async function exportMyData(tx: Tx, userId: string) {
         .innerJoin(documents, eq(documents.id, documentAiChecks.documentId))
         .where(eq(documents.ownerId, userId))
         .orderBy(asc(documents.createdAt))
-    ).map((c) => ({ ...c })),
+    ),
     privateFiles: await Promise.all(files.map(async (f) => ({ createdAt: f.createdAt, downloadUrl: await link(f.key) }))),
     requests: myRequests.map((r) => ({ id: r.id, role: roleOf(r.customerId), status: r.status, description: r.customerId === userId ? r.description : null, startAt: r.startAt, durationMin: r.durationMin, onSite: r.onSite, answerBy: r.answerBy, createdAt: r.createdAt })),
     quotes: myQuotes.map((q) => ({ id: q.id, requestId: q.requestId, version: q.version, amount: Number(q.amount), currency: q.currency, scope: q.providerId === own ? q.scope : null, suggestedStart: q.startAt, durationMin: q.durationMin, status: q.status, expiresAt: q.expiresAt, createdAt: q.createdAt })),
