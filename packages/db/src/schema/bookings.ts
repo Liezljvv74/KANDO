@@ -84,42 +84,37 @@ export const quotes = pgTable(
   ],
 )
 
-/** The booking columns the app role may write; the others (money, payment, endings) are staff-only (rls.ts COLUMN_STAFF_ONLY.bookings). */
-export const bookingAppColumns = () => ({
-  id: uuid().primaryKey().defaultRandom(),
-  customerId: text('customer_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  providerId: uuid('provider_id')
-    .notNull()
-    .references(() => providers.id, { onDelete: 'cascade' }),
-  serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
-  quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'set null' }),
-  // Filled from the quote by the bookings_fill_amount trigger, never changed (rls.ts).
-  requestId: uuid('request_id').references(() => requests.id),
-  source: text().notNull(),
-  status: text().notNull(),
-  startAt: timestamp('start_at', { withTimezone: true }).notNull(),
-  durationMin: integer('duration_min').notNull(),
-  onSite: boolean('on_site').notNull().default(true),
-  addressStreet: text('address_street'),
-  addressPostcode: text('address_postcode'),
-  addressCity: text('address_city'),
-  note: text(),
-  answerBy: timestamp('answer_by', { withTimezone: true }),
-  payBy: timestamp('pay_by', { withTimezone: true }),
-  // When the booking became awaiting-payment: the payment reminders count from here.
-  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
-  remindedHalfAt: timestamp('reminded_half_at', { withTimezone: true }),
-  remindedLastAt: timestamp('reminded_last_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
-
 export const bookings = pgTable(
   'bookings',
   {
-    ...bookingAppColumns(),
+    id: uuid().primaryKey().defaultRandom(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    providerId: uuid('provider_id')
+      .notNull()
+      .references(() => providers.id, { onDelete: 'cascade' }),
+    serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
+    quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'set null' }),
+    // Filled from the quote by the bookings_fill_amount trigger, never changed (rls.ts).
+    requestId: uuid('request_id').references(() => requests.id),
+    source: text().notNull(),
+    status: text().notNull(),
+    startAt: timestamp('start_at', { withTimezone: true }).notNull(),
+    durationMin: integer('duration_min').notNull(),
+    onSite: boolean('on_site').notNull().default(true),
+    addressStreet: text('address_street'),
+    addressPostcode: text('address_postcode'),
+    addressCity: text('address_city'),
+    note: text(),
+    answerBy: timestamp('answer_by', { withTimezone: true }),
+    payBy: timestamp('pay_by', { withTimezone: true }),
+    // When the booking became awaiting-payment: the payment reminders count from here.
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    remindedHalfAt: timestamp('reminded_half_at', { withTimezone: true }),
+    remindedLastAt: timestamp('reminded_last_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     // amount and currency come from the quote or the service (trigger bookings_fill_amount), never from the app
     amount: numeric({ precision: 10, scale: 2 }).notNull(),
     currency: text().notNull().default('EUR'),

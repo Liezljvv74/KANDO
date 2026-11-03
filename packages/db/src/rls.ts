@@ -26,11 +26,11 @@ export const PRIVATE_TABLES: Record<string, string> = {
 }
 
 // Extra rule on INSERT only (a RESTRICTIVE policy, ANDed with owner_only): who may create a row, and with which ids.
-// Every row starts at its first status: later statuses only through APP_STATUS_MOVES (or the owner connection).
+// Every app insert starts at its first status: later statuses only through APP_STATUS_MOVES (or the owner connection).
 export const INSERT_RULES: Record<string, string> = {
   requests: `customer_id = app_current_user_id() AND status = 'open'`,
   // No booking is inserted by an app request: the domain creates every booking on the owner connection (confirm, additional
-  // task, agreed time, payment webhook) after its checks. A deny-all rule keeps it that way for the app role.
+  // task, agreed time, payment webhook) after its checks. The app role has no INSERT privilege on it at all (policyStatements), and the deny-all rule stays as a second layer.
   bookings: 'false',
   // Only the provider's owner quotes, and only on a request addressed to that provider (qualified: requests has provider_id too).
   quotes: `${OWN_SERVICE} AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_id AND r.provider_id = quotes.provider_id) AND status = 'sent'`,
@@ -222,6 +222,8 @@ function policyStatements(table: string): string[] {
     return [
       `GRANT INSERT, UPDATE${NO_APP_DELETE.includes(table) ? '' : ', DELETE'} ON ${t} TO ${APP_ROLE}`,
       ...columnRestrictions(table),
+      // A deny-all insert rule means no INSERT privilege either (also drops column-level grants); the policy stays as defence in depth.
+      ...(rule === 'false' ? [`REVOKE INSERT ON ${t} FROM ${APP_ROLE}`] : []),
       ...head,
       `CREATE POLICY owner_only ON ${t} TO ${APP_ROLE} USING (${priv}) WITH CHECK (${priv})`,
       ...(rule ? [`CREATE POLICY insert_rule ON ${t} AS RESTRICTIVE FOR INSERT TO ${APP_ROLE} WITH CHECK (${rule})`] : []),
@@ -463,12 +465,12 @@ const BOOKING_TRIGGERS = [
   `DROP TRIGGER IF EXISTS bookings_fill_amount ON bookings`,
   `CREATE TRIGGER bookings_fill_amount BEFORE INSERT OR UPDATE OF quote_id, service_id ON bookings FOR EACH ROW EXECUTE FUNCTION bookings_fill_amount()`,
   // An owner-only status (paid, or an ending) is set, and left, only on the owner connection: an app request can neither
-  // move a booking into it (insert or update) nor out of it (that would dodge settlement), nor change any other column of
+  // move a booking into it nor out of it (that would dodge settlement), nor change any other column of
   // such a booking (its start time decides money: late cancellation, Finished, no-shows). An update that changes nothing passes.
   `CREATE OR REPLACE FUNCTION bookings_guard_status() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
     BEGIN
       IF current_user = '${APP_ROLE}' THEN
-        IF (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status) AND NEW.status = ANY (${OWNER_ONLY}) THEN
+        IF NEW.status IS DISTINCT FROM OLD.status AND NEW.status = ANY (${OWNER_ONLY}) THEN
           RAISE EXCEPTION 'bookings: status % is set by the payment code only', NEW.status;
         END IF;
         IF TG_OP = 'UPDATE' AND OLD.status = ANY (${OWNER_ONLY}) AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN

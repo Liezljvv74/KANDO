@@ -105,7 +105,7 @@ it('app_user cannot set completed, cancelled or refunded', async () => {
   const waiting = await booking({ status: 'awaiting-time' })
   for (const to of ending) {
     // not on insert, not by moving a booking in, by either party
-    await expect(run(U.cust, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES (${U.cust}, ${providerId}, ${serviceId}, 'direct', ${to}, now() + interval '3 days', 60)`)).rejects.toMatchObject(ownerOnly)
+    await expect(run(U.cust, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES (${U.cust}, ${providerId}, ${serviceId}, 'direct', ${to}, now() + interval '3 days', 60)`)).rejects.toMatchObject(denied)
     for (const uid of [U.cust, U.owner]) {
       await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${waiting}`)).rejects.toMatchObject(ownerOnly)
       await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${rootId}`)).rejects.toMatchObject(ownerOnly)
