@@ -4,7 +4,7 @@ import { t, type Key } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 
-const price = (q: Pick<QuoteListItem, 'amount' | 'currency'>) => formatPrice({ priceType: 'fixed', price: q.amount, currency: q.currency })
+export const price = (q: Pick<QuoteListItem, 'amount' | 'currency'>) => formatPrice({ priceType: 'fixed', price: q.amount, currency: q.currency })
 
 /** "My received quotes" (the person as customer) and "Quotes sent" (as provider), in the order the server sent them (newest first). */
 export function splitQuotes(list: QuoteListItem[]): { received: QuoteListItem[]; sent: QuoteListItem[] } {

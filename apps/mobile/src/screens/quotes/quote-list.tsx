@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { QuoteListItem } from '@kando/contract'
 import { PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
@@ -11,9 +12,8 @@ import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
 import { confirmDanger } from '@/lib/confirm'
-import { formatPrice } from '@/lib/format'
 import { go, goReplace } from '@/lib/go'
-import { acceptedRows, acceptSummary, openQuotes, otherQuotes, quoteLines, quoteWhen, splitQuotes, type AcceptedRow } from '@/lib/quotes'
+import { acceptedRows, acceptSummary, openQuotes, otherQuotes, quoteLines, quoteWhen, splitQuotes, type AcceptedRow, price } from '@/lib/quotes'
 import { DocRow, usePdf } from '@/screens/invoices/invoice-list'
 
 /**
@@ -26,6 +26,7 @@ export default function QuoteList() {
   const { data, error, retry } = useLoad(listQuoteDocuments)
   const pdf = usePdf()
   const accepting = useSubmit()
+  const [asking, setAsking] = useState(false)
   const title = t('booking.quotes')
   if (!data) return <FormScreen title={title}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
   const { received, sent } = splitQuotes(data)
@@ -35,7 +36,10 @@ export default function QuoteList() {
   const others = otherQuotes(received, now)
   // The customer reads provider, service, price and time before the call; the booking opens at once on success.
   const accept = async (q: QuoteListItem) => {
-    if (!(await confirmDanger(acceptSummary(q), t('quote.acceptYes'), false))) return
+    if (asking) return // one question at a time: a second tap while the dialog is open does nothing
+    setAsking(true)
+    const yes = await confirmDanger(acceptSummary(q), t('quote.acceptYes'), false).finally(() => setAsking(false))
+    if (!yes) return
     accepting.submit(async () => {
       try {
         goReplace(`/bookings/${(await confirmQuote(q.quoteId)).id}`)
@@ -54,7 +58,7 @@ export default function QuoteList() {
       {data.length === 0 && <Empty text={t('quote.none')} />}
       {open.length > 0 && <SectionTitle text={t('quote.openTitle')} />}
       {open.map((q) => (
-        <OfferCard key={q.id} q={q} busy={accepting.busy} onAccept={() => accept(q)} onPdf={() => pdf.open(q.id, () => quotePdf(q.id))} />
+        <OfferCard key={q.id} q={q} busy={accepting.busy || asking} onAccept={() => accept(q)} onPdf={() => pdf.open(q.id, () => quotePdf(q.id))} />
       ))}
       {accepted.length > 0 && <SectionTitle text={t('quote.acceptedTitle')} />}
       {accepted.length > 0 && <AcceptedTable rows={accepted} />}
@@ -68,7 +72,7 @@ export default function QuoteList() {
 
 /** One open quote with everything that is accepted by its button: provider, service, price, time, scope and last valid day. */
 function OfferCard({ q, busy, onAccept, onPdf }: { q: QuoteListItem; busy: boolean; onAccept: () => void; onPdf: () => void }) {
-  const total = formatPrice({ priceType: 'fixed', price: q.amount, currency: q.currency })
+  const total = price(q)
   return (
     <Card>
       <Text style={styles.title}>{q.counterparty}</Text>
