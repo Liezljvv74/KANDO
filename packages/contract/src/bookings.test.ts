@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingAnswerSchema, BookingSchema, ConfirmQuoteInputSchema, PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
+import { AcceptQuoteInputSchema, AgreedTimeInputSchema, BOOKING_STATUSES, BookingSchema, ConfirmQuoteInputSchema, PendingTimeSchema, QuoteListItemSchema, RequestInputSchema, TimeProposalSchema } from './index'
 
 const proposal = { startAt: '2026-11-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
@@ -25,19 +25,15 @@ describe('TimeProposalSchema', () => {
 
   it('an on-site proposal without an address is rejected and a remote one without an address is accepted', () => {
     expect(TimeProposalSchema.safeParse({ ...proposal, onSite: true }).success).toBe(false)
-    expect(AcceptQuoteInputSchema.safeParse({ ...proposal, onSite: true }).success).toBe(false)
     expect(TimeProposalSchema.safeParse({ ...proposal, onSite: false }).success).toBe(true)
   })
 })
 
-describe('BookingAnswerSchema', () => {
-  it('parses counter and rejects a counter without startAt', () => {
-    const counter = { type: 'counter', startAt: proposal.startAt, durationMin: 90, onSite: true }
-    expect(BookingAnswerSchema.safeParse(counter).success).toBe(true)
-    expect(BookingAnswerSchema.safeParse({ type: 'counter', durationMin: 90, onSite: true }).success).toBe(false)
-    expect(BookingAnswerSchema.safeParse({ type: 'accept' }).success).toBe(true)
-    expect(BookingAnswerSchema.safeParse({ type: 'decline' }).success).toBe(true)
-    expect(BookingAnswerSchema.safeParse({ type: 'other' }).success).toBe(false)
+describe('AcceptQuoteInputSchema', () => {
+  it('takes only an optional note: a time is refused (an ordinary quote is confirmed, not accepted)', () => {
+    expect(AcceptQuoteInputSchema.safeParse({}).success).toBe(true)
+    expect(AcceptQuoteInputSchema.safeParse({ note: 'Bitte klingeln' }).success).toBe(true)
+    expect(AcceptQuoteInputSchema.safeParse(proposal).success).toBe(false)
   })
 })
 

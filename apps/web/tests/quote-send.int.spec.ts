@@ -28,8 +28,6 @@ const newRequest = async (time: object = requestTime()) => {
 const send = (id: string, body: object, as = U.owner) => call(quotes.POST, as, 'POST', body, { id })
 const row = async (id: string) => (await pool.query('SELECT status, start_at, duration_min, proposed_other_time, expires_at FROM quotes WHERE id = $1', [id])).rows[0]
 const notices = async (user: string, kind: string) => (await pool.query('SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = $2', [user, kind])).rows[0].n
-const said = (requestId: string, sender: string) =>
-  pool.query("INSERT INTO messages (thread_id, sender_id, kind, body) SELECT id, $2, 'text', 'Hello' FROM threads WHERE request_id = $1", [requestId, sender])
 
 it('a quote with the request\'s own time is the accept: not a proposal, and the customer gets the quote notice', async () => {
   const r = await newRequest()
@@ -89,15 +87,6 @@ it('a time that clashes with a held booking is refused with slot-pending, but a 
   const clash = await send(r.id, { amount: 50, scope: 'Fence', startAt: when, durationMin: 60 })
   expect([clash.status, (await clash.json()).error]).toEqual([409, 'slot-pending'])
   expect((await send(r.id, { amount: 50, scope: 'Fence' })).status).toBe(201)
-})
-
-it('a second different time from the provider needs a chat message from the customer first', async () => {
-  const r = await newRequest()
-  expect((await send(r.id, { amount: 90, scope: 'Fence', startAt: day(12), durationMin: 120 })).status).toBe(201)
-  const again = await send(r.id, { amount: 90, scope: 'Fence', startAt: day(13), durationMin: 120 })
-  expect([again.status, (await again.json()).error]).toEqual([409, 'chat-first'])
-  await said(r.id, U.cust)
-  expect((await send(r.id, { amount: 90, scope: 'Fence', startAt: day(13), durationMin: 120 })).status).toBe(201)
 })
 
 it('only the provider of the request quotes it; a rejection ends the request and tells the customer', async () => {

@@ -12,7 +12,6 @@ import {
   startAdditionalTask,
   stateStopAmount,
   stopJob,
-  answerBooking,
   createRequest,
   getBooking,
   getBusyTimes,
@@ -25,8 +24,6 @@ import {
 } from './bookings'
 
 jest.mock('@/api/client', () => ({ api: jest.fn() }))
-
-const time = { startAt: '2027-01-05T09:00:00.000Z', durationMin: 60, onSite: false }
 
 beforeEach(() => (api as jest.Mock).mockReset().mockResolvedValue({ docs: [] }))
 const last = () => (api as jest.Mock).mock.calls.at(-1)
@@ -45,8 +42,8 @@ test('requests and quotes use their routes, methods and bodies', async () => {
   expect(last()).toEqual(['/app-api/v1/requests/r1/quotes'])
   await sendQuote('r1', { amount: 90, scope: 'All of it' })
   expect(last()).toEqual(['/app-api/v1/requests/r1/quotes', { method: 'POST', body: { amount: 90, scope: 'All of it' } }])
-  await acceptQuote('q1', time)
-  expect(last()).toEqual(['/app-api/v1/quotes/q1/accept', { method: 'POST', body: time }])
+  await acceptQuote('q1', { note: 'Thanks' })
+  expect(last()).toEqual(['/app-api/v1/quotes/q1/accept', { method: 'POST', body: { note: 'Thanks' } }])
 })
 
 test('bookings use their routes, methods and bodies', async () => {
@@ -56,10 +53,6 @@ test('bookings use their routes, methods and bodies', async () => {
   expect(last()).toEqual(['/app-api/v1/bookings?role=provider&cursor=c%7C1'])
   await getBooking('b 1')
   expect(last()).toEqual(['/app-api/v1/bookings/b%201'])
-  await answerBooking('b1', { type: 'counter', startAt: time.startAt, durationMin: 90, onSite: true })
-  expect(last()).toEqual(['/app-api/v1/bookings/b1/answer', { method: 'POST', body: { type: 'counter', startAt: time.startAt, durationMin: 90, onSite: true } }])
-  await answerBooking('b1', { type: 'accept' })
-  expect(last()![1].body).toEqual({ type: 'accept' })
   await withdrawBooking('b1')
   expect(last()).toEqual(['/app-api/v1/bookings/b1/withdraw', { method: 'POST', body: undefined }])
 })

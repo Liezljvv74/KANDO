@@ -5,7 +5,7 @@ import { appPool } from '@kando/db/src/client'
 import { PayLinkSchema } from '@kando/contract'
 import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, runDueTimers, type GatewayEvent } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, insertProposedBooking, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -14,7 +14,7 @@ const webhook = await import('../app/api/stripe/webhook/route')
 const me = await import('../app/app-api/v1/me/route')
 const requestsRoute = await import('../app/app-api/v1/requests/route')
 const bookingRoute = await import('../app/app-api/v1/bookings/[id]/route')
-const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
+const confirmRoute = await import('../app/app-api/v1/quotes/[id]/confirm/route')
 const busyRoute = await import('../app/app-api/v1/providers/[slug]/busy/route')
 const withdrawRoute = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
 
@@ -204,17 +204,12 @@ it('a booking further ahead than the hold limit cannot be paid', async () => {
   expect(g.attempts.createCheckout ?? 0).toBe(0)
 })
 
-it('a request further ahead than 60 days is refused while payments are on, and an old proposal that far ahead cannot be accepted', async () => {
+it('a request further ahead than 60 days is refused while payments are on', async () => {
   await relaxLimits(U.cust2)
   const time = (days: number) => ({ startAt: new Date(Date.now() + days * DAY).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
   const res = await call(requestsRoute.POST, U.cust2, 'POST', { providerId, description: 'Far ahead', ...time(61) })
   expect(res.status).toBe(400)
   expect((await res.json()).error).toBe('TOO_FAR_AHEAD')
-  // proposed while payments were off: the provider cannot accept it now
-  const made = await insertProposedBooking({ customerId: U.cust2, serviceId, ...time(61) })
-  const acc = await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: made.id })
-  expect(acc.status).toBe(400)
-  expect((await acc.json()).error).toBe('TOO_FAR_AHEAD')
   expect((await call(requestsRoute.POST, U.cust2, 'POST', { providerId, description: 'Near enough', ...time(59) })).status).toBe(201)
 })
 
@@ -408,32 +403,30 @@ it('two concurrent pay events for the same booking: exactly one confirms and the
   expect((await ledger(b.id)).map((x) => x.kind)).toEqual(['charge', 'charge', 'refund'])
 })
 
-it('a payment and a provider accept of an overlapping booking take the provider lock in turn: never both', async () => {
-  // A's deadline passed a minute ago (in the grace, the sweep has not run), so the provider may accept B for the same time
+it('a payment and a customer confirm of an overlapping booking take the provider lock in turn: never both', async () => {
+  // A's deadline passed a minute ago (in the grace, the sweep has not run), so B's customer may confirm a quote for the same time
   const a = await awaiting({ payBy: new Date(Date.now() - 60_000) })
-  const bId = (await insertProposedBooking({ customerId: U.cust2, serviceId, startAt: a.startAt, durationMin: 60, onSite: true, address: { postcode: '10115' } })).id
+  const { quote } = await makeQuote({ customerId: U.cust2, ownerId: U.owner, providerId, startAt: a.startAt })
   const holder = await pool.connect()
   let both: Promise<[Response, Response]>
   try {
     await holder.query('BEGIN')
     await holder.query("SELECT pg_advisory_xact_lock(hashtext('booking_slot'), hashtext($1))", [providerId])
-    both = Promise.all([deliver(paid(a.id)), call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: bId })])
+    both = Promise.all([deliver(paid(a.id)), call(confirmRoute.POST, U.cust2, 'POST', {}, { id: quote.id })])
     await new Promise((ok) => setTimeout(ok, 500))
     await holder.query('COMMIT')
   } finally {
     holder.release()
   }
-  const [hook, acc] = await both
+  const [hook, conf] = await both
   expect(hook.status).toBe(200)
   const aStatus = (await row(a.id)).status
-  const bStatus = (await row(bId)).status
   if (aStatus === 'confirmed') {
-    expect(acc.status).toBe(409) // the confirmed booking holds the time
-    expect(bStatus).toBe('proposed')
+    expect(conf.status).toBe(409) // the confirmed booking holds the time
+    expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [quote.id])).rows[0].n).toBe(0)
     expect(callsOf('refund')).toEqual([])
   } else {
-    expect(acc.status).toBe(200)
-    expect(bStatus).toBe('awaiting-payment')
+    expect(conf.status).toBe(200)
     expect(callsOf('refund')).toHaveLength(1) // the payment lost the time: refunded
   }
 })
@@ -445,10 +438,7 @@ it('a confirmed booking blocks the time and shows as booked', async () => {
   const to = new Date(b.startAt.getTime() + 2 * HOUR).toISOString()
   const res = await busyRoute.GET(new Request(`http://localhost/x?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`), { params: Promise.resolve({ slug: `${U.owner}-slug` }) })
   expect((await res.json()).docs).toEqual([{ startAt: b.startAt.toISOString(), endAt: new Date(b.startAt.getTime() + HOUR).toISOString(), state: 'booked' }])
-  const made = await insertProposedBooking({ customerId: U.cust2, serviceId, startAt: b.startAt, durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  const acc = await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: made.id })
-  expect(acc.status).toBe(409)
-  expect((await acc.json()).error).toBe('slot-pending')
+  await expect(makeAwaitingPayment({ customerId: U.cust2, ownerId: U.owner, providerId, startAt: b.startAt })).rejects.toThrow('slot-pending') // no one else can get that time
 })
 
 it('the timers never expire confirmed bookings', async () => {

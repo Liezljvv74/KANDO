@@ -31,8 +31,6 @@ const send = async (body: object = {}, providerId = pOwner, as = U.cust) => {
 }
 const created = async (body: object = time(), providerId = pOwner) => RequestSchema.parse(await (await send(body, providerId)).json())
 const noticesOf = async (user: string, kind: string) => (await pool.query('SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = $2', [user, kind])).rows[0].n
-const said = (requestId: string, sender: string, body = 'Hello') =>
-  pool.query("INSERT INTO messages (thread_id, sender_id, kind, body) SELECT id, $2, 'text', $3 FROM threads WHERE request_id = $1", [requestId, sender, body])
 
 it('a request stores the time, duration, place and note; the provider is told', async () => {
   const r = await created()
@@ -113,19 +111,9 @@ it('revising to the same time changes nothing', async () => {
   expect((await res.json()).revision).toBe(0)
 })
 
-it('before the provider proposed anything the customer may keep adjusting', async () => {
+it('the customer may keep adjusting an open request', async () => {
   const r = await created()
   for (const d of [12, 13, 14]) expect((await call(revise.POST, U.cust, 'POST', time({ startAt: day(d) }), { id: r.id })).status).toBe(200)
-})
-
-it('after the provider proposed another time, a change by the customer needs a chat message from the provider first', async () => {
-  const r = await created()
-  await pool.query("INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, start_at, duration_min, proposed_other_time, expires_at) VALUES ($1, $2, 1, 100, 'EUR', 'Fence', now() + interval '11 days', 120, true, now() + interval '7 days')", [r.id, pOwner])
-  const again = await call(revise.POST, U.cust, 'POST', time({ startAt: day(14) }), { id: r.id })
-  expect(again.status).toBe(409)
-  expect((await again.json()).error).toBe('chat-first')
-  await said(r.id, U.owner)
-  expect((await call(revise.POST, U.cust, 'POST', time({ startAt: day(14) }), { id: r.id })).status).toBe(200)
 })
 
 it('only the customer revises; a stranger gets 404; a closed request gets 409', async () => {

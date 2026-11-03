@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { requestTime, call, cleanupUsers, expireQuotes, insertProposedBooking, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, expireQuotes, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
 const quotesRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 
 const U = { c1: 'al-c1', c2: 'al-c2', c3: 'al-c3', c4: 'al-c4', c5: 'al-c5', owner: 'al-owner', owner2: 'al-owner2' }
-let pOwner: string, pOwner2: string, sOwner2: string
+let pOwner: string, pOwner2: string
 
 beforeAll(async () => {
   await cleanupUsers()
@@ -15,14 +15,10 @@ beforeAll(async () => {
   for (const u of [U.c1, U.c2, U.c3, U.c4, U.c5]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Al Owner', categoryId })
   pOwner2 = await seedProvider(U.owner2, { name: 'Al Owner2', categoryId })
-  sOwner2 = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pOwner2])).rows[0].id
 })
 afterAll(cleanupUsers)
 
 const req = (as: string, providerId = pOwner, description = 'Fix the fence') => call(requests.POST, as, 'POST', { providerId, description, ...requestTime() })
-// old direct proposals (no longer creatable through the API) still count toward the daily limit
-const oldDirect = (as: string, n: number) =>
-  insertProposedBooking({ customerId: as, serviceId: sOwner2, startAt: new Date(Date.now() + (200 + n) * 86_400_000), durationMin: 60, onSite: true, address: { postcode: '10115' } })
 const count = async (uid: string) =>
   (await pool.query('SELECT (SELECT count(*) FROM requests WHERE customer_id = $1)::int r, (SELECT count(*) FROM bookings WHERE customer_id = $1)::int b', [uid])).rows[0]
 
@@ -52,15 +48,14 @@ it('a quoted request whose quote has expired no longer counts toward the pair li
   expect((await req(U.c5)).status).toBe(201)
 })
 
-it('the 11th request in 24 hours (counting old direct bookings) is 409 daily-limit', async () => {
-  // 6 requests (each to a fresh provider row would be slow): close them so the pair limit does not interfere
-  for (let i = 0; i < 6; i++) {
+it('the 11th request in 24 hours is 409 daily-limit', async () => {
+  // 10 requests (each to a fresh provider row would be slow): close them so the pair limit does not interfere
+  for (let i = 0; i < 10; i++) {
     expect((await req(U.c3)).status).toBe(201)
     await pool.query("UPDATE requests SET status = 'withdrawn' WHERE customer_id = $1", [U.c3])
   }
-  for (let i = 0; i < 4; i++) await oldDirect(U.c3, i)
   const before = await count(U.c3)
-  expect(before).toEqual({ r: 6, b: 4 })
+  expect(before).toEqual({ r: 10, b: 0 })
   const r = await req(U.c3)
   expect(r.status).toBe(409)
   expect(await r.json()).toEqual({ error: 'daily-limit' })
