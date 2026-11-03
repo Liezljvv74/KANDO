@@ -1,5 +1,5 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import { db, quoteDocuments, quotes, requests, users, type Tx } from '@kando/db'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { bookings, db, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
 import type { QuoteListItem } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { invoiceProvider } from '../invoices/issue'
@@ -7,6 +7,7 @@ import { formatQuoteNumber, isTestNumber, nextNumber, quoteSeries, yearOf } from
 import { describeError } from '../log-error'
 import { LIVE_PAYMENTS_ALLOWED } from '../payments/rules'
 import type { Exec } from '../providers/eligibility'
+import { bookingShownStatus } from '../bookings/rules'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
@@ -130,14 +131,40 @@ export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boole
 
 /**
  * The caller's quote documents, as the provider ("Quotes sent") and as the customer ("My received quotes"), newest first. A person who is
- * both gets both. Quotes sent before documents existed are not listed. RLS: the two parties only.
+ * both gets both. Quotes sent before documents existed are not listed. RLS: the two parties only. One query: the job's service title, and
+ * for an accepted quote the booking made from it (the latest one: a booking that lapsed reopens the quote, which can be accepted again)
+ * as `bookingId` and when it was made as `bookedAt`. Reads never write: a quote whose booking has lapsed (bookingShownStatus, the same rule
+ * as listQuotes) shows as the trigger bookings_reopen_request will write it, open again (or expired) and with no booking.
  */
-export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteListItem[]> {
+export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date()): Promise<QuoteListItem[]> {
   const own = await ownProvider(tx, userId)
+  // the latest booking made from an accepted quote, joined per row (LATERAL) so the list stays one query
+  const latest = tx
+    .select({ id: bookings.id, createdAt: bookings.createdAt, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy })
+    .from(bookings)
+    .where(and(eq(bookings.quoteId, quotes.id), eq(quotes.status, 'accepted')))
+    .orderBy(desc(bookings.createdAt))
+    .limit(1)
+    .as('latest')
   const rows = await tx
-    .select({ d: quoteDocuments, status: quotes.status, requestId: quotes.requestId, startAt: quotes.startAt, durationMin: quotes.durationMin, amount: quotes.amount, currency: quotes.currency })
+    .select({
+      d: quoteDocuments,
+      status: quotes.status,
+      requestId: quotes.requestId,
+      startAt: quotes.startAt,
+      durationMin: quotes.durationMin,
+      amount: quotes.amount,
+      currency: quotes.currency,
+      scope: quotes.scope,
+      expiresAt: quotes.expiresAt,
+      service: services.title,
+      booking: { id: latest.id, createdAt: latest.createdAt, status: latest.status, answerBy: latest.answerBy, payBy: latest.payBy },
+    })
     .from(quoteDocuments)
     .innerJoin(quotes, eq(quotes.id, quoteDocuments.quoteId))
+    .innerJoin(requests, eq(requests.id, quotes.requestId))
+    .leftJoin(services, eq(services.id, requests.serviceId))
+    .leftJoinLateral(latest, sql`true`)
     .where(sql`${quoteDocuments.customerId} = ${userId} ${own ? sql`OR ${quoteDocuments.providerId} = ${own.id}` : sql``}`)
     .orderBy(sql`${quoteDocuments.issuedAt} DESC`, sql`${quoteDocuments.number} DESC`)
   const out: QuoteListItem[] = []
@@ -145,6 +172,9 @@ export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteL
     const draft = r.d.draft as QuoteDraft
     // as the customer the quote is "received" (the issuer is the other side); as the provider it is "sent" (the customer is). Nobody is both sides of one quote.
     const role = r.d.customerId === userId ? 'customer' : 'provider'
+    const b = r.booking // null when the quote has no booking (the LATERAL join found none)
+    const lapsed = !!b && bookingShownStatus({ status: b.status, answerBy: b.answerBy ?? null, payBy: b.payBy ?? null }, now) === 'expired'
+    const status = lapsed ? (r.expiresAt > now ? 'sent' : 'expired') : r.status
     out.push({
       id: r.d.id,
       quoteId: r.d.quoteId,
@@ -156,9 +186,14 @@ export async function listQuoteDocuments(tx: Tx, userId: string): Promise<QuoteL
       amount: Number(r.amount),
       currency: r.currency as QuoteListItem['currency'],
       counterparty: role === 'customer' ? draft.issuer.name : draft.customerName,
-      status: r.status as QuoteListItem['status'],
+      service: r.service,
+      scope: r.scope,
+      expiresAt: r.expiresAt.toISOString(),
+      status: status as QuoteListItem['status'],
       issuedAt: r.d.issuedAt.toISOString(),
       pdfReady: r.d.fileKey !== null,
+      bookingId: b && !lapsed ? b.id : null,
+      bookedAt: b && !lapsed ? b.createdAt.toISOString() : null,
     })
   }
   return out

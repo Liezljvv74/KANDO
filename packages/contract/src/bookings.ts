@@ -133,9 +133,17 @@ export const QuoteListItemSchema = z.object({
   amount: AmountSchema,
   currency: CurrencySchema,
   counterparty: z.string(),
+  /** The job's service title (null when the request named none or the service is gone). */
+  service: z.string().nullable(),
+  scope: z.string(),
+  /** The quote's last valid day. */
+  expiresAt: z.string(),
   status: z.enum(QUOTE_STATUSES),
   issuedAt: z.string(),
   pdfReady: z.boolean(),
+  /** Accepted quotes only: the booking made from it and when it was made (its creation; not the start of its payment window); null for any other quote, and for one whose booking has lapsed. */
+  bookingId: z.string().nullable(),
+  bookedAt: z.string().nullable(),
 })
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })
@@ -201,7 +209,13 @@ export const BookingSchema = z.object({
 export type Booking = z.infer<typeof BookingSchema>
 
 /** GET /bookings/:id: the booking, which side the caller is on, and its chat (null when none exists yet). */
-export const BookingViewSchema = z.object({ booking: BookingSchema, viewer: z.enum(['customer', 'provider']), threadId: z.string().nullable() })
+export const BookingViewSchema = z.object({
+  booking: BookingSchema,
+  viewer: z.enum(['customer', 'provider']),
+  threadId: z.string().nullable(),
+  /** The number of the quote document this booking was made from (`Q-...`), so a provider sees exactly which quote was accepted; null when none. */
+  quoteNumber: z.string().nullable(),
+})
 export type BookingView = z.infer<typeof BookingViewSchema>
 
 /** What others may see of a calendar: the time only. */

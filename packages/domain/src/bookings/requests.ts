@@ -133,7 +133,7 @@ export const lockRequest = (tx: Tx, requestId: string) =>
 /**
  * Abuse limits, checked before anything is saved. The customer's advisory lock (held to the end of the transaction) makes two
  * parallel creates take turns, so both cannot pass. The customer reads all their own rows, so the caller's tx counts them.
- * The messages say nothing about other people. `providerId` is null when the given id is no valid id (only the daily limit applies; the create then fails as not found).
+ * The messages say nothing about other people. At most MAX_OPEN_REQUESTS_PER_PAIR (5) open requests per customer and provider, and MAX_REQUESTS_PER_DAY a day; `providerId` is null when the given id is no valid id (only the daily limit applies; the create then fails as not found).
  */
 export async function assertWithinLimits(tx: Tx, userId: string, providerId: string | null, now: Date): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('request_limit'), hashtext(${userId}))`)

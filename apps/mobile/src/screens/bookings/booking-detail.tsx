@@ -82,6 +82,7 @@ export default function BookingDetail() {
     <FormScreen title={title}>
       <Card>
         {!!b.parentBookingId && <Text style={styles.small}>{t('booking.additionalTask')}</Text>}
+        {!!data.quoteNumber && <Text style={styles.small}>{`${t('quote.label')} ${data.quoteNumber}`}</Text>}
         <Text style={styles.status} accessibilityRole="header">
           {bookingStatusText(b, viewer, now)}
         </Text>
