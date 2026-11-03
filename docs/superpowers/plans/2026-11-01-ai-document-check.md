@@ -29,7 +29,7 @@ When a provider uploads a verification document (photo ID, insurance, trade regi
 - 2.1 Provider, processing agreement, DPIA, API key in Vercel (owner).
 - 2.2 Backend: results table with row-level security (verdict and reason only), job after upload, call through OpenRouter, rate limits and cost cap, 10% sample, 30-day deletion sweep, tests including a failing provider.
 - 2.3 Back office: suggestion panel next to each document; staff decide; decision logged.
-- 2.4 Disclosure (German and English labels, privacy text names the provider, Article 50 note).
+- 2.4 Disclosure (owner decision 3 November 2026): all information about the AI used is in the terms and conditions the user accepts at sign-up (and the privacy text names the provider category and region); nothing about the document check is shown on screen. A small label in German and English is kept only where AI-written text appears (today only the quote assistant, if it is built). The data protection impact assessment review decides whether that label can go.
 - 2.5 Delete my data and export cover the AI result.
 - 2.6 Evaluation on about 20 made-up documents, result recorded in `Reports/`.
 

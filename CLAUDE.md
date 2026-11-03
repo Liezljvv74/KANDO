@@ -12,7 +12,7 @@ A service marketplace for Germany: households find, request and book document-ch
 7. **Secrets** never go into the repo, a chat, a commit or a report. Every LLM, Stripe, storage and email call is server side.
 8. **No competitor names** anywhere. South Africa comes later: no new Germany-only assumptions (country and currency come from the country record).
 9. **Row-level security on every table with user data.** A new table must be added to `packages/db/src/rls.ts` (private, published-read, public-owned, append-only, reference or staff-only) with an isolation test; `classifyTables()` must return no unclassified table.
-10. **AI output is disclosed** (EU AI Act Article 50): a visible label in German and English wherever a person sees AI-generated content. A "delete my data" path must cover any AI result.
+10. **AI use is disclosed** (EU AI Act Article 50, GDPR): all information about the AI used is in the terms and conditions accepted at sign-up, nothing on screen for the document check (owner decision 3 November 2026). A small label in German and English stays wherever a person sees AI-written text (only the quote assistant, if built); the DPIA review decides whether it can go. A "delete my data" path must cover any AI result.
 11. Windows machine: write multi-line edits with the editor tools, not shell heredocs with quotes; never print `.env` values.
 
 ## Where things are
