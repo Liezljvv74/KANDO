@@ -163,6 +163,21 @@ test('verify saves the accepted Terms first, so a refused name cannot lose them'
   expect(api.updateMe).toHaveBeenNthCalledWith(2, { firstName: 'Anna', lastName: 'Berg', language: 'en', address })
 })
 
+test('a failed terms call does not block the names; the acceptance is kept and retried at the next start', async () => {
+  await savePending({ ...pending, pictureUri: null, termsAccepted: true })
+  api.updateMe.mockRejectedValueOnce(new Error('network'))
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await verify('a@b.de', '123456')
+  expect(api.updateMe).toHaveBeenCalledWith({ firstName: 'Anna', lastName: 'Berg', language: 'en', address }) // names saved anyway
+  expect(await loadPending()).toMatchObject({ termsAccepted: true }) // the acceptance waits
+  api.updateMe.mockClear()
+  a.session.mockResolvedValueOnce(user)
+  await loadSession()
+  await new Promise((r) => setTimeout(r, 0))
+  expect(api.updateMe).toHaveBeenCalledWith({ termsAccepted: true })
+  expect(await loadPending()).toBeNull()
+})
+
 test('a failed upload keeps the record; loadSession retries it once and clears it', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)
