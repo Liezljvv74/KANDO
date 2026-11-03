@@ -89,7 +89,7 @@ let detail = `| Document | Expected | ${[...results.keys()].join(' | ')} |\n|---
 for (const f of set) {
   const cells = [...results.values()].map((rows) => {
     const r = rows.find((x) => x.id === f.id)!
-    return r.error ? `error` : `${r.approved ? 'approve' : 'to staff'} (${r.verdict}, ${r.confidence?.toFixed(2)})`
+    return r.error ? `error: ${r.error}` : `${r.approved ? 'approve' : 'to staff'} (${r.verdict}, ${r.confidence?.toFixed(2)})`
   })
   detail += `| ${f.id}: ${f.why} | ${f.expected === 'ok' ? 'approve' : 'to staff'} | ${cells.join(' | ')} |\n`
 }
