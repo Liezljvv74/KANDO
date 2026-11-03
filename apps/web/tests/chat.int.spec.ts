@@ -5,7 +5,7 @@ import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { sendMessage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, insertProposedBooking, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const threadsRoute = await import('../app/app-api/v1/threads/route')
@@ -15,7 +15,6 @@ const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 
 const U = { cust: 'ch-cust', owner: 'ch-owner', third: 'ch-third', spam: 'ch-spam' }
 let pOwner: string, sOwner: string
@@ -84,7 +83,7 @@ it("a quote and its acceptance appear as cards in the request's thread", async (
   expect((await pool.query("SELECT count(*)::int AS n FROM messages WHERE thread_id = $1 AND kind = 'card'", [t.id])).rows[0].n).toBe(2)
 })
 
-it("a booking from an accepted quote shares the request's thread; a direct booking gets its own", async () => {
+it("a booking from an accepted quote shares the request's thread; an old direct booking has its own", async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Fence' }, { id: r.id })).json())
   const b = BookingSchema.parse(await (await call(accept.POST, U.cust, 'POST', { startAt: day(11), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q.id })).json())
@@ -93,7 +92,7 @@ it("a booking from an accepted quote shares the request's thread; a direct booki
   const { threadForBooking } = await import('@kando/domain')
   const { asUser } = await import('@kando/db')
   expect(await asUser(U.owner, (tx) => threadForBooking(tx, b.id))).toBe(t.id)
-  const direct = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: day(12), durationMin: 60, onSite: true, address: { postcode: '10115' } })).json())
+  const direct = await insertProposedBooking({ customerId: U.cust, serviceId: sOwner, startAt: day(12), durationMin: 60, onSite: true, address: { postcode: '10115' } })
   const own = (await pool.query('SELECT id, request_id FROM threads WHERE booking_id = $1', [direct.id])).rows
   expect(own).toHaveLength(1)
   expect(own[0].request_id).toBeNull()
@@ -129,8 +128,6 @@ it('a request description or quote scope with an email is 422', async () => {
   const q = await call(quotes.POST, U.owner, 'POST', { amount: 10, scope: 'mail max@example.com' }, { id: r.id })
   expect(q.status).toBe(422)
   expect((await pool.query('SELECT count(*)::int AS n FROM quotes WHERE request_id = $1', [r.id])).rows[0].n).toBe(0)
-  const note = await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: sOwner, startAt: day(13), durationMin: 60, onSite: true, address: { postcode: '10115' }, note: 'ring 0151 23456789' })
-  expect(note.status).toBe(422)
 })
 
 it('three blocked attempts in a day create one staff flag', async () => {

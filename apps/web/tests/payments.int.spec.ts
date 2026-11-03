@@ -5,14 +5,14 @@ import { appPool } from '@kando/db/src/client'
 import { PayLinkSchema } from '@kando/contract'
 import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, runDueTimers, type GatewayEvent } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, insertProposedBooking, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const pay = await import('../app/app-api/v1/bookings/[id]/pay/route')
 const webhook = await import('../app/api/stripe/webhook/route')
 const me = await import('../app/app-api/v1/me/route')
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
+const requestsRoute = await import('../app/app-api/v1/requests/route')
 const bookingRoute = await import('../app/app-api/v1/bookings/[id]/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const busyRoute = await import('../app/app-api/v1/providers/[slug]/busy/route')
@@ -204,21 +204,18 @@ it('a booking further ahead than the hold limit cannot be paid', async () => {
   expect(g.attempts.createCheckout ?? 0).toBe(0)
 })
 
-it('a booking further ahead than 60 days cannot be proposed or accepted while payments are on', async () => {
+it('a request further ahead than 60 days is refused while payments are on, and an old proposal that far ahead cannot be accepted', async () => {
   await relaxLimits(U.cust2)
-  const body = (days: number) => ({ serviceId, startAt: new Date(Date.now() + days * DAY).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  const res = await call(bookingsRoute.POST, U.cust2, 'POST', body(61))
+  const time = (days: number) => ({ startAt: new Date(Date.now() + days * DAY).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
+  const res = await call(requestsRoute.POST, U.cust2, 'POST', { providerId, description: 'Far ahead', ...time(61) })
   expect(res.status).toBe(400)
   expect((await res.json()).error).toBe('TOO_FAR_AHEAD')
   // proposed while payments were off: the provider cannot accept it now
-  vi.stubEnv('PAYMENTS_ENABLED', 'false')
-  const made = await call(bookingsRoute.POST, U.cust2, 'POST', body(61))
-  expect(made.status).toBe(201)
-  vi.stubEnv('PAYMENTS_ENABLED', 'true')
-  const acc = await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: (await made.json()).id })
+  const made = await insertProposedBooking({ customerId: U.cust2, serviceId, ...time(61) })
+  const acc = await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: made.id })
   expect(acc.status).toBe(400)
   expect((await acc.json()).error).toBe('TOO_FAR_AHEAD')
-  expect((await call(bookingsRoute.POST, U.cust2, 'POST', body(59))).status).toBe(201)
+  expect((await call(requestsRoute.POST, U.cust2, 'POST', { providerId, description: 'Near enough', ...time(59) })).status).toBe(201)
 })
 
 it('the pay link is refused while another booking holds the time', async () => {
@@ -414,9 +411,7 @@ it('two concurrent pay events for the same booking: exactly one confirms and the
 it('a payment and a provider accept of an overlapping booking take the provider lock in turn: never both', async () => {
   // A's deadline passed a minute ago (in the grace, the sweep has not run), so the provider may accept B for the same time
   const a = await awaiting({ payBy: new Date(Date.now() - 60_000) })
-  await relaxLimits(U.cust2)
-  const made = await call(bookingsRoute.POST, U.cust2, 'POST', { serviceId, startAt: a.startAt.toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  const bId = (await made.json()).id as string
+  const bId = (await insertProposedBooking({ customerId: U.cust2, serviceId, startAt: a.startAt, durationMin: 60, onSite: true, address: { postcode: '10115' } })).id
   const holder = await pool.connect()
   let both: Promise<[Response, Response]>
   try {
@@ -450,9 +445,8 @@ it('a confirmed booking blocks the time and shows as booked', async () => {
   const to = new Date(b.startAt.getTime() + 2 * HOUR).toISOString()
   const res = await busyRoute.GET(new Request(`http://localhost/x?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`), { params: Promise.resolve({ slug: `${U.owner}-slug` }) })
   expect((await res.json()).docs).toEqual([{ startAt: b.startAt.toISOString(), endAt: new Date(b.startAt.getTime() + HOUR).toISOString(), state: 'booked' }])
-  await relaxLimits(U.cust2)
-  const made = await call(bookingsRoute.POST, U.cust2, 'POST', { serviceId, startAt: b.startAt.toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })
-  const acc = await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: (await made.json()).id })
+  const made = await insertProposedBooking({ customerId: U.cust2, serviceId, startAt: b.startAt, durationMin: 60, onSite: true, address: { postcode: '10115' } })
+  const acc = await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: made.id })
   expect(acc.status).toBe(409)
   expect((await acc.json()).error).toBe('slot-pending')
 })

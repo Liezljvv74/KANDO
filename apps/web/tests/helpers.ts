@@ -1,5 +1,6 @@
-import { pool } from '@kando/db'
-import type { Storage } from '@kando/domain'
+import { asUser, db, pool } from '@kando/db'
+import { HOUR, type Booking } from '@kando/contract'
+import { getBooking, PROPOSAL_ANSWER_HOURS, threadForBooking, type Storage } from '@kando/domain'
 
 // Fake session: cookie "uid=<id>:<email>" is a confirmed session, plus "verified=0" an unconfirmed one and "name=<name>"
 // the account name (each test file mocks lib/auth/server with `fakeSession`).
@@ -205,6 +206,33 @@ export function adminCall(handler: Route, uid: string, method = 'GET', path = '/
 export const seedUser = (id: string, staffRole: string | null = null, name: string | null = null) => {
   const [first = null, ...rest] = name?.split(' ') ?? []
   return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null])
+}
+
+/**
+ * A `proposed` booking with source 'direct', as old rows from the removed direct booking still exist (new jobs only come from
+ * requests). Written on the owner connection like the removed domain function did: provider and price (trigger
+ * bookings_fill_amount) come from the service, answer window 24 hours, its own chat thread. Returns the booking as the customer sees it.
+ */
+export async function insertProposedBooking(o: {
+  customerId: string
+  serviceId: string
+  startAt: string | Date
+  durationMin: number
+  onSite: boolean
+  address?: { postcode: string; street?: string; city?: string }
+  note?: string
+  now?: Date
+}): Promise<Booking> {
+  const now = o.now ?? new Date()
+  const a = o.onSite ? o.address : undefined
+  const { rows } = await pool.query(
+    `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, note, answer_by, created_at, updated_at)
+     SELECT $1, provider_id, id, 'direct', 'proposed', $3, $4, $5, $6, $7, $8, $9, $10, $11, $11 FROM services WHERE id = $2 RETURNING id`,
+    [o.customerId, o.serviceId, new Date(o.startAt), o.durationMin, o.onSite, a?.street ?? null, a?.postcode ?? null, a?.city ?? null, o.note ?? null, new Date(now.getTime() + PROPOSAL_ANSWER_HOURS * HOUR), now],
+  )
+  const id = rows[0].id as string
+  await threadForBooking(db, id)
+  return (await asUser(o.customerId, (tx) => getBooking(tx, o.customerId, id))).booking
 }
 
 /**

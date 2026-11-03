@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, BookingViewSchema, LIST_PAGE, QuoteSchema, RequestSchema } from '@kando/contract'
-import { requestTime, call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, insertProposedBooking, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingsRoute = await import('../app/app-api/v1/bookings/route')
@@ -14,9 +14,9 @@ const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const accept = await import('../app/app-api/v1/quotes/[id]/accept/route')
 
-const U = { cust: 'bk-cust', cust2: 'bk-cust2', owner: 'bk-owner', remote: 'bk-remote', susp: 'bk-susp', draft: 'bk-draft', third: 'bk-third', pager: 'bk-pager' }
-let pOwner: string, pRemote: string, pSusp: string, pDraft: string
-let sOwner: string, sRemote: string, sSusp: string, sDraft: string, sHourly: string
+const U = { cust: 'bk-cust', cust2: 'bk-cust2', owner: 'bk-owner', remote: 'bk-remote', third: 'bk-third', pager: 'bk-pager' }
+let pOwner: string, pRemote: string
+let sOwner: string, sRemote: string
 
 const serviceOf = async (providerId: string) => (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id as string
 
@@ -26,24 +26,16 @@ beforeAll(async () => {
   for (const u of [U.cust, U.cust2, U.third, U.pager]) await seedUser(u)
   pOwner = await seedProvider(U.owner, { name: 'Bk Owner', categoryId })
   pRemote = await seedProvider(U.remote, { name: 'Bk Remote', categoryId, remote: true, price: 40 })
-  pSusp = await seedProvider(U.susp, { name: 'Bk Susp', categoryId, suspended: true })
-  pDraft = await seedProvider(U.draft, { name: 'Bk Draft', categoryId, status: 'draft' })
   ;sOwner = await serviceOf(pOwner)
   sRemote = await serviceOf(pRemote)
-  sSusp = await serviceOf(pSusp)
-  sDraft = await serviceOf(pDraft)
-  sHourly = (await pool.query("INSERT INTO services (provider_id, category_id, title, price_type, price) VALUES ($1, $2, 'Hourly', 'hourly', 30) RETURNING id", [pOwner, categoryId])).rows[0].id
 })
 afterAll(cleanupUsers)
 
 const day = (n: number, h = 0) => new Date(Date.now() + n * 86_400_000 + h * 3_600_000).toISOString()
 let nextDay = 100 // every default proposal gets its own day, so accepted bookings never collide by accident
 const proposal = (extra: object = {}) => ({ startAt: day(nextDay++), durationMin: 120, onSite: true, address: { postcode: '10115', street: 'Hauptstr. 1' }, ...extra })
-const book = (as: string, serviceId: string, extra: object = {}) => call(bookingsRoute.POST, as, 'POST', { serviceId, ...proposal(extra) })
-const direct = async (serviceId = sOwner, extra: object = {}, as = U.cust) => {
-  await relaxLimits(as)
-  return BookingSchema.parse(await (await book(as, serviceId, extra)).json())
-}
+/** An old direct proposal (production may still hold some): the one request flow is the only way to start a new job. */
+const direct = async (serviceId = sOwner, extra: object = {}, as = U.cust) => insertProposedBooking({ customerId: as, serviceId, ...proposal(extra) })
 const answering = (id: string, as: string, body: object) => call(answer.POST, as, 'POST', body, { id })
 const withdrawing = (id: string, as: string) => call(withdraw.POST, as, 'POST', undefined, { id })
 const row = async (id: string) => (await pool.query('SELECT status, pay_by, answer_by, counter_by, start_at, on_site, accepted_at FROM bookings WHERE id = $1', [id])).rows[0]
@@ -54,36 +46,17 @@ const listAs = async (uid: string, role: string) =>
     ).json()
   ).docs as { id: string; address: unknown }[]
 
-it('direct booking: fixed service, amount from the service, proposed with a 24h answer window', async () => {
-  const res = await book(U.cust, sOwner, { amount: 1 }) // a client amount is ignored
-  expect(res.status).toBe(201)
-  const b = BookingSchema.parse(await res.json())
+it('POST /bookings is gone: a new job is a request (the route only lists)', () => {
+  expect(Object.keys(bookingsRoute).sort()).toEqual(['GET'])
+})
+
+it('an old direct proposal: amount from the service, a 24h answer window, listed for both parties and not for a stranger', async () => {
+  const b = await direct()
   expect(b).toMatchObject({ status: 'proposed', source: 'direct', quoteId: null, requestId: null, serviceId: sOwner, customerId: U.cust, providerId: pOwner, amount: 10, currency: 'EUR', onSite: true, payBy: null, counterBy: null, address: { postcode: '10115' } })
   expect(new Date(b.answerBy!).getTime() - new Date(b.createdAt).getTime()).toBe(24 * 3_600_000)
   expect((await listAs(U.cust, 'customer')).map((x) => x.id)).toContain(b.id)
   expect((await listAs(U.owner, 'provider')).map((x) => x.id)).toContain(b.id)
   expect((await listAs(U.third, 'customer')).map((x) => x.id)).not.toContain(b.id)
-})
-
-it('hourly or on-request service cannot be booked directly (400)', async () => {
-  expect((await book(U.cust, sHourly)).status).toBe(400)
-  await pool.query("UPDATE services SET price_type = 'on-request', price = NULL WHERE id = $1", [sHourly])
-  expect((await book(U.cust, sHourly)).status).toBe(400)
-})
-
-it('past or absurd times, a missing address and an on-site booking with a non-remote provider are 400', async () => {
-  for (const bad of [{ startAt: day(-1) }, { startAt: day(400) }, { durationMin: 5000 }, { address: undefined }, { onSite: false, address: undefined }]) {
-    expect((await book(U.cust, sOwner, bad)).status).toBe(400)
-  }
-  expect((await book(U.cust, 'not-a-uuid')).status).toBe(400)
-  const ok = await book(U.cust, sRemote, { onSite: false, address: undefined })
-  expect(ok.status).toBe(201)
-  expect(BookingSchema.parse(await ok.json())).toMatchObject({ onSite: false, address: null })
-})
-
-it('own service is 400; unpublished, suspended and unknown services are 404', async () => {
-  expect((await book(U.owner, sOwner)).status).toBe(400)
-  for (const s of [sSusp, sDraft, crypto.randomUUID()]) expect((await book(U.cust, s)).status).toBe(404)
 })
 
 it('job address is hidden from the provider until accepted', async () => {

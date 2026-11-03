@@ -3,13 +3,12 @@ import { db, pool } from '@kando/db'
 import { BookingSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { clearOutbox, clearPushOutbox, createAppRequest, notifyBookingEvent, runDueTimers, sendPush, withPushBatch } from '@kando/domain'
 import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, EMAIL, fakeSession, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, fakeSession, insertProposedBooking, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
 const threadsRoute = await import('../app/app-api/v1/threads/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 
 const U = { cust: 'ps-cust', owner: 'ps-owner' }
@@ -195,7 +194,7 @@ it('a suspended person still gets booking pushes; an unknown or deleted account 
 
 it('a timer reminder pushes once; the next run sends nothing again', async () => {
   await giveTokens(U.cust)
-  const b = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust, 'POST', { serviceId: service, startAt: new Date(Date.now() + 40 * 86_400_000).toISOString(), durationMin: 60, onSite: true, address: { postcode: '10115' } })).json())
+  const b = await insertProposedBooking({ customerId: U.cust, serviceId: service, startAt: new Date(Date.now() + 40 * 86_400_000), durationMin: 60, onSite: true, address: { postcode: '10115' } })
   await call(answer.POST, U.owner, 'POST', { type: 'accept' }, { id: b.id })
   clearPushOutbox()
   const payBy = (await pool.query('SELECT pay_by FROM bookings WHERE id = $1', [b.id])).rows[0].pay_by as Date

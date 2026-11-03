@@ -3,10 +3,9 @@ import { db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
 import { clearOutbox, notifyBookingEvent, runDueTimers } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, call, cleanupUsers, insertProposedBooking, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
-const bookingsRoute = await import('../app/app-api/v1/bookings/route')
 const answer = await import('../app/app-api/v1/bookings/[id]/answer/route')
 const requests = await import('../app/app-api/v1/requests/route')
 const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
@@ -59,7 +58,7 @@ it('a quote: the customer gets one row and an English email naming the 7-day exp
   expect(mail[0]!.text).toContain('7 days')
 })
 
-it('accepting a quote tells the provider of the proposal; a direct booking on a time awaiting payment also sends pending-slot-requested', async () => {
+it('accepting a quote tells the provider of the proposal; a second proposal on a time awaiting payment also sends pending-slot-requested', async () => {
   const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'x', ...requestTime() })).json())
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r.id })).json())
   await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
@@ -73,13 +72,16 @@ it('accepting a quote tells the provider of the proposal; a direct booking on a 
   expect(subjects(U.cust).map((m) => m.subject)).toEqual(['Zahlung fällig für Deine Buchung'])
   // another customer proposes an overlapping time
   await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
-  const other = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust2, 'POST', proposal(0, { startAt: day(30) }))).json())
+  const r2 = RequestSchema.parse(await (await call(requests.POST, U.cust2, 'POST', { providerId: prov, description: 'y', ...requestTime() })).json())
+  const q2 = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 50, scope: 'Work' }, { id: r2.id })).json())
+  await pool.query("DELETE FROM notifications WHERE user_id = $1", [U.owner])
+  const other = BookingSchema.parse(await (await call(accept.POST, U.cust2, 'POST', { startAt: day(30), durationMin: 60, onSite: true, address: { postcode: '10115' } }, { id: q2.id })).json())
   expect((await rows(U.owner)).map((x) => x.kind).sort()).toEqual(['booking-proposed', 'pending-slot-requested'])
   expect(other.status).toBe('proposed')
 })
 
 it('declining a booking tells the customer once', async () => {
-  const b = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust, 'POST', proposal(40))).json())
+  const b = await insertProposedBooking({ customerId: U.cust, ...proposal(40) })
   await call(answer.POST, U.owner, 'POST', { type: 'decline' }, { id: b.id })
   expect((await rows(U.cust)).map((x) => x.kind)).toEqual(['booking-declined'])
   expect(subjects(U.cust)).toHaveLength(1)
@@ -110,7 +112,7 @@ it('never throws: unknown user, broken ids', async () => {
 })
 
 it('a counter notifies the other side, in both directions, with one row and one email each', async () => {
-  const b = BookingSchema.parse(await (await call(bookingsRoute.POST, U.cust, 'POST', proposal(50))).json())
+  const b = await insertProposedBooking({ customerId: U.cust, ...proposal(50) })
   await pool.query("DELETE FROM notifications WHERE user_id LIKE 'bn-%'")
   clearOutbox()
   await call(answer.POST, U.owner, 'POST', { type: 'counter', startAt: day(51), durationMin: 60, onSite: true }, { id: b.id })
