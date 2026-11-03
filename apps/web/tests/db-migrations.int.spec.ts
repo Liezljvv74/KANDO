@@ -218,10 +218,16 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   const proposed = await booking('proposed')
   const waiting = await booking('awaiting-payment')
   await pool.query("INSERT INTO threads (booking_id, customer_id, provider_id) VALUES ($1, 'm28-c', $2)", [proposed, p])
+  // a quote-born proposed booking: deleting it must give the request and the quote back (they were booked and accepted)
+  const r28 = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m28-c', $1, 'x', now() + interval '3 days', 'booked') RETURNING id", [p])).rows[0].id
+  const q28 = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 80, 's', now() + interval '5 days', 'accepted') RETURNING id", [r28, p])).rows[0].id
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, source, request_id, quote_id, status, start_at, duration_min, amount, answer_by) VALUES ('m28-c', $1, 'quote', $2, $3, 'proposed', now() + interval '9 days', 60, 80, now() + interval '1 day')", [p, r28, q28])
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m28-c', 'booking-proposed'), ('m28-c', 'booking-declined'), ('m28-p', 'pending-slot-requested'), ('m28-c', 'booking-accepted')")
   await migrate()
   expect((await pool.query('SELECT id, status FROM bookings')).rows).toEqual([{ id: waiting, status: 'awaiting-payment' }])
   expect((await pool.query('SELECT 1 FROM threads')).rows).toHaveLength(0)
+  expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r28])).rows).toEqual([{ status: 'quoted' }])
+  expect((await pool.query('SELECT status FROM quotes WHERE id = $1', [q28])).rows).toEqual([{ status: 'sent' }])
   expect((await pool.query('SELECT kind FROM notifications')).rows).toEqual([{ kind: 'booking-accepted' }])
   expect(await columns('bookings')).not.toHaveProperty('counter_by')
   // the new checks: no proposed status, no default status, none of the removed kinds
@@ -233,5 +239,5 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
     await expect(pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m28-c', $1)", [kind])).rejects.toThrow(/notifications_kind_check/)
   }
   expect((await pool.query("SELECT 1 FROM pg_indexes WHERE indexname = 'bookings_proposed_answer_by_idx'")).rows).toHaveLength(0)
-  await pool.query('DELETE FROM notifications; DELETE FROM bookings; DELETE FROM providers; DELETE FROM users')
+  await pool.query('DELETE FROM notifications; DELETE FROM bookings; DELETE FROM quotes; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
 }, 60_000)
