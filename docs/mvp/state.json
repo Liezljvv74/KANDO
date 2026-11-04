@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 08-41",
+  "stamp": "2026-11-04 09-43",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -18,7 +18,9 @@
     "2.3": "Done",
     "2.5": "Done",
     "2.6": "Done",
-    "2.4": "In progress"
+    "2.4": "In progress",
+    "2.7": "Open",
+    "3.0": "Open"
   },
   "tasks": {
     "1": "Done",
@@ -268,13 +270,17 @@
         "merged PR #70",
         "merged PR #73"
       ]
+    },
+    {
+      "when": "2026-11-04 09:43",
+      "commit": "e28121a",
+      "note": "Plan sheet: step 2.7 (terms acceptance for everyone, migration 0032) and step 3.0 (sign-up cleanups) added; owner approved A1 and A2 on 4 November 2026.",
+      "steps": [
+        "step 2.7 Open",
+        "step 3.0 Open"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
-  "workbookMerges": [
-    "68",
-    "69",
-    "70",
-    "73"
-  ]
+  "workbookMerges": []
 }
