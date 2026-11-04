@@ -8,6 +8,7 @@ import { Button, ErrorText, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { useMarkSeen } from '@/hooks/use-mark-seen'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
@@ -25,6 +26,7 @@ import { DocRow, usePdf } from '@/screens/invoices/invoice-list'
  */
 export default function QuoteList() {
   useLang()
+  useMarkSeen('quotes')
   const { data, error, retry } = useLoad(listQuoteDocuments)
   const pdf = usePdf()
   const accepting = useSubmit()

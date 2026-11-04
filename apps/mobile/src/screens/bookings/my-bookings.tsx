@@ -8,11 +8,12 @@ import { NotificationBanners } from '@/components/notification-banner'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
-import { loadMe, useMe } from '@/hooks/use-me'
+import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { useMore } from '@/hooks/use-more'
 import { t, useLang, type Key } from '@/i18n'
 import { bookingStatusText } from '@/lib/booking-status'
 import { formatWhen } from '@/lib/booking-time'
+import { categoryOf } from '@/lib/correspondence'
 import { go } from '@/lib/go'
 import { isBookingNotice } from '@/lib/notification-text'
 
@@ -20,7 +21,7 @@ import { isBookingNotice } from '@/lib/notification-text'
 export default function MyBookings() {
   useLang()
   const me = useMe()
-  useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
+  useFocusEffect(useCallback(() => { loadMe().then(() => markNotificationsSeen((n) => categoryOf(n) === 'bookings')).catch(() => {}) }, []))
   const [role, setRole] = useState<Role>('customer')
   const fetch = useCallback(async () => ({ role, bookings: await listBookings(role), requests: await listRequests(role) }), [role])
   const { data, error, retry } = useLoad(fetch)

@@ -29,10 +29,10 @@ export const Card = ({ children, done }: { children: React.ReactNode; done?: boo
 
 export const SectionTitle = ({ text }: { text: string }) => <Text style={styles.section}>{text}</Text>
 
-export const SwitchRow = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+export const SwitchRow = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
   <View style={styles.switchRow}>
     <Text style={[styles.label, styles.switchLabel]}>{label}</Text>
-    <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: '#34328A' }} />
+    <Switch value={value} onValueChange={onChange} disabled={disabled} accessibilityLabel={label} trackColor={{ true: '#34328A' }} />
   </View>
 )
 

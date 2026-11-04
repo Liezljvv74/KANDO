@@ -5,8 +5,8 @@ import type { MyProfile, OwnService } from '@kando/contract'
 
 import { ApiError } from '@/api/client'
 import { publishProfile, unpublishProfile } from '@/api/my-profile'
-import { Button, ErrorText } from '@/components/auth-ui'
-import { Card, SmallButton } from '@/components/form-ui'
+import { ErrorText } from '@/components/auth-ui'
+import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { canShare } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
@@ -14,13 +14,13 @@ import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
 
 /**
- * Publish / Live, driven by the server's `missing` list of the latest profile response.
- * `onChanged` reloads the profile after a publish or unpublish.
+ * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
+ * `missing` list of the latest profile response. `onChanged` reloads the profile afterwards.
  */
 export function PublishBar({ profile, services, onChanged }: { profile: MyProfile; services: OwnService[]; onChanged: () => void }) {
   const { categories } = useCategories()
   const [busy, setBusy] = useState(false)
-  // Set when a Publish succeeded here: the live message (with Share) shows until the page is left.
+  // Set when a publish succeeded here: the live message (with Share) shows until the page is left.
   const [justPublished, setJustPublished] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   // Set when the server answered 409 'Profile incomplete'; the next profile response clears it.
@@ -42,34 +42,30 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
     setBusy(false)
   }
 
-  const takeOffline = () =>
+  const live = profile.status === 'published'
+  const change = (on: boolean) => {
+    if (on) return void run(publishProfile, true)
     Alert.alert(t('myProfile.unpublishAsk'), undefined, [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('setup.takeOffline'), style: 'destructive', onPress: () => run(unpublishProfile) },
     ])
-
-  if (profile.status === 'published') {
-    const waitingServices = services.filter((s) => (s.waitingFor ?? []).length > 0)
-    const waiting = waitingServices.length
-    return (
-      <Card>
-        {isLive(profile) ? <Text style={styles.live}>{waiting > 0 ? t('setup.liveWaiting', { count: waiting }) : t('setup.live')}</Text> : <ErrorText text={errorText('Profile suspended')} />}
-        {justPublished && isLive(profile) && (
-          <>
-            <Text style={styles.live}>{waiting > 0 ? t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title }) : t('setup.liveMessage')}</Text>
-            {canShare(services) && profile.slug ? <SmallButton label={t('setup.share')} onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())} /> : null}
-          </>
-        )}
-        <SmallButton label={t('setup.takeOffline')} onPress={takeOffline} busy={busy} />
-        <ErrorText text={problem} />
-      </Card>
-    )
   }
 
-  // Greyed out while the profile is incomplete; the starred fields say what is needed.
+  const waitingServices = services.filter((s) => (s.waitingFor ?? []).length > 0)
+  const waiting = waitingServices.length
+  // Switched off and greyed out while the profile is incomplete; the starred fields say what is needed.
+  const locked = !live && profile.missing.length > 0 && !refused
   return (
     <Card>
-      <Button label={t('setup.publish')} onPress={() => run(publishProfile, true)} busy={busy} disabled={profile.missing.length > 0 && !refused} />
+      <SwitchRow label={t('setup.live')} value={live} onChange={change} disabled={busy || locked} />
+      {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
+      {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
+      {justPublished && live && isLive(profile) && (
+        <>
+          <Text style={styles.live}>{waiting > 0 ? t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title }) : t('setup.liveMessage')}</Text>
+          {canShare(services) && profile.slug ? <SmallButton label={t('setup.share')} onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())} /> : null}
+        </>
+      )}
       <ErrorText text={problem} />
     </Card>
   )

@@ -84,7 +84,9 @@ export default function HomeScreen() {
       if (!signedIn) return // signed out there is no account to load
       loadMe().catch(() => {})
       // "I need help" was tapped before logging in or signing up: go to the search page now (unless the person asked to offer services, which opens their profile).
-      if (consumeAfterLogin() && !peekPending()) router.navigate('/search')
+      consumeAfterLogin().then((dest) => {
+        if (dest && !peekPending()) router.navigate('/search')
+      })
     }, [signedIn]),
   )
   const head = splitHeadline(t('home.heroHeadline'))
@@ -103,9 +105,9 @@ export default function HomeScreen() {
         { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn') },
       ]
     : [
-        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { setAfterLogin('/search'); router.push('/sign-up') }, main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { setAfterLogin(null); router.push('/sign-up?offer=1') } },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { setAfterLogin(null); router.push('/how-it-works') } },
+        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { void setAfterLogin('/search'); router.push('/sign-up') }, main: true },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') } },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') } },
       ]
 
   return (

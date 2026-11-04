@@ -5,6 +5,7 @@ import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { useMarkSeen } from '@/hooks/use-mark-seen'
 import { useMore } from '@/hooks/use-more'
 import { t, useLang } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
@@ -15,6 +16,7 @@ const firstPage = () => listThreads()
 /** The person's conversations, most recent first (the server's order). */
 export default function ThreadList() {
   useLang()
+  useMarkSeen('messages')
   const { data, error, retry } = useLoad(firstPage)
   const more = useMore(data, listThreads)
   const title = t('chat.title')

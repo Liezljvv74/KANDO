@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import type { Me } from '@kando/contract'
+import type { Me, Notification } from '@kando/contract'
 
 import { getMe } from '@/api/client'
 import { notificationsApi } from '@/api/my-profile'
@@ -41,8 +41,8 @@ export function clearMe() {
 /** The notifications the customer has not seen yet. */
 export const unseenOf = <T extends { seenAt: string | null }>(notifications: T[] | undefined) => (notifications ?? []).filter((n) => !n.seenAt)
 
-export async function markNotificationsSeen() {
-  const unseen = unseenOf(me?.notifications)
+export async function markNotificationsSeen(only: (n: Notification) => boolean = () => true) {
+  const unseen = unseenOf(me?.notifications).filter(only)
   if (!unseen.length) return
   await Promise.all(unseen.map((n) => notificationsApi.mark(n.id, { seen: true }))).catch(() => {})
   const now = new Date().toISOString()

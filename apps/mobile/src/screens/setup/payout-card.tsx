@@ -1,6 +1,6 @@
 import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useState } from 'react'
-import { StyleSheet, Text } from 'react-native'
+import { Pressable, StyleSheet, Text } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
 
@@ -81,6 +81,7 @@ function Invoicing() {
 function InvoicingFields({ initial }: { initial: MyProfile }) {
   const [taxNumber, setTaxNumber] = useState(initial.taxNumber ?? '')
   const [consent, setConsent] = useState(!!initial.invoiceConsent)
+  const [taxOpen, setTaxOpen] = useState(false) // collapsed until the person needs it
   const [problem, setProblem] = useState<string | null>(null)
   async function save(body: object) {
     setProblem(null)
@@ -92,7 +93,11 @@ function InvoicingFields({ initial }: { initial: MyProfile }) {
   }
   return (
     <>
-      <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={setTaxNumber} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: taxOpen }} onPress={() => setTaxOpen(!taxOpen)} style={styles.toggle}>
+        <Text style={styles.toggleText}>{t('payouts.taxNumber')}</Text>
+        <Text style={styles.toggleText}>{taxOpen ? '▴' : '▾'}</Text>
+      </Pressable>
+      {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={setTaxNumber} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />}
       <SwitchRow
         label={t('payouts.invoiceConsent')}
         value={consent}
@@ -112,4 +117,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
   text: { fontSize: 16, color: '#1D1C4A' },
   small: { fontSize: 14, color: '#4F4E7D' },
+  toggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44 },
+  toggleText: { fontSize: 15, fontWeight: '600', color: '#34328A' },
 })

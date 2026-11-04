@@ -11,8 +11,10 @@ import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
+import { categoryOf } from '@/lib/correspondence'
 import { canShare, documentRows } from '@/lib/documents'
 import { createStaleGuard } from '@/lib/stale-guard'
+import { InvoicesCard } from '../invoices/invoices-card'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
 import { AboutCard } from './about-card'
@@ -47,7 +49,7 @@ export default function SetupScreen() {
     const profile = (await getMyProfile()) ?? (await ensureDraft())
     const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
     // Opening the page marks the notifications seen; a /me failure must not hold the page back.
-    loadMe().then(markNotificationsSeen).catch(() => {})
+    loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
     return { profile, services, references, photos, verifications, fresh }
   }, [stamp])
   const { done, data, error, retry } = useLoad(loadAll)
@@ -61,6 +63,7 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
+      <PublishBar profile={profile} services={services} onChanged={retry} />
       <NotificationBanners me={me} canShare={canShare(services)} />
       <Card>
         <View style={styles.row}>
@@ -75,8 +78,6 @@ export default function SetupScreen() {
 
       <PayoutCard />
 
-      <PublishBar profile={profile} services={services} onChanged={retry} />
-
       <ServicesCard services={services} docRows={docRows} />
 
       <AboutCard profile={profile} />
@@ -85,6 +86,7 @@ export default function SetupScreen() {
       <PortfolioCard photos={photos.filter((p) => p.kind === 'portfolio')} name={name} onChanged={retry} />
       {docRows.some((r) => r.optional) && <Info text={t('setup.documentsExtra')} />}
       {docRows.length > 0 && <DocumentsCard rows={docRows} />}
+      <InvoicesCard me={me} />
     </FormScreen>
   )
 }
