@@ -5,7 +5,7 @@ import { errorText, t } from '@/i18n'
 
 export const Loading = () => (
   <View style={styles.box}>
-    <ActivityIndicator size="large" color="#0E8A6B" />
+    <ActivityIndicator size="large" color="#34328A" />
   </View>
 )
 
@@ -26,5 +26,5 @@ export const ErrorRetry = ({ code, onRetry }: { code: string; onRetry: () => voi
 
 const styles = StyleSheet.create({
   box: { padding: 16, gap: 12, alignItems: 'stretch', justifyContent: 'center' },
-  text: { fontSize: 16, color: '#14352E', textAlign: 'center' },
+  text: { fontSize: 16, color: '#1D1C4A', textAlign: 'center' },
 })

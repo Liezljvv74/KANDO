@@ -78,6 +78,6 @@ const styles = StyleSheet.create({
   add: { paddingBottom: 2 },
   addWithError: { paddingBottom: 26 }, // keeps the + level with the field when its error shows below it
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: '#E1F4EE', justifyContent: 'center' },
-  chipText: { color: '#14352E', fontSize: 14 },
+  chip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: '#CFE6DC', justifyContent: 'center' },
+  chipText: { color: '#1D1C4A', fontSize: 14 },
 })

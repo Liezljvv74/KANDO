@@ -3,6 +3,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LanguageSwitch } from '@/components/language-switch'
+import { color, font } from '@/theme'
 
 /** How far above the keyboard the field being typed in stays (every scrolling form uses it, Android and iPhone alike). */
 export const KEYBOARD_GAP = 24
@@ -30,7 +31,7 @@ export const Field = ({ label, error, style, hint, ...props }: TextInputProps & 
       {...props}
       accessibilityLabel={label}
       accessibilityHint={hint}
-      placeholderTextColor="#7A948D"
+      placeholderTextColor="#5E5D90"
       style={[styles.input, error ? styles.inputError : null, style]}
     />
     <ErrorText text={error ?? null} />
@@ -47,7 +48,7 @@ export const Button = ({ label, onPress, busy, disabled, danger, a11yLabel }: { 
     accessibilityState={{ busy: !!busy, disabled: !!(busy || disabled) }}
     // Dims while pressed, so a tap is visible.
     style={({ pressed }) => [styles.button, danger && styles.danger, (busy || disabled) && styles.busy, pressed && styles.pressed]}>
-    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonLabel}>{label}</Text>}
+    {busy ? <ActivityIndicator color={danger ? '#fff' : color.ink} /> : <Text style={[styles.buttonLabel, danger && styles.dangerLabel]}>{label}</Text>}
   </Pressable>
 )
 
@@ -68,21 +69,22 @@ export const Info = ({ text }: { text: string }) => <Text style={styles.info}>{t
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: '#E3F6EE' },
   content: { flexGrow: 1, padding: 16, justifyContent: 'center', gap: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
+  card: { backgroundColor: '#fff', borderRadius: 8, padding: 16, gap: 12 },
+  title: { fontSize: 24, fontFamily: font.heading, color: '#34328A' },
   field: { gap: 4 },
-  label: { fontSize: 14, fontWeight: '600', color: '#14352E' },
-  input: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: '#BFE3D8', paddingHorizontal: 12, fontSize: 16, color: '#14352E', backgroundColor: '#fff' },
+  label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
+  input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, fontSize: 16, color: '#1D1C4A', backgroundColor: '#fff' },
   inputError: { borderColor: '#B3261E' },
-  hint: { fontSize: 13, color: '#4A6A62' },
-  button: { minHeight: 44, borderRadius: 22, backgroundColor: '#0E8A6B', alignItems: 'center', justifyContent: 'center' },
+  hint: { fontSize: 13, color: '#4F4E7D' },
+  button: { minHeight: 48, borderRadius: 4, backgroundColor: color.teal, alignItems: 'center', justifyContent: 'center' },
   danger: { backgroundColor: '#B3261E' },
   busy: { opacity: 0.6 },
-  buttonLabel: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  buttonLabel: { color: color.ink, fontSize: 16, fontWeight: '700' },
+  dangerLabel: { color: '#fff' },
   link: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  linkLabel: { color: '#0E8A6B', fontSize: 15, fontWeight: '600' },
+  linkLabel: { color: '#34328A', fontSize: 15, fontWeight: '600' },
   error: { color: '#B3261E', fontSize: 14 },
-  info: { color: '#14352E', fontSize: 16, lineHeight: 22 },
+  info: { color: '#1D1C4A', fontSize: 16, lineHeight: 22 },
 })

@@ -14,6 +14,7 @@ import { getLang, t, useLang, type Key } from '@/i18n'
 import { formatPrice, ratingBadge } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
 import { notifyOnly } from '@/lib/request-target'
+import { font } from '@/theme'
 import { NotifyMe } from '@/screens/provider/notify-me'
 import { RequestButton, useCanRequest } from '@/screens/provider/request-actions'
 
@@ -57,7 +58,7 @@ export default function ProviderScreen() {
   }
 
   const options = (
-    <Stack.Screen options={{ headerShown: true, title: p?.publicName ?? '', headerTintColor: '#0E8A6B', headerStyle: { backgroundColor: '#F2FBF8' } }} />
+    <Stack.Screen options={{ headerShown: true, title: p?.publicName ?? '', headerTintColor: '#34328A', headerStyle: { backgroundColor: '#E3F6EE' } }} />
   )
   if (!p)
     return (
@@ -100,7 +101,7 @@ export default function ProviderScreen() {
         p.translatable && (
           <View style={styles.translateBox}>
             <Pressable accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={translate} style={styles.translate}>
-              {busy ? <ActivityIndicator color="#0E8A6B" accessibilityLabel={t('provider.translate')} /> : <Text style={styles.translateLabel}>{t('provider.translate')}</Text>}
+              {busy ? <ActivityIndicator color="#34328A" accessibilityLabel={t('provider.translate')} /> : <Text style={styles.translateLabel}>{t('provider.translate')}</Text>}
             </Pressable>
             {translateError && (
               <Text style={styles.small} accessibilityRole="alert">
@@ -213,27 +214,27 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 )
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: '#E3F6EE' },
   content: { padding: 16, gap: 12 },
   header: { flexDirection: 'row', gap: 16, alignItems: 'center' },
   headerText: { flex: 1, gap: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  name: { fontSize: 22, fontWeight: '700', color: '#14352E' },
-  badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#0E8A6B', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-  text: { fontSize: 16, lineHeight: 22, color: '#14352E' },
-  small: { fontSize: 14, lineHeight: 20, color: '#14352E' },
+  name: { fontSize: 26, fontFamily: font.display, color: '#1D1C4A' },
+  badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#34328A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  text: { fontSize: 16, lineHeight: 22, color: '#1D1C4A' },
+  small: { fontSize: 14, lineHeight: 20, color: '#1D1C4A' },
   translateBox: { gap: 4, alignItems: 'flex-start' },
-  translate: { minHeight: 44, minWidth: 44, borderRadius: 22, borderWidth: 1, borderColor: '#0E8A6B', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  translateLabel: { color: '#0E8A6B', fontSize: 14, fontWeight: '700' },
+  translate: { minHeight: 44, minWidth: 44, borderRadius: 22, borderWidth: 1, borderColor: '#34328A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  translateLabel: { color: '#34328A', fontSize: 14, fontWeight: '700' },
   section: { gap: 8 },
-  h2: { fontSize: 18, fontWeight: '700', color: '#0E8A6B' },
+  h2: { fontSize: 20, fontFamily: font.heading, color: '#34328A' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tag: { fontSize: 14, color: '#14352E', backgroundColor: '#fff', borderWidth: 1, borderColor: '#BFE3D8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  service: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, backgroundColor: '#fff', borderRadius: 12, padding: 12 },
+  tag: { fontSize: 14, color: '#1D1C4A', backgroundColor: '#fff', borderWidth: 1, borderColor: '#7B7AB8', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 },
+  service: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, backgroundColor: '#fff', borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: '#34328A', padding: 12 },
   serviceText: { flex: 1, gap: 2 },
-  serviceTitle: { fontSize: 16, fontWeight: '600', color: '#14352E' },
-  price: { fontSize: 15, fontWeight: '700', color: '#0E8A6B', textAlign: 'right', flexShrink: 0 },
+  serviceTitle: { fontSize: 16, fontWeight: '600', color: '#1D1C4A' },
+  price: { fontSize: 16, fontFamily: font.tag, color: '#34328A', textAlign: 'right', flexShrink: 0 },
   reference: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  gridImage: { width: '31%', aspectRatio: 1, borderRadius: 8, backgroundColor: '#BFE3D8' },
+  gridImage: { width: '31%', aspectRatio: 1, borderRadius: 8, backgroundColor: '#7B7AB8' },
 })

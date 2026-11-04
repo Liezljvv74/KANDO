@@ -15,7 +15,7 @@ export function TermsCheckbox({ checked, onChange }: { checked: boolean; onChang
   return (
     <View style={styles.row}>
       <Pressable style={styles.box} onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={t('auth.termsLabel')} hitSlop={8}>
-        <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={26} color="#0E8A6B" />
+        <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={26} color="#34328A" />
       </Pressable>
       <Text
         style={styles.text}
@@ -40,6 +40,6 @@ export function TermsCheckbox({ checked, onChange }: { checked: boolean; onChang
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, minHeight: 44 },
   box: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  text: { flex: 1, fontSize: 15, color: '#14352E', paddingTop: 10 },
-  link: { color: '#0B6B54', textDecorationLine: 'underline' },
+  text: { flex: 1, fontSize: 15, color: '#1D1C4A', paddingTop: 10 },
+  link: { color: '#1D1C4A', textDecorationLine: 'underline' },
 })

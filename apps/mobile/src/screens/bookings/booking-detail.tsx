@@ -129,7 +129,7 @@ export default function BookingDetail() {
 }
 
 const styles = StyleSheet.create({
-  status: { fontSize: 18, fontWeight: '700', color: '#0E8A6B' },
-  text: { fontSize: 16, color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  status: { fontSize: 18, fontWeight: '700', color: '#34328A' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

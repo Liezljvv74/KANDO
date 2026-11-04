@@ -25,7 +25,7 @@ export default function TabsLayout() {
   // A dot (empty badge) while any notification is unseen; the Account tab and the provider setup screen mark them seen.
   const unseen = me?.notifications.some((n) => !n.seenAt)
   return (
-    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#0E8A6B', tabBarInactiveTintColor: '#5C7A72' }}>
+    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
       <Tabs.Screen name="index" options={{ title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ title: t('tab.search') }} />
       <Tabs.Screen name="my-profile" options={{ title: t('tab.myProfile'), href: showProfileTab(me) ? undefined : null }} />

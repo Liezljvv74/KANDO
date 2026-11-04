@@ -46,5 +46,5 @@ export function LapsedAsk({ requestId, onClosed }: { requestId: string; onClosed
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, color: '#14352E' },
+  text: { fontSize: 16, color: '#1D1C4A' },
 })

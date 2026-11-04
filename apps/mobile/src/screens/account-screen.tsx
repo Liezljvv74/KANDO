@@ -171,13 +171,13 @@ function PushSwitches() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: '#E3F6EE' },
   scroll: { padding: 16, gap: 12 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
-  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
-  email: { fontSize: 16, color: '#14352E' },
-  heading: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  hint: { fontSize: 14, color: '#4B6B63' },
-  link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#0E8A6B', textDecorationLine: 'underline' },
+  title: { fontSize: 22, fontWeight: '700', color: '#34328A' },
+  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#34328A' },
+  email: { fontSize: 16, color: '#1D1C4A' },
+  heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  hint: { fontSize: 14, color: '#4F4E7D' },
+  link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#34328A', textDecorationLine: 'underline' },
 })

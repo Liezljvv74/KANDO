@@ -39,6 +39,6 @@ export default function ThreadList() {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 16, fontWeight: '700', color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  name: { fontSize: 16, fontWeight: '700', color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

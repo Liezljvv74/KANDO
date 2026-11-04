@@ -82,7 +82,7 @@ export function PortfolioCard({ photos, name, onChanged }: { photos: OwnPhoto[];
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   cell: { width: 72 },
-  thumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: '#BFE3D8' },
+  thumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: '#7B7AB8' },
   // The remove icon sits on the photo's top-right corner.
   remove: { position: 'absolute', top: -12, right: -12 },
 })

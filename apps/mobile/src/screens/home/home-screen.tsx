@@ -7,6 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { photosApi } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card } from '@/components/form-ui'
+import { Rise, Stamp } from '@/components/shop-ui'
+import { splitHeadline } from '@/screens/auth/welcome-screen'
+import { color, font } from '@/theme'
 import { NotificationBanners } from '@/components/notification-banner'
 import { Select } from '@/components/select'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -106,14 +109,18 @@ export default function HomeScreen() {
   const me = useMe()
   useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
   const k = (key: string) => t(`home.${key}` as Key)
+  const head = splitHeadline(t('home.headline'))
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.headline} accessibilityRole="header">
-          {k('headline')}
-        </Text>
-        <Text style={styles.intro}>{k('intro')}</Text>
+        <View style={styles.hero}>
+          <Text style={styles.headline} accessibilityRole="header">
+            {head[0]} <Text style={styles.headlineRest}>{head[1]}</Text>
+          </Text>
+          <Text style={styles.intro}>{k('intro')}</Text>
+          <Stamp label={k('stamp')} />
+        </View>
         <NotificationBanners me={me} />
         <PictureNudge />
         <Button label={t('home.cta')} onPress={() => router.navigate('/search')} />
@@ -135,11 +142,13 @@ export default function HomeScreen() {
         ) : (
           <Loading />
         )}
-        {BADGES.map(([title, text]) => (
-          <View key={title} style={styles.card}>
-            <Text style={styles.bold}>{t(title)}</Text>
-            <Text style={styles.body}>{t(text)}</Text>
-          </View>
+        {BADGES.map(([title, text], i) => (
+          <Rise key={title} index={i}>
+            <View style={styles.card}>
+              <Text style={styles.bold}>{t(title)}</Text>
+              <Text style={styles.body}>{t(text)}</Text>
+            </View>
+          </Rise>
         ))}
 
         <Text style={styles.h2} accessibilityRole="header">
@@ -171,17 +180,19 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: '#E3F6EE' },
   content: { padding: 16, gap: 12 },
-  headline: { fontSize: 24, fontWeight: '800', color: '#14352E' },
-  intro: { fontSize: 16, lineHeight: 22, color: '#14352E' },
-  card: { borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#CDEDE3', padding: 12, gap: 2 },
-  bold: { fontSize: 15, fontWeight: '700', color: '#14352E' },
-  body: { fontSize: 15, lineHeight: 22, color: '#14352E' },
-  h2: { fontSize: 20, fontWeight: '800', color: '#14352E', marginTop: 4 },
-  h3: { fontSize: 16, fontWeight: '700', color: '#14352E' },
-  panel: { borderRadius: 12, backgroundColor: '#E1F4EE', padding: 12, gap: 4 },
-  panelWarm: { backgroundColor: '#FFF7E8' },
+  hero: { backgroundColor: color.indigo, borderRadius: 8, padding: 20, gap: 14 },
+  headline: { fontFamily: font.display, fontSize: 38, lineHeight: 41, color: color.bg },
+  headlineRest: { color: color.teal },
+  intro: { fontSize: 16, lineHeight: 22, color: color.onIndigoMuted },
+  card: { borderRadius: 6, backgroundColor: '#fff', borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo, padding: 12, gap: 2 },
+  bold: { fontSize: 15, fontWeight: '700', color: '#1D1C4A' },
+  body: { fontSize: 15, lineHeight: 22, color: '#1D1C4A' },
+  h2: { fontFamily: font.heading, fontSize: 22, color: '#1D1C4A', marginTop: 8 },
+  h3: { fontSize: 16, fontWeight: '700', color: '#1D1C4A' },
+  panel: { borderRadius: 8, backgroundColor: '#CFE6DC', padding: 12, gap: 4 },
+  panelWarm: { backgroundColor: '#FFFFFF' },
   safety: { gap: 2 },
-  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: '#14352E' },
+  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: '#1D1C4A' },
 })

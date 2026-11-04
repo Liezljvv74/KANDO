@@ -1,4 +1,7 @@
 import { DEFAULT_ACTION_IDENTIFIER, clearLastNotificationResponse, setNotificationHandler, useLastNotificationResponse } from 'expo-notifications'
+import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces'
+import { CourierPrime_700Bold } from '@expo-google-fonts/courier-prime'
+import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
@@ -20,11 +23,13 @@ export default function RootLayout() {
   const { user, loading, offline, retry } = useSession()
   useLang()
   usePushTaps(!!user)
-  if (loading || offline) {
+  // The shop type; if it fails to load the app still opens with the system font.
+  const [fontsReady, fontError] = useFonts({ Fraunces_700Bold, Fraunces_900Black, CourierPrime_700Bold })
+  if (loading || offline || (!fontsReady && !fontError)) {
     return (
       <View style={styles.center}>
-        {loading ? (
-          <ActivityIndicator size="large" color="#0E8A6B" />
+        {loading || !offline ? (
+          <ActivityIndicator size="large" color="#34328A" />
         ) : (
           <>
             <Text style={styles.text}>{t(isAuthBusy() ? 'error.authBusy' : 'error.network')}</Text>
@@ -67,6 +72,6 @@ function usePushTaps(signedIn: boolean) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: '#F2FBF8', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  text: { fontSize: 16, color: '#14352E', textAlign: 'center' },
+  center: { flex: 1, backgroundColor: '#E3F6EE', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  text: { fontSize: 16, color: '#1D1C4A', textAlign: 'center' },
 })

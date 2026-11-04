@@ -109,7 +109,7 @@ function InvoicingFields({ initial }: { initial: MyProfile }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  text: { fontSize: 16, color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  title: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

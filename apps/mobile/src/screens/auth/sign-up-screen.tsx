@@ -95,6 +95,6 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   picture: { gap: 8 },
-  preview: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#BFE3D8' },
-  why: { fontSize: 14, color: '#14352E' },
+  preview: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#7B7AB8' },
+  why: { fontSize: 14, color: '#1D1C4A' },
 })

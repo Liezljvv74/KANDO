@@ -36,8 +36,8 @@ export function ReferencesCard({ references }: { references: OwnReference[] }) {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  status: { fontSize: 14, color: '#5C7A72' },
+  name: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  status: { fontSize: 14, color: '#4F4E7D' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowText: { flex: 1 },
 })

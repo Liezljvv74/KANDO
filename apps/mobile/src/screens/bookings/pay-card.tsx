@@ -102,6 +102,6 @@ export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; vie
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, color: '#14352E' },
-  paid: { fontSize: 18, fontWeight: '700', color: '#0B6B54' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  paid: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
 })

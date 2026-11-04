@@ -62,5 +62,5 @@ export function IdScanButton({ onResult, onBusy, disabled }: { onResult: (r: IdS
 
 const styles = StyleSheet.create({
   box: { gap: 8 },
-  done: { color: '#0B6B54', fontSize: 14, fontWeight: '600' },
+  done: { color: '#1D1C4A', fontSize: 14, fontWeight: '600' },
 })

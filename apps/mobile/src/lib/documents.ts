@@ -49,4 +49,4 @@ export type DocTone = 'required' | 'optional' | 'pending' | 'approved'
 export const docTone = (r: DocumentRow): DocTone => (r.state === 'approved' ? 'approved' : r.state === 'pending' ? 'pending' : r.optional ? 'optional' : 'required')
 
 /** Text colours per tone, readable (4.5:1 or more) on the white and on the green card. */
-export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#9A5B00', pending: '#4A665E', approved: '#0B7A5E' }
+export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#9A5B00', pending: '#4F4E7D', approved: '#08674F' }

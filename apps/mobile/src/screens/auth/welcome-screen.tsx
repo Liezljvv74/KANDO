@@ -1,64 +1,84 @@
 import { useRouter } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LanguageSwitch } from '@/components/language-switch'
+import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { t, useLang, type Key } from '@/i18n'
+import { color, font } from '@/theme'
 
-type Card = { title: Key; text: Key; href: '/sign-up' | '/sign-up?offer=1' | '/how-it-works'; tone: 'green' | 'sand' | 'mint' }
+type Card = { title: Key; text: Key; href: '/sign-up' | '/sign-up?offer=1' | '/how-it-works'; main?: boolean }
 const CARDS: Card[] = [
-  { title: 'welcome.needHelp', text: 'welcome.needHelpText', href: '/sign-up', tone: 'green' },
-  { title: 'welcome.offer', text: 'welcome.offerText', href: '/sign-up?offer=1', tone: 'sand' },
-  { title: 'welcome.learn', text: 'welcome.learnText', href: '/how-it-works', tone: 'mint' },
+  { title: 'welcome.needHelp', text: 'welcome.needHelpText', href: '/sign-up', main: true },
+  { title: 'welcome.offer', text: 'welcome.offerText', href: '/sign-up?offer=1' },
+  { title: 'welcome.learn', text: 'welcome.learnText', href: '/how-it-works' },
 ]
 
-/** The first screen when signed out. */
+/** "Finally. Someone who can" -> ["Finally.", "Someone who can"]: the first sentence in mint, the rest in teal. */
+export const splitHeadline = (s: string): [string, string] => {
+  const i = s.indexOf('. ')
+  return i < 0 ? [s, ''] : [s.slice(0, i + 1), s.slice(i + 2)]
+}
+
+/** The first screen when signed out: the shop sign in the KANDO colours. */
 export default function WelcomeScreen() {
   useLang()
   const router = useRouter()
+  const [first, rest] = splitHeadline(t('home.headline'))
   return (
     <SafeAreaView style={styles.root}>
+      <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.brand}>{t('brand.name')}</Text>
-          <Pressable accessibilityRole="link" onPress={() => router.push('/login')} hitSlop={12}>
+          <View style={styles.brandTag}>
+            <Text style={styles.brand}>{t('brand.name')}</Text>
+          </View>
+          <Pressable accessibilityRole="link" onPress={() => router.push('/login')} hitSlop={12} style={styles.loginHit}>
             <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
           </Pressable>
         </View>
-        <Text style={styles.headline}>{t('home.headline')}</Text>
-        {CARDS.map(({ title, text, href, tone }) => (
-          <Pressable
-            key={title}
-            accessibilityRole="button"
-            onPress={() => router.push(href)}
-            style={({ pressed }) => [styles.card, styles[tone], pressed && styles.pressed]}>
-            <View style={styles.row}>
-              <Text style={[styles.cardTitle, tone === 'green' && styles.onGreen]}>{t(title)}</Text>
-              <Text style={[styles.cardTitle, tone === 'green' && styles.onGreen]}>→</Text>
-            </View>
-            <Text style={[styles.cardText, tone === 'green' && styles.onGreen]}>{t(text)}</Text>
-          </Pressable>
-        ))}
-        <LanguageSwitch />
+        <Text style={styles.headline} accessibilityRole="header">
+          {first} <Text style={styles.headlineRest}>{rest}</Text>
+        </Text>
+        <Stamp label={t('home.stamp')} />
+        <View style={styles.cards}>
+          {CARDS.map(({ title, text, href, main }, i) => (
+            <Rise key={title} index={i}>
+              <Pressable accessibilityRole="button" onPress={() => router.push(href)} style={({ pressed }) => pressed && styles.pressed}>
+                <Tag style={main ? styles.main : undefined}>
+                  <View style={styles.row}>
+                    <Text style={styles.cardTitle}>{t(title)}</Text>
+                    <Text style={styles.cardTitle}>→</Text>
+                  </View>
+                  <Text style={styles.cardText}>{t(text)}</Text>
+                </Tag>
+              </Pressable>
+            </Rise>
+          ))}
+        </View>
+        <Tag>
+          <LanguageSwitch />
+        </Tag>
       </ScrollView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
-  content: { padding: 16, gap: 16 },
+  root: { flex: 1, backgroundColor: color.indigo },
+  content: { padding: 20, gap: 20 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  brand: { fontSize: 20, fontWeight: '800', color: '#14352E' },
-  link: { fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
-  headline: { fontSize: 34, fontWeight: '800', lineHeight: 40, color: '#14352E', marginTop: 32, marginBottom: 8 },
-  card: { borderRadius: 16, borderWidth: 1, padding: 18, gap: 8 },
-  green: { backgroundColor: '#0E8A6B', borderColor: '#0E8A6B' },
-  sand: { backgroundColor: '#FFF6E8', borderColor: '#F3E3C8' },
-  mint: { backgroundColor: '#DCEFE8', borderColor: '#C6E3D8' },
-  pressed: { opacity: 0.7 },
+  brandTag: { backgroundColor: color.bg, borderWidth: 2, borderColor: color.teal, paddingHorizontal: 12, paddingVertical: 6, transform: [{ rotate: '-3deg' }] },
+  brand: { fontFamily: font.tag, fontSize: 15, letterSpacing: 1, color: color.ink },
+  loginHit: { minHeight: 44, justifyContent: 'center' },
+  link: { fontSize: 15, fontWeight: '700', color: color.bg, textDecorationLine: 'underline' },
+  headline: { fontFamily: font.display, fontSize: 44, lineHeight: 46, color: color.bg, marginTop: 24 },
+  headlineRest: { color: color.teal },
+  cards: { gap: 12, marginTop: 8 },
+  main: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: color.bg },
+  pressed: { opacity: 0.75 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#14352E' },
-  cardText: { fontSize: 15, lineHeight: 21, color: '#14352E' },
-  onGreen: { color: '#fff' },
+  cardTitle: { fontFamily: font.heading, fontSize: 19, color: color.ink },
+  cardText: { fontSize: 15, lineHeight: 21, color: color.inkMuted, marginTop: 4 },
 })

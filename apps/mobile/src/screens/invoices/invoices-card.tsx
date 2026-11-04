@@ -53,6 +53,6 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
 
 const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
-  heading: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  text: { fontSize: 15, lineHeight: 21, color: '#14352E' },
+  heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
 })

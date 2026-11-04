@@ -77,6 +77,6 @@ export default function MyBookings() {
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

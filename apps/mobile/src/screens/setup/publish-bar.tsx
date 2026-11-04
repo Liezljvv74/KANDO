@@ -76,5 +76,5 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
 }
 
 const styles = StyleSheet.create({
-  live: { fontSize: 16, fontWeight: '700', color: '#0E8A6B' },
+  live: { fontSize: 16, fontWeight: '700', color: '#34328A' },
 })

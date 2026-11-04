@@ -159,14 +159,14 @@ function Row({ q, now, busy, onPdf }: { q: QuoteListItem; now: Date; busy: boole
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontWeight: '700', color: '#14352E' },
-  text: { fontSize: 16, color: '#14352E' },
-  amount: { fontSize: 20, fontWeight: '700', color: '#0E8A6B' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  title: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  amount: { fontSize: 20, fontWeight: '700', color: '#34328A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
   tr: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  body: { minHeight: 44, justifyContent: 'center', gap: 2, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#E3F1EC' },
-  cell: { fontSize: 13, color: '#14352E' },
-  head: { fontWeight: '700', color: '#5C7A72' },
+  body: { minHeight: 44, justifyContent: 'center', gap: 2, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#CFE6DC' },
+  cell: { fontSize: 13, color: '#1D1C4A' },
+  head: { fontWeight: '700', color: '#4F4E7D' },
   provider: { flex: 3 },
   date: { flex: 2.5 },
   service: { flex: 3 },

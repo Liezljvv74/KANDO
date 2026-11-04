@@ -44,7 +44,7 @@ export function NotificationBanners({ me, canShare = false, only }: { me: Me | n
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  text: { flex: 1, fontSize: 16, fontWeight: '700', color: '#0E8A6B' },
-  more: { textAlign: 'center', fontSize: 14, color: '#5C7A72' },
-  close: { fontSize: 28, lineHeight: 28, color: '#5C7A72', minWidth: 44, minHeight: 44, textAlign: 'center' },
+  text: { flex: 1, fontSize: 16, fontWeight: '700', color: '#34328A' },
+  more: { textAlign: 'center', fontSize: 14, color: '#4F4E7D' },
+  close: { fontSize: 28, lineHeight: 28, color: '#4F4E7D', minWidth: 44, minHeight: 44, textAlign: 'center' },
 })

@@ -6,8 +6,8 @@ import { Button } from '@/components/auth-ui'
 import { t, useLang, type Key } from '@/i18n'
 
 const GROUPS: { title: Key; steps: [Key, Key, Key]; bg: string }[] = [
-  { title: 'home.customerTitle', steps: ['home.customer1', 'home.customer2', 'home.customer3'], bg: '#DCEFE8' },
-  { title: 'home.providerTitle', steps: ['home.provider1', 'home.provider2', 'home.provider3'], bg: '#FFF6E8' },
+  { title: 'home.customerTitle', steps: ['home.customer1', 'home.customer2', 'home.customer3'], bg: '#CFE6DC' },
+  { title: 'home.providerTitle', steps: ['home.provider1', 'home.provider2', 'home.provider3'], bg: '#FFFFFF' },
 ]
 const SAFETY: [Key, Key][] = [
   ['home.payment', 'home.paymentText'],
@@ -50,13 +50,13 @@ export default function HowItWorksScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: '#E3F6EE' },
   content: { padding: 16, gap: 16 },
-  link: { fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
-  title: { fontSize: 28, fontWeight: '800', color: '#14352E' },
+  link: { fontSize: 15, fontWeight: '600', color: '#34328A' },
+  title: { fontSize: 28, fontWeight: '800', color: '#1D1C4A' },
   box: { borderRadius: 16, padding: 16, gap: 8 },
-  boxTitle: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  text: { fontSize: 15, lineHeight: 21, color: '#14352E' },
-  sub: { fontSize: 22, fontWeight: '800', color: '#14352E', marginTop: 8 },
+  boxTitle: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
+  sub: { fontSize: 22, fontWeight: '800', color: '#1D1C4A', marginTop: 8 },
   safe: { gap: 4 },
 })

@@ -48,6 +48,6 @@ export function DisputeInfo({ booking }: { booking: Booking }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontWeight: '700', color: '#14352E' },
-  quote: { fontSize: 15, color: '#5C7A72', fontStyle: 'italic' },
+  title: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
+  quote: { fontSize: 15, color: '#4F4E7D', fontStyle: 'italic' },
 })

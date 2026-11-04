@@ -91,11 +91,11 @@ export function ReviewPanel({ booking }: { booking: Booking }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontWeight: '700', color: '#14352E' },
-  label: { fontSize: 14, fontWeight: '600', color: '#14352E' },
-  text: { fontSize: 16, color: '#14352E' },
+  title: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
+  label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
+  text: { fontSize: 16, color: '#1D1C4A' },
   starRow: { flexDirection: 'row' },
-  stars: { fontSize: 20, color: '#0E8A6B' },
+  stars: { fontSize: 20, color: '#34328A' },
   star: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  starText: { fontSize: 28, color: '#0E8A6B' },
+  starText: { fontSize: 28, color: '#34328A' },
 })

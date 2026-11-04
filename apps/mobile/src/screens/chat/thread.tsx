@@ -151,7 +151,7 @@ export default function ThreadScreen() {
                 onChangeText={setText}
                 placeholder={t('chat.placeholder')}
                 accessibilityLabel={t('chat.placeholder')}
-                placeholderTextColor="#7A948D"
+                placeholderTextColor="#5E5D90"
                 maxLength={MAX_MESSAGE_CHARS}
                 multiline
                 editable={!busy}
@@ -168,14 +168,14 @@ export default function ThreadScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8', padding: 12 },
+  root: { flex: 1, backgroundColor: '#E3F6EE', padding: 12 },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#14352E' },
+  title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
   messages: { paddingVertical: 8, flexGrow: 1 },
-  empty: { textAlign: 'center', color: '#5C7A72', padding: 24 },
-  blocked: { textAlign: 'center', color: '#5C7A72', padding: 12, fontSize: 15 },
+  empty: { textAlign: 'center', color: '#4F4E7D', padding: 24 },
+  blocked: { textAlign: 'center', color: '#4F4E7D', padding: 12, fontSize: 15 },
   composer: { gap: 8, paddingTop: 8 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: '#BFD6CE', borderRadius: 10, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#14352E' },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 10, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#1D1C4A' },
 })

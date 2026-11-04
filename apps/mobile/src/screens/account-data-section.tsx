@@ -78,8 +78,8 @@ export function AccountDataSection() {
 
 const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12, marginTop: 24 },
-  heading: { fontSize: 18, fontWeight: '700', color: '#14352E' },
+  heading: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
   danger: { fontSize: 18, fontWeight: '700', color: '#B3261E' },
-  text: { fontSize: 15, lineHeight: 21, color: '#14352E' },
-  rule: { height: 1, backgroundColor: '#BFE3D8', marginVertical: 4 },
+  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
+  rule: { height: 1, backgroundColor: '#7B7AB8', marginVertical: 4 },
 })

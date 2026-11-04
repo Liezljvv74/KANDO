@@ -104,7 +104,7 @@ export function BookingInvoiceRow({ booking }: { booking: Pick<Booking, 'id' | '
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, fontWeight: '600', color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  text: { fontSize: 16, fontWeight: '600', color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
   pressed: { opacity: 0.6 },
 })

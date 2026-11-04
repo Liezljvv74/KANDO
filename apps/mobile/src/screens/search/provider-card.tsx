@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { SearchItem } from '@kando/contract'
 
 import { Avatar } from '@/components/avatar'
+import { color, font } from '@/theme'
 import { formatDistance, formatPrice, ratingBadge } from '@/lib/format'
 
 export function ProviderCard({ item, names }: { item: SearchItem; names: Map<string, string> }) {
@@ -32,11 +33,11 @@ export function ProviderCard({ item, names }: { item: SearchItem; names: Map<str
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 14, alignItems: 'center' },
+  card: { flexDirection: 'row', gap: 12, backgroundColor: '#fff', borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo, padding: 14, alignItems: 'center' },
   body: { flex: 1, gap: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { flexShrink: 1, fontSize: 17, fontWeight: '700', color: '#14352E' },
-  badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#0E8A6B', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-  sub: { fontSize: 14, color: '#14352E' },
-  meta: { fontSize: 14, color: '#0E8A6B', fontWeight: '600' },
+  name: { flexShrink: 1, fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
+  badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#34328A', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  sub: { fontSize: 14, color: '#1D1C4A' },
+  meta: { fontSize: 14, color: '#34328A', fontFamily: font.tag },
 })
