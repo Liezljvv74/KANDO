@@ -28,17 +28,25 @@ test('the pending record round-trips and clears', async () => {
 
 describe('nextPending', () => {
   const p: PendingSignup = { ...rec, termsAccepted: true }
-  it.each([
-    ['nothing left', { termsOpen: false, pictureLeft: false }, null],
-    ['only the picture left', { termsOpen: false, pictureLeft: true }, { email: p.email, offerServices: true, pictureUri: 'file:///p.jpg' }],
-    ['only the Terms left', { termsOpen: true, pictureLeft: false }, { email: p.email, offerServices: true, pictureUri: null, termsAccepted: true }],
-    ['both left', { termsOpen: true, pictureLeft: true }, { email: p.email, offerServices: true, pictureUri: 'file:///p.jpg', termsAccepted: true }],
-  ])('%s', (_name, left, expected) => {
-    expect(nextPending(p, left)).toEqual(expected)
-  })
+  const noPicture = { ...p, pictureUri: null }
 
+  it('keeps nothing when the Terms and the picture are done', () => {
+    expect(nextPending(p, { termsOpen: false, pictureDone: true })).toBeNull()
+  })
+  it('keeps nothing when there is no picture to upload and the Terms are done', () => {
+    expect(nextPending(noPicture, { termsOpen: false, pictureDone: false })).toBeNull()
+  })
+  it('keeps only the picture while it is not uploaded', () => {
+    expect(nextPending(p, { termsOpen: false, pictureDone: false })).toEqual({ email: p.email, offerServices: true, pictureUri: 'file:///p.jpg' })
+  })
+  it('keeps only the Terms when the picture is done', () => {
+    expect(nextPending(p, { termsOpen: true, pictureDone: true })).toEqual({ email: p.email, offerServices: true, pictureUri: null, termsAccepted: true })
+  })
+  it('keeps both when both are open', () => {
+    expect(nextPending(p, { termsOpen: true, pictureDone: false })).toEqual({ email: p.email, offerServices: true, pictureUri: 'file:///p.jpg', termsAccepted: true })
+  })
   it('never keeps the names or the address, so a retry cannot overwrite later edits', () => {
-    const kept = nextPending(p, { termsOpen: true, pictureLeft: true })
+    const kept = nextPending(p, { termsOpen: true, pictureDone: false })
     expect(kept).not.toHaveProperty('firstName')
     expect(kept).not.toHaveProperty('address')
   })

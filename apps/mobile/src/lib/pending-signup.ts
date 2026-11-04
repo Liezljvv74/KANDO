@@ -17,12 +17,13 @@ export type PendingSignup = {
   address?: Address | null
 }
 
-/** What is still to do after a step: the Terms acceptance (a network or server problem kept it open) and the picture. Null when nothing is left. Names and address are never kept once saved, so a retry cannot overwrite later edits. */
-export type Left = { termsOpen: boolean; pictureLeft: boolean }
+/** What is still to do after a step: the Terms acceptance (a network or server problem kept it open) and the picture (only when there is one and it is not uploaded yet). Null when nothing is left. Names and address are never kept once saved, so a retry cannot overwrite later edits. */
+export type Left = { termsOpen: boolean; pictureDone: boolean }
 
 export function nextPending(p: PendingSignup, left: Left): PendingSignup | null {
-  if (!left.termsOpen && !left.pictureLeft) return null
-  return { email: p.email, offerServices: p.offerServices, pictureUri: left.pictureLeft ? p.pictureUri : null, ...(left.termsOpen ? { termsAccepted: true } : {}) }
+  const pictureLeft = !!p.pictureUri && !left.pictureDone
+  if (!left.termsOpen && !pictureLeft) return null
+  return { email: p.email, offerServices: p.offerServices, pictureUri: pictureLeft ? p.pictureUri : null, ...(left.termsOpen ? { termsAccepted: true } : {}) }
 }
 
 export const savePending = (p: PendingSignup) => SecureStore.setItemAsync(KEY, JSON.stringify(p))

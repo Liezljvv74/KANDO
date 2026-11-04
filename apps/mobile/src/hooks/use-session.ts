@@ -116,13 +116,13 @@ async function finish(p: PendingSignup) {
         if (!(e instanceof ApiError && e.code === 'CONTACT_DETAILS')) throw e
       }
       // Saved: a retry only repeats the picture, so later edits are never overwritten.
-      await settle(p, { termsOpen, pictureLeft: true })
+      await settle(p, { termsOpen, pictureDone: false })
     }
     if (p.pictureUri) {
-      if (!new File(p.pictureUri).exists) return await settle(p, { termsOpen, pictureLeft: false }) // the OS cleared its cache: nothing left to upload
+      if (!new File(p.pictureUri).exists) return await settle(p, { termsOpen, pictureDone: true }) // the OS cleared its cache: nothing left to upload
       await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
     }
-    await settle(p, { termsOpen, pictureLeft: false })
+    await settle(p, { termsOpen, pictureDone: true })
   } catch {
     // Kept for the next launch.
   }
