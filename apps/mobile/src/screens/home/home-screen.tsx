@@ -14,7 +14,9 @@ import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
+import { consumeAfterLogin, setAfterLogin } from '@/lib/after-login'
 import { askPhotoSource } from '@/lib/ask-photo-source'
+import { peekPending } from '@/lib/pending-navigation'
 import { pictureNudgeKey } from '@/lib/picture-nudge'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { showProfileTab } from '@/lib/profile-tab'
@@ -77,7 +79,14 @@ export default function HomeScreen() {
   const signedIn = !!useSession().user
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  useFocusEffect(useCallback(() => { if (signedIn) loadMe().catch(() => {}) }, [signedIn])) // signed out there is no account to load
+  useFocusEffect(
+    useCallback(() => {
+      if (!signedIn) return // signed out there is no account to load
+      loadMe().catch(() => {})
+      // "I need help" was tapped before logging in or signing up: go to the search page now (unless the person asked to offer services, which opens their profile).
+      if (consumeAfterLogin() && !peekPending()) router.navigate('/search')
+    }, [signedIn]),
+  )
   const head = splitHeadline(t('home.heroHeadline'))
 
   const offer = async () => {
@@ -94,9 +103,9 @@ export default function HomeScreen() {
         { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn') },
       ]
     : [
-        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.push('/sign-up'), main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => router.push('/sign-up?offer=1') },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/how-it-works') },
+        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { setAfterLogin('/search'); router.push('/sign-up') }, main: true },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { setAfterLogin(null); router.push('/sign-up?offer=1') } },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { setAfterLogin(null); router.push('/how-it-works') } },
       ]
 
   return (
