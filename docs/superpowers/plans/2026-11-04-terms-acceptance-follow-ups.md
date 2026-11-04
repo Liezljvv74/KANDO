@@ -8,7 +8,7 @@ Where it fits in the MVP plan: after step 1.7 (Flow 1 test report) and before st
 
 | PR | What | Size | Migration | Depends on |
 |----|------|------|-----------|------------|
-| A | Terms version, gate for accounts without a current acceptance, accept screen in the app | M | 0032 | owner publishes the legal pages with a version label |
+| A | Terms version, pop-up and server backstop when the terms change | M | 0032 | owner publishes the legal pages with a version label |
 | B | Checkbox text with real links, readable by a screen reader | S | none | none |
 | C | `finish()` and the pending sign-up record in one place | S | none | none (do before A touches `finish()`) |
 
@@ -25,25 +25,25 @@ Tasks
 
 Done when: mobile tests pass with no changed expectation; `finish()` has one exit path for the record; diff shows only the refactor.
 
-## PR A: terms version and a gate for everyone (findings 1, 2, 3)
+## PR A: terms version and a gate for everyone (findings 1, 2, 3; scope reduced by the owner on 4 November)
 
-Decisions to make before building (owner)
-- **A1.** What happens to an account without a current acceptance? Recommended: it can read and browse, but every write (request, quote, booking, upload, chat message) answers `428 terms-required` until the person accepts in the app. Alternative: a full-screen block on app start only. Recommended is the server gate, because the app check alone can be skipped (that was finding 2).
-- **A2.** Version label format. Recommended: the date the text took effect, for example `2026-11-15`, set in one constant in `packages/contract/src/terms.ts` and the same label shown at the bottom of the published page ("Stand / As of").
-- **A3.** Changes to the terms give a 30-day notice by email (terms section 10). Recommended: this PR does not send the email; the owner sends it by hand the first time. The gate only starts to apply when the version constant is raised.
+Owner decisions (4 November 2026)
+- **A1.** Registration is impossible without accepting the terms (the sign-up checkbox, already built). Old accounts are test accounts only and will be deleted, so **no gate and no special handling for them**. Document rules are unchanged: a customer needs no documents; a provider can publish a service only after an approved ID.
+- **A2.** The version label is the date the text took effect, for example `2026-11-15`, one constant in `packages/contract/src/terms.ts`, shown on the published page too.
+- **A3.** No emails. When the terms change (the constant is raised), a **pop-up appears in the app** and the person must accept the new terms before continuing. Terms section 10 (German and English) must be reworded to say this instead of the 30-day email; the owner or Claude edits the unpublished drafts in the back office before publishing.
 
-Tasks (after A1 to A3)
-1. **Migration 0032:** `users.terms_version text` (nullable). No backfill of old accounts: they stay empty so the gate and the AI check treat them as not accepted (a made-up acceptance is worse). `pnpm db:generate --name`, dev, then production before the code is deployed. Existing column `terms_accepted_at` stays as the time of the last acceptance.
-2. **Contract:** `TERMS_VERSION` constant; `MePatchSchema.termsAccepted` becomes `termsVersion: z.literal(TERMS_VERSION)` (keep accepting `termsAccepted: true` for one release so an older app build still signs up; it records the current version).
-3. **Domain `updateMe`:** write `terms_accepted_at = now()` and `terms_version` when the version in the patch is the current one. Overwrite on re-acceptance (the time of the last acceptance is what counts; the history goes in the audit log if one exists for `users`, otherwise note it as a limit).
-4. **Gate:** in `createAppRequest` (`packages/domain/src/app-request.ts`), for non-GET requests, read the caller's `terms_version` with the session lookup that already runs; if it differs from `TERMS_VERSION`, answer `428` with code `terms-required`. Allow-list: `PATCH /me` (the accept call), `DELETE /me` (account deletion must always work), `GET /me/export`, and the auth routes. Cost check: reuse the user row already loaded for the session, no extra query (verify; if it needs one, cache per request).
-5. **App:** on `428 terms-required` the API client opens an accept screen (new `screens/auth/accept-terms-screen.tsx`) with the same checkbox and links as sign-up (share the component from PR B), a "Not now" that leaves the browse-only app, and the "Delete my account" path visible. Both languages; error text names the problem and the action (project rule).
-6. **AI check:** `document-check.ts` requires `terms_version = TERMS_VERSION` instead of only a non-null `terms_accepted_at`. When it fails, the staff text `admin.ai.failure.terms-not-accepted` stays.
-7. **Export and deletion:** `termsVersion` in the user export (`export.ts`); account deletion already removes the user row.
-8. **Tests:** integration spec for the gate (accepted user passes, empty user gets 428 on a write and passes on a read, allow-listed routes pass); `terms-accepted.int.spec.ts` extended for the version; AI check spec for the stale version; mobile test for the 428 handler; `notification-parity` unaffected (no new notice).
-9. **Legal pages:** owner publishes `agb` and `datenschutz` with the version label before this PR is merged; the order is publish, then raise nothing (the constant starts at the label of the published text).
+Tasks
+1. **Migration 0032:** `users.terms_version text` (nullable). No backfill. `pnpm db:generate --name`, dev, then production before the code is deployed.
+2. **Contract:** `TERMS_VERSION` constant; the accept call sends `termsVersion` (the sign-up call keeps `termsAccepted: true` and records the current version).
+3. **Domain `updateMe`:** on accepting the current version write `terms_accepted_at = now()` and `terms_version`. Re-acceptance overwrites (the last acceptance counts).
+4. **Pop-up:** the app reads `termsVersion` from `GET /me`; when it differs from `TERMS_VERSION` a modal (shared checkbox and links from PR B, button "Accept and continue") blocks the app until accepted. A "Delete my account" link stays visible in the modal. Texts in German and English, naming the problem and the action.
+5. **Server backstop:** for non-GET requests, `createAppRequest` answers `428 terms-required` while the caller's version is not current (allow-list: accept call, account deletion, export, auth routes), so a modified app cannot skip the pop-up. Reuse the user row already loaded for the session, no extra query (verify).
+6. **AI check:** `document-check.ts` requires the current version; failure text `admin.ai.failure.terms-not-accepted` stays.
+7. **Export:** `termsVersion` in the user export (`export.ts`).
+8. **Tests:** gate spec (current version passes; stale version gets 428 on a write, passes on a read and on the allow-list); `terms-accepted.int.spec.ts` for the version; AI check spec for a stale version; mobile test for the pop-up and the 428 handler; `helpers.ts` `seedUser` sets the current version.
+9. **Legal pages:** owner publishes `agb` and `datenschutz` with the version label before the merge; the constant starts at that label.
 
-Done when: an account created before #73 can browse, is stopped on its first write with a clear German or English message, accepts once, and is never asked again until `TERMS_VERSION` changes; the AI check skips stale accounts; full web suite green (CI runs everything).
+Done when: after `TERMS_VERSION` is raised, a signed-in test account sees the pop-up, cannot write until it accepts, and is not asked again until the next change; the AI check skips stale accounts; full web suite green (CI runs everything).
 
 Risks: the gate is a new failure mode on every write route, so run the full web suite before pushing (the cron-route test in #70 failed in CI for a similar reason). Test accounts created by seed helpers must get the current version (`helpers.ts` `seedUser`).
 
@@ -61,5 +61,6 @@ Done when: German and English read naturally, a screen reader can focus the chec
 
 ## Not planned here
 
-- Re-sending the terms by email on every change (A3): by hand for now.
+- Emails about terms changes: decided against (A3); the pop-up replaces them.
+- A gate or backfill for old accounts: they are test accounts and will be deleted.
 - Server-side block at Neon Auth sign-up: not possible with Managed Better Auth; PR A's gate is the replacement.
