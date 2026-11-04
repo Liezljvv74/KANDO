@@ -68,7 +68,7 @@ export function DateTimeField({
 const styles = StyleSheet.create({
   field: { gap: 4 },
   label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
-  input: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, justifyContent: 'center', backgroundColor: '#fff' },
+  input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, justifyContent: 'center', backgroundColor: '#fff' },
   value: { fontSize: 16, color: '#1D1C4A' },
   placeholder: { fontSize: 16, color: '#5E5D90' },
   pressed: { opacity: 0.6 },

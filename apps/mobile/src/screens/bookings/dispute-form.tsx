@@ -11,6 +11,7 @@ import { useSubmit } from '@/hooks/use-submit'
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
+import { font } from '@/theme'
 
 /** A written text for our team or the other side: a reported problem, an objection to a no-show report, an additional task. */
 export function DescriptionForm({ label, hint, submitLabel, onSubmit, onDone }: { label: string; hint?: string; submitLabel: string; onSubmit: (text: string) => Promise<unknown>; onDone: () => void }) {
@@ -48,6 +49,6 @@ export function DisputeInfo({ booking }: { booking: Booking }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
+  title: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
   quote: { fontSize: 15, color: '#4F4E7D', fontStyle: 'italic' },
 })

@@ -8,6 +8,7 @@ import { TermsCheckbox } from '@/components/terms-checkbox'
 import { loadMe, setAside, useTermsPopup } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
+import { font } from '@/theme'
 
 /**
  * Shown over the whole app after the published Terms changed (TERMS_VERSION raised) and the person accepted an older version.
@@ -62,9 +63,9 @@ export function TermsReaccept() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F2FBF8' },
+  page: { flex: 1, backgroundColor: '#E3F6EE' },
   content: { padding: 24, gap: 16, paddingTop: 64 },
-  title: { fontSize: 22, fontWeight: '700', color: '#14352E' },
-  text: { fontSize: 16, color: '#14352E' },
-  small: { fontSize: 14, color: '#4C6B63' },
+  title: { fontSize: 22, fontFamily: font.heading, color: '#1D1C4A' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

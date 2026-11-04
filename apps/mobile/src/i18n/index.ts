@@ -75,6 +75,7 @@ export const errorKeys: Record<string, Key> = {
   WRONG_PASSWORD: 'account.wrongPassword',
   AUTH_BUSY: 'error.authBusy',
   OFFER_NOT_SAVED: 'error.offerNotSaved',
+  OFFER_HAS_OPEN_JOBS: 'error.offerHasOpenJobs',
   LAST_ADMIN: 'account.lastAdmin',
   REPLACEMENT_FIRST: 'error.replacementFirst',
   OPEN_BOOKINGS: 'account.openBookings',

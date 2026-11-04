@@ -21,6 +21,7 @@ import { nearBottom } from '@/lib/scroll'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
 import { MessageBubble } from '@/screens/chat/message-bubble'
+import { font } from '@/theme'
 
 /** One conversation. Deep link `skilled://threads/<id>` (the new-message notice) lands here. */
 export default function ThreadScreen() {
@@ -171,11 +172,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#E3F6EE', padding: 12 },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
+  title: { flex: 1, fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
   messages: { paddingVertical: 8, flexGrow: 1 },
   empty: { textAlign: 'center', color: '#4F4E7D', padding: 24 },
   blocked: { textAlign: 'center', color: '#4F4E7D', padding: 12, fontSize: 15 },
   composer: { gap: 8, paddingTop: 8 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 10, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#1D1C4A' },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 4, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#1D1C4A' },
 })

@@ -14,6 +14,7 @@ import { payCard } from '@/lib/pay-state'
 import { useMe } from '@/hooks/use-me'
 import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { isHttps } from '@/lib/safe-url'
+import { font } from '@/theme'
 
 type Session = { openedAt: number | null; gaveUp: boolean }
 /** Per booking, for this session only: when the pay link was last returned from, and whether the customer said they did not finish. */
@@ -103,5 +104,5 @@ export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; vie
 
 const styles = StyleSheet.create({
   text: { fontSize: 16, color: '#1D1C4A' },
-  paid: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
+  paid: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
 })

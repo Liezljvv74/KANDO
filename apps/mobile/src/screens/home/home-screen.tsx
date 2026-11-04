@@ -66,9 +66,9 @@ function PictureNudge() {
   )
 }
 
-/** "Finally Someone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
+/** "Finally\nSomeone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
 const splitHeadline = (s: string): [string, string] => {
-  const i = s.indexOf(' ')
+  const i = s.indexOf('\n')
   return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
 }
 

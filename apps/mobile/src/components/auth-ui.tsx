@@ -69,10 +69,10 @@ export const Info = ({ text }: { text: string }) => <Text style={styles.info}>{t
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
-  root: { flex: 1, backgroundColor: '#E3F6EE' },
+  root: { flex: 1, backgroundColor: color.bg },
   content: { flexGrow: 1, padding: 16, justifyContent: 'center', gap: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 8, padding: 16, gap: 12 },
-  title: { fontSize: 24, fontFamily: font.heading, color: '#34328A' },
+  card: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.divider, borderRadius: 6, padding: 16, gap: 12 },
+  title: { fontSize: 24, fontFamily: font.heading, color: color.indigo },
   field: { gap: 4 },
   label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
   input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, fontSize: 16, color: '#1D1C4A', backgroundColor: '#fff' },

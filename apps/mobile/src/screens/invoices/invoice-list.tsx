@@ -44,7 +44,7 @@ export function DocRow({ title, lines, ready, busy, onPress }: { title: string; 
       accessibilityLabel={[t('invoice.open', { name: title }), ...lines].join('. ')}
       accessibilityState={{ disabled: !ready, busy }}
       style={({ pressed }) => pressed && styles.pressed}>
-      <Card>
+      <Card list>
         <Text style={styles.text}>{title}</Text>
         {lines.map((l) => (
           <Text key={l} style={styles.small}>

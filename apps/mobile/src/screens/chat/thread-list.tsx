@@ -27,7 +27,7 @@ export default function ThreadList() {
       {more.docs.length === 0 && <Text style={styles.small}>{t('chat.empty')}</Text>}
       {more.docs.map((th) => (
         <Pressable key={th.id} onPress={() => go(`/threads/${th.id}`)} accessibilityRole="button" accessibilityLabel={th.otherName}>
-          <Card>
+          <Card list>
             <Text style={styles.name}>{th.otherName}</Text>
             {th.lastMessageAt && <Text style={styles.small}>{formatWhen(th.lastMessageAt)}</Text>}
             {th.blocked && <Text style={styles.small}>{t('chat.blocked')}</Text>}

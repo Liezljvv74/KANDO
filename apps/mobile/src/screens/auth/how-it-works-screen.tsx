@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/auth-ui'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang, type Key } from '@/i18n'
+import { font } from '@/theme'
 
 const GROUPS: { title: Key; steps: [Key, Key, Key]; bg: string }[] = [
   { title: 'home.customerTitle', steps: ['home.customer1', 'home.customer2', 'home.customer3'], bg: '#CFE6DC' },
@@ -55,10 +56,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#E3F6EE' },
   content: { padding: 16, gap: 16 },
   link: { fontSize: 15, fontWeight: '600', color: '#34328A' },
-  title: { fontSize: 28, fontWeight: '800', color: '#1D1C4A' },
-  box: { borderRadius: 16, padding: 16, gap: 8 },
-  boxTitle: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  title: { fontSize: 28, fontFamily: font.heading, color: '#1D1C4A' },
+  box: { borderRadius: 6, padding: 16, gap: 8 },
+  boxTitle: { fontSize: 17, fontFamily: font.heading, color: '#1D1C4A' },
   text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
-  sub: { fontSize: 22, fontWeight: '800', color: '#1D1C4A', marginTop: 8 },
+  sub: { fontSize: 22, fontFamily: font.heading, color: '#1D1C4A', marginTop: 8 },
   safe: { gap: 4 },
 })

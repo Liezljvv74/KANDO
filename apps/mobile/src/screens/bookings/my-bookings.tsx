@@ -51,7 +51,7 @@ export default function MyBookings() {
       <SectionTitle text={t('booking.bookings')} />
       {bookings.docs.map((b) => (
         <Pressable key={b.id} accessibilityRole="button" onPress={() => go(`/bookings/${b.id}`)}>
-          <Card>
+          <Card list>
             <Text style={styles.text}>{formatWhen(b.startAt)}</Text>
             <Text style={styles.small}>{bookingStatusText(b, role)}</Text>
           </Card>
@@ -62,7 +62,7 @@ export default function MyBookings() {
       <SectionTitle text={t('booking.requests')} />
       {requests.docs.map((r) => (
         <Pressable key={r.id} accessibilityRole="button" onPress={() => go(`/bookings/request/${r.id}`)}>
-          <Card>
+          <Card list>
             <Text style={styles.text} numberOfLines={2}>
               {r.description}
             </Text>

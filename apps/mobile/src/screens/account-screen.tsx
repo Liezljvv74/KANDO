@@ -5,6 +5,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { stopOffering } from '@/api/account'
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
@@ -66,6 +67,19 @@ export default function AccountScreen() {
     if (r.postcode || r.street || r.city) setAddress((a) => ({ street: r.street ?? a.street, postcode: r.postcode ?? a.postcode, city: r.city ?? a.city }))
   }
 
+  async function stop() {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await stopOffering()
+      await loadMe() // the My business tab goes away
+    } catch (e) {
+      setError(errorText(e instanceof ApiError ? e.code : ''))
+    }
+    setBusy(false)
+  }
+
   async function offer() {
     if (busy) return
     setBusy(true)
@@ -95,7 +109,10 @@ export default function AccountScreen() {
   const isProvider = showProfileTab(shared ?? me)
   const changeOffer = (on: boolean) => {
     if (on) return void offer()
-    Alert.alert(t('account.offerSwitch'), t('account.offerOffInfo')) // the switch stays on: the provider account is only taken offline under My business
+    Alert.alert(t('account.offerSwitch'), t('account.stopOfferingAsk'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('account.stopOfferingConfirm'), style: 'destructive', onPress: () => void stop() },
+    ])
   }
 
   return (

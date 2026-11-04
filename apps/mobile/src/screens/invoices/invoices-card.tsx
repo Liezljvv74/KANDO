@@ -9,6 +9,7 @@ import { signOutGeneration } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { clampYear, exportYears, invoiceEntries } from '@/lib/invoices'
+import { font } from '@/theme'
 
 /** Account tab: invoices and receipts for everyone; commission invoices and the yearly CSV export (share sheet) for providers. */
 export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
@@ -52,7 +53,7 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
-  heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 6, padding: 16, gap: 12 },
+  heading: { fontSize: 17, fontFamily: font.heading, color: '#1D1C4A' },
   text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
 })

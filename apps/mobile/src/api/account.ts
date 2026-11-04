@@ -14,3 +14,6 @@ export const deleteAccount = (password: string) =>
   api<{ ok: true }>('/app-api/v1/me', { method: 'DELETE', body: { password }, timeLimit: DELETE_TIMEOUT_MS })
 
 export const DELETE_TIMEOUT_MS = 60_000
+
+/** Stops offering services: the server refuses with 409 OFFER_HAS_OPEN_JOBS while there is open work; the profile is kept as a draft. */
+export const stopOffering = () => api<{ ok: true }>('/app-api/v1/me/stop-offering', { method: 'POST' })
