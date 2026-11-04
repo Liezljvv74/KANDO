@@ -101,3 +101,14 @@ Expected result: the processing is acceptable with the measures above, a human d
 4. Privacy policy and upload notice updated.
 5. Test with sample documents (no real people) and measure agreement with staff.
 6. This DPIA finished and signed.
+
+## 7. Addendum of 4 November 2026: reading an ID card to fill in the account details (optional)
+
+Not part of the first assessment; to be reviewed with it before sign-off.
+
+- **What.** In the app (Account) a person can photograph their ID card; the same AI model service and settings as for the document check (one pinned provider, no training, no retention, no fallback) read the first and last name, the date of birth and the address and return them as suggestions. The person checks and changes every value and saves; nothing is saved before. Typing the details in by hand stays possible.
+- **What is stored.** The photo is held in memory for the one call and is not stored. The card number, the machine-readable lines and the expiry date are neither requested nor stored. The values the person confirms are stored as the account's own details; the date of birth is new (`users.birth_date`, private, exported and deleted with the account, never shown to others). A cost row without any content (owner, model, cost, time) counts against the hourly limit and the monthly cap.
+- **Who may use it.** Only a signed-in person with a recorded acceptance of the terms (the disclosure is in terms section 5b and privacy section 4c). 10 scans per person and hour; counted in the monthly cap of 20 euro. A feature switch: it is on only when the same two environment variables as the document check are set.
+- **Legal basis.** Consent by using the scan (Art. 6(1)(a)) and Art. 6(1)(b). **[DPIA and lawyer: confirm.]**
+- **Risks and measures.** A misread value (the person checks it; the document check compares the name with the ID); abuse and cost (login, accepted terms, hourly limit, cap); ID data reaching a provider that keeps it (the pin, no training, no retention; the owner confirms this with the provider, as for the document check); minimisation (customers are never asked; the card number is never read; the photo is not kept).
+- **Open.** Confirm the EU data location with the provider; the lawyer's view on the date of birth and on providers from 16 (plan: `docs/superpowers/plans/2026-11-04-providers-from-16-and-id-prefill.md`).

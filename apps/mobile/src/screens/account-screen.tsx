@@ -1,4 +1,4 @@
-import type { Me, Photo, PushSettings } from '@kando/contract'
+import type { IdScan, Me, Photo, PushSettings } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
+import { DateTimeField } from '@/components/date-time-field'
 import { Button, ErrorText, Field, KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
@@ -21,7 +22,9 @@ import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
+import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
+import { IdScanButton } from '@/screens/id-scan-button'
 import { InvoicesCard } from '@/screens/invoices/invoices-card'
 import { QuotesCard } from '@/screens/quotes/quotes-card'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
@@ -33,6 +36,7 @@ export default function AccountScreen() {
   const shared = useMe() // the shared copy holds the notifications and follows dismissals
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [birthDate, setBirthDate] = useState<Date | null>(null)
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -46,6 +50,7 @@ export default function AccountScreen() {
       setMe(m)
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
+      setBirthDate(fromIsoDay(m.birthDate))
       setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.code : '') // the form stays hidden behind a retry
@@ -64,6 +69,15 @@ export default function AccountScreen() {
     }, [hasUnseen]),
   )
 
+  /** The suggestions from an ID card scan fill the form (only what was read); nothing is saved until the person taps Save. */
+  function applyScan(r: IdScan) {
+    hideSaved()
+    if (r.firstName) setFirstName(r.firstName)
+    if (r.lastName) setLastName(r.lastName)
+    if (r.birthDate) setBirthDate(fromIsoDay(r.birthDate))
+    if (r.postcode || r.street || r.city) setAddress((a) => ({ street: r.street ?? a.street, postcode: r.postcode ?? a.postcode, city: r.city ?? a.city }))
+  }
+
   async function offer() {
     if (busy) return
     setBusy(true)
@@ -80,7 +94,7 @@ export default function AccountScreen() {
     setError(null)
     hideSaved()
     try {
-      await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr })
+      await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr, birthDate: birthDate ? toIsoDay(birthDate) : null })
       await load()
       showSaved()
     } catch (e) {
@@ -99,8 +113,10 @@ export default function AccountScreen() {
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
+              <IdScanButton onResult={applyScan} disabled={busy} />
               <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy} />
               <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy} />
+              <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} disabled={busy} />
               <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy} />
               <Button label={t('common.save')} onPress={save} busy={busy} />
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}

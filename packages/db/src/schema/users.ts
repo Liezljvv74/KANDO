@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, check, date, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 // id is the Neon Auth user id. staff_role and suspended_* are written by staff only (see COLUMN_STAFF_ONLY in rls.ts).
 export const users = pgTable(
@@ -15,6 +15,8 @@ export const users = pgTable(
     addressPostcode: text('address_postcode'),
     addressCity: text('address_city'),
     addressCountry: text('address_country'),
+    // Private (owner and staff only, never public): read from an ID card the person scanned and confirmed, or typed in; the base of the age rule for providers.
+    birthDate: date('birth_date', { mode: 'string' }),
     isProvider: boolean('is_provider').notNull().default(false),
     // Push switches, the person's own: chat messages and reminders; every other booking and money event is always pushed.
     pushChat: boolean('push_chat').notNull().default(true),

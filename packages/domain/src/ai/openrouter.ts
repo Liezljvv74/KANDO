@@ -57,68 +57,79 @@ Answer with one JSON object and nothing else, with exactly the keys verdict, rea
 const userText = (i: DocumentCheckInput) =>
   `Document type: ${i.documentType}\nNames the document may carry: ${i.names.map((n) => JSON.stringify(n)).join(', ')}\nToday: ${i.today}`
 
+export type ModelOpts = { apiKey: string; model: string; provider?: string; timeoutMs?: number; fetchImpl?: typeof fetch }
+export type ModelCall = { system: string; text: string; bytes: Buffer; mime: string; maxTokens: number }
+
 /**
- * OpenRouter chat completions, called from the server only. Privacy settings go with every request: `data_collection: deny` and
+ * OpenRouter chat completions, called from the server only; every use of a model (the document check, the ID scan) goes through here, so the
+ * privacy settings are the same. They go with every request: `data_collection: deny` and
  * `zdr: true` limit routing to endpoints that neither store nor train on the data (checked against
  * https://openrouter.ai/docs/guides/routing/provider-selection on 3 Nov 2026), and no fallback to other providers.
- * `opts.provider` (AI_DOCUMENT_PROVIDER) pins one provider: nothing is sent to any other. The image or PDF is sent once, as base64. Throws AiUnavailable.
+ * `opts.provider` (AI_DOCUMENT_PROVIDER) pins one provider: nothing is sent to any other. The image or PDF is sent once, as base64.
+ * Returns the answer parsed as JSON (the caller checks its shape and, when the shape is wrong, throws with `costUsd`). Throws AiUnavailable.
  */
-export function openRouterChecker(opts: { apiKey: string; model: string; provider?: string; timeoutMs?: number; fetchImpl?: typeof fetch }): DocumentChecker {
+export async function askModel(opts: ModelOpts, call: ModelCall): Promise<{ json: unknown; costUsd: number | null; tokens: number | null }> {
   const doFetch = opts.fetchImpl ?? fetch
+  const dataUrl = `data:${call.mime};base64,${call.bytes.toString('base64')}`
+  const file =
+    call.mime === 'application/pdf'
+      ? { type: 'file', file: { filename: 'document.pdf', file_data: dataUrl } }
+      : { type: 'image_url', image_url: { url: dataUrl } }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? AI_TIMEOUT_MS)
+  try {
+    const res = await doFetch(ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: opts.model,
+        temperature: 0,
+        max_tokens: call.maxTokens,
+        response_format: { type: 'json_object' },
+        provider: { data_collection: 'deny', zdr: true, allow_fallbacks: false, ...(opts.provider && { only: [opts.provider] }) },
+        usage: { include: true },
+        // A PDF is read by the model itself: OpenRouter's own parser (another company, outside the provider pin) is never used.
+        ...(call.mime === 'application/pdf' && { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }),
+        messages: [
+          { role: 'system', content: call.system },
+          { role: 'user', content: [{ type: 'text', text: call.text }, file] },
+        ],
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new AiUnavailable('error', `AI service answered ${res.status}`)
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { cost?: number; total_tokens?: number } }
+    const cost = body.usage?.cost
+    const costUsd = typeof cost === 'number' && Number.isFinite(cost) ? cost : null
+    // From here on the call was answered, so it was billed: a bad answer carries the cost to the monthly cap.
+    const bad = (why: string) => new AiUnavailable('error', why, costUsd ?? FALLBACK_COST_PER_CALL)
+    const content = body.choices?.[0]?.message?.content
+    if (typeof content !== 'string') throw bad('AI service gave no answer')
+    let json: unknown
+    try {
+      json = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
+    } catch {
+      throw bad('AI answer was not JSON') // the parse error may quote the answer: not passed on
+    }
+    return { json, costUsd, tokens: body.usage?.total_tokens ?? null }
+  } catch (e) {
+    if (e instanceof AiUnavailable) throw e
+    if (e instanceof Error && e.name === 'AbortError') throw new AiUnavailable('timeout', 'AI service timed out')
+    throw new AiUnavailable('error', 'AI call failed') // the original error may quote the answer: not passed on
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** The document check: the shared call, then the answer must have the expected shape. */
+export function openRouterChecker(opts: ModelOpts): DocumentChecker {
   return {
     model: opts.model,
     async check(input) {
-      const dataUrl = `data:${input.mime};base64,${input.bytes.toString('base64')}`
-      const file =
-        input.mime === 'application/pdf'
-          ? { type: 'file', file: { filename: 'document.pdf', file_data: dataUrl } }
-          : { type: 'image_url', image_url: { url: dataUrl } }
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? AI_TIMEOUT_MS)
-      try {
-        const res = await doFetch(ENDPOINT, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: opts.model,
-            temperature: 0,
-            max_tokens: 400,
-            response_format: { type: 'json_object' },
-            provider: { data_collection: 'deny', zdr: true, allow_fallbacks: false, ...(opts.provider && { only: [opts.provider] }) },
-            usage: { include: true },
-            // A PDF is read by the model itself: OpenRouter's own parser (another company, outside the provider pin) is never used.
-            ...(input.mime === 'application/pdf' && { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }),
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: [{ type: 'text', text: userText(input) }, file] },
-            ],
-          }),
-          signal: controller.signal,
-        })
-        if (!res.ok) throw new AiUnavailable('error', `AI service answered ${res.status}`)
-        const body = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { cost?: number; total_tokens?: number } }
-        const cost = body.usage?.cost
-        const costUsd = typeof cost === 'number' && Number.isFinite(cost) ? cost : null
-        // From here on the call was answered, so it was billed: a bad answer carries the cost to the monthly cap.
-        const bad = (why: string) => new AiUnavailable('error', why, costUsd ?? FALLBACK_COST_PER_CALL)
-        const content = body.choices?.[0]?.message?.content
-        if (typeof content !== 'string') throw bad('AI service gave no answer')
-        let json: unknown
-        try {
-          json = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
-        } catch {
-          throw bad('AI answer was not JSON') // the parse error may quote the answer: not passed on
-        }
-        const parsed = DocumentCheckResultSchema.safeParse(json)
-        if (!parsed.success) throw bad('AI answer had the wrong shape')
-        return { result: parsed.data, costUsd, tokens: body.usage?.total_tokens ?? null }
-      } catch (e) {
-        if (e instanceof AiUnavailable) throw e
-        if (e instanceof Error && e.name === 'AbortError') throw new AiUnavailable('timeout', 'AI service timed out')
-        throw new AiUnavailable('error', 'AI call failed') // the original error may quote the answer: not passed on
-      } finally {
-        clearTimeout(timer)
-      }
+      const { json, costUsd, tokens } = await askModel(opts, { system: SYSTEM_PROMPT, text: userText(input), bytes: input.bytes, mime: input.mime, maxTokens: 400 })
+      const parsed = DocumentCheckResultSchema.safeParse(json)
+      if (!parsed.success) throw new AiUnavailable('error', 'AI answer had the wrong shape', costUsd ?? FALLBACK_COST_PER_CALL)
+      return { result: parsed.data, costUsd, tokens }
     },
   }
 }

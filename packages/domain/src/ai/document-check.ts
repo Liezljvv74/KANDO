@@ -3,7 +3,7 @@ import { db, documentAiChecks, documents, providers, users } from '@kando/db'
 import { describeError } from '../log-error'
 import { notifyDocumentDecision } from '../notifications'
 import { documentsBucket, storage } from '../storage'
-import { AiUnavailable, FALLBACK_COST_PER_CALL, openRouterChecker, type DocumentChecker } from './openrouter'
+import { AiUnavailable, FALLBACK_COST_PER_CALL, openRouterChecker, type DocumentChecker, type ModelOpts } from './openrouter'
 import { minConfidence, monthlyCapEur, providerPin, stripPersonalData, TYPE_NAME, wouldAutoApprove } from './rules'
 
 export { DEFAULT_MIN_CONFIDENCE, DEFAULT_MONTHLY_CAP_EUR, minConfidence, monthlyCapEur, stripPersonalData, wouldAutoApprove } from './rules'
@@ -33,11 +33,17 @@ export const setDocumentCheckerForTests = (c: DocumentChecker | undefined) => {
  */
 export function documentChecker(): DocumentChecker | null {
   if (override) return override
+  const o = modelOptsFromEnv()
+  return o ? openRouterChecker(o) : null
+}
+
+/** The model settings from the environment (also used by the ID scan), or null when the AI is off. */
+export function modelOptsFromEnv(): ModelOpts | null {
   const apiKey = process.env.OPENROUTER_API_KEY
   const model = process.env.AI_DOCUMENT_MODEL?.trim()
   const provider = providerPin()
-  if (provider === false) return null // a mistyped pin switches the check off, never widens where documents go
-  return apiKey && model ? openRouterChecker({ apiKey, model, provider }) : null
+  if (provider === false) return null // a mistyped pin switches the AI off, never widens where documents go
+  return apiKey && model ? { apiKey, model, provider } : null
 }
 
 export type CheckDeps = {

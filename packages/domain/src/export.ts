@@ -43,6 +43,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       firstName: user.firstName,
       lastName: user.lastName,
       language: user.language,
+      birthDate: user.birthDate,
       address: { street: user.addressStreet, postcode: user.addressPostcode, city: user.addressCity, country: user.addressCountry },
       isProvider: user.isProvider,
       staffRole: user.staffRole,

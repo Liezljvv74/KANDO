@@ -13,6 +13,7 @@ export { mediaBucket, documentsBucket, storage, photoUrl, removeObject, type Sto
 export * from './photos'
 export * from './documents'
 export { runDocumentCheck, sweepIdImages, closeInterruptedChecks, documentChecker, ID_DOCUMENT, ID_IMAGE_KEEP_DAYS, SPOT_CHECK_RATE, CHECKS_PER_HOUR, minConfidence, monthlyCapEur, stripPersonalData, wouldAutoApprove, type CheckDeps, type CheckOutcome } from './ai/document-check'
+export { scanIdCard, idScanner, cleanScan, SCANS_PER_HOUR, ID_SCAN_PROMPT, type IdScanner } from './ai/id-scan'
 export { AiUnavailable, openRouterChecker, SYSTEM_PROMPT as DOCUMENT_CHECK_PROMPT, type DocumentCheckInput, type DocumentCheckOutput, type DocumentChecker } from './ai/openrouter'
 export * from './search'
 export * from './public-profile'

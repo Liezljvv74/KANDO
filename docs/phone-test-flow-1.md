@@ -76,6 +76,16 @@ Taps (quote to paid): ____
 - [ ] Staff see the suggestion panel in the back office and decide as before.
 - [ ] A document of an account that has not accepted the terms goes to staff with the reason "terms not accepted".
 
+## Part 7: scan your ID card (optional feature; a made-up or your own test card, never someone else's)
+
+- [ ] Account screen: the note above the button says what happens to the photo; "Scan your ID card to fill in your details" opens Camera / Photo library / Cancel.
+- [ ] Camera and library work on Android and on iPhone; refusing the permission shows the "open settings" notice.
+- [ ] A readable card fills first name, last name, date of birth, street, postcode and city; nothing is saved until you tap Save; after Save the values are there again after leaving the screen.
+- [ ] A photo that is not an ID card (a cat, a blurry card) shows "No ID card could be read..." and changes nothing.
+- [ ] The date of birth field opens the phone's own date picker and keeps the day you chose (check a day near midnight).
+- [ ] An account without accepted terms gets the clear message; the 11th scan in an hour gets the "too many times" message.
+- [ ] Typing everything in by hand still works and saves.
+
 ## Result
 
 Date: ______ Phone: ______ Build: ______ Tester: ______
