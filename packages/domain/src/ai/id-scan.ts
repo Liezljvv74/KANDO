@@ -3,10 +3,10 @@ import { db, documentAiChecks, users } from '@kando/db'
 import { BirthDateSchema, IdScanModelSchema, type IdScan, type IdScanModel } from '@kando/contract'
 import { fail } from '../providers/http'
 import { AiUnavailable, askModel, FALLBACK_COST_PER_CALL, type ModelOpts } from './openrouter'
-import { modelOptsFromEnv } from './document-check'
+import { ID_SCAN_FAILURE, modelOptsFromEnv } from './document-check'
 import { monthlyCapEur } from './rules'
 
-/** Scans per person and hour (the same budget as the document checks: one loop must not run up the bill). */
+/** Scans per person and hour (counted apart from the document checks; the monthly cap is shared: one loop must not run up the bill). */
 export const SCANS_PER_HOUR = 10
 
 export type IdScanOutput = { result: IdScanModel; costUsd: number | null; tokens: number | null }
@@ -29,7 +29,7 @@ export function openRouterIdScanner(opts: ModelOpts): IdScanner {
   return {
     model: opts.model,
     async scan(input) {
-      const { json, costUsd, tokens } = await askModel(opts, { system: ID_SCAN_PROMPT, text: 'Read this identity card.', bytes: input.bytes, mime: input.mime, maxTokens: 300 })
+      const { json, costUsd, tokens } = await askModel(opts, { system: ID_SCAN_PROMPT, text: 'Read this identity card.', bytes: input.bytes, mime: input.mime, maxTokens: 800 })
       const parsed = IdScanModelSchema.safeParse(json)
       if (!parsed.success) throw new AiUnavailable('error', 'AI answer had the wrong shape', costUsd ?? FALLBACK_COST_PER_CALL)
       return { result: parsed.data, costUsd, tokens }
@@ -82,7 +82,7 @@ export async function scanIdCard(userId: string, image: Buffer, deps: ScanDeps =
   const now = deps.now ?? new Date()
   const [u] = await db.select({ terms: users.termsAcceptedAt }).from(users).where(eq(users.id, userId))
   if (!u?.terms) return fail(403, { error: 'TERMS_NOT_ACCEPTED' }) // the disclosure of the AI use is in the terms
-  const [recent] = await db.select({ n: count() }).from(documentAiChecks).where(and(eq(documentAiChecks.ownerId, userId), gt(documentAiChecks.createdAt, new Date(now.getTime() - 3_600_000))))
+  const [recent] = await db.select({ n: count() }).from(documentAiChecks).where(and(eq(documentAiChecks.ownerId, userId), eq(documentAiChecks.failure, ID_SCAN_FAILURE), gt(documentAiChecks.createdAt, new Date(now.getTime() - 3_600_000))))
   if ((recent?.n ?? 0) >= SCANS_PER_HOUR) return fail(429, { error: 'ID_SCAN_RATE_LIMIT' })
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const [spent] = await db.select({ s: sum(documentAiChecks.costEur) }).from(documentAiChecks).where(gte(documentAiChecks.createdAt, monthStart))
@@ -91,7 +91,7 @@ export async function scanIdCard(userId: string, image: Buffer, deps: ScanDeps =
   // Claimed before the call, with the fallback cost: a function killed mid-call still counts. Decided from the start, so the interrupted-check sweep leaves it alone.
   const [row] = await db
     .insert(documentAiChecks)
-    .values({ ownerId: userId, model: scanner.model, failure: 'id-scan', decision: 'sent-to-staff', costEur: FALLBACK_COST_PER_CALL.toFixed(6), finishedAt: sql`now()` })
+    .values({ ownerId: userId, model: scanner.model, failure: ID_SCAN_FAILURE, decision: 'sent-to-staff', costEur: FALLBACK_COST_PER_CALL.toFixed(6), finishedAt: sql`now()` })
     .returning({ id: documentAiChecks.id })
   const book = (eur: number) => db.update(documentAiChecks).set({ costEur: eur.toFixed(6) }).where(eq(documentAiChecks.id, row!.id))
   let out: IdScanOutput

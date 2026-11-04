@@ -13,7 +13,7 @@ import { DeniedNotice } from '@/screens/my-profile/denied-notice'
  * suggestions go to `onResult`. Nothing is saved here: the person checks the fields and saves the form, and typing everything in
  * stays possible. A short note says what happens to the photo before anything is sent.
  */
-export function IdScanButton({ onResult, disabled }: { onResult: (r: IdScan) => void; disabled?: boolean }) {
+export function IdScanButton({ onResult, onBusy, disabled }: { onResult: (r: IdScan) => void; onBusy?: (busy: boolean) => void; disabled?: boolean }) {
   useLang()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +25,7 @@ export function IdScanButton({ onResult, disabled }: { onResult: (r: IdScan) => 
     setDenied(false)
     setDone(false)
     setBusy(true)
+    onBusy?.(true)
     try {
       const file = await pickPhoto(source, false)
       if (file === null) return
@@ -37,6 +38,7 @@ export function IdScanButton({ onResult, disabled }: { onResult: (r: IdScan) => 
       setError(errorText(uploadErrorCode(e)))
     } finally {
       setBusy(false)
+      onBusy?.(false)
     }
   }
 

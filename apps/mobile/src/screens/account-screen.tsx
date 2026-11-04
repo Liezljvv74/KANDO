@@ -37,6 +37,7 @@ export default function AccountScreen() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [birthDate, setBirthDate] = useState<Date | null>(null)
+  const [scanning, setScanning] = useState(false) // an ID scan is running: the form is locked so its answer cannot overwrite an edit or a reload
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -113,12 +114,12 @@ export default function AccountScreen() {
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
-              <IdScanButton onResult={applyScan} disabled={busy} />
-              <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy} />
-              <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy} />
-              <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} disabled={busy} />
-              <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy} />
-              <Button label={t('common.save')} onPress={save} busy={busy} />
+              <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
+              <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy && !scanning} />
+              <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy && !scanning} />
+              <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date(1990, 0, 1, 12)} disabled={busy || scanning} />
+              <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy || scanning} />
+              <Button label={t('common.save')} onPress={save} busy={busy} disabled={scanning} />
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}

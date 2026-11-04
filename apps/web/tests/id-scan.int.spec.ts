@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
+import { IdScanModelSchema } from '@kando/contract'
 import { AiUnavailable, cleanScan, ID_SCAN_PROMPT, SCANS_PER_HOUR, type IdScanner } from '@kando/domain'
 import { openRouterIdScanner } from '@kando/domain/src/ai/id-scan'
 import { setIdScannerForTests, setStorageForTests } from '@kando/domain/src/testing'
@@ -98,6 +99,15 @@ describe('POST /me/id-scan', () => {
     expect(calls).toBe(0)
   })
 
+  it('document checks do not use up the scans (separate hourly limits)', async () => {
+    for (let i = 0; i < 10; i++) await pool.query("INSERT INTO document_ai_checks (owner_id, model, decision, finished_at) VALUES ('sc1', 'm', 'sent-to-staff', now())")
+    try {
+      expect((await scan('sc1')).status).toBe(200)
+    } finally {
+      await pool.query("DELETE FROM document_ai_checks WHERE owner_id = 'sc1' AND failure IS NULL")
+    }
+  })
+
   it('stops at the hourly limit (429) without a model call', async () => {
     for (let i = 0; i < SCANS_PER_HOUR; i++) expect((await scan('sc1')).status).toBe(200)
     const res = await scan('sc1')
@@ -146,6 +156,12 @@ describe('POST /me/id-scan', () => {
 })
 
 describe('cleanScan', () => {
+  it('cuts a value that is too long instead of failing the whole scan', () => {
+    const parsed = IdScanModelSchema.parse({ ...GOOD, firstName: 'A'.repeat(200), street: 'B'.repeat(500) })
+    expect(parsed.firstName).toHaveLength(60)
+    expect(parsed.street).toHaveLength(120)
+    expect(parsed.lastName).toBe('Beispiel')
+  })
   it('gives nothing for an unreadable photo', () => {
     expect(cleanScan({ ...GOOD, readable: false })).toEqual({ readable: false, firstName: null, lastName: null, birthDate: null, street: null, postcode: null, city: null })
   })

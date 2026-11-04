@@ -15,7 +15,7 @@ export const users = pgTable(
     addressPostcode: text('address_postcode'),
     addressCity: text('address_city'),
     addressCountry: text('address_country'),
-    // Private (owner and staff only, never public): read from an ID card the person scanned and confirmed, or typed in; the base of the age rule for providers.
+    // Private (owner and staff only, never public): read from an ID card the person scanned and confirmed, or typed in. NOT verified: the age rule for providers (step 6.1) must compare it with the ID document, never trust it alone.
     birthDate: date('birth_date', { mode: 'string' }),
     isProvider: boolean('is_provider').notNull().default(false),
     // Push switches, the person's own: chat messages and reminders; every other booking and money event is always pushed.

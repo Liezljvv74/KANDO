@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { BirthDateSchema } from './me'
 
-const text = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullish()
+// A field that is too long is cut, not refused: one odd value must not fail the whole scan.
+const text = (max: number) => z.string().transform((v) => v.trim().slice(0, max) || null).nullish()
 
 /** What the AI model must answer when it reads the front or back of an identity card. Parsed loosely: the server cleans it before it goes to the app. */
 export const IdScanModelSchema = z.object({

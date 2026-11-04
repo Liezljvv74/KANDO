@@ -237,6 +237,14 @@ it('rate limit: ten checks per person and hour, then staff decide', async () => 
   expect(await runDocumentCheck(second.id, { checker: f.checker, random: () => 0.9 })).toBe('auto-approved')
 })
 
+it('ten ID scans in the hour do not use up the document checks (the hourly limits are separate)', async () => {
+  const d = await pendingDoc()
+  for (let i = 0; i < 10; i++) await pool.query("INSERT INTO document_ai_checks (owner_id, model, failure, decision, finished_at) VALUES ($1, 'm', 'id-scan', 'sent-to-staff', now())", [d.uid])
+  const f = fake(OK)
+  expect(await runDocumentCheck(d.id, { checker: f.checker, random: () => 0.9 })).toBe('auto-approved')
+  await pool.query("DELETE FROM document_ai_checks WHERE failure = 'id-scan'")
+})
+
 it('idempotent: a second run of the same document does nothing', async () => {
   const f = fake(OK)
   const d = await pendingDoc()

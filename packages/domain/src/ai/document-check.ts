@@ -1,4 +1,4 @@
-import { and, count, eq, gt, gte, isNull, lt, lte, ne, sql, sum } from 'drizzle-orm'
+import { and, count, eq, gt, gte, isNull, lt, lte, ne, or, sql, sum } from 'drizzle-orm'
 import { db, documentAiChecks, documents, providers, users } from '@kando/db'
 import { describeError } from '../log-error'
 import { notifyDocumentDecision } from '../notifications'
@@ -8,6 +8,8 @@ import { minConfidence, monthlyCapEur, providerPin, stripPersonalData, TYPE_NAME
 
 export { DEFAULT_MIN_CONFIDENCE, DEFAULT_MONTHLY_CAP_EUR, minConfidence, monthlyCapEur, stripPersonalData, wouldAutoApprove } from './rules'
 
+/** The `failure` value of the cost row an ID scan leaves (no document; counted in the monthly cap, not in the document-check hourly limit). */
+export const ID_SCAN_FAILURE = 'id-scan'
 /** The requirement code of a photo ID: its image is kept only 30 days after the check. */
 export const ID_DOCUMENT = 'id-document'
 export const ID_IMAGE_KEEP_DAYS = 30
@@ -104,7 +106,8 @@ async function check(documentId: string, checker: DocumentChecker, deps: CheckDe
   const [recentRow] = await db
     .select({ n: count() })
     .from(documentAiChecks)
-    .where(and(eq(documentAiChecks.ownerId, doc.ownerId), gt(documentAiChecks.createdAt, hourAgo), ne(documentAiChecks.id, claim.id)))
+    // ID scans have their own hourly count (the cost rows are shared, the limits are not): ten scans must not send documents to staff.
+    .where(and(eq(documentAiChecks.ownerId, doc.ownerId), gt(documentAiChecks.createdAt, hourAgo), ne(documentAiChecks.id, claim.id), or(isNull(documentAiChecks.failure), ne(documentAiChecks.failure, ID_SCAN_FAILURE))))
   if ((recentRow?.n ?? 0) >= CHECKS_PER_HOUR) return toStaff({ failure: 'rate-limit' })
 
   // ponytail: concurrent checks can overshoot the hourly limit and the cap by a few calls (check, then act); a lock would only be needed at much higher volume.
