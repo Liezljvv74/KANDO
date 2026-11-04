@@ -62,8 +62,8 @@ export function cleanScan(m: IdScanModel): IdScan {
     firstName: name(m.firstName),
     lastName: name(m.lastName),
     birthDate: birth.success ? birth.data : null,
-    street: m.street ?? null,
-    postcode: m.postcode ?? null,
+    street: m.street && /\p{L}/u.test(m.street) ? m.street : null, // a value without letters is an ID number or noise
+    postcode: m.postcode && /^[A-Za-z0-9][A-Za-z0-9 -]{1,14}$/.test(m.postcode) && !/\p{L}{3}/u.test(m.postcode) ? m.postcode : null,
     city: m.city && !/\d/.test(m.city) ? m.city : null,
   }
 }
@@ -93,6 +93,12 @@ export async function scanIdCard(userId: string, image: Buffer, deps: ScanDeps =
     .insert(documentAiChecks)
     .values({ ownerId: userId, model: scanner.model, failure: ID_SCAN_FAILURE, decision: 'sent-to-staff', costEur: FALLBACK_COST_PER_CALL.toFixed(6), finishedAt: sql`now()` })
     .returning({ id: documentAiChecks.id })
+  // Count again with the claim in: parallel calls that all passed the first check are stopped here before the model is called.
+  const [after] = await db.select({ n: count() }).from(documentAiChecks).where(and(eq(documentAiChecks.ownerId, userId), eq(documentAiChecks.failure, ID_SCAN_FAILURE), gt(documentAiChecks.createdAt, new Date(now.getTime() - 3_600_000))))
+  if ((after?.n ?? 0) > SCANS_PER_HOUR) {
+    await db.update(documentAiChecks).set({ costEur: '0' }).where(eq(documentAiChecks.id, row!.id))
+    return fail(429, { error: 'ID_SCAN_RATE_LIMIT' })
+  }
   const book = (eur: number) => db.update(documentAiChecks).set({ costEur: eur.toFixed(6) }).where(eq(documentAiChecks.id, row!.id))
   let out: IdScanOutput
   try {

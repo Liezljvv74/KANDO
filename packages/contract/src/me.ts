@@ -13,14 +13,14 @@ export const AddressSchema = z.object({
 })
 export type Address = z.infer<typeof AddressSchema>
 
-/** A calendar day in the past, not more than 120 years back. */
+/** A calendar day before today (UTC), not more than 120 years back. */
 export const BirthDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((s) => {
     const d = new Date(`${s}T00:00:00Z`)
     const now = Date.now()
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s && d.getTime() < now && d.getTime() > now - 120 * 365.25 * 86_400_000
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s && d.getTime() < now - (now % 86_400_000) && d.getTime() > now - 120 * 365.25 * 86_400_000
   })
 
 /** An in-app message for the owner; the app only marks it seen or dismissed. */

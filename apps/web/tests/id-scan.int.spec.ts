@@ -108,6 +108,12 @@ describe('POST /me/id-scan', () => {
     }
   })
 
+  it('parallel calls cannot all pass the limit: at most the limit reaches the model', async () => {
+    const res = await Promise.all(Array.from({ length: SCANS_PER_HOUR + 5 }, () => scan('sc1')))
+    expect(res.filter((r) => r.status === 200).length).toBeLessThanOrEqual(SCANS_PER_HOUR)
+    expect(calls).toBeLessThanOrEqual(SCANS_PER_HOUR)
+  })
+
   it('stops at the hourly limit (429) without a model call', async () => {
     for (let i = 0; i < SCANS_PER_HOUR; i++) expect((await scan('sc1')).status).toBe(200)
     const res = await scan('sc1')
@@ -172,6 +178,14 @@ describe('cleanScan', () => {
     expect(cleanScan({ ...GOOD, lastName: 'C01234567' }).lastName).toBeNull()
     expect(cleanScan({ ...GOOD, city: '12345' }).city).toBeNull()
     expect(cleanScan(GOOD)).toEqual(GOOD)
+  })
+  it('drops a street without letters and a postcode that is a word or a city', () => {
+    expect(cleanScan({ ...GOOD, street: '1234 5678' }).street).toBeNull()
+    expect(cleanScan({ ...GOOD, postcode: '10115 Berlin' }).postcode).toBeNull()
+    expect(cleanScan({ ...GOOD, postcode: 'SW1A 1AA' }).postcode).toBe('SW1A 1AA')
+  })
+  it('does not accept today as a date of birth', () => {
+    expect(cleanScan({ ...GOOD, birthDate: new Date().toISOString().slice(0, 10) }).birthDate).toBeNull()
   })
 })
 
