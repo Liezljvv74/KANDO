@@ -90,7 +90,7 @@ We are liable without limit for intent and gross negligence, for injury to life,
 If you see illegal content, write to info@skillweb.space with the profile and the reason. We review notices and may remove content.
 
 **10. Changes to these terms**
-We may change these terms for good reasons (for example new features or legal changes). We tell registered users by email at least [30] days before the change takes effect. If you do not object and keep using SkillWeb after that date, the new terms apply; we point this out in the notice. If you object we may close your account.
+We may change these terms for good reasons (for example new features or legal changes). When we change them, a notice appears in the app and you must accept the new terms before you continue using SkillWeb. If you do not accept, you can delete your account in the app under Account.
 
 **11. Final provisions**
 German law applies; for consumers, mandatory consumer-protection rules of their country of residence remain unaffected. If a clause is invalid, the others stay valid. Place of jurisdiction for merchants: [Amplivine's registered place]. Last updated: [date].

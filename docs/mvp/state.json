@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-03 15-41",
+  "stamp": "2026-11-04 10-07",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -13,7 +13,15 @@
     "1.4": "Done",
     "1.5": "Done",
     "1.6": "Done",
-    "1.8": "Done"
+    "1.8": "Done",
+    "2.2": "Done",
+    "2.3": "Done",
+    "2.5": "Done",
+    "2.6": "Done",
+    "2.4": "In progress",
+    "2.7": "Open",
+    "3.0": "Open",
+    "1.7": "Done"
   },
   "tasks": {
     "1": "Done",
@@ -246,12 +254,48 @@
       "steps": [
         "step 1.8 Done"
       ]
+    },
+    {
+      "when": "2026-11-04 08:41",
+      "commit": "74114aa",
+      "note": "Merged 3 to 4 November 2026: #67 decisions, #68 bookings INSERT revoked, #69 lapsed booking (step 1.6d), #70 AI document check (steps 2.2, 2.3, 2.5, 2.6 done; migrations 0029, 0030), #72 README resume point, #73 sign-up terms checkbox (migration 0031). Migrations 0029 to 0031 on dev and production. AI check live on production (model claude-sonnet-5.5 pinned to google-vertex). Step 2.4 in progress: terms and privacy drafts are in the back office unpublished, owner fills the brackets and publishes. Not yet done: prompt for existing users, terms version, step 1.7.",
+      "steps": [
+        "step 1.6 Done",
+        "step 2.2 Done",
+        "step 2.3 Done",
+        "step 2.5 Done",
+        "step 2.6 Done",
+        "step 2.4 In progress",
+        "merged PR #68",
+        "merged PR #69",
+        "merged PR #70",
+        "merged PR #73"
+      ]
+    },
+    {
+      "when": "2026-11-04 09:43",
+      "commit": "e28121a",
+      "note": "Plan sheet: step 2.7 (terms acceptance for everyone, migration 0032) and step 3.0 (sign-up cleanups) added; owner approved A1 and A2 on 4 November 2026.",
+      "steps": [
+        "step 2.7 Open",
+        "step 3.0 Open"
+      ]
+    },
+    {
+      "when": "2026-11-04 09:49",
+      "commit": "3ed2dbd",
+      "note": "Owner decisions 4 November 2026: terms re-acceptance by pop-up in the app, no emails, no gate for old test accounts; step 2.7 rewritten.",
+      "steps": []
+    },
+    {
+      "when": "2026-11-04 10:07",
+      "commit": "ee5a1cb",
+      "note": "Step 1.7 Flow 1 test report written 4 November 2026 (Reports/Flow-1-Test-Report.xlsx): web 941 passed 1 skipped, mobile 344, contract 29, i18n 18, domain 254, 0 failed; typecheck and lint clean; migrations agree. Phone checks and step 1.10 still open.",
+      "steps": [
+        "step 1.7 Done"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
-  "workbookMerges": [
-    "61",
-    "62",
-    "64"
-  ]
+  "workbookMerges": []
 }
