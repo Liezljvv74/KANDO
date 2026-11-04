@@ -78,7 +78,7 @@ export default function SignUpScreen() {
           <Field label={t('common.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
         </View>
         <View style={styles.postcodeCol}>
-          <Field label={t('address.postcode')} value={postcode} onChangeText={setPostcode} keyboardType="number-pad" autoComplete="postal-code" maxLength={5} />
+          <Field label={t('address.postcode')} value={postcode} onChangeText={setPostcode} autoComplete="postal-code" autoCapitalize="characters" />
         </View>
       </View>
       <Field label={`${t('common.password')} (${t('auth.passwordHint')})`} value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" />
@@ -94,7 +94,9 @@ export default function SignUpScreen() {
         accessibilityState={{ checked: offerServices }}
         accessibilityLabel={t('auth.offerServices')}
         style={[styles.tile, offerServices && styles.tileOn]}>
-        <View style={[styles.box, offerServices && styles.boxOn]}>{offerServices && <Text style={styles.tick}>✓</Text>}</View>
+        <View style={[styles.box, offerServices && styles.boxOn]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {offerServices && <Text style={styles.tick}>✓</Text>}
+        </View>
         <Text style={[styles.tileText, offerServices && styles.tileTextOn]}>{t('auth.offerServices')}</Text>
       </Pressable>
       <TermsCheckbox checked={terms} onChange={setTerms} />

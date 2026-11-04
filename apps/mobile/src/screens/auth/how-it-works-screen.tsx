@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Button } from '@/components/auth-ui'
-import { useMe } from '@/hooks/use-me'
+import { useSession } from '@/hooks/use-session'
 import { t, useLang, type Key } from '@/i18n'
 
 const GROUPS: { title: Key; steps: [Key, Key, Key]; bg: string }[] = [
@@ -20,7 +20,7 @@ const SAFETY: [Key, Key][] = [
 export default function HowItWorksScreen() {
   useLang()
   const router = useRouter()
-  const signedIn = !!useMe() // signed in: back goes to Home and there is nothing to register for
+  const signedIn = !!useSession().user // signed in: back goes to Home and there is nothing to register for
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>

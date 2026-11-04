@@ -65,7 +65,7 @@ function PictureNudge() {
 }
 
 /** "Finally Someone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
-export const splitHeadline = (s: string): [string, string] => {
+const splitHeadline = (s: string): [string, string] => {
   const i = s.indexOf(' ')
   return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
 }
@@ -77,8 +77,8 @@ export default function HomeScreen() {
   const signedIn = !!useSession().user
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
-  const head = splitHeadline(t('home.headline'))
+  useFocusEffect(useCallback(() => { if (signedIn) loadMe().catch(() => {}) }, [signedIn])) // signed out there is no account to load
+  const head = splitHeadline(t('home.heroHeadline'))
 
   const offer = async () => {
     if (showProfileTab(me)) return router.navigate('/my-profile')

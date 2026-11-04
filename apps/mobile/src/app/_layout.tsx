@@ -28,7 +28,7 @@ export default function RootLayout() {
   if (loading || offline || (!fontsReady && !fontError)) {
     return (
       <View style={styles.center}>
-        {loading || !offline ? (
+        {loading || !offline ? ( // spinner while the session or the fonts load; the offline notice only once loading is over
           <ActivityIndicator size="large" color="#34328A" />
         ) : (
           <>
