@@ -1,6 +1,6 @@
 # Providers from 16, and filling in the sign-up from the ID card
 
-Status: plan only, nothing built. Owner decisions of 4 November 2026: (1) option 1 for young people: customers stay 18 or older, providers may be 16 or older with a parent or guardian's consent; the owner confirms the law with lawyers before going live. (2) Idea: the first step of registering could be a scan of the ID card, which fills in name, date of birth and the rest; typing everything in by hand stays possible for changes and for people who do not need to upload an ID.
+Status: part 2 (the ID scan, step 6.2) was built on 4 November 2026 in a first version (see "What was built" at the end); part 1 (providers from 16 with a guardian's consent, step 6.1) is plan only. Owner decisions of 4 November 2026: (1) option 1 for young people: customers stay 18 or older, providers may be 16 or older with a parent or guardian's consent; the owner confirms the law with lawyers before going live. (2) Idea: the first step of registering could be a scan of the ID card, which fills in name, date of birth and the rest; typing everything in by hand stays possible for changes and for people who do not need to upload an ID.
 
 Where it fits in the MVP plan: not needed for the capstone. After the assessment and before launch; suggested steps 6.1 (providers from 16) and 6.2 (ID scan fills in the sign-up), size L and M. The owner confirms the numbers before the Plan sheet is changed (the tracker changes wait for the open tracker PR).
 
@@ -55,3 +55,13 @@ Tests: domain spec for the extraction result shape and for "nothing saved before
 1. The lawyer answers (owner); in parallel the DPIA update.
 2. Step 6.2 first if the owner wants the nicer sign-up sooner: it does not depend on the age rule and helps every provider.
 3. Step 6.1: migration, table with row-level security, consent flow, payout rule, texts. Go live only after the lawyer and Stripe confirm.
+
+## What was built (step 6.2, 4 November 2026, first version)
+
+- `POST /app-api/v1/me/id-scan` (one photo in the field `file`): stateless, nothing stored; the same model, provider pin and privacy settings as the document check (shared `askModel`); needs a session and accepted terms; 10 per person and hour and the monthly cap shared with the document check; answers 503 `ID_SCAN_UNAVAILABLE` (AI off or cap spent), 403 `TERMS_NOT_ACCEPTED`, 429 `ID_SCAN_RATE_LIMIT`, 502 `ID_SCAN_FAILED`. Suggestions: first and last name, date of birth, street, postcode, city; the card number, the machine-readable lines and the expiry date are not requested. Values that are not plausible (a date that is not a real past day, digits in a name) are dropped.
+- `users.birth_date` (migration 0032): private, in `GET /me`, `PATCH /me` (a real day in the past, at most 120 years back) and the export; deleted with the account. Nothing enforces an age yet (step 6.1).
+- App: on the Account screen a button "Scan your ID card to fill in your details" (camera or photo library, with a note about what happens to the photo), a date of birth field with the phone's own date picker, and the suggestions fill the form; nothing is saved until Save. Entering by hand is unchanged.
+- **Where it is not:** the sign-up screen before the account exists. The scan needs a signed-in person who has accepted the terms (disclosure first, and no open endpoint that calls a paid model), so it sits on the Account screen after the email code. Showing it right after the code as the first step for people who tick "Offer services" is a small follow-up.
+- **One upload for both** (the scan and the ID document) is not built: the scan keeps no photo, and the document upload is a separate step.
+- Texts: terms section 5b, privacy sections 4b and 4c and four new table rows, DPIA addendum (section 7), Article 50 note; German and English in the app and in the back office drafts (`docs/legal-drafts/payments-and-id-scan-legal-text.md`).
+- Not tested on a device (camera, photo library, the date picker on iPhone and Android): listed in the phone test script, part 7.
