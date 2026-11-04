@@ -232,6 +232,13 @@
       "when": 1793795055655,
       "tag": "0032_user_birth_date",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793806228546,
+      "tag": "0033_user_terms_version",
+      "breakpoints": true
     }
   ]
 }

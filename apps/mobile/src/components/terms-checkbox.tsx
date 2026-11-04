@@ -9,9 +9,9 @@ import { splitSentence } from '@/lib/terms-sentence'
 const openPage = (slug: 'agb' | 'datenschutz') => Linking.openURL(`${API_URL}/${slug}${getLang() === 'de' ? '' : '?lang=en'}`).catch(() => {})
 
 /** The tick for the Terms and the Privacy Policy. A tap on the box or on the words ticks it; a tap on a link opens the page. A screen reader finds the box and the sentence, and the sentence offers the two pages as actions (a nested link inside a Text is not focusable on its own on iOS). */
-export function TermsCheckbox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+export function TermsCheckbox({ checked, onChange, sentenceKey = 'auth.termsSentence' }: { checked: boolean; onChange: (v: boolean) => void; sentenceKey?: 'auth.termsSentence' | 'terms.reaccept.sentence' }) {
   useLang()
-  const parts = splitSentence(t('auth.termsSentence'), { terms: t('auth.termsLink'), privacy: t('auth.privacyLink') })
+  const parts = splitSentence(t(sentenceKey), { terms: t('auth.termsLink'), privacy: t('auth.privacyLink') })
   return (
     <View style={styles.row}>
       <Pressable style={styles.box} onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={t('auth.termsLabel')} hitSlop={8}>

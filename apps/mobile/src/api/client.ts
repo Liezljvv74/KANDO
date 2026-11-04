@@ -41,6 +41,12 @@ export const setOnUnauthorized = (fn: (() => void) | null) => {
   onUnauthorized = fn
 }
 
+let onTermsRequired: (() => void) | null = null
+/** Called when the server answers 428 terms-required (the Terms changed since the person accepted them); `use-me` registers it to reload /me, which shows the accept pop-up. */
+export const setOnTermsRequired = (fn: (() => void) | null) => {
+  onTermsRequired = fn
+}
+
 /** Set-Cookie lines; a platform that joins them into one header gets split at the commas that start a new cookie. */
 function setCookieLines(headers: Headers): string[] {
   if (typeof headers.getSetCookie === 'function') return headers.getSetCookie()
@@ -161,6 +167,7 @@ export async function api<T>(path: string, init: Init = {}): Promise<T> {
     await clearSession()
     onUnauthorized?.()
   }
+  if (res.status === 428) onTermsRequired?.()
   if (!res.ok) throw toError(res.status, data)
   return data as T
 }
@@ -177,7 +184,7 @@ export function splitName(name: string): { firstName?: string; lastName?: string
 export const getMe = () => api<Me>('/app-api/v1/me')
 
 /** Changes the account name (`name` is split into first and last name; the server derives the public name), the language of emails and/or the private address. */
-export const updateMe = ({ name, ...rest }: { name?: string; firstName?: string; lastName?: string; language?: Me['language']; address?: Address | null; birthDate?: string | null; termsAccepted?: true }) =>
+export const updateMe = ({ name, ...rest }: { name?: string; firstName?: string; lastName?: string; language?: Me['language']; address?: Address | null; birthDate?: string | null; termsAccepted?: true; termsVersion?: string }) =>
   api<Partial<Me>>('/app-api/v1/me', { method: 'PATCH', body: { ...(name !== undefined && splitName(name)), ...rest } })
 
 /** Reads one photo of an ID card and returns suggestions for the details; nothing is saved until the person saves the form. */
