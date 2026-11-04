@@ -4,7 +4,7 @@ import { CourierPrime_700Bold } from '@expo-google-fonts/courier-prime'
 import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
@@ -25,7 +25,12 @@ export default function RootLayout() {
   usePushTaps(!!user)
   // The shop type; if it fails to load the app still opens with the system font.
   const [fontsReady, fontError] = useFonts({ Fraunces_700Bold, Fraunces_900Black, CourierPrime_700Bold })
-  if (loading || offline || (!fontsReady && !fontError)) {
+  const [fontsLate, setFontsLate] = useState(false) // a font that hangs never keeps the app on the spinner
+  useEffect(() => {
+    const timer = setTimeout(() => setFontsLate(true), 4000)
+    return () => clearTimeout(timer)
+  }, [])
+  if (loading || offline || (!fontsReady && !fontError && !fontsLate)) {
     return (
       <View style={styles.center}>
         {loading || !offline ? ( // spinner while the session or the fonts load; the offline notice only once loading is over

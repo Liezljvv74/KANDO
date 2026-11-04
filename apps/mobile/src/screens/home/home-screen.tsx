@@ -119,7 +119,7 @@ export default function HomeScreen() {
             <View style={styles.brandTag}>
               <Text style={styles.brand}>{t('brand.name')}</Text>
             </View>
-            <Pressable accessibilityRole="link" onPress={() => router.push('/login')} hitSlop={12} style={styles.loginHit}>
+            <Pressable accessibilityRole="link" onPress={() => { void setAfterLogin(null); router.push('/login') }} hitSlop={12} style={styles.loginHit}>
               <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
             </Pressable>
           </View>

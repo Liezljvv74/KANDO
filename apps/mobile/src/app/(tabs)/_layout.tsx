@@ -3,9 +3,9 @@ import { router, Tabs } from 'expo-router'
 import { useEffect } from 'react'
 import { AppState, type ColorValue } from 'react-native'
 
-import { loadMe, useMe } from '@/hooks/use-me'
+import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
-import { unseenCounts } from '@/lib/correspondence'
+import { categoryOf, unseenCounts } from '@/lib/correspondence'
 import { consumePending, readyToNavigate, urlOf, usePending } from '@/lib/pending-navigation'
 import { showProfileTab } from '@/lib/profile-tab'
 
@@ -28,6 +28,8 @@ export default function TabsLayout() {
   }, [])
   // The number of requests, bookings, quotes and messages the person has not looked at yet (opening each list marks its notices seen).
   const unseen = unseenCounts(me?.notifications).total
+  // Provider notices (payouts, documents, invoices ...) show as a dot on My business, where opening the page marks them seen.
+  const businessDot = unseenOf(me?.notifications).some((n) => !n.dismissedAt && !categoryOf(n))
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
       <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
@@ -36,7 +38,7 @@ export default function TabsLayout() {
         name="correspondence"
         options={{ title: t('tab.correspondence'), tabBarBadge: unseen > 0 ? unseen : undefined, tabBarIcon: icon('mail-outline') }}
       />
-      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), href: showProfileTab(me) ? undefined : null }} />
+      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, href: showProfileTab(me) ? undefined : null }} />
       <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
     </Tabs>
   )

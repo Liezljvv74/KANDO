@@ -94,7 +94,7 @@ function InvoicingFields({ initial }: { initial: MyProfile }) {
   return (
     <>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: taxOpen }} onPress={() => setTaxOpen(!taxOpen)} style={styles.toggle}>
-        <Text style={styles.toggleText}>{t('payouts.taxNumber')}</Text>
+        <Text style={styles.toggleText}>{taxNumber.trim() && !taxOpen ? `${t('payouts.taxNumber')}: ${taxNumber.trim()}` : t('payouts.taxNumber')}</Text>
         <Text style={styles.toggleText}>{taxOpen ? '▴' : '▾'}</Text>
       </Pressable>
       {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={setTaxNumber} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />}

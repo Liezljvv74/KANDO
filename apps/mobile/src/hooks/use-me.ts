@@ -37,16 +37,17 @@ export function clearMe() {
   set(null)
 }
 
-/** Marks every unseen notification seen (opening the setup page); a failure only leaves the dot a little longer. */
 /** The notifications the customer has not seen yet. */
 export const unseenOf = <T extends { seenAt: string | null }>(notifications: T[] | undefined) => (notifications ?? []).filter((n) => !n.seenAt)
 
+/** Marks the unseen notifications that pass `only` (all by default) seen. Only the ones the server saved turn seen here; a failed one keeps its number until the next try. */
 export async function markNotificationsSeen(only: (n: Notification) => boolean = () => true) {
   const unseen = unseenOf(me?.notifications).filter(only)
   if (!unseen.length) return
-  await Promise.all(unseen.map((n) => notificationsApi.mark(n.id, { seen: true }))).catch(() => {})
+  const results = await Promise.allSettled(unseen.map((n) => notificationsApi.mark(n.id, { seen: true })))
+  const saved = unseen.filter((_, i) => results[i]!.status === 'fulfilled')
   const now = new Date().toISOString()
-  if (me) set({ ...me, notifications: me.notifications.map((n) => (unseen.some((u) => u.id === n.id) ? { ...n, seenAt: now } : n)) })
+  if (me && saved.length) set({ ...me, notifications: me.notifications.map((n) => (saved.some((u) => u.id === n.id) ? { ...n, seenAt: now } : n)) })
 }
 
 export async function dismissNotification(id: string) {
