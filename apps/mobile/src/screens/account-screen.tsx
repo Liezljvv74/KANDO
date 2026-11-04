@@ -117,7 +117,7 @@ export default function AccountScreen() {
               <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
               <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy && !scanning} />
               <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy && !scanning} />
-              <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date(1990, 0, 1, 12)} disabled={busy || scanning} />
+              <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
               <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy || scanning} />
               <Button label={t('common.save')} onPress={save} busy={busy} disabled={scanning} />
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
