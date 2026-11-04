@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 23-53",
+  "stamp": "2026-11-05 00-10",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -32,7 +32,9 @@
     "7.2": "In progress",
     "7.3": "In progress",
     "7.4": "Done",
-    "1.10": "Waiting for owner"
+    "1.10": "Waiting for owner",
+    "3.1": "In progress",
+    "3.2": "Waiting for owner"
   },
   "tasks": {
     "1": "Done",
@@ -55,7 +57,9 @@
     "24": "In progress",
     "26": "In progress",
     "34": "In progress",
-    "12": "Waiting for owner"
+    "12": "Waiting for owner",
+    "8": "In progress",
+    "9": "Waiting for owner"
   },
   "log": [
     {
@@ -403,10 +407,19 @@
         "task 12 Waiting for owner",
         "task 35 Done"
       ]
+    },
+    {
+      "when": "2026-11-05 00:10",
+      "commit": "0d2ca03",
+      "note": "Security scan and secrets scan done 4 Nov 2026 on main at c3cf63b (Next.js, Vercel and RLS scanners, pnpm audit, secrets scan of tree and 198 commits): no critical finding, no secret in the repo or history; two highs fixed in PR #87 (street shown to a declining provider; sharp 0.35.5); two Vercel dashboard highs are owner actions; note in docs/security-scan-2026-11-04.md.",
+      "steps": [
+        "step 3.1 In progress",
+        "step 3.2 Waiting for owner",
+        "task 8 In progress",
+        "task 9 Waiting for owner"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
-  "workbookMerges": [
-    "85"
-  ]
+  "workbookMerges": []
 }
