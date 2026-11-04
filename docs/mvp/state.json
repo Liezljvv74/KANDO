@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 09-49",
+  "stamp": "2026-11-04 10-07",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -20,7 +20,8 @@
     "2.6": "Done",
     "2.4": "In progress",
     "2.7": "Open",
-    "3.0": "Open"
+    "3.0": "Open",
+    "1.7": "Done"
   },
   "tasks": {
     "1": "Done",
@@ -285,6 +286,14 @@
       "commit": "3ed2dbd",
       "note": "Owner decisions 4 November 2026: terms re-acceptance by pop-up in the app, no emails, no gate for old test accounts; step 2.7 rewritten.",
       "steps": []
+    },
+    {
+      "when": "2026-11-04 10:07",
+      "commit": "ee5a1cb",
+      "note": "Step 1.7 Flow 1 test report written 4 November 2026 (Reports/Flow-1-Test-Report.xlsx): web 941 passed 1 skipped, mobile 344, contract 29, i18n 18, domain 254, 0 failed; typecheck and lint clean; migrations agree. Phone checks and step 1.10 still open.",
+      "steps": [
+        "step 1.7 Done"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
