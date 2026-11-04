@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 22-42",
+  "stamp": "2026-11-04 23-53",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -25,13 +25,14 @@
     "2.1": "In progress",
     "3.3": "In progress",
     "4.1": "Done",
-    "1.9": "In progress",
+    "1.9": "Done",
     "6.1": "Open",
     "6.2": "In progress",
     "7.1": "In progress",
     "7.2": "In progress",
     "7.3": "In progress",
-    "7.4": "Done"
+    "7.4": "Done",
+    "1.10": "Waiting for owner"
   },
   "tasks": {
     "1": "Done",
@@ -44,8 +45,8 @@
     "20": "Done",
     "16": "Done",
     "17": "Done",
-    "4": "In progress",
-    "35": "In progress",
+    "4": "Done",
+    "35": "Done",
     "10": "In progress",
     "11": "In progress",
     "18": "Done",
@@ -53,7 +54,8 @@
     "23": "Done",
     "24": "In progress",
     "26": "In progress",
-    "34": "In progress"
+    "34": "In progress",
+    "12": "Waiting for owner"
   },
   "log": [
     {
@@ -389,10 +391,22 @@
         "step 7.4 Done",
         "merged PR #85"
       ]
+    },
+    {
+      "when": "2026-11-04 23:53",
+      "commit": "7f851ab",
+      "note": "Audit 4 Nov 2026 late evening against the app, GitHub, production and the live site after PR #85: release (task 4, step 1.9) done: code through #85 deployed, migrations through 0033 on production, new Android build 17dc2b91 exists; docs task 35 done (deployment.md no longer mentions Payload); phone walk-through (task 12, step 1.10) waits for the owner; terms and privacy pages are published (4 Nov, version 2026-11-04) but still hold [bestätigen] items, Impressum and Ranking are not published (404); demo data still on production; all other rows re-checked and unchanged. Summary, scorecard, owner decisions, owner actions and reminders updated. Old branches and worktrees deleted (backup bundle outside the repo).",
+      "steps": [
+        "step 1.9 Done",
+        "step 1.10 Waiting for owner",
+        "task 4 Done",
+        "task 12 Waiting for owner",
+        "task 35 Done"
+      ]
     }
   ],
-  "mergesSinceWorkbook": [
+  "mergesSinceWorkbook": [],
+  "workbookMerges": [
     "85"
-  ],
-  "workbookMerges": []
+  ]
 }
