@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 12-02",
+  "stamp": "2026-11-04 16-23",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -25,7 +25,9 @@
     "2.1": "In progress",
     "3.3": "In progress",
     "4.1": "In progress",
-    "1.9": "In progress"
+    "1.9": "In progress",
+    "6.1": "Open",
+    "6.2": "In progress"
   },
   "tasks": {
     "1": "Done",
@@ -332,11 +334,20 @@
         "merged PR #77",
         "merged PR #78"
       ]
+    },
+    {
+      "when": "2026-11-04 16:23",
+      "commit": "2bb0449",
+      "note": "Merged 4 November 2026: #79 tracker, #80 terms section 8a draft, #81 plan for providers from 16 and ID scan, #82 ID card scan (migration 0032 applied on dev and production; the Vercel build was fixed before the merge). Plan sheet: new phase 6 (6.1 providers from 16, 6.2 ID scan); step 2.7 now uses migration 0033. Next: step 2.7 re-acceptance pop-up, new Android build and phone walk-through.",
+      "steps": [
+        "step 6.1 Open",
+        "step 6.2 In progress",
+        "merged PR #82"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
   "workbookMerges": [
-    "77",
-    "78"
+    "82"
   ]
 }
