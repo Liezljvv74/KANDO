@@ -7,10 +7,14 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const meRoute = await import('../app/app-api/v1/me/route')
 const pushRoute = await import('../app/app-api/v1/me/push/route')
 const exportRoute = await import('../app/app-api/v1/me/export/route')
+const blocksRoute = await import('../app/app-api/v1/blocks/route')
 
 const setVersion = (id: string, v: string | null) => pool.query('UPDATE users SET terms_version = $2 WHERE id = $1', [id, v])
 const row = async (id: string) => (await pool.query('SELECT terms_accepted_at AS at, terms_version AS v FROM users WHERE id = $1', [id])).rows[0] as { at: Date | null; v: string | null }
+/** A background write (notification settings): never gated, so it never reopens the terms pop-up. */
 const write = (id: string) => call(pushRoute.PATCH, id, 'PATCH', { chat: false })
+/** A real change (blocking a person): gated while the terms are stale; the gate runs before the handler looks at the body. */
+const gatedWrite = (id: string) => call(blocksRoute.POST, id, 'POST', { threadId: 'none' })
 
 beforeAll(async () => {
   await seedBase()
@@ -30,9 +34,10 @@ describe('terms version', () => {
     expect((await call(meRoute.GET, 'tv1')).status).toBe(200)
     expect((await (await call(meRoute.GET, 'tv1')).json()).termsRequired).toBe(true)
     expect((await call(exportRoute.GET, 'tv1')).status).toBe(200) // their data stays reachable
-    const res = await write('tv1')
+    const res = await gatedWrite('tv1')
     expect(res.status).toBe(428)
     expect((await res.json()).error).toBe('terms-required')
+    expect((await write('tv1')).status).toBe(200) // marking things seen and push switches never bring the pop-up back
   })
 
   it('accepting the current version on PATCH /me is allowed, stamps time and version, and opens the writes again', async () => {
@@ -66,5 +71,12 @@ describe('terms version', () => {
   it('an account that never accepted (an old test account) is not held back', async () => {
     await pool.query('UPDATE users SET terms_accepted_at = NULL, terms_version = NULL WHERE id = $1', ['tv3'])
     expect((await write('tv3')).status).toBe(200)
+  })
+
+  it('an account that accepted before must name the version; only the first acceptance may leave it out', async () => {
+    const old = await call(meRoute.PATCH, 'tv2', 'PATCH', { termsAccepted: true })
+    expect(old.status).toBe(409)
+    expect((await old.json()).error).toBe('terms-outdated')
+    expect((await call(meRoute.PATCH, 'tv3', 'PATCH', { termsAccepted: true })).status).toBe(200) // never accepted: the sign-up acceptance
   })
 })
