@@ -11,9 +11,9 @@ const GROUPS: { title: Key; steps: [Key, Key, Key]; bg: string }[] = [
   { title: 'home.providerTitle', steps: ['home.provider1', 'home.provider2', 'home.provider3'], bg: '#FFFFFF' },
 ]
 const SAFETY: [Key, Key][] = [
-  ['home.payment', 'home.paymentText'],
-  ['home.safetyVerified', 'home.safetyVerifiedText'],
-  ['home.safetyReviews', 'home.safetyReviewsText'],
+  ['home.payment', 'howto.paymentText'],
+  ['home.safetyVerified', 'howto.verifiedText'],
+  ['howto.reviewsTitle', 'home.safetyReviewsText'],
   ['home.safetyEu', 'home.safetyEuText'],
 ]
 
