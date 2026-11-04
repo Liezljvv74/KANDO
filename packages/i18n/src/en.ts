@@ -226,7 +226,7 @@ export const en: Record<AppKey, string> = {
   'tab.home': 'Home',
   'home.cta': 'Find help now',
   'home.becomeProvider': 'Become a provider',
-  'home.headline': 'Finally. Someone who can',
+  'home.headline': 'Finally Someone who can',
   'home.stamp': 'Checked',
   'home.intro': 'Find helpers near you – or new customers for your skills.',
   'home.badgeVerified': 'Documents checked',

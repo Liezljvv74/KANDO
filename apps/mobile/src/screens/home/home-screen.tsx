@@ -116,7 +116,9 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Text style={styles.headline} accessibilityRole="header">
-            {head[0]} <Text style={styles.headlineRest}>{head[1]}</Text>
+            {head[0]}
+            {'\n'}
+            <Text style={styles.headlineRest}>{head[1]}</Text>
           </Text>
           <Text style={styles.intro}>{k('intro')}</Text>
           <Stamp label={k('stamp')} />

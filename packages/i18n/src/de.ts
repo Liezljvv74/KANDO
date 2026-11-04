@@ -225,7 +225,7 @@ export const de = {
   'tab.home': 'Start',
   'home.cta': 'Jetzt Hilfe finden',
   'home.becomeProvider': 'Anbieter werden',
-  'home.headline': 'Endlich. Jemand, der’s kann',
+  'home.headline': 'Endlich Jemand, der’s kann',
   'home.stamp': 'Geprüft',
   'home.intro': 'Finde Helfer in deiner Nähe – oder neue Kunden für dein Können.',
   'home.badgeVerified': 'Nachweise geprüft',

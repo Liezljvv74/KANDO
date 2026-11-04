@@ -15,10 +15,10 @@ const CARDS: Card[] = [
   { title: 'welcome.learn', text: 'welcome.learnText', href: '/how-it-works' },
 ]
 
-/** "Finally. Someone who can" -> ["Finally.", "Someone who can"]: the first sentence in mint, the rest in teal. */
+/** "Finally Someone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
 export const splitHeadline = (s: string): [string, string] => {
-  const i = s.indexOf('. ')
-  return i < 0 ? [s, ''] : [s.slice(0, i + 1), s.slice(i + 2)]
+  const i = s.indexOf(' ')
+  return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
 }
 
 /** The first screen when signed out: the shop sign in the KANDO colours. */
@@ -39,7 +39,9 @@ export default function WelcomeScreen() {
           </Pressable>
         </View>
         <Text style={styles.headline} accessibilityRole="header">
-          {first} <Text style={styles.headlineRest}>{rest}</Text>
+          {first}
+          {'\n'}
+          <Text style={styles.headlineRest}>{rest}</Text>
         </Text>
         <Stamp label={t('home.stamp')} />
         <View style={styles.cards}>
