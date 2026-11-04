@@ -7,7 +7,7 @@ import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
 import { clearMe, loadMe } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
-import { clearPending, loadPending, savePending, type PendingSignup } from '@/lib/pending-signup'
+import { clearPending, loadPending, savePending, settle, type PendingSignup } from '@/lib/pending-signup'
 import { registerForPush, unregisterPush } from '@/lib/push'
 
 type User = auth.SessionUser
@@ -103,7 +103,6 @@ async function finish(p: PendingSignup) {
       // A refusal that will never pass (4xx other than busy or timeout) is dropped; only a network or server problem is retried.
       termsOpen = !(e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429)
     })
-    const done = () => (termsOpen ? savePending({ email: p.email, offerServices: p.offerServices, pictureUri: null, termsAccepted: true }) : clearPending())
     if (p.firstName && p.lastName) {
       const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
       // A postcode the server refuses must not block the names for good (the form cannot show it any more): saved without the address.
@@ -117,13 +116,13 @@ async function finish(p: PendingSignup) {
         if (!(e instanceof ApiError && e.code === 'CONTACT_DETAILS')) throw e
       }
       // Saved: a retry only repeats the picture, so later edits are never overwritten.
-      await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri, ...(termsOpen ? { termsAccepted: true } : {}) })
+      await settle(p, { termsOpen, pictureDone: false })
     }
     if (p.pictureUri) {
-      if (!new File(p.pictureUri).exists) return await done() // the OS cleared its cache: nothing left to upload
+      if (!new File(p.pictureUri).exists) return await settle(p, { termsOpen, pictureDone: true }) // the OS cleared its cache: nothing left to upload
       await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
     }
-    await done()
+    await settle(p, { termsOpen, pictureDone: true })
   } catch {
     // Kept for the next launch.
   }
