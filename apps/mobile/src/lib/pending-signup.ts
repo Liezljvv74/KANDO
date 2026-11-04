@@ -11,6 +11,8 @@ export type PendingSignup = {
   firstName?: string
   lastName?: string
   offerServices: boolean
+  /** The Terms box was ticked; saved with the account once the code is confirmed. */
+  termsAccepted?: boolean
   pictureUri: string | null
   address?: Address | null
 }

@@ -97,6 +97,13 @@ export async function completeSignup(user: User) {
 
 async function finish(p: PendingSignup) {
   try {
+    // First, so a refused name below cannot lose it; a network blip here must not block the rest, so it is kept for the next launch.
+    let termsOpen = false
+    if (p.termsAccepted) await updateMe({ termsAccepted: true }).catch((e) => {
+      // A refusal that will never pass (4xx other than busy or timeout) is dropped; only a network or server problem is retried.
+      termsOpen = !(e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429)
+    })
+    const done = () => (termsOpen ? savePending({ email: p.email, offerServices: p.offerServices, pictureUri: null, termsAccepted: true }) : clearPending())
     if (p.firstName && p.lastName) {
       const names = { firstName: p.firstName, lastName: p.lastName, language: getLang() }
       // A postcode the server refuses must not block the names for good (the form cannot show it any more): saved without the address.
@@ -110,13 +117,13 @@ async function finish(p: PendingSignup) {
         if (!(e instanceof ApiError && e.code === 'CONTACT_DETAILS')) throw e
       }
       // Saved: a retry only repeats the picture, so later edits are never overwritten.
-      await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri })
+      await savePending({ email: p.email, offerServices: p.offerServices, pictureUri: p.pictureUri, ...(termsOpen ? { termsAccepted: true } : {}) })
     }
     if (p.pictureUri) {
-      if (!new File(p.pictureUri).exists) return await clearPending() // the OS cleared its cache: nothing left to upload
+      if (!new File(p.pictureUri).exists) return await done() // the OS cleared its cache: nothing left to upload
       await photosApi.add({ uri: p.pictureUri, name: 'photo.jpg', type: 'image/jpeg' }, 'profile')
     }
-    await clearPending()
+    await done()
   } catch {
     // Kept for the next launch.
   }
