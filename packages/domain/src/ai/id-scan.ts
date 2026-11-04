@@ -57,15 +57,31 @@ export function cleanScan(m: IdScanModel): IdScan {
   if (!m.readable) return empty
   const name = (v: string | null | undefined) => (v && !/\d/.test(v) ? v : null)
   const birth = BirthDateSchema.safeParse(m.birthDate ?? '')
+  // Postcode and city are put in their own fields: "D-14641", "14641 Wustermark" in either field, or a city that still carries the postcode.
+  const place = splitPlace(m.postcode, m.city)
   return {
     readable: true,
     firstName: name(m.firstName),
     lastName: name(m.lastName),
     birthDate: birth.success ? birth.data : null,
     street: m.street && /\p{L}/u.test(m.street) ? m.street : null, // a value without letters is an ID number or noise
-    postcode: m.postcode && /^[A-Za-z0-9][A-Za-z0-9 -]{1,14}$/.test(m.postcode) && !/\p{L}{3}/u.test(m.postcode) ? m.postcode : null,
-    city: m.city && !/\d/.test(m.city) ? m.city : null,
+    postcode: place.postcode,
+    city: place.city,
   }
+}
+
+/** A German postcode is five digits; other countries' codes (letters and digits, e.g. 'SW1A 1AA') pass when they look like a code. */
+const POSTCODE = /^[A-Za-z0-9][A-Za-z0-9 -]{1,14}$/
+export function splitPlace(postcode?: string | null, city?: string | null): { postcode: string | null; city: string | null } {
+  let pc = (postcode ?? '').trim().replace(/^D[-\s]+(?=\d{5}(?!\d))/i, '')
+  let c = (city ?? '').trim().replace(/^D[-\s]+(?=\d{5}(?!\d))/i, '')
+  const combined = /^(\d{5})\s+(\p{L}.*)$/u
+  const inPc = combined.exec(pc)
+  if (inPc) [pc, c] = [inPc[1]!, c || inPc[2]!]
+  const inCity = combined.exec(c)
+  if (inCity) [pc, c] = [pc || inCity[1]!, inCity[2]!]
+  if (/^\p{L}/u.test(pc) && /^\d{5}$/.test(c)) [pc, c] = [c, pc] // swapped
+  return { postcode: pc && POSTCODE.test(pc) && !/\p{L}{3}/u.test(pc) ? pc : null, city: c && !/\d/.test(c) ? c : null }
 }
 
 export type ScanDeps = { scanner?: IdScanner; now?: Date }

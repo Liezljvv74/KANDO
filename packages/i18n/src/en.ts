@@ -384,6 +384,8 @@ export const en: Record<AppKey, string> = {
   'error.idScanUnavailable': 'Reading an ID card is not available right now. Type your details in yourself, or try again later.',
   'error.termsNotAccepted': 'This account has not accepted the Terms and the Privacy Policy, so the ID card cannot be read. Type your details in yourself.',
   'error.idScanRateLimit': 'You have scanned too many times in the last hour. Wait a while, or type your details in yourself.',
+  'error.invalidBirthDate': 'The date of birth is not possible. Choose the day you were born (it cannot be today or in the future), then save again.',
+  'error.invalidInput': 'Some of the details you entered are not valid. Check the fields, correct them, then save again.',
   'error.idScanFailed': 'The ID card could not be read this time. Try again, or type your details in yourself.',
   'account.pushHeading': 'Notifications',
   'account.pushChat': 'Chat messages',

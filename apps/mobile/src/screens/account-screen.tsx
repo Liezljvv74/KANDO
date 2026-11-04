@@ -91,6 +91,7 @@ export default function AccountScreen() {
     const addr = toAddress(address, me?.address?.country)
     if (!firstName.trim() || !lastName.trim()) return setError(t('auth.fillAll'))
     if (addr === undefined) return setError(t('auth.addressIncomplete'))
+    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return setError(t('error.invalidBirthDate'))
     setBusy(true)
     setError(null)
     hideSaved()
@@ -99,7 +100,7 @@ export default function AccountScreen() {
       await load()
       showSaved()
     } catch (e) {
-      setError(errorText(e instanceof ApiError ? e.code : ''))
+      setError(e instanceof ApiError && e.code === 'Invalid input' && e.fields?.some((f) => f.startsWith('birthDate')) ? t('error.invalidBirthDate') : errorText(e instanceof ApiError ? e.code : ''))
     }
     setBusy(false)
   }

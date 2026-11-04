@@ -383,6 +383,8 @@ export const de = {
   'error.idScanUnavailable': 'Das Lesen des Ausweises ist gerade nicht verfÃ¼gbar. Gib deine Angaben selbst ein oder versuche es spÃ¤ter noch einmal.',
   'error.termsNotAccepted': 'Dieses Konto hat AGB und DatenschutzerklÃ¤rung noch nicht bestÃ¤tigt, deshalb kann der Ausweis nicht gelesen werden. Gib deine Angaben selbst ein.',
   'error.idScanRateLimit': 'Du hast in der letzten Stunde zu oft gescannt. Warte etwas oder gib deine Angaben selbst ein.',
+  'error.invalidBirthDate': 'Das Geburtsdatum ist nicht möglich. Wähle den Tag deiner Geburt (nicht heute und nicht in der Zukunft) und speichere noch einmal.',
+  'error.invalidInput': 'Einige deiner Angaben sind nicht gültig. Prüfe die Felder, korrigiere sie und speichere noch einmal.',
   'error.idScanFailed': 'Der Ausweis konnte diesmal nicht gelesen werden. Versuche es noch einmal oder gib deine Angaben selbst ein.',
   'account.pushHeading': 'Mitteilungen',
   'account.pushChat': 'Chatnachrichten',

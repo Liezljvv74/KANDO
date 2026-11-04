@@ -179,10 +179,18 @@ describe('cleanScan', () => {
     expect(cleanScan({ ...GOOD, city: '12345' }).city).toBeNull()
     expect(cleanScan(GOOD)).toEqual(GOOD)
   })
-  it('drops a street without letters and a postcode that is a word or a city', () => {
+  it('drops a street without letters and a postcode that is a city name', () => {
     expect(cleanScan({ ...GOOD, street: '1234 5678' }).street).toBeNull()
-    expect(cleanScan({ ...GOOD, postcode: '10115 Berlin' }).postcode).toBeNull()
+    expect(cleanScan({ ...GOOD, postcode: 'Berlin', city: null }).postcode).toBeNull()
     expect(cleanScan({ ...GOOD, postcode: 'SW1A 1AA' }).postcode).toBe('SW1A 1AA')
+  })
+  it('puts postcode and city in their own fields, German style', () => {
+    const at = (postcode: string | null, city: string | null) => { const r = cleanScan({ ...GOOD, postcode, city }); return [r.postcode, r.city] }
+    expect(at('14641', 'Wustermark')).toEqual(['14641', 'Wustermark'])
+    expect(at('D-14641', 'Wustermark')).toEqual(['14641', 'Wustermark'])
+    expect(at('14641 Wustermark', null)).toEqual(['14641', 'Wustermark'])
+    expect(at(null, '14641 Wustermark')).toEqual(['14641', 'Wustermark'])
+    expect(at('Wustermark', '14641')).toEqual(['14641', 'Wustermark'])
   })
   it('does not accept today as a date of birth', () => {
     expect(cleanScan({ ...GOOD, birthDate: new Date().toISOString().slice(0, 10) }).birthDate).toBeNull()
