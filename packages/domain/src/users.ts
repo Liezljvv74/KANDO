@@ -97,6 +97,7 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   isProvider: row.isProvider,
   photoUrl: pictureKey ? photoUrl(pictureKey) : null,
   address: addressOf(row),
+  birthDate: row.birthDate,
   paymentsEnabled: paymentsEnabled(),
   notifications,
 })
@@ -119,6 +120,7 @@ export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<
       ...(patch.firstName !== undefined && { firstName: patch.firstName }),
       ...(patch.lastName !== undefined && { lastName: patch.lastName }),
       ...(patch.language !== undefined && { language: patch.language }),
+      ...(patch.birthDate !== undefined && { birthDate: patch.birthDate }),
       ...(patch.termsAccepted && { termsAcceptedAt: sql`COALESCE(${users.termsAcceptedAt}, now())` }), // the first acceptance stays
       ...(a !== undefined && {
         addressStreet: a?.street ?? null,

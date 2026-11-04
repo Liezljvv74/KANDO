@@ -225,6 +225,13 @@
       "when": 1793738192669,
       "tag": "0031_signup_terms_accepted",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793795055655,
+      "tag": "0032_user_birth_date",
+      "breakpoints": true
     }
   ]
 }

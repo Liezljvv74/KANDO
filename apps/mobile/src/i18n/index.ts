@@ -47,6 +47,7 @@ export const t = (key: Key, params?: Record<string, string | number>) => transla
 export const errorKeys: Record<string, Key> = {
   // App API (`error`)
   'Unknown postcode': 'error.unknownPostcode',
+  'Invalid input': 'error.invalidInput',
   'Invalid postcode': 'error.invalidPostcode',
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',
@@ -59,6 +60,10 @@ export const errorKeys: Record<string, Key> = {
   'Payload too large': 'error.fileTooLarge',
   'Unsupported file type': 'error.unsupportedFile',
   'File unreadable': 'error.fileUnreadable',
+  ID_SCAN_UNAVAILABLE: 'error.idScanUnavailable',
+  TERMS_NOT_ACCEPTED: 'error.termsNotAccepted',
+  ID_SCAN_RATE_LIMIT: 'error.idScanRateLimit',
+  ID_SCAN_FAILED: 'error.idScanFailed',
   'Photo limit reached': 'error.photoLimit',
   'Check already pending': 'error.checkPending',
   'Translation unavailable': 'provider.translateError',

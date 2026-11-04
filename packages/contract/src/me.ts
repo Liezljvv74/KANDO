@@ -13,6 +13,16 @@ export const AddressSchema = z.object({
 })
 export type Address = z.infer<typeof AddressSchema>
 
+/** A calendar day before today (UTC), not more than 120 years back. */
+export const BirthDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`)
+    const now = Date.now()
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s && d.getTime() < now - (now % 86_400_000) && d.getTime() > now - 120 * 365.25 * 86_400_000
+  })
+
 /** An in-app message for the owner; the app only marks it seen or dismissed. */
 export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-accepted', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'message-received', 'booking-paid', 'payment-received', 'payment-late-refunded', 'payout-setup-complete', 'customers-waiting', 'provider-available', 'refund-issued', 'job-finished', 'confirm-reminder', 'payment-released', 'was-job-done', 'booking-cancelled', 'no-show-reported', 'dispute-opened', 'dispute-decided', 'job-stopped', 'stop-amount-stated', 'additional-task-requested', 'review-requested', 'review-visible', 'provider-warning', 'invoice-ready', 'commission-invoice-ready', 'request-withdrawn', 'request-declined', 'request-reopened', 'request-updated', 'time-proposed', 'time-to-confirm', 'quote-confirmed'] as const
 /** Kinds about a request whose booking (if named) has ended: the push and the in-app notice open the request, not the booking. */
@@ -41,6 +51,8 @@ export const MeSchema = z.object({
   /** The person's picture (their profile photo), if any. */
   photoUrl: z.string().nullable(),
   address: AddressSchema.nullable(),
+  /** Private; YYYY-MM-DD; null until the person gives it (typed or confirmed after an ID scan). */
+  birthDate: z.string().nullish(),
   /** Whether the server takes payments (optional: an older server lacks it). */
   paymentsEnabled: z.boolean().optional(),
   /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
@@ -71,6 +83,8 @@ export const MePatchSchema = z
     lastName: requiredText(60),
     language: LangSchema,
     address: AddressSchema.nullable(),
+    /** YYYY-MM-DD, a real day in the past and not more than 120 years ago; null clears it. */
+    birthDate: BirthDateSchema.nullable(),
     /** Sign-up: the person ticked the Terms and Privacy Policy box; the server stores the time. */
     termsAccepted: z.literal(true),
   })

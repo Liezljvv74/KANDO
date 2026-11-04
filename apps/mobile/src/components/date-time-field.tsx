@@ -7,7 +7,7 @@ import { suggestedWhen } from '@/lib/when-where'
 
 /**
  * A date or a time of day chosen with the phone's own picker (a dialog on Android, a spinner under the field on iPhone, closed with
- * "Done") instead of typed text. `value` null shows `placeholder`; `minimumDate` is the earliest day that can be chosen. The time is
+ * "Done") instead of typed text. `value` null shows `placeholder`; `minimumDate` / `maximumDate` bound what can be chosen; `initial` is where the picker opens when nothing is chosen yet (default: tomorrow morning, for a booking). The time is
  * shown in 24-hour form, like the picker.
  */
 export function DateTimeField({
@@ -17,6 +17,8 @@ export function DateTimeField({
   value,
   onChange,
   minimumDate,
+  maximumDate,
+  initial,
   disabled,
 }: {
   label: string
@@ -25,6 +27,8 @@ export function DateTimeField({
   value: Date | null
   onChange: (picked: Date) => void
   minimumDate?: Date
+  maximumDate?: Date
+  initial?: Date
   disabled?: boolean
 }) {
   const [iosOpen, setIosOpen] = useState(false)
@@ -33,11 +37,11 @@ export function DateTimeField({
       ? value.toLocaleDateString(getLang(), { dateStyle: 'medium' })
       : value.toLocaleTimeString(getLang(), { hour: '2-digit', minute: '2-digit', hour12: false })
     : null
-  const current = value ?? suggestedWhen()
+  const current = value ?? initial ?? suggestedWhen()
 
   function open() {
     if (disabled) return
-    if (Platform.OS === 'android') return DateTimePickerAndroid.open({ value: current, mode, is24Hour: true, minimumDate, onValueChange: (_e, d) => onChange(d) })
+    if (Platform.OS === 'android') return DateTimePickerAndroid.open({ value: current, mode, is24Hour: true, minimumDate, maximumDate, onValueChange: (_e, d) => onChange(d) })
     // the spinner shows a suggested value: opening it chooses that value, so accepting it needs no spin away and back
     if (!iosOpen && !value) onChange(current)
     setIosOpen((o) => !o)
@@ -51,7 +55,7 @@ export function DateTimeField({
       </Pressable>
       {Platform.OS === 'ios' && iosOpen && (
         <>
-          <DateTimePicker value={current} mode={mode} display="spinner" is24Hour minimumDate={minimumDate} onValueChange={(_e, d) => onChange(d)} />
+          <DateTimePicker value={current} mode={mode} display="spinner" is24Hour minimumDate={minimumDate} maximumDate={maximumDate} onValueChange={(_e, d) => onChange(d)} />
           <Pressable accessibilityRole="button" onPress={() => setIosOpen(false)} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
             <Text style={styles.doneLabel}>{t('common.done')}</Text>
           </Pressable>
