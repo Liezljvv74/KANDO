@@ -359,7 +359,7 @@ export const en: Record<AppKey, string> = {
   'auth.offerServices': 'I also want to offer services',
   'auth.pictureWhy': 'Providers see who they are working for. A picture keeps both sides safer.',
   'auth.addressOptional': 'Address (optional)',
-  'auth.termsLabel': 'I am at least 18 years old and accept the Terms and Conditions and the Privacy Policy',
+  'auth.termsLabel': 'Accept the Terms and the Privacy Policy',
   'auth.termsSentence': 'I am at least 18 years old and accept the {terms} and the {privacy}.',
   'auth.termsOpens': 'Opens the page in the browser',
   'auth.termsLink': 'Terms and Conditions',

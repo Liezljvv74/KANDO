@@ -8,7 +8,7 @@ import { splitSentence } from '@/lib/terms-sentence'
 /** The page staff publish on the website (slug agb or datenschutz), in the app's language. */
 const openPage = (slug: 'agb' | 'datenschutz') => Linking.openURL(`${API_URL}/${slug}${getLang() === 'de' ? '' : '?lang=en'}`).catch(() => {})
 
-/** The tick for the Terms and the Privacy Policy. The box and each link are separate elements, so a screen reader can reach all three. */
+/** The tick for the Terms and the Privacy Policy. A tap on the box or on the words ticks it; a tap on a link opens the page. A screen reader finds the box and the sentence, and the sentence offers the two pages as actions (a nested link inside a Text is not focusable on its own on iOS). */
 export function TermsCheckbox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   useLang()
   const parts = splitSentence(t('auth.termsSentence'), { terms: t('auth.termsLink'), privacy: t('auth.privacyLink') })
@@ -17,7 +17,12 @@ export function TermsCheckbox({ checked, onChange }: { checked: boolean; onChang
       <Pressable style={styles.box} onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={t('auth.termsLabel')} hitSlop={8}>
         <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={26} color="#0E8A6B" />
       </Pressable>
-      <Text style={styles.text}>
+      <Text
+        style={styles.text}
+        onPress={() => onChange(!checked)}
+        accessibilityActions={[{ name: 'terms', label: t('auth.termsLink') }, { name: 'privacy', label: t('auth.privacyLink') }]}
+        onAccessibilityAction={(e) => openPage(e.nativeEvent.actionName === 'terms' ? 'agb' : 'datenschutz')}
+      >
         {parts.map((p, i) =>
           p.link ? (
             <Text key={i} style={styles.link} accessibilityRole="link" accessibilityHint={t('auth.termsOpens')} onPress={() => openPage(p.link === 'terms' ? 'agb' : 'datenschutz')}>

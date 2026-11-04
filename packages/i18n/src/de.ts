@@ -358,7 +358,7 @@ export const de = {
   'auth.offerServices': 'Ich möchte auch Leistungen anbieten',
   'auth.pictureWhy': 'Anbieter sehen, für wen sie arbeiten. Ein Foto macht es für beide Seiten sicherer.',
   'auth.addressOptional': 'Adresse (optional)',
-  'auth.termsLabel': 'Ich bin mindestens 18 Jahre alt und akzeptiere die AGB und die Datenschutzerklärung',
+  'auth.termsLabel': 'AGB und Datenschutzerklärung akzeptieren',
   'auth.termsSentence': 'Ich bin mindestens 18 Jahre alt und akzeptiere die {terms} und die {privacy}.',
   'auth.termsOpens': 'Öffnet die Seite im Browser',
   'auth.termsLink': 'AGB',
