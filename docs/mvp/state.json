@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 16-23",
+  "stamp": "2026-11-04 17-02",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -24,7 +24,7 @@
     "1.7": "Done",
     "2.1": "In progress",
     "3.3": "In progress",
-    "4.1": "In progress",
+    "4.1": "Done",
     "1.9": "In progress",
     "6.1": "Open",
     "6.2": "In progress"
@@ -32,19 +32,19 @@
   "tasks": {
     "1": "Done",
     "2": "In progress",
-    "3": "In progress",
+    "3": "Done",
     "5": "Done",
     "6": "Done",
     "7": "In progress",
     "15": "Waiting for owner",
-    "20": "In progress",
+    "20": "Done",
     "16": "Done",
     "17": "Done",
     "4": "In progress",
     "35": "In progress",
     "10": "In progress",
     "11": "In progress",
-    "18": "In progress",
+    "18": "Done",
     "19": "Done",
     "23": "Done",
     "24": "In progress",
@@ -344,10 +344,19 @@
         "step 6.2 In progress",
         "merged PR #82"
       ]
+    },
+    {
+      "when": "2026-11-04 17:02",
+      "commit": "6477c10",
+      "note": "Audit 5 Nov 2026 against the app, GitHub, Vercel and EAS: tasks 3, 18 and 20 and step 4.1 are finished (what was left belongs to the phone walk-through, task 12, and to task 28); task 4, task 34, step 1.9 and the review evidence (task 7) brought up to date (migrations to 0032, code to #83, Android build of 3 Nov finished but older than #73, #82 and step 2.7); the finished merges #74 and #75 removed from the owner actions.",
+      "steps": [
+        "step 4.1 Done",
+        "task 3 Done",
+        "task 18 Done",
+        "task 20 Done"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
-  "workbookMerges": [
-    "82"
-  ]
+  "workbookMerges": []
 }
