@@ -114,6 +114,7 @@ export const en: Record<AppKey, string> = {
   'setup.aboutYou': 'About you',
   'setup.publish': 'Publish',
   'setup.live': 'Live',
+  'setup.liveLocked': 'Fill in the fields marked * below to go live.',
   'setup.liveWaiting': 'Live, {count} service(s) waiting for a check',
   'setup.takeOffline': 'Take offline',
   'setup.services': 'Services',
