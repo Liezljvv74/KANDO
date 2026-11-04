@@ -1,4 +1,4 @@
-import { termsCurrent } from '../users'
+import { termsCurrent } from '../terms'
 import { and, count, eq, gt, gte, isNull, lt, lte, ne, or, sql, sum } from 'drizzle-orm'
 import { db, documentAiChecks, documents, providers, users } from '@kando/db'
 import { describeError } from '../log-error'

@@ -119,10 +119,11 @@ const clean = (v: string | null) => v?.trim() || null
 
 /** The caller's draft: created on first open (postcode taken from the private address), the same row every time. */
 export async function ensureDraft(tx: Tx, userId: string): Promise<MyProfile> {
-  return (await ensure(tx, userId)).profile
+  return (await ensure(tx, userId, true)).profile
 }
 
-async function ensure(tx: Tx, userId: string): Promise<{ profile: MyProfile; created: boolean }> {
+/** `reoffer`: the explicit "offer services" action (ensureDraft) also turns the provider flag back on after stopOffering; a plain profile save never does. */
+async function ensure(tx: Tx, userId: string, reoffer = false): Promise<{ profile: MyProfile; created: boolean }> {
   await lockProfile(tx, userId)
   let row = await ownProvider(tx, userId)
   const created = !row
@@ -134,7 +135,7 @@ async function ensure(tx: Tx, userId: string): Promise<{ profile: MyProfile; cre
     row = (await ownProvider(tx, userId))!
     await syncIdentity(tx, userId, row)
     row = (await ownProvider(tx, userId))!
-  } else await tx.update(users).set({ isProvider: true }).where(and(eq(users.id, userId), eq(users.isProvider, false))) // offering again after stopOffering: the kept draft comes back
+  } else if (reoffer) await tx.update(users).set({ isProvider: true }).where(and(eq(users.id, userId), eq(users.isProvider, false))) // offering again after stopOffering: the kept draft comes back
   return { profile: await view(tx, userId, row), created }
 }
 

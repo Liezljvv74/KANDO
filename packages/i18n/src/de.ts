@@ -364,6 +364,7 @@ export const de = {
   'auth.firstName': 'Vorname',
   'auth.lastName': 'Nachname',
   'auth.offerServices': 'Ich biete eine Leistung an',
+  'auth.postcodeInvalid': 'Prüfe die Postleitzahl: Sie wirkt zu kurz oder enthält ungewöhnliche Zeichen.',
   'auth.pictureWhy': 'Anbieter sehen, für wen sie arbeiten. Ein Foto macht es für beide Seiten sicherer.',
   'auth.addressOptional': 'Adresse (optional)',
   'auth.termsLabel': 'AGB und Datenschutzerklärung akzeptieren',

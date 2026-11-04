@@ -10,10 +10,11 @@ import { type Category, unseenCounts } from '@/lib/correspondence'
 import { go } from '@/lib/go'
 import { color, font } from '@/theme'
 
-const ROWS: { category: Category; title: Key; href: '/bookings' | '/quotes' | '/threads' }[] = [
+const ROWS: { category: Category | null; title: Key; href: '/bookings' | '/quotes' | '/threads' | '/invoices' }[] = [
   { category: 'bookings', title: 'booking.myBookings', href: '/bookings' },
   { category: 'quotes', title: 'booking.quotes', href: '/quotes' },
   { category: 'messages', title: 'chat.title', href: '/threads' },
+  { category: null, title: 'invoice.title', href: '/invoices' }, // invoices and receipts for everyone, also after stopping to offer
 ]
 
 /** The Correspondence tab: requests and bookings, quotes and messages, each with the number of things not looked at yet. */
@@ -29,11 +30,11 @@ export default function CorrespondenceScreen() {
           {t('tab.correspondence')}
         </Text>
         {ROWS.map(({ category, title, href }) => (
-          <Pressable key={category} accessibilityRole="button" accessibilityLabel={counts[category] ? `${t(title)}, ${counts[category]}` : t(title)} onPress={() => go(href)} style={({ pressed }) => pressed && styles.pressed}>
+          <Pressable key={href} accessibilityRole="button" accessibilityLabel={category && counts[category] ? `${t(title)}, ${counts[category]}` : t(title)} onPress={() => go(href)} style={({ pressed }) => pressed && styles.pressed}>
             <Tag>
               <View style={styles.row}>
                 <Text style={styles.rowTitle}>{t(title)}</Text>
-                {counts[category] > 0 && (
+                {category && counts[category] > 0 && (
                   <View style={styles.count}>
                     <Text style={styles.countText}>{counts[category]}</Text>
                   </View>

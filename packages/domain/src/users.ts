@@ -2,6 +2,8 @@ import { assertNoContactDetailsIn } from './chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, isPostcode, photos, users, type Tx } from '@kando/db'
 import { TERMS_VERSION, type Me, type MePatch } from '@kando/contract'
+import { termsStale } from './terms'
+export { termsCurrent, termsStale } from './terms'
 import { fail } from './providers/http'
 import { ownProvider, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
@@ -12,9 +14,7 @@ import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null; termsStale: boolean }
 
 /** The person accepted the Terms once, but not the current version (the published terms changed since): they must accept again in the app. Accounts that never accepted (old test accounts) are not held back. */
-export const termsStale = (row: { termsAcceptedAt: Date | null; termsVersion: string | null }) => row.termsAcceptedAt !== null && row.termsVersion !== TERMS_VERSION
 /** The current version was accepted: what the AI features require, as the AI use is disclosed in the terms. */
-export const termsCurrent = (row: { termsAcceptedAt: Date | null; termsVersion: string | null }) => row.termsAcceptedAt !== null && row.termsVersion === TERMS_VERSION
 export type StaffRole = 'admin' | 'reviewer'
 export type StaffUser = { id: string; email: string; staffRole: StaffRole }
 
@@ -119,6 +119,11 @@ export async function getMe(tx: Tx, userId: string): Promise<Me> {
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */
 export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<Me> {
   if (patch.termsVersion !== undefined && patch.termsVersion !== TERMS_VERSION) fail(409, { error: 'terms-outdated' }) // the app showed an older text
+  // Only the first acceptance (at sign-up) may leave the version out: an account that accepted before and does not say which text it showed could be accepting a newer text it never saw.
+  if (patch.termsAccepted && patch.termsVersion === undefined) {
+    const prior = (await tx.select({ at: users.termsAcceptedAt }).from(users).where(eq(users.id, userId)))[0]
+    if (prior?.at) fail(409, { error: 'terms-outdated' })
+  }
   await assertNoContactDetailsIn(userId, [patch.firstName, patch.lastName])
   const a = patch.address
   if (a && !(await isPostcode(a.country, a.postcode, tx))) fail(400, { error: 'Invalid postcode' }) // the format only: a real but unlisted postcode is fine

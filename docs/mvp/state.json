@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 17-02",
+  "stamp": "2026-11-04 22-42",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -19,7 +19,7 @@
     "2.5": "Done",
     "2.6": "Done",
     "2.4": "In progress",
-    "2.7": "Open",
+    "2.7": "In progress",
     "3.0": "Done",
     "1.7": "Done",
     "2.1": "In progress",
@@ -27,7 +27,11 @@
     "4.1": "Done",
     "1.9": "In progress",
     "6.1": "Open",
-    "6.2": "In progress"
+    "6.2": "In progress",
+    "7.1": "In progress",
+    "7.2": "In progress",
+    "7.3": "In progress",
+    "7.4": "Open"
   },
   "tasks": {
     "1": "Done",
@@ -354,6 +358,18 @@
         "task 3 Done",
         "task 18 Done",
         "task 20 Done"
+      ]
+    },
+    {
+      "when": "2026-11-04 22:42",
+      "commit": "d17bcff",
+      "note": "5 Nov evening: new app look (PR #85, not merged): corner-shop look in the KANDO colours on every screen, welcome and Home merged, new tabs (Correspondence with unseen numbers, My business, slimmer Account), sign-up and how-it-works changes, stop offering services (server rule, route, switch), step 2.7 terms re-acceptance included in the branch (migration 0033 on dev only; production before the merge). New plan phase 7 (7.1 to 7.4). Not yet seen on a phone.",
+      "steps": [
+        "step 2.7 In progress",
+        "step 7.1 In progress",
+        "step 7.2 In progress",
+        "step 7.3 In progress",
+        "step 7.4 Open"
       ]
     }
   ],

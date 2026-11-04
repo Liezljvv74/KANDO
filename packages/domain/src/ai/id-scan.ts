@@ -1,4 +1,4 @@
-import { termsCurrent } from '../users'
+import { termsCurrent } from '../terms'
 import { and, count, eq, gt, gte, sql, sum } from 'drizzle-orm'
 import { db, documentAiChecks, users } from '@kando/db'
 import { BirthDateSchema, IdScanModelSchema, type IdScan, type IdScanModel } from '@kando/contract'

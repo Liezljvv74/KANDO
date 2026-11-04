@@ -47,6 +47,7 @@ export default function SignUpScreen() {
     if (!firstName.trim() || !lastName.trim() || !email.trim() || password.length < 8) return setError(t('auth.fillAll'))
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError(t('auth.invalidEmail'))
     if (!terms) return setError(t('auth.termsRequired'))
+    if (postcode.trim() && !/^[A-Za-z0-9][A-Za-z0-9 -]{1,8}[A-Za-z0-9]$/.test(postcode.trim())) return setError(t('auth.postcodeInvalid')) // a loose shape check (countries differ); the server checks the real format
     const addr = toAddress({ ...EMPTY_ADDRESS, postcode })
     setBusy(true)
     setError(null)
