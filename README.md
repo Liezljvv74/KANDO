@@ -214,6 +214,11 @@ Done on 30 and 31 October 2026 for Production: sandbox account, Connect, Account
 4. May staff decide disputes, is the decision binding, and what must the site say about out-of-court dispute resolution for consumers?
 5. What must the site say about reviews coming from people who really booked, and what may staff hide?
 6. Keeping trader documents 6 months after account deletion; whether private persons need a trade registration; whether the EU Digital Services Act "know your trader" duty applies to Amplivine.
+7. Providers from 16 (owner decision of 4 November 2026, plan `docs/superpowers/plans/2026-11-04-providers-from-16-and-id-prefill.md`): may a 16 or 17 year old offer small services and agree prices with a parent or guardian's consent given in the app (§§ 106 to 113 BGB)?
+8. Is the family court's approval needed for a minor's independent business (§ 112 BGB), and is a trade registration needed?
+9. Does the youth employment law (JArbSchG) apply to self-employed jobs such as babysitting and dog walking?
+10. May payouts for a minor's work go to the guardian's Stripe account, and how must the invoice or receipt read?
+11. What must the privacy policy say about children's data (consent from age 16 under GDPR Article 8 in Germany), and about reading the date of birth and address from an ID card?
 
 **Tax adviser:** VAT on cancellation and no-show fees; a business invoice for a remote job has no customer address; commission amounts are treated as gross and the `vatNote` is a placeholder; whether private providers need a commission invoice at all; refunds after payout or a chargeback leave the invoices standing (no correction invoice); account deletion is refused when the current month's commission was already issued.
 
