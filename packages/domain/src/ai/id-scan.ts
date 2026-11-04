@@ -1,3 +1,4 @@
+import { termsCurrent } from '../users'
 import { and, count, eq, gt, gte, sql, sum } from 'drizzle-orm'
 import { db, documentAiChecks, users } from '@kando/db'
 import { BirthDateSchema, IdScanModelSchema, type IdScan, type IdScanModel } from '@kando/contract'
@@ -96,8 +97,8 @@ export async function scanIdCard(userId: string, image: Buffer, deps: ScanDeps =
   const scanner = deps.scanner ?? idScanner()
   if (!scanner) return fail(503, { error: 'ID_SCAN_UNAVAILABLE' })
   const now = deps.now ?? new Date()
-  const [u] = await db.select({ terms: users.termsAcceptedAt }).from(users).where(eq(users.id, userId))
-  if (!u?.terms) return fail(403, { error: 'TERMS_NOT_ACCEPTED' }) // the disclosure of the AI use is in the terms
+  const [u] = await db.select({ termsAcceptedAt: users.termsAcceptedAt, termsVersion: users.termsVersion }).from(users).where(eq(users.id, userId))
+  if (!u || !termsCurrent(u)) return fail(403, { error: 'TERMS_NOT_ACCEPTED' }) // the disclosure of the AI use is in the terms
   const [recent] = await db.select({ n: count() }).from(documentAiChecks).where(and(eq(documentAiChecks.ownerId, userId), eq(documentAiChecks.failure, ID_SCAN_FAILURE), gt(documentAiChecks.createdAt, new Date(now.getTime() - 3_600_000))))
   if ((recent?.n ?? 0) >= SCANS_PER_HOUR) return fail(429, { error: 'ID_SCAN_RATE_LIMIT' })
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))

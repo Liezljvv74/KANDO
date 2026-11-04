@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
 import { Button } from '@/components/auth-ui'
+import { TermsReaccept } from '@/components/terms-reaccept'
 import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
@@ -51,6 +52,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" />
         </Stack.Protected>
       </Stack>
+      {user && <TermsReaccept />}
     </KeyboardProvider>
   )
 }

@@ -48,6 +48,8 @@ export const errorKeys: Record<string, Key> = {
   // App API (`error`)
   'Unknown postcode': 'error.unknownPostcode',
   'Invalid input': 'error.invalidInput',
+  'terms-required': 'error.termsRequired',
+  'terms-outdated': 'error.termsOutdated',
   'Invalid postcode': 'error.invalidPostcode',
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',

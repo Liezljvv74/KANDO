@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "terms_version" text;

@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 
 import type { Me } from '@kando/contract'
 
-import { getMe } from '@/api/client'
+import { getMe, setOnTermsRequired } from '@/api/client'
 import { notificationsApi } from '@/api/my-profile'
 import { noteMe } from '@/lib/payments-off'
 import { clearPending } from '@/lib/pending-navigation'
@@ -31,8 +31,22 @@ export async function loadMe() {
   return m
 }
 
+/** The person chose "I do not agree" and went to the account page (to delete the account): the pop-up stays away until a write is refused again or the app restarts. */
+let aside = false
+export const setAside = (v: boolean) => {
+  aside = v
+  listeners.forEach((l) => l())
+}
+
+// A write answered 428 terms-required: the shared copy is reloaded, its termsRequired shows the accept pop-up (again, if it was set aside).
+setOnTermsRequired(() => {
+  setAside(false)
+  loadMe().catch(() => {})
+})
+
 export function clearMe() {
   generation++
+  aside = false
   clearPending()
   set(null)
 }
@@ -63,4 +77,12 @@ export function useMe() {
     if (!me) loadMe().catch(() => {})
   }, [])
   return value
+}
+
+/** true while the accept pop-up must cover the app: the Terms changed since the person accepted and they have not set it aside. */
+export function useTermsPopup() {
+  return useSyncExternalStore(
+    (l) => (listeners.add(l), () => listeners.delete(l)),
+    () => me?.termsRequired === true && !aside,
+  )
 }

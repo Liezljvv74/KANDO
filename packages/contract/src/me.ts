@@ -53,6 +53,8 @@ export const MeSchema = z.object({
   address: AddressSchema.nullable(),
   /** Private; YYYY-MM-DD; null until the person gives it (typed or confirmed after an ID scan). */
   birthDate: z.string().nullish(),
+  /** true when the person has accepted an older version of the Terms (or none that is current): the app shows the accept pop-up (optional: an older server lacks it). */
+  termsRequired: z.boolean().optional(),
   /** Whether the server takes payments (optional: an older server lacks it). */
   paymentsEnabled: z.boolean().optional(),
   /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
@@ -87,6 +89,8 @@ export const MePatchSchema = z
     birthDate: BirthDateSchema.nullable(),
     /** Sign-up: the person ticked the Terms and Privacy Policy box; the server stores the time. */
     termsAccepted: z.literal(true),
+    /** The version the person saw; the server refuses (409 terms-outdated) a version that is no longer the current one. Left out at sign-up. */
+    termsVersion: z.string().max(20),
   })
   .partial()
 export type MePatch = z.infer<typeof MePatchSchema>

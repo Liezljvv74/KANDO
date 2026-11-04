@@ -26,6 +26,8 @@ export const users = pgTable(
     suspendedReason: text('suspended_reason'),
     // When the person accepted the Terms and the Privacy Policy at sign-up (null: before this was recorded).
     termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+    /** The terms version (a date label, TERMS_VERSION) the person last accepted; null for an acceptance before versions existed. */
+    termsVersion: text('terms_version'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
