@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { t } from '@/i18n'
 import { matches } from '@/lib/match'
+import { font } from '@/theme'
 
 /** A dropdown: a field showing the chosen option; tapping it opens a scrollable list of options. */
 export function Select<T extends string | number>({
@@ -83,7 +84,7 @@ export function Select<T extends string | number>({
               value={query}
               onChangeText={setQuery}
               placeholder={t('common.typeToSearch')}
-              placeholderTextColor="#7A948D"
+              placeholderTextColor="#5E5D90"
               accessibilityLabel={t('common.typeToSearch')}
               autoCorrect={false}
               style={styles.search}
@@ -118,33 +119,33 @@ export function Select<T extends string | number>({
 
 const styles = StyleSheet.create({
   field: { gap: 4 },
-  label: { fontSize: 14, fontWeight: '600', color: '#14352E' },
+  label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
   input: {
     minHeight: 44,
-    borderRadius: 12,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#BFE3D8',
+    borderColor: '#7B7AB8',
     paddingHorizontal: 12,
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  value: { flex: 1, fontSize: 16, color: '#14352E' },
-  placeholder: { color: '#7A948D' },
-  chevron: { fontSize: 16, color: '#0E8A6B' },
+  value: { flex: 1, fontSize: 16, color: '#1D1C4A' },
+  placeholder: { color: '#5E5D90' },
+  chevron: { fontSize: 16, color: '#34328A' },
   flex: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(20, 53, 46, 0.35)' },
   sheet: { maxHeight: '70%', backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#14352E' },
+  sheetTitle: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
   close: { minHeight: 44, justifyContent: 'center' },
-  closeLabel: { fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
-  option: { minHeight: 48, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#E1F4EE' },
-  optionOn: { backgroundColor: '#E1F4EE' },
-  optionLabel: { fontSize: 16, color: '#14352E' },
-  optionLabelOn: { fontWeight: '700', color: '#0E8A6B' },
-  check: { fontSize: 18, color: '#0E8A6B' },
-  search: { marginHorizontal: 16, marginBottom: 8, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: '#BFE3D8', paddingHorizontal: 12, fontSize: 16, color: '#14352E' },
-  empty: { padding: 16, fontSize: 15, color: '#5C7A72' },
+  closeLabel: { fontSize: 15, fontWeight: '600', color: '#34328A' },
+  option: { minHeight: 48, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#CFE6DC' },
+  optionOn: { backgroundColor: '#CFE6DC' },
+  optionLabel: { fontSize: 16, color: '#1D1C4A' },
+  optionLabelOn: { fontWeight: '700', color: '#34328A' },
+  check: { fontSize: 18, color: '#34328A' },
+  search: { marginHorizontal: 16, marginBottom: 8, minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, fontSize: 16, color: '#1D1C4A' },
+  empty: { padding: 16, fontSize: 15, color: '#4F4E7D' },
 })

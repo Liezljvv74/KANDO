@@ -1,11 +1,15 @@
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { router, Tabs } from 'expo-router'
 import { useEffect } from 'react'
-import { AppState } from 'react-native'
+import { AppState, type ColorValue } from 'react-native'
 
-import { loadMe, useMe } from '@/hooks/use-me'
+import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
+import { categoryOf, unseenCounts } from '@/lib/correspondence'
 import { consumePending, readyToNavigate, urlOf, usePending } from '@/lib/pending-navigation'
 import { showProfileTab } from '@/lib/profile-tab'
+
+const icon = (name: React.ComponentProps<typeof Ionicons>['name']) => ({ color, size }: { color: ColorValue; size: number }) => <Ionicons name={name} size={size} color={color as string} />
 
 export default function TabsLayout() {
   useLang()
@@ -22,14 +26,20 @@ export default function TabsLayout() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
     return () => sub.remove()
   }, [])
-  // A dot (empty badge) while any notification is unseen; the Account tab and the provider setup screen mark them seen.
-  const unseen = me?.notifications.some((n) => !n.seenAt)
+  // The number of requests, bookings, quotes and messages the person has not looked at yet (opening each list marks its notices seen).
+  const unseen = unseenCounts(me?.notifications).total
+  // Provider notices (payouts, documents, invoices ...) show as a dot on My business, where opening the page marks them seen.
+  const businessDot = unseenOf(me?.notifications).some((n) => !n.dismissedAt && !categoryOf(n))
   return (
-    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#0E8A6B', tabBarInactiveTintColor: '#5C7A72' }}>
-      <Tabs.Screen name="index" options={{ title: t('tab.home') }} />
-      <Tabs.Screen name="search" options={{ title: t('tab.search') }} />
-      <Tabs.Screen name="my-profile" options={{ title: t('tab.myProfile'), href: showProfileTab(me) ? undefined : null }} />
-      <Tabs.Screen name="account" options={{ title: t('tab.account'), tabBarBadge: unseen ? '' : undefined }} />
+    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
+      <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
+      <Tabs.Screen name="search" options={{ tabBarIcon: icon('search-outline'), title: t('tab.search') }} />
+      <Tabs.Screen
+        name="correspondence"
+        options={{ title: t('tab.correspondence'), tabBarBadge: unseen > 0 ? unseen : undefined, tabBarIcon: icon('mail-outline') }}
+      />
+      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, href: showProfileTab(me) ? undefined : null }} />
+      <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
     </Tabs>
   )
 }

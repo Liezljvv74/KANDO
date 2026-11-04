@@ -25,7 +25,7 @@ export function CardBubble({ card }: { card: Card }) {
 }
 
 const styles = StyleSheet.create({
-  card: { alignSelf: 'center', backgroundColor: '#E1F3EC', borderRadius: 12, padding: 12, marginVertical: 6, maxWidth: '90%' },
-  text: { fontSize: 15, fontWeight: '700', color: '#0B6B54', textAlign: 'center' },
-  note: { fontSize: 13, color: '#0B6B54', textAlign: 'center', marginTop: 4 },
+  card: { alignSelf: 'center', backgroundColor: '#CFE6DC', borderRadius: 6, padding: 12, marginVertical: 6, maxWidth: '90%' },
+  text: { fontSize: 15, fontWeight: '700', color: '#1D1C4A', textAlign: 'center' },
+  note: { fontSize: 13, color: '#1D1C4A', textAlign: 'center', marginTop: 4 },
 })

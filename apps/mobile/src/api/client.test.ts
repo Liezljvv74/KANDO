@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store'
 
-import { api, upload, ApiError, getCookie, REQUEST_TIMEOUT_MS, SESSION_KEY, setOnUnauthorized, updateMe } from './client'
+import { api, upload, ApiError, getCookie, REQUEST_TIMEOUT_MS, SESSION_KEY, setOnTermsRequired, setOnUnauthorized, updateMe } from './client'
 
 jest.mock('expo-secure-store', () => {
   const store = new Map<string, string>()
@@ -75,6 +75,17 @@ test('clears the session on 401', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1) // no refresh, no retry
   expect(await getCookie()).toBeNull()
   expect(onUnauthorized).toHaveBeenCalledTimes(1)
+})
+
+test('a 428 terms-required calls the handler, keeps the session and still throws the refusal', async () => {
+  const onTerms = jest.fn()
+  setOnTermsRequired(onTerms)
+  fetchMock.mockResolvedValueOnce(json(428, { error: 'terms-required' }))
+  await expect(api('/app-api/v1/me/push', { method: 'PATCH', body: {} })).rejects.toMatchObject({ status: 428, code: 'terms-required' })
+  expect(onTerms).toHaveBeenCalledTimes(1)
+  expect(onUnauthorized).not.toHaveBeenCalled()
+  expect(await getCookie()).toBe(TOKEN)
+  setOnTermsRequired(null)
 })
 
 test('a 401 without a stored session does not call onUnauthorized', async () => {

@@ -119,10 +119,11 @@ const clean = (v: string | null) => v?.trim() || null
 
 /** The caller's draft: created on first open (postcode taken from the private address), the same row every time. */
 export async function ensureDraft(tx: Tx, userId: string): Promise<MyProfile> {
-  return (await ensure(tx, userId)).profile
+  return (await ensure(tx, userId, true)).profile
 }
 
-async function ensure(tx: Tx, userId: string): Promise<{ profile: MyProfile; created: boolean }> {
+/** `reoffer`: the explicit "offer services" action (ensureDraft) also turns the provider flag back on after stopOffering; a plain profile save never does. */
+async function ensure(tx: Tx, userId: string, reoffer = false): Promise<{ profile: MyProfile; created: boolean }> {
   await lockProfile(tx, userId)
   let row = await ownProvider(tx, userId)
   const created = !row
@@ -134,7 +135,7 @@ async function ensure(tx: Tx, userId: string): Promise<{ profile: MyProfile; cre
     row = (await ownProvider(tx, userId))!
     await syncIdentity(tx, userId, row)
     row = (await ownProvider(tx, userId))!
-  }
+  } else if (reoffer) await tx.update(users).set({ isProvider: true }).where(and(eq(users.id, userId), eq(users.isProvider, false))) // offering again after stopOffering: the kept draft comes back
   return { profile: await view(tx, userId, row), created }
 }
 
@@ -195,4 +196,26 @@ export async function unpublish(tx: Tx, userId: string): Promise<MyProfile> {
   if (!(await ownProvider(tx, userId))) return fail(404, { error: 'Not found' })
   await tx.execute(sql`SELECT set_provider_published(false, '')`)
   return (await getMyProfile(tx, userId))!
+}
+
+/**
+ * Stops offering services: 409 OFFER_HAS_OPEN_JOBS while the person has open work as provider, else the profile goes back to draft
+ * (off search and the public page) and is_provider turns false. The profile, services, bookings, reviews and invoices stay; ensureDraft brings it back.
+ * Open = a booking not yet ended (anything but expired, declined, withdrawn, completed, cancelled, refunded) or paid and not released,
+ * a request still open or quoted, or a quote still sent. Disputes are bookings in status 'disputed'. No provider row: only the flag is cleared.
+ */
+export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true }> {
+  await lockProfile(tx, userId)
+  const row = await ownProvider(tx, userId)
+  if (row) {
+    const open = (
+      await tx.execute(sql`SELECT 1 FROM bookings WHERE provider_id = ${row.id} AND (status NOT IN ('expired','declined','withdrawn','completed','cancelled','refunded') OR (paid_at IS NOT NULL AND released_at IS NULL))
+        UNION ALL SELECT 1 FROM requests WHERE provider_id = ${row.id} AND status IN ('open','quoted')
+        UNION ALL SELECT 1 FROM quotes WHERE provider_id = ${row.id} AND status = 'sent' LIMIT 1`)
+    ).rows.length
+    if (open) fail(409, { error: 'OFFER_HAS_OPEN_JOBS' })
+    await tx.execute(sql`SELECT set_provider_published(false, '')`)
+  }
+  await tx.update(users).set({ isProvider: false }).where(eq(users.id, userId))
+  return { ok: true }
 }

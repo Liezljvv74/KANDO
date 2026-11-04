@@ -15,5 +15,5 @@ export function QuotesCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
+  card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 6, padding: 16, gap: 12 },
 })

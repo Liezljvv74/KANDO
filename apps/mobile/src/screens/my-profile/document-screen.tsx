@@ -101,7 +101,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 15, lineHeight: 21, color: '#14352E' },
+  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
   state: { fontSize: 17, fontWeight: '700' },
   sub: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
 })

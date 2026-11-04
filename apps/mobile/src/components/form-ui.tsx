@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { t } from '@/i18n'
+import { color, font } from '@/theme'
 
 export function FormScreen({ title, children, back = true }: { title: string; children: React.ReactNode; back?: boolean }) {
   const router = useRouter()
@@ -21,17 +22,20 @@ export function FormScreen({ title, children, back = true }: { title: string; ch
 }
 
 /** Text colour on a green (complete) card: the brand green, darkened to stay readable on the tint. */
-export const DONE_TEXT = '#0B6B54'
+export const DONE_TEXT = color.ink
 
 /** `done`: the card's compulsory information is complete, so it is tinted green. */
-export const Card = ({ children, done }: { children: React.ReactNode; done?: boolean }) => <View style={[styles.card, done && styles.cardDone]}>{children}</View>
+/** `list`: a row in a list or a summary (a booking, a quote, a thread, an invoice): the dashed price-tag look. Without it the card is a calm form container. */
+export const Card = ({ children, done, list }: { children: React.ReactNode; done?: boolean; list?: boolean }) => (
+  <View style={[styles.card, list && styles.cardList, done && styles.cardDone]}>{children}</View>
+)
 
 export const SectionTitle = ({ text }: { text: string }) => <Text style={styles.section}>{text}</Text>
 
-export const SwitchRow = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+export const SwitchRow = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
   <View style={styles.switchRow}>
     <Text style={[styles.label, styles.switchLabel]}>{label}</Text>
-    <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: '#0E8A6B' }} />
+    <Switch value={value} onValueChange={onChange} disabled={disabled} accessibilityLabel={label} trackColor={{ true: color.indigo }} />
   </View>
 )
 
@@ -57,7 +61,7 @@ export const SmallButton = ({
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
     style={({ pressed }) => [styles.small, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color="#0E8A6B" /> : <Text style={styles.smallLabel}>{label}</Text>}
+    {busy ? <ActivityIndicator color={color.indigo} /> : <Text style={styles.smallLabel}>{label}</Text>}
   </Pressable>
 )
 
@@ -84,7 +88,7 @@ export const IconButton = ({
     hitSlop={4}
     style={({ pressed }) => [styles.icon, (pressed || disabled) && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color="#0E8A6B" /> : <Ionicons name={icon} size={22} color="#0E8A6B" />}
+    {busy ? <ActivityIndicator color={color.indigo} /> : <Ionicons name={icon} size={22} color={color.indigo} />}
   </Pressable>
 )
 
@@ -105,18 +109,19 @@ export const Actions = ({ children }: { children: React.ReactNode }) => <View st
 export { styles as formStyles }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 12, gap: 8 },
-  title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 12, gap: 6 },
-  cardDone: { backgroundColor: '#E3F5EE' },
-  section: { fontSize: 18, fontWeight: '700', color: '#14352E' },
+  title: { fontSize: 24, fontFamily: font.heading, color: color.indigo },
+  card: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.divider, borderRadius: 6, padding: 12, gap: 6 },
+  cardList: { borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo },
+  cardDone: { backgroundColor: color.divider },
+  section: { fontSize: 18, fontFamily: font.heading, color: color.ink },
   field: { gap: 4 },
-  label: { fontSize: 14, fontWeight: '600', color: '#14352E' },
+  label: { fontSize: 14, fontWeight: '600', color: color.ink },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, gap: 12 },
   switchLabel: { flex: 1 },
-  small: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: '#0E8A6B', justifyContent: 'center' },
-  smallLabel: { color: '#0E8A6B', fontWeight: '600', fontSize: 15 },
+  small: { minHeight: 44, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: color.indigo, justifyContent: 'center' },
+  smallLabel: { color: color.indigo, fontWeight: '600', fontSize: 15 },
   smallOff: { opacity: 0.5 },
   icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },

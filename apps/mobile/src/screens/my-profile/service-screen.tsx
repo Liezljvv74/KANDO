@@ -165,7 +165,7 @@ function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows
 }
 
 const styles = StyleSheet.create({
-  hint: { fontSize: 14, color: '#5C7A72' },
+  hint: { fontSize: 14, color: '#4F4E7D' },
   waiting: { fontSize: 14, fontWeight: '600', color: '#8A5A00' },
   multi: { minHeight: 72, paddingTop: 10, textAlignVertical: 'top' },
 })

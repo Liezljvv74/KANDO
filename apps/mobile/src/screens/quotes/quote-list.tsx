@@ -8,6 +8,7 @@ import { Button, ErrorText, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { useMarkSeen } from '@/hooks/use-mark-seen'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang } from '@/i18n'
 import { formatDay, formatWhen } from '@/lib/booking-time'
@@ -17,6 +18,7 @@ import { asksStillWanted } from '@/lib/lapse'
 import { acceptedRows, acceptSummary, openQuotes, otherQuotes, quoteLines, quoteWhen, splitQuotes, type AcceptedRow, price } from '@/lib/quotes'
 import { LapseBanner } from '@/screens/bookings/lapse-banner'
 import { DocRow, usePdf } from '@/screens/invoices/invoice-list'
+import { font } from '@/theme'
 
 /**
  * The person's quotes. As customer: every open quote is its own card with its own Accept button (so they see exactly what they
@@ -25,6 +27,7 @@ import { DocRow, usePdf } from '@/screens/invoices/invoice-list'
  */
 export default function QuoteList() {
   useLang()
+  useMarkSeen('quotes')
   const { data, error, retry } = useLoad(listQuoteDocuments)
   const pdf = usePdf()
   const accepting = useSubmit()
@@ -84,7 +87,7 @@ export default function QuoteList() {
 function OfferCard({ q, asked, busy, onAccept, onPdf }: { q: QuoteListItem; asked: boolean; busy: boolean; onAccept: () => void; onPdf: () => void }) {
   const total = price(q)
   return (
-    <Card>
+    <Card list>
       <Text style={styles.title}>{q.counterparty}</Text>
       <Text style={styles.text}>{q.service ?? t('quote.noService')}</Text>
       <Text style={styles.amount}>{total}</Text>
@@ -107,7 +110,7 @@ function AcceptedTable({ rows }: { rows: AcceptedRow[] }) {
   const { width, fontScale } = useWindowDimensions() // re-renders when the window or the system font size changes
   const stacked = width < NARROW_WIDTH || fontScale > LARGE_FONT_SCALE
   return (
-    <Card>
+    <Card list>
       {!stacked && (
         <View style={styles.tr}>
           <Text style={[styles.cell, styles.provider, styles.head]}>{t('quote.col.provider')}</Text>
@@ -159,14 +162,14 @@ function Row({ q, now, busy, onPdf }: { q: QuoteListItem; now: Date; busy: boole
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontWeight: '700', color: '#14352E' },
-  text: { fontSize: 16, color: '#14352E' },
-  amount: { fontSize: 20, fontWeight: '700', color: '#0E8A6B' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  title: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  amount: { fontSize: 20, fontFamily: font.tag, color: '#34328A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
   tr: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  body: { minHeight: 44, justifyContent: 'center', gap: 2, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#E3F1EC' },
-  cell: { fontSize: 13, color: '#14352E' },
-  head: { fontWeight: '700', color: '#5C7A72' },
+  body: { minHeight: 44, justifyContent: 'center', gap: 2, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#CFE6DC' },
+  cell: { fontSize: 13, color: '#1D1C4A' },
+  head: { fontWeight: '700', color: '#4F4E7D' },
   provider: { flex: 3 },
   date: { flex: 2.5 },
   service: { flex: 3 },

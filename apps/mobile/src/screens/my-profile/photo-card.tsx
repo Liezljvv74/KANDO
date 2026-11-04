@@ -83,7 +83,7 @@ export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | nul
           accessibilityState={{ busy, disabled: busy }}
           style={styles.edit}
         >
-          {busy ? <ActivityIndicator color="#0E8A6B" /> : <Ionicons name="pencil" size={20} color="#0E8A6B" style={styles.halo} />}
+          {busy ? <ActivityIndicator color="#34328A" /> : <Ionicons name="pencil" size={20} color="#34328A" style={styles.halo} />}
         </Pressable>
       </View>
       <ErrorText text={problem} />

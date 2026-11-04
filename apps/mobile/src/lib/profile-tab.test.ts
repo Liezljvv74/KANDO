@@ -1,7 +1,7 @@
 import { currentMe, clearMe, loadMe } from '@/hooks/use-me'
 import { showProfileTab } from './profile-tab'
 
-jest.mock('@/api/client', () => ({ getMe: jest.fn(async () => ({ isProvider: true, notifications: [] })) }))
+jest.mock('@/api/client', () => ({ getMe: jest.fn(async () => ({ isProvider: true, notifications: [] })), setOnTermsRequired: jest.fn() }))
 jest.mock('@/api/my-profile', () => ({ notificationsApi: {} }))
 
 test('the My profile tab shows only for a known provider', () => {

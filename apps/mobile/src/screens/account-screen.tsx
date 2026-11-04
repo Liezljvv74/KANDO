@@ -1,32 +1,29 @@
 import type { IdScan, Me, Photo, PushSettings } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
-import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { stopOffering } from '@/api/account'
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { DateTimeField } from '@/components/date-time-field'
-import { Button, ErrorText, Field, KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
+import { Button, ErrorText, Field, KEYBOARD_GAP } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
-import { NotificationBanners } from '@/components/notification-banner'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useFlash } from '@/hooks/use-flash'
-import { loadMe, markNotificationsSeen, unseenOf, useMe } from '@/hooks/use-me'
+import { loadMe, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
-import { go } from '@/lib/go'
+import { showProfileTab } from '@/lib/profile-tab'
 import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { IdScanButton } from '@/screens/id-scan-button'
-import { InvoicesCard } from '@/screens/invoices/invoices-card'
-import { QuotesCard } from '@/screens/quotes/quotes-card'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -61,15 +58,6 @@ export default function AccountScreen() {
     load()
   }, [load])
 
-  // The account page is where a customer reads their messages: clear the dot on every focus, and again if one arrives while it is open.
-  // Marking updates the shared copy, so unseen turns false and the effect does not loop.
-  const hasUnseen = unseenOf(shared?.notifications).length > 0
-  useFocusEffect(
-    useCallback(() => {
-      if (hasUnseen) markNotificationsSeen().catch(() => {})
-    }, [hasUnseen]),
-  )
-
   /** The suggestions from an ID card scan fill the form (only what was read); nothing is saved until the person taps Save. */
   function applyScan(r: IdScan) {
     hideSaved()
@@ -77,6 +65,19 @@ export default function AccountScreen() {
     if (r.lastName) setLastName(r.lastName)
     if (r.birthDate) setBirthDate(fromIsoDay(r.birthDate))
     if (r.postcode || r.street || r.city) setAddress((a) => ({ street: r.street ?? a.street, postcode: r.postcode ?? a.postcode, city: r.city ?? a.city }))
+  }
+
+  async function stop() {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await stopOffering()
+      await loadMe() // the My business tab goes away
+    } catch (e) {
+      setError(errorText(e instanceof ApiError ? e.code : ''))
+    }
+    setBusy(false)
   }
 
   async function offer() {
@@ -105,13 +106,26 @@ export default function AccountScreen() {
     setBusy(false)
   }
 
+  const isProvider = showProfileTab(shared ?? me)
+  const changeOffer = (on: boolean) => {
+    if (on) return void offer()
+    Alert.alert(t('account.offerSwitch'), t('account.stopOfferingAsk'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('account.stopOfferingConfirm'), style: 'destructive', onPress: () => void stop() },
+    ])
+  }
+
   return (
     <SafeAreaView style={styles.root}>
       <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
-        <NotificationBanners me={shared} />
         <View style={styles.card}>
           <Text style={styles.title}>{t('tab.account')}</Text>
           {user && <Text style={styles.email}>{user.email}</Text>}
+          <Button label={t('auth.logOut')} onPress={signOut} />
+          <LanguageSwitch />
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.heading}>{t('account.exportHeading')}</Text>
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
@@ -125,17 +139,14 @@ export default function AccountScreen() {
             </>
           )}
           {!me && loadError !== null && <ErrorRetry code={loadError} onRetry={load} />}
-          <LinkText label={t('booking.myBookings')} onPress={() => go('/bookings')} />
-          <LinkText label={t('chat.title')} onPress={() => go('/threads')} />
-          <LinkText label={t('account.offerServices')} onPress={offer} />
+          <AccountDataSection part="export" />
+        </View>
+        <View style={styles.card}>
+          <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
           <ErrorText text={error} />
-          <LanguageSwitch />
         </View>
         <PushSwitches />
-        <QuotesCard />
-        <InvoicesCard me={shared ?? me} />
-        <Button label={t('auth.logOut')} onPress={signOut} />
-        <AccountDataSection />
+        <AccountDataSection part="delete" />
         {/* Staff shortcut while testing; release builds never show it. The in-app browser's ✕ returns here (createTask false:
             on Android a separate browser task closed to the home screen, not back to the app). */}
         {__DEV__ && (
@@ -171,13 +182,13 @@ function PushSwitches() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: '#E3F6EE' },
   scroll: { padding: 16, gap: 12 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: '700', color: '#0E8A6B' },
-  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#0E8A6B' },
-  email: { fontSize: 16, color: '#14352E' },
-  heading: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  hint: { fontSize: 14, color: '#4B6B63' },
-  link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#0E8A6B', textDecorationLine: 'underline' },
+  title: { fontSize: 22, fontWeight: '700', color: '#34328A' },
+  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#34328A' },
+  email: { fontSize: 16, color: '#1D1C4A' },
+  heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  hint: { fontSize: 14, color: '#4F4E7D' },
+  link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#34328A', textDecorationLine: 'underline' },
 })

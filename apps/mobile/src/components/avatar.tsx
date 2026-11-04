@@ -16,7 +16,7 @@ export function Avatar({ name, url, size = 56 }: { name: string; url: string | n
 }
 
 const styles = StyleSheet.create({
-  photo: { backgroundColor: '#BFE3D8' },
-  fallback: { backgroundColor: '#BFE3D8', alignItems: 'center', justifyContent: 'center' },
-  initials: { fontWeight: '700', color: '#0E8A6B' },
+  photo: { backgroundColor: '#7B7AB8' },
+  fallback: { backgroundColor: '#7B7AB8', alignItems: 'center', justifyContent: 'center' },
+  initials: { fontWeight: '700', color: '#34328A' },
 })

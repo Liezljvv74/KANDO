@@ -1,37 +1,27 @@
 import { router, useFocusEffect } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import * as SecureStore from 'expo-secure-store'
 import { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { photosApi } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card } from '@/components/form-ui'
+import { LanguageSwitch } from '@/components/language-switch'
 import { NotificationBanners } from '@/components/notification-banner'
-import { Select } from '@/components/select'
-import { ErrorRetry, Loading } from '@/components/state-view'
-import { useCategories } from '@/hooks/use-categories'
+import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
+import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
-import { showProfileTab } from '@/lib/profile-tab'
-import { startOffering } from '@/lib/start-offering'
+import { consumeAfterLogin, setAfterLogin } from '@/lib/after-login'
 import { askPhotoSource } from '@/lib/ask-photo-source'
+import { peekPending } from '@/lib/pending-navigation'
 import { pictureNudgeKey } from '@/lib/picture-nudge'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
-
-/** [title, text] per card. */
-const BADGES: [Key, Key][] = [
-  ['home.badgeVerified', 'home.badgeVerifiedText'],
-  ['home.payment', 'home.paymentBadgeText'],
-  ['home.badgeNoFees', 'home.badgeNoFeesText'],
-]
-const SAFETY: [Key, Key][] = [
-  ['home.payment', 'home.paymentText'],
-  ['home.safetyVerified', 'home.safetyVerifiedText'],
-  ['home.safetyReviews', 'home.safetyReviewsText'],
-  ['home.safetyEu', 'home.safetyEuText'],
-]
-const STEPS = [1, 2, 3] as const
+import { showProfileTab } from '@/lib/profile-tab'
+import { startOffering } from '@/lib/start-offering'
+import { color, font } from '@/theme'
 
 /** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
 function PictureNudge() {
@@ -76,112 +66,116 @@ function PictureNudge() {
   )
 }
 
-/** "Become a provider": opens the profile page (creating the draft first); not for people who already have the My profile tab. */
-function ProviderCard() {
+/** "Finally\nSomeone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
+const splitHeadline = (s: string): [string, string] => {
+  const i = s.indexOf('\n')
+  return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
+}
+
+/** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in it adds the notifications and the picture prompt. */
+export default function HomeScreen() {
+  useLang()
   const me = useMe()
+  const signedIn = !!useSession().user
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  if (showProfileTab(me)) return null
-  const go = async () => {
+  useFocusEffect(
+    useCallback(() => {
+      if (!signedIn) return // signed out there is no account to load
+      loadMe().catch(() => {})
+      // "I need help" was tapped before logging in or signing up: go to the search page now (unless the person asked to offer services, which opens their profile).
+      consumeAfterLogin().then((dest) => {
+        if (dest && !peekPending()) router.navigate('/search')
+      })
+    }, [signedIn]),
+  )
+  const head = splitHeadline(t('home.heroHeadline'))
+
+  const offer = async () => {
+    if (showProfileTab(me)) return router.navigate('/my-profile')
     setBusy(true)
     setProblem(null)
     setProblem(await startOffering())
     setBusy(false)
   }
-  return (
-    <View style={[styles.panel, styles.panelWarm]}>
-      <Text style={styles.h2} accessibilityRole="header">
-        {t('home.providersTitle')}
-      </Text>
-      <Text style={styles.body}>{t('home.providersText')}</Text>
-      <ErrorText text={problem} />
-      <Button label={t('home.becomeProvider')} onPress={go} busy={busy} />
-    </View>
-  )
-}
-
-export default function HomeScreen() {
-  useLang()
-  const { categories, error, retry } = useCategories()
-  const me = useMe()
-  useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
-  const k = (key: string) => t(`home.${key}` as Key)
+  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean }[] = signedIn
+    ? [
+        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.navigate('/search'), main: true },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn') },
+      ]
+    : [
+        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { void setAfterLogin('/search'); router.push('/sign-up') }, main: true },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') } },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') } },
+      ]
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={signedIn ? styles.root : [styles.root, styles.rootOut]} edges={['top']}>
+      {!signedIn && <StatusBar style="light" />}
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.headline} accessibilityRole="header">
-          {k('headline')}
-        </Text>
-        <Text style={styles.intro}>{k('intro')}</Text>
-        <NotificationBanners me={me} />
-        <PictureNudge />
-        <Button label={t('home.cta')} onPress={() => router.navigate('/search')} />
-        <ProviderCard />
-        {categories ? (
-          // Every pick starts a fresh search, even the same category again (`at` changes).
-          <Select
-            label={k('categoriesTitle')}
-            hideLabel
-            options={categories.map((c) => ({ value: c.slug, label: c.name }))}
-            value={null}
-            placeholder={k('categoriesTitle')}
-            searchable
-            hint={t('search.categoryHint')}
-            onChange={(slug) => router.navigate({ pathname: '/search', params: { category: slug, at: String(Date.now()) } })}
-          />
-        ) : error ? (
-          <ErrorRetry code={error} onRetry={retry} />
-        ) : (
-          <Loading />
+        {!signedIn && (
+          <View style={styles.header}>
+            <View style={styles.brandTag}>
+              <Text style={styles.brand}>{t('brand.name')}</Text>
+            </View>
+            <Pressable accessibilityRole="link" onPress={() => { void setAfterLogin(null); router.push('/login') }} hitSlop={12} style={styles.loginHit}>
+              <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
+            </Pressable>
+          </View>
         )}
-        {BADGES.map(([title, text]) => (
-          <View key={title} style={styles.card}>
-            <Text style={styles.bold}>{t(title)}</Text>
-            <Text style={styles.body}>{t(text)}</Text>
-          </View>
+        <View style={signedIn ? styles.hero : styles.heroOut}>
+          <Text style={styles.headline} accessibilityRole="header">
+            {head[0]}
+            {'\n'}
+            <Text style={styles.headlineRest}>{head[1]}</Text>
+          </Text>
+          <Stamp label={t('home.stamp')} />
+        </View>
+        {signedIn && <NotificationBanners me={me} />}
+        {signedIn && <PictureNudge />}
+        {choices.map(({ title, text, onPress, main }, i) => (
+          <Rise key={title} index={i}>
+            <Pressable accessibilityRole="button" onPress={onPress} disabled={busy && title === 'welcome.offer'} style={({ pressed }) => pressed && styles.pressed}>
+              <Tag style={main ? styles.main : undefined}>
+                <View style={styles.row}>
+                  <Text style={styles.cardTitle}>{t(title)}</Text>
+                  <Text style={styles.cardTitle}>→</Text>
+                </View>
+                <Text style={styles.cardText}>{t(text)}</Text>
+              </Tag>
+            </Pressable>
+          </Rise>
         ))}
-
-        <Text style={styles.h2} accessibilityRole="header">
-          {k('howTitle')}
-        </Text>
-        {(['customer', 'provider'] as const).map((who) => (
-          <View key={who} style={[styles.panel, who === 'provider' && styles.panelWarm]}>
-            <Text style={styles.h3}>{k(`${who}Title`)}</Text>
-            {STEPS.map((n) => (
-              <Text key={n} style={styles.body}>
-                {n}. {k(`${who}${n}`)}
-              </Text>
-            ))}
-          </View>
-        ))}
-
-        <Text style={styles.h2} accessibilityRole="header">
-          {k('safetyTitle')}
-        </Text>
-        {SAFETY.map(([title, text]) => (
-          <View key={title} style={styles.safety}>
-            <Text style={styles.h3}>{t(title)}</Text>
-            <Text style={styles.body}>{t(text)}</Text>
-          </View>
-        ))}
+        <ErrorText text={problem} />
+        {!signedIn && (
+          <Tag>
+            <LanguageSwitch />
+          </Tag>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F2FBF8' },
+  root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 16, gap: 12 },
-  headline: { fontSize: 24, fontWeight: '800', color: '#14352E' },
-  intro: { fontSize: 16, lineHeight: 22, color: '#14352E' },
-  card: { borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#CDEDE3', padding: 12, gap: 2 },
-  bold: { fontSize: 15, fontWeight: '700', color: '#14352E' },
-  body: { fontSize: 15, lineHeight: 22, color: '#14352E' },
-  h2: { fontSize: 20, fontWeight: '800', color: '#14352E', marginTop: 4 },
-  h3: { fontSize: 16, fontWeight: '700', color: '#14352E' },
-  panel: { borderRadius: 12, backgroundColor: '#E1F4EE', padding: 12, gap: 4 },
-  panelWarm: { backgroundColor: '#FFF7E8' },
-  safety: { gap: 2 },
-  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: '#14352E' },
+  rootOut: { backgroundColor: color.indigo },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  brandTag: { backgroundColor: color.bg, borderWidth: 2, borderColor: color.teal, paddingHorizontal: 12, paddingVertical: 6, transform: [{ rotate: '-3deg' }] },
+  brand: { fontFamily: font.tag, fontSize: 15, letterSpacing: 1, color: color.ink },
+  loginHit: { minHeight: 44, justifyContent: 'center' },
+  link: { fontSize: 15, fontWeight: '700', color: color.bg, textDecorationLine: 'underline' },
+  hero: { backgroundColor: color.indigo, borderRadius: 8, padding: 20, gap: 16 },
+  heroOut: { gap: 16, marginTop: 16, marginBottom: 8 },
+  headline: { fontFamily: font.display, fontSize: 40, lineHeight: 43, color: color.bg },
+  headlineRest: { color: color.teal },
+  main: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: color.bg },
+  pressed: { opacity: 0.75 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  cardTitle: { fontFamily: font.heading, fontSize: 19, color: color.ink },
+  cardText: { fontSize: 15, lineHeight: 21, color: color.inkMuted, marginTop: 4 },
+  body: { fontSize: 15, lineHeight: 22, color: color.ink },
+  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: color.ink },
 })

@@ -50,6 +50,7 @@ export async function exportMyData(tx: Tx, userId: string) {
       suspendedUntil: user.suspendedUntil,
       suspendedReason: user.suspendedReason,
       termsAcceptedAt: user.termsAcceptedAt,
+      termsVersion: user.termsVersion,
       createdAt: user.createdAt,
     },
     provider: provider ?? null,

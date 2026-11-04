@@ -1,5 +1,5 @@
 import { api } from '@/api/client'
-import { deleteAccount, getExport } from './account'
+import { deleteAccount, getExport, stopOffering } from './account'
 
 jest.mock('@/api/client', () => ({ ...jest.requireActual('@/api/client'), api: jest.fn() }))
 
@@ -29,4 +29,9 @@ test('an empty export answer is a failed read', async () => {
 test('the delete has its own 60 second time limit', async () => {
   await deleteAccount('secret-pw')
   expect(api).toHaveBeenCalledWith('/app-api/v1/me', { method: 'DELETE', body: { password: 'secret-pw' }, timeLimit: 60_000 })
+})
+
+test('stop offering is a POST to /me/stop-offering', async () => {
+  await stopOffering()
+  expect(api).toHaveBeenCalledWith('/app-api/v1/me/stop-offering', { method: 'POST' })
 })

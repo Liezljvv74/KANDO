@@ -1,7 +1,9 @@
 import { assertNoContactDetailsIn } from './chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, isPostcode, photos, users, type Tx } from '@kando/db'
-import type { Me, MePatch } from '@kando/contract'
+import { TERMS_VERSION, type Me, type MePatch } from '@kando/contract'
+import { termsStale } from './terms'
+export { termsCurrent, termsStale } from './terms'
 import { fail } from './providers/http'
 import { ownProvider, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
@@ -9,7 +11,10 @@ import { photoUrl } from './storage'
 import { paymentsEnabled } from './payments/rules'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
-export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null }
+export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null; termsStale: boolean }
+
+/** The person accepted the Terms once, but not the current version (the published terms changed since): they must accept again in the app. Accounts that never accepted (old test accounts) are not held back. */
+/** The current version was accepted: what the AI features require, as the AI use is disclosed in the terms. */
 export type StaffRole = 'admin' | 'reviewer'
 export type StaffUser = { id: string; email: string; staffRole: StaffRole }
 
@@ -79,6 +84,7 @@ export async function ensureUser(session: { id: string; email: string }, request
     language: isLang(row.language) ? row.language : DEFAULT_LANG,
     isProvider: row.isProvider,
     suspendedUntil: row.suspendedUntil,
+    termsStale: termsStale(row),
   }
 }
 
@@ -98,6 +104,7 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   photoUrl: pictureKey ? photoUrl(pictureKey) : null,
   address: addressOf(row),
   birthDate: row.birthDate,
+  termsRequired: termsStale(row),
   paymentsEnabled: paymentsEnabled(),
   notifications,
 })
@@ -111,6 +118,12 @@ export async function getMe(tx: Tx, userId: string): Promise<Me> {
 
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */
 export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<Me> {
+  if (patch.termsVersion !== undefined && patch.termsVersion !== TERMS_VERSION) fail(409, { error: 'terms-outdated' }) // the app showed an older text
+  // Only the first acceptance (at sign-up) may leave the version out: an account that accepted before and does not say which text it showed could be accepting a newer text it never saw.
+  if (patch.termsAccepted && patch.termsVersion === undefined) {
+    const prior = (await tx.select({ at: users.termsAcceptedAt }).from(users).where(eq(users.id, userId)))[0]
+    if (prior?.at) fail(409, { error: 'terms-outdated' })
+  }
   await assertNoContactDetailsIn(userId, [patch.firstName, patch.lastName])
   const a = patch.address
   if (a && !(await isPostcode(a.country, a.postcode, tx))) fail(400, { error: 'Invalid postcode' }) // the format only: a real but unlisted postcode is fine
@@ -121,7 +134,11 @@ export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<
       ...(patch.lastName !== undefined && { lastName: patch.lastName }),
       ...(patch.language !== undefined && { language: patch.language }),
       ...(patch.birthDate !== undefined && { birthDate: patch.birthDate }),
-      ...(patch.termsAccepted && { termsAcceptedAt: sql`COALESCE(${users.termsAcceptedAt}, now())` }), // the first acceptance stays
+      // Accepting the current version stamps the time and the version; a repeat of the same version keeps the first time. A different version is an app that is out of date.
+      ...(patch.termsAccepted && {
+        termsAcceptedAt: sql`CASE WHEN ${users.termsVersion} = ${TERMS_VERSION} THEN COALESCE(${users.termsAcceptedAt}, now()) ELSE now() END`,
+        termsVersion: TERMS_VERSION,
+      }),
       ...(a !== undefined && {
         addressStreet: a?.street ?? null,
         addressPostcode: a?.postcode ?? null,

@@ -1,4 +1,3 @@
-import { useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 
@@ -8,7 +7,8 @@ import { NotificationBanners } from '@/components/notification-banner'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
-import { loadMe, useMe } from '@/hooks/use-me'
+import { useMarkSeen } from '@/hooks/use-mark-seen'
+import { useMe } from '@/hooks/use-me'
 import { useMore } from '@/hooks/use-more'
 import { t, useLang, type Key } from '@/i18n'
 import { bookingStatusText } from '@/lib/booking-status'
@@ -20,7 +20,7 @@ import { isBookingNotice } from '@/lib/notification-text'
 export default function MyBookings() {
   useLang()
   const me = useMe()
-  useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
+  useMarkSeen('bookings')
   const [role, setRole] = useState<Role>('customer')
   const fetch = useCallback(async () => ({ role, bookings: await listBookings(role), requests: await listRequests(role) }), [role])
   const { data, error, retry } = useLoad(fetch)
@@ -50,7 +50,7 @@ export default function MyBookings() {
       <SectionTitle text={t('booking.bookings')} />
       {bookings.docs.map((b) => (
         <Pressable key={b.id} accessibilityRole="button" onPress={() => go(`/bookings/${b.id}`)}>
-          <Card>
+          <Card list>
             <Text style={styles.text}>{formatWhen(b.startAt)}</Text>
             <Text style={styles.small}>{bookingStatusText(b, role)}</Text>
           </Card>
@@ -61,7 +61,7 @@ export default function MyBookings() {
       <SectionTitle text={t('booking.requests')} />
       {requests.docs.map((r) => (
         <Pressable key={r.id} accessibilityRole="button" onPress={() => go(`/bookings/request/${r.id}`)}>
-          <Card>
+          <Card list>
             <Text style={styles.text} numberOfLines={2}>
               {r.description}
             </Text>
@@ -77,6 +77,6 @@ export default function MyBookings() {
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  text: { fontSize: 16, color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

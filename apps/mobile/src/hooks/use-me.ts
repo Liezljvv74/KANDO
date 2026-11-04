@@ -1,8 +1,8 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import type { Me } from '@kando/contract'
+import type { Me, Notification } from '@kando/contract'
 
-import { getMe } from '@/api/client'
+import { getMe, setOnTermsRequired } from '@/api/client'
 import { notificationsApi } from '@/api/my-profile'
 import { noteMe } from '@/lib/payments-off'
 import { clearPending } from '@/lib/pending-navigation'
@@ -31,22 +31,37 @@ export async function loadMe() {
   return m
 }
 
+/** The person chose "I do not agree" and went to the account page (to delete the account): the pop-up stays away until a write is refused again or the app restarts. */
+let aside = false
+export const setAside = (v: boolean) => {
+  aside = v
+  listeners.forEach((l) => l())
+}
+
+// A write answered 428 terms-required: the shared copy is reloaded, its termsRequired shows the accept pop-up (again, if it was set aside).
+setOnTermsRequired(() => {
+  setAside(false)
+  loadMe().catch(() => {})
+})
+
 export function clearMe() {
   generation++
+  aside = false
   clearPending()
   set(null)
 }
 
-/** Marks every unseen notification seen (opening the setup page); a failure only leaves the dot a little longer. */
 /** The notifications the customer has not seen yet. */
 export const unseenOf = <T extends { seenAt: string | null }>(notifications: T[] | undefined) => (notifications ?? []).filter((n) => !n.seenAt)
 
-export async function markNotificationsSeen() {
-  const unseen = unseenOf(me?.notifications)
+/** Marks the unseen notifications that pass `only` (all by default) seen. Only the ones the server saved turn seen here; a failed one keeps its number until the next try. */
+export async function markNotificationsSeen(only: (n: Notification) => boolean = () => true) {
+  const unseen = unseenOf(me?.notifications).filter(only)
   if (!unseen.length) return
-  await Promise.all(unseen.map((n) => notificationsApi.mark(n.id, { seen: true }))).catch(() => {})
+  const results = await Promise.allSettled(unseen.map((n) => notificationsApi.mark(n.id, { seen: true })))
+  const saved = unseen.filter((_, i) => results[i]!.status === 'fulfilled')
   const now = new Date().toISOString()
-  if (me) set({ ...me, notifications: me.notifications.map((n) => (unseen.some((u) => u.id === n.id) ? { ...n, seenAt: now } : n)) })
+  if (me && saved.length) set({ ...me, notifications: me.notifications.map((n) => (saved.some((u) => u.id === n.id) ? { ...n, seenAt: now } : n)) })
 }
 
 export async function dismissNotification(id: string) {
@@ -63,4 +78,12 @@ export function useMe() {
     if (!me) loadMe().catch(() => {})
   }, [])
   return value
+}
+
+/** true while the accept pop-up must cover the app: the Terms changed since the person accepted and they have not set it aside. */
+export function useTermsPopup() {
+  return useSyncExternalStore(
+    (l) => (listeners.add(l), () => listeners.delete(l)),
+    () => me?.termsRequired === true && !aside,
+  )
 }

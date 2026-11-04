@@ -19,6 +19,8 @@ type Opts<P> = {
   prepare?: (request: Request, onFailure: AfterCommit) => Promise<P>
   /** A suspended person may still call this route (taking their own profile offline). DELETE is always allowed. */
   allowWhenSuspended?: boolean
+  /** The person may call this even while the Terms they accepted are out of date (accepting them again, erasing their account). Every other write answers 428 terms-required. */
+  allowStaleTerms?: boolean
 }
 /** An answer built after the transaction committed (a Stripe call): runs with no request transaction open; may throw a Response. */
 export type AfterTransaction = () => Promise<Response>
@@ -69,6 +71,7 @@ async function exceedsBytes(request: Request, max: number): Promise<boolean> {
  * An unconfirmed email is refused (403 EMAIL_NOT_VERIFIED) where auth is required and counts as signed out where it
  * is optional: it never gets a users row. A suspended person (users.suspended_until in the future) gets 403 SUSPENDED
  * on every create or edit (POST, PUT, PATCH); reads and DELETE (erasing their own data) still work.
+ * A person whose accepted Terms are out of date gets 428 terms-required on every write except the routes that set `allowStaleTerms`.
  * Emails and pushes caused during the transaction and the after-transaction answer are collected and, with the
  * after-commit queue, handed to `schedule` (default: run now, awaited), so they never hold up the answer.
  */
@@ -110,6 +113,11 @@ export function createAppRequest(getSession: SessionResolver, opts: { schedule?:
         if (user?.suspendedUntil && user.suspendedUntil > new Date() && !['GET', 'DELETE'].includes(request.method) && !opts.allowWhenSuspended) {
           for (const fn of failQueue) await fn().catch((e) => console.error(`[app-request ${requestId}] cleanup failed ${describeError(e)}`))
           return noStore(Response.json({ error: 'SUSPENDED' }, { status: 403 }))
+        }
+        // The published terms changed since this person accepted: the app shows the accept pop-up; a modified app that skips it is stopped here. Reads still work.
+        if (user?.termsStale && !['GET', 'HEAD'].includes(request.method) && !opts.allowStaleTerms) {
+          for (const fn of failQueue) await fn().catch((e) => console.error(`[app-request ${requestId}] cleanup failed ${describeError(e)}`))
+          return noStore(Response.json({ error: 'terms-required' }, { status: 428 }))
         }
         const params = await ctx.params
         const queue: (() => Promise<void>)[] = []

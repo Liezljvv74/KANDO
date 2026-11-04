@@ -5,6 +5,7 @@ import { Button, ErrorText } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { useMarkSeen } from '@/hooks/use-mark-seen'
 import { useMore } from '@/hooks/use-more'
 import { t, useLang } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
@@ -15,6 +16,7 @@ const firstPage = () => listThreads()
 /** The person's conversations, most recent first (the server's order). */
 export default function ThreadList() {
   useLang()
+  useMarkSeen('messages')
   const { data, error, retry } = useLoad(firstPage)
   const more = useMore(data, listThreads)
   const title = t('chat.title')
@@ -25,7 +27,7 @@ export default function ThreadList() {
       {more.docs.length === 0 && <Text style={styles.small}>{t('chat.empty')}</Text>}
       {more.docs.map((th) => (
         <Pressable key={th.id} onPress={() => go(`/threads/${th.id}`)} accessibilityRole="button" accessibilityLabel={th.otherName}>
-          <Card>
+          <Card list>
             <Text style={styles.name}>{th.otherName}</Text>
             {th.lastMessageAt && <Text style={styles.small}>{formatWhen(th.lastMessageAt)}</Text>}
             {th.blocked && <Text style={styles.small}>{t('chat.blocked')}</Text>}
@@ -39,6 +41,6 @@ export default function ThreadList() {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 16, fontWeight: '700', color: '#14352E' },
-  small: { fontSize: 14, color: '#5C7A72' },
+  name: { fontSize: 16, fontWeight: '700', color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
 })

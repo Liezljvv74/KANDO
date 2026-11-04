@@ -44,8 +44,8 @@ export function ServicesCard({ services, docRows }: { services: OwnService[]; do
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 17, fontWeight: '700', color: '#14352E' },
-  status: { fontSize: 14, color: '#5C7A72' },
+  name: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  status: { fontSize: 14, color: '#4F4E7D' },
   waiting: { fontSize: 14, fontWeight: '600', color: '#8A5A00' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowText: { flex: 1 },

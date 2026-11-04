@@ -1,11 +1,15 @@
 import { DEFAULT_ACTION_IDENTIFIER, clearLastNotificationResponse, setNotificationHandler, useLastNotificationResponse } from 'expo-notifications'
+import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces'
+import { CourierPrime_700Bold } from '@expo-google-fonts/courier-prime'
+import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
 import { Button } from '@/components/auth-ui'
+import { TermsReaccept } from '@/components/terms-reaccept'
 import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
@@ -20,11 +24,18 @@ export default function RootLayout() {
   const { user, loading, offline, retry } = useSession()
   useLang()
   usePushTaps(!!user)
-  if (loading || offline) {
+  // The shop type; if it fails to load the app still opens with the system font.
+  const [fontsReady, fontError] = useFonts({ Fraunces_700Bold, Fraunces_900Black, CourierPrime_700Bold })
+  const [fontsLate, setFontsLate] = useState(false) // a font that hangs never keeps the app on the spinner
+  useEffect(() => {
+    const timer = setTimeout(() => setFontsLate(true), 4000)
+    return () => clearTimeout(timer)
+  }, [])
+  if (loading || offline || (!fontsReady && !fontError && !fontsLate)) {
     return (
       <View style={styles.center}>
-        {loading ? (
-          <ActivityIndicator size="large" color="#0E8A6B" />
+        {loading || !offline ? ( // spinner while the session or the fonts load; the offline notice only once loading is over
+          <ActivityIndicator size="large" color="#34328A" />
         ) : (
           <>
             <Text style={styles.text}>{t(isAuthBusy() ? 'error.authBusy' : 'error.network')}</Text>
@@ -42,6 +53,7 @@ export default function RootLayout() {
         <Stack.Protected guard={!!user} redirectTo="/welcome">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="provider/[slug]" />
+          <Stack.Screen name="learn" />
           <Stack.Screen name="my-profile" />
           <Stack.Screen name="bookings" />
           <Stack.Screen name="threads" />
@@ -51,6 +63,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" />
         </Stack.Protected>
       </Stack>
+      {user && <TermsReaccept />}
     </KeyboardProvider>
   )
 }
@@ -67,6 +80,6 @@ function usePushTaps(signedIn: boolean) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: '#F2FBF8', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  text: { fontSize: 16, color: '#14352E', textAlign: 'center' },
+  center: { flex: 1, backgroundColor: '#E3F6EE', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  text: { fontSize: 16, color: '#1D1C4A', textAlign: 'center' },
 })

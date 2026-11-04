@@ -10,7 +10,7 @@ import { t, useLang } from '@/i18n'
 import { accountError, afterDeleteFailure, exportText } from '@/lib/account-data'
 
 /** Export of the person's data through the share sheet, and the deletion of the account behind a password confirmation. */
-export function AccountDataSection() {
+export function AccountDataSection({ part }: { part: 'export' | 'delete' }) {
   useLang()
   const { user, signOut } = useSession()
   const [confirming, setConfirming] = useState(false)
@@ -50,13 +50,15 @@ export function AccountDataSection() {
   }
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.heading}>{t('account.exportHeading')}</Text>
-      <Text style={styles.text}>{t('account.exportHint')}</Text>
-      <Button label={t('account.exportJson')} onPress={() => share('json')} busy={busy === 'json'} disabled={!!busy && busy !== 'json'} />
-      <Button label={t('account.exportCsv')} onPress={() => share('csv')} busy={busy === 'csv'} disabled={!!busy && busy !== 'csv'} />
-      <View style={styles.rule} />
-      {confirming ? (
+    <View style={part === 'delete' ? styles.card : styles.plain}>
+      {part === 'export' ? (
+        <>
+          <Text style={styles.text}>{t('account.exportHint')}</Text>
+          <Button label={t('account.exportJson')} onPress={() => share('json')} busy={busy === 'json'} disabled={!!busy && busy !== 'json'} />
+          <Button label={t('account.exportCsv')} onPress={() => share('csv')} busy={busy === 'csv'} disabled={!!busy && busy !== 'csv'} />
+          <ErrorText text={error} />
+        </>
+      ) : confirming ? (
         <>
           <Text style={styles.danger}>{t('account.deleteHeading')}</Text>
           <Text style={styles.text}>{t('account.deleteWarning')}</Text>
@@ -77,9 +79,10 @@ export function AccountDataSection() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12, marginTop: 24 },
-  heading: { fontSize: 18, fontWeight: '700', color: '#14352E' },
+  card: { backgroundColor: '#fff', borderRadius: 8, padding: 16, gap: 12 },
+  plain: { gap: 12 },
+  heading: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
   danger: { fontSize: 18, fontWeight: '700', color: '#B3261E' },
-  text: { fontSize: 15, lineHeight: 21, color: '#14352E' },
-  rule: { height: 1, backgroundColor: '#BFE3D8', marginVertical: 4 },
+  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
+  rule: { height: 1, backgroundColor: '#7B7AB8', marginVertical: 4 },
 })

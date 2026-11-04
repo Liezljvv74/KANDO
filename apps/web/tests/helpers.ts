@@ -1,5 +1,5 @@
 import { pool } from '@kando/db'
-import { BookingSchema, QuoteSchema, RequestSchema, type Booking, type BookingRequest, type Quote } from '@kando/contract'
+import { TERMS_VERSION, BookingSchema, QuoteSchema, RequestSchema, type Booking, type BookingRequest, type Quote } from '@kando/contract'
 import type { Storage } from '@kando/domain'
 
 // Fake session: cookie "uid=<id>:<email>" is a confirmed session, plus "verified=0" an unconfirmed one and "name=<name>"
@@ -210,7 +210,7 @@ export function adminCall(handler: Route, uid: string, method = 'GET', path = '/
 /** A user row written straight through the owner connection. */
 export const seedUser = (id: string, staffRole: string | null = null, name: string | null = null) => {
   const [first = null, ...rest] = name?.split(' ') ?? []
-  return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name, terms_accepted_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null])
+  return pool.query('INSERT INTO users (id, email, staff_role, first_name, last_name, terms_accepted_at, terms_version) VALUES ($1, $2, $3, $4, $5, now(), $6) ON CONFLICT DO NOTHING', [id, EMAIL(id), staffRole, first, rest.join(' ') || null, TERMS_VERSION])
 }
 
 /** A request and the provider's quote for the same time (no booking yet), made through the real routes; the owner and id are the provider's. */

@@ -32,6 +32,6 @@ export function BusyTimes({ slug }: { slug: string }) {
 
 const styles = StyleSheet.create({
   box: { gap: 4 },
-  title: { fontSize: 16, fontWeight: '700', color: '#0E8A6B' },
-  text: { fontSize: 14, color: '#14352E' },
+  title: { fontSize: 16, fontWeight: '700', color: '#34328A' },
+  text: { fontSize: 14, color: '#1D1C4A' },
 })

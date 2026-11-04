@@ -1,6 +1,6 @@
 # Terms acceptance: follow-ups from the review of #73
 
-Status: plan only, nothing built. Source: the `/code-review --comment` of PR #73 (4 November 2026), findings that were accepted for later. Migration 0031 (`users.terms_accepted_at`) and the sign-up checkbox are merged and live.
+Status: PRs C and B are merged (#77, #78); PR A (step 2.7) is built on branch `feat/terms-reacceptance` (see "What was built" at the end). Source: the `/code-review --comment` of PR #73 (4 November 2026), findings that were accepted for later. Migration 0031 (`users.terms_accepted_at`) and the sign-up checkbox are merged and live.
 
 Where it fits in the MVP plan: after step 1.7 (Flow 1 test report) and before step 3.1 (security and compliance scan). Suggested new step **2.7 "Terms acceptance for everyone"** (Claude, size M) for PR A, and **3.0 "Sign-up cleanups"** (Claude, size S) for PRs B and C. The owner confirms the numbers before `mvp_plan.py` is changed.
 
@@ -64,3 +64,16 @@ Done when: German and English read naturally, a screen reader can focus the chec
 - Emails about terms changes: decided against (A3); the pop-up replaces them.
 - A gate or backfill for old accounts: they are test accounts and will be deleted.
 - Server-side block at Neon Auth sign-up: not possible with Managed Better Auth; PR A's gate is the replacement.
+
+
+## What was built for PR A (step 2.7, 5 November 2026)
+
+- **Migration 0033** `users.terms_version text` (nullable, no backfill). Migration 0032 became the date of birth (ID scan), so the number moved.
+- **`TERMS_VERSION`** in `packages/contract/src/terms.ts`, set to `2026-11-04` for now. **The owner gives the real date when she publishes the pages; raise the constant to it in the same pull request or just before.** Raising it later shows everybody the pop-up again.
+- **Who is held back:** a person who accepted before (`terms_accepted_at` set) but not the current version (`termsRequired` in `GET /me`, `termsStale` on the session user). An account that never accepted (old test accounts) is not held back, as decided (A1). Accounts that accepted through #73 have no version and see the pop-up once.
+- **Server backstop:** every write except `PATCH /me` and `DELETE /me` answers `428 terms-required` while the version is stale (`allowStaleTerms` on the route options; reads and the export still work).
+- **Accepting:** `PATCH /me {termsAccepted:true, termsVersion}`; the time and version are stored; a repeat of the same version keeps the first time; an older app text gets `409 terms-outdated`.
+- **AI features:** the document check and the ID scan need the current version.
+- **App:** `TermsReaccept` modal over the whole app (`terms-reaccept.tsx`), reload of `/me` on a 428, "I do not agree" sets the pop-up aside and opens the account page (delete account there); a refused write brings it back.
+- **Tests:** `terms-version.int.spec.ts` (gate, accept, outdated app, never-accepted), AI check with a stale version, mobile client 428 and `use-me`.
+- **Not built:** a delete-account button inside the pop-up (the account page has it).
