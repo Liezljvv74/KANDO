@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-04 11-29",
+  "stamp": "2026-11-04 12-02",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -20,7 +20,7 @@
     "2.6": "Done",
     "2.4": "In progress",
     "2.7": "Open",
-    "3.0": "Open",
+    "3.0": "Done",
     "1.7": "Done",
     "2.1": "In progress",
     "3.3": "In progress",
@@ -322,8 +322,21 @@
       "steps": [
         "step 1.7 Done"
       ]
+    },
+    {
+      "when": "2026-11-04 12:02",
+      "commit": "32c6d85",
+      "note": "Merged 4 November 2026: #76 (Article 50 note, phone test script, audit), #77 pending sign-up record refactor, #78 terms checkbox component. Step 3.0 done. Step 1.7 done (report and phone script). Next: step 2.7 (terms re-acceptance), the new Android build, the owner's phone walk-through.",
+      "steps": [
+        "step 3.0 Done",
+        "merged PR #77",
+        "merged PR #78"
+      ]
     }
   ],
   "mergesSinceWorkbook": [],
-  "workbookMerges": []
+  "workbookMerges": [
+    "77",
+    "78"
+  ]
 }
