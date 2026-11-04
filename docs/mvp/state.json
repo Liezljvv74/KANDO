@@ -19,7 +19,7 @@
     "2.5": "Done",
     "2.6": "Done",
     "2.4": "In progress",
-    "2.7": "In progress",
+    "2.7": "Done",
     "3.0": "Done",
     "1.7": "Done",
     "2.1": "In progress",
@@ -31,7 +31,7 @@
     "7.1": "In progress",
     "7.2": "In progress",
     "7.3": "In progress",
-    "7.4": "In progress"
+    "7.4": "Done"
   },
   "tasks": {
     "1": "Done",
@@ -379,8 +379,20 @@
       "steps": [
         "step 7.4 In progress"
       ]
+    },
+    {
+      "when": "2026-11-04 23:38",
+      "commit": "c3cf63b",
+      "note": "PR #85 merged by the owner (4 Nov 2026, 22:37 UTC, c3cf63b): new app look, new tabs, stop offering services and step 2.7 terms re-acceptance (migration 0033 on production, terms published as version 2026-11-04). Still to do: phone walk-through of the Android preview build, finish review and DESIGN.md.",
+      "steps": [
+        "step 2.7 Done",
+        "step 7.4 Done",
+        "merged PR #85"
+      ]
     }
   ],
-  "mergesSinceWorkbook": [],
+  "mergesSinceWorkbook": [
+    "85"
+  ],
   "workbookMerges": []
 }
