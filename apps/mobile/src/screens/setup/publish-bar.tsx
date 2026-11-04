@@ -58,6 +58,7 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
   return (
     <Card>
       <SwitchRow label={t('setup.live')} value={live} onChange={change} disabled={busy || locked} />
+      {locked ? <Text style={styles.hint}>{t('setup.liveLocked')}</Text> : null}
       {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
       {justPublished && live && isLive(profile) && (
@@ -73,4 +74,5 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
 
 const styles = StyleSheet.create({
   live: { fontSize: 16, fontWeight: '700', color: '#34328A' },
+  hint: { fontSize: 14, color: '#4F4E7D' },
 })

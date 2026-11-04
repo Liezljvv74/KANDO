@@ -113,6 +113,7 @@ export const de = {
   'setup.aboutYou': 'Über dich',
   'setup.publish': 'Veröffentlichen',
   'setup.live': 'Online',
+  'setup.liveLocked': 'Fülle unten die mit * markierten Felder aus, um live zu gehen.',
   'setup.liveWaiting': 'Online, {count} Leistung(en) warten auf eine Prüfung',
   'setup.takeOffline': 'Offline nehmen',
   'setup.services': 'Leistungen',
