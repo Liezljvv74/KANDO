@@ -47,6 +47,7 @@ export default function RootLayout() {
         <Stack.Protected guard={!!user} redirectTo="/welcome">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="provider/[slug]" />
+          <Stack.Screen name="learn" />
           <Stack.Screen name="my-profile" />
           <Stack.Screen name="bookings" />
           <Stack.Screen name="threads" />

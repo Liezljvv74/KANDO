@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Button } from '@/components/auth-ui'
+import { useMe } from '@/hooks/use-me'
 import { t, useLang, type Key } from '@/i18n'
 
 const GROUPS: { title: Key; steps: [Key, Key, Key]; bg: string }[] = [
@@ -19,10 +20,11 @@ const SAFETY: [Key, Key][] = [
 export default function HowItWorksScreen() {
   useLang()
   const router = useRouter()
+  const signedIn = !!useMe() // signed in: back goes to Home and there is nothing to register for
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))} hitSlop={12}>
+        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace(signedIn ? '/' : '/welcome'))} hitSlop={12}>
           <Text style={styles.link}>← {t('welcome.backHome')}</Text>
         </Pressable>
         <Text style={styles.title}>{t('welcome.howTitle')}</Text>
@@ -43,7 +45,7 @@ export default function HowItWorksScreen() {
             <Text style={styles.text}>{t(text)}</Text>
           </View>
         ))}
-        <Button label={t('welcome.register')} onPress={() => router.push('/sign-up')} />
+        {!signedIn && <Button label={t('welcome.register')} onPress={() => router.push('/sign-up')} />}
       </ScrollView>
     </SafeAreaView>
   )
