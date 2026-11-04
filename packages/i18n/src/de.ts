@@ -356,7 +356,7 @@ export const de = {
   'auth.repeatPassword': 'Passwort wiederholen',
   'auth.firstName': 'Vorname',
   'auth.lastName': 'Nachname',
-  'auth.offerServices': 'Ich möchte auch Leistungen anbieten',
+  'auth.offerServices': 'Ich biete eine Leistung an',
   'auth.pictureWhy': 'Anbieter sehen, für wen sie arbeiten. Ein Foto macht es für beide Seiten sicherer.',
   'auth.addressOptional': 'Adresse (optional)',
   'auth.termsLabel': 'AGB und Datenschutzerklärung akzeptieren',

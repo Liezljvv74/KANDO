@@ -357,7 +357,7 @@ export const en: Record<AppKey, string> = {
   'auth.repeatPassword': 'Repeat password',
   'auth.firstName': 'First name',
   'auth.lastName': 'Surname',
-  'auth.offerServices': 'I also want to offer services',
+  'auth.offerServices': 'I offer a service',
   'auth.pictureWhy': 'Providers see who they are working for. A picture keeps both sides safer.',
   'auth.addressOptional': 'Address (optional)',
   'auth.termsLabel': 'Accept the Terms and the Privacy Policy',
