@@ -7,7 +7,7 @@ export function adminLang({ cookie, acceptLanguage }: { cookie?: string; acceptL
 }
 
 /** The cookie the language switch writes: one year, whole site. */
-export const adminLangCookie = (lang: Lang) => `admin-lang=${lang}; path=/; max-age=31536000; SameSite=Lax`
+export const adminLangCookie = (lang: Lang) => `admin-lang=${lang}; path=/; max-age=31536000; SameSite=Lax; Secure`
 
 /** Browser side (no request headers): the admin-lang cookie from document.cookie, else navigator.languages, else the default. */
 export function browserAdminLang(cookie: string, languages: readonly string[]): Lang {

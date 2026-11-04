@@ -394,7 +394,8 @@ async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'cust
     const owner = (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, req.providerId)))[0]
     if (owner) await notifyBookingEvent('request-withdrawn', owner.id, { requestId })
   })
-  return toRequest(row!, now)
+  // The provider declining must not read the customer's street (it is shown only after the customer confirms), like every other provider-facing answer.
+  return by === 'provider' ? hideStreet(toRequest(row!, now)) : toRequest(row!, now)
 }
 
 export const withdrawRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>

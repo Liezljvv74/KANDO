@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm'
-import sharp from 'sharp'
+import sharp, { type FormatEnum } from 'sharp'
 import { db, documents, pendingObjectDeletes, privateFiles, type Tx } from '@kando/db'
 import { DOCUMENT_TYPES, type Document } from '@kando/contract'
 import { flushPendingObjects } from './account'
@@ -52,7 +52,7 @@ async function readDocument(request: Request): Promise<{ data: Buffer; type: str
     const data = await img
       .rotate()
       .resize(MAX_SIDE, MAX_SIDE, { fit: 'inside', withoutEnlargement: true })
-      .toFormat(format as keyof sharp.FormatEnum)
+      .toFormat(format as keyof FormatEnum)
       .toBuffer()
     return { data, ...IMAGE[format] }
   } catch {

@@ -189,6 +189,7 @@ export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
   const slugBase = slugify(fresh.publicName ?? '') // '' (no name) falls back to 'profile'
   const ok = (await tx.execute<{ ok: boolean }>(sql`SELECT set_provider_published(true, ${slugBase}) AS ok`)).rows[0]!.ok
   if (!ok) fail(409, { error: 'Profile suspended' })
+  await tx.update(users).set({ isProvider: true }).where(eq(users.id, userId)) // publishing after stopOffering is an explicit offer: the flag and the tab come back
   return (await getMyProfile(tx, userId))!
 }
 
@@ -204,7 +205,7 @@ export async function unpublish(tx: Tx, userId: string): Promise<MyProfile> {
  * Open = a booking not yet ended (anything but expired, declined, withdrawn, completed, cancelled, refunded) or paid and not released,
  * a request still open or quoted, or a quote still sent. Disputes are bookings in status 'disputed'. No provider row: only the flag is cleared.
  */
-export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true }> {
+export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true; hadProfile: boolean }> {
   await lockProfile(tx, userId)
   const row = await ownProvider(tx, userId)
   if (row) {
@@ -217,5 +218,5 @@ export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true }
     await tx.execute(sql`SELECT set_provider_published(false, '')`)
   }
   await tx.update(users).set({ isProvider: false }).where(eq(users.id, userId))
-  return { ok: true }
+  return { ok: true, hadProfile: !!row }
 }

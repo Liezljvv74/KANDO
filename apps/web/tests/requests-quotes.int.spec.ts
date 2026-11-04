@@ -272,6 +272,15 @@ it('a request expiring between the read and the withdraw answers 409, not 500', 
   expect(await statusOf('requests', r.id)).toBe('expired')
 })
 
+it('the provider declining does not read the street of the customer, which is shown only after the customer confirms', async () => {
+  await relaxLimits(U.cust)
+  const made = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Secret street', ...requestTime(), address: { postcode: '10115', street: 'Geheimweg 7', city: 'Berlin' } })
+  const r = RequestSchema.parse(await made.json())
+  const res = await closing(decline, r.id, U.owner)
+  expect(res.status).toBe(200)
+  expect(JSON.stringify(await res.json())).not.toContain('Geheimweg')
+})
+
 it('a declined request stops the requests-ignored flag', async () => {
   const { runDueTimers } = await import('@kando/domain')
   const { db } = await import('@kando/db')
