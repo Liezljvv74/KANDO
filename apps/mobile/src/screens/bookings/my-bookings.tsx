@@ -1,4 +1,3 @@
-import { useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 
