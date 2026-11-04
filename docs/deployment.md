@@ -7,7 +7,7 @@ How KANDO is deployed. As of 28 October 2026 the steps below are done: the site 
 - **Website, back office and API:** one Next.js app in `apps/web`, on Vercel, region `fra1` (Frankfurt; set in `apps/web/vercel.json`).
 - **Daily check:** Vercel Cron (`crons` in `apps/web/vercel.json`) calls `/api/cron/suspensions` at 06:00 UTC with `Authorization: Bearer $CRON_SECRET`; it ends suspensions whose date has passed and sends the "published again" email. Vercel runs crons on the Production deployment only, so `CRON_SECRET` is needed for Production (Preview never runs the check).
 - **Database, login and files:** Neon project `SkillWeb` in AWS Frankfurt (Postgres, Neon Auth, Object Storage).
-- **Branches:** `kando-dev` exists now (endpoint `ep-steep-scene-b9p4f2v6`). `kando-main` is created at cutover. The old `main` and `dev` branches belong to the old Payload app and stay untouched until then.
+- **Branches:** `kando-dev` exists now (endpoint `ep-steep-scene-b9p4f2v6`). `kando-main` is created at cutover. The old `main` and `dev` branches belong to the old app and stay untouched until then.
 
 ## Vercel project (owner)
 
