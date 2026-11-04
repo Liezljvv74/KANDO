@@ -1,4 +1,5 @@
 import { router, useFocusEffect } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import * as SecureStore from 'expo-secure-store'
 import { useCallback, useEffect, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -7,16 +8,17 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { photosApi } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card } from '@/components/form-ui'
+import { LanguageSwitch } from '@/components/language-switch'
 import { NotificationBanners } from '@/components/notification-banner'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
+import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { pictureNudgeKey } from '@/lib/picture-nudge'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { showProfileTab } from '@/lib/profile-tab'
 import { startOffering } from '@/lib/start-offering'
-import { splitHeadline } from '@/screens/auth/welcome-screen'
 import { color, font } from '@/theme'
 
 /** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
@@ -62,10 +64,17 @@ function PictureNudge() {
   )
 }
 
-/** The signed-in Home: the same three choices as the welcome screen (help, offer, learn more). */
+/** "Finally Someone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
+export const splitHeadline = (s: string): [string, string] => {
+  const i = s.indexOf(' ')
+  return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
+}
+
+/** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in it adds the notifications and the picture prompt. */
 export default function HomeScreen() {
   useLang()
   const me = useMe()
+  const signedIn = !!useSession().user
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   useFocusEffect(useCallback(() => { loadMe().catch(() => {}) }, []))
@@ -78,16 +87,33 @@ export default function HomeScreen() {
     setProblem(await startOffering())
     setBusy(false)
   }
-  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean }[] = [
-    { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.navigate('/search'), main: true },
-    { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer },
-    { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn') },
-  ]
+  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean }[] = signedIn
+    ? [
+        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.navigate('/search'), main: true },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn') },
+      ]
+    : [
+        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.push('/sign-up'), main: true },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => router.push('/sign-up?offer=1') },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/how-it-works') },
+      ]
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={signedIn ? styles.root : [styles.root, styles.rootOut]} edges={['top']}>
+      {!signedIn && <StatusBar style="light" />}
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
+        {!signedIn && (
+          <View style={styles.header}>
+            <View style={styles.brandTag}>
+              <Text style={styles.brand}>{t('brand.name')}</Text>
+            </View>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/login')} hitSlop={12} style={styles.loginHit}>
+              <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
+            </Pressable>
+          </View>
+        )}
+        <View style={signedIn ? styles.hero : styles.heroOut}>
           <Text style={styles.headline} accessibilityRole="header">
             {head[0]}
             {'\n'}
@@ -95,8 +121,8 @@ export default function HomeScreen() {
           </Text>
           <Stamp label={t('home.stamp')} />
         </View>
-        <NotificationBanners me={me} />
-        <PictureNudge />
+        {signedIn && <NotificationBanners me={me} />}
+        {signedIn && <PictureNudge />}
         {choices.map(({ title, text, onPress, main }, i) => (
           <Rise key={title} index={i}>
             <Pressable accessibilityRole="button" onPress={onPress} disabled={busy && title === 'welcome.offer'} style={({ pressed }) => pressed && styles.pressed}>
@@ -111,6 +137,11 @@ export default function HomeScreen() {
           </Rise>
         ))}
         <ErrorText text={problem} />
+        {!signedIn && (
+          <Tag>
+            <LanguageSwitch />
+          </Tag>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -119,7 +150,14 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 16, gap: 12 },
+  rootOut: { backgroundColor: color.indigo },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  brandTag: { backgroundColor: color.bg, borderWidth: 2, borderColor: color.teal, paddingHorizontal: 12, paddingVertical: 6, transform: [{ rotate: '-3deg' }] },
+  brand: { fontFamily: font.tag, fontSize: 15, letterSpacing: 1, color: color.ink },
+  loginHit: { minHeight: 44, justifyContent: 'center' },
+  link: { fontSize: 15, fontWeight: '700', color: color.bg, textDecorationLine: 'underline' },
   hero: { backgroundColor: color.indigo, borderRadius: 8, padding: 20, gap: 16 },
+  heroOut: { gap: 16, marginTop: 16, marginBottom: 8 },
   headline: { fontFamily: font.display, fontSize: 40, lineHeight: 43, color: color.bg },
   headlineRest: { color: color.teal },
   main: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: color.bg },
