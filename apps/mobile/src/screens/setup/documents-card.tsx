@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Card, EditButton, IconButton, SectionHeader } from '@/components/form-ui'
 import { docText, t } from '@/i18n'
 import { documentsComplete } from '@/lib/completeness'
-import { DOC_COLORS, docTone, groupColor, type DocumentRow } from '@/lib/documents'
+import { DOC_COLORS, docTone, groupColor, groupNeedsAction, type DocumentRow } from '@/lib/documents'
 
-/** Verification documents in two collapsible groups. Required: red while one is missing or rejected (open until then). Optional: indigo while nothing of it is uploaded (collapsed). Each document has its own screen. */
+/** Verification documents in two collapsible groups with an approved count each. A group that needs attention (a required document missing or rejected, an optional one rejected) is red and open; the optional group is indigo while nothing of it is uploaded. Each document has its own screen. */
 export function DocumentsCard({ rows }: { rows: DocumentRow[] }) {
   const done = documentsComplete(rows)
   const required = rows.filter((r) => !r.optional)
@@ -24,13 +24,17 @@ export function DocumentsCard({ rows }: { rows: DocumentRow[] }) {
 function Group({ title, rows, optional }: { title: string; rows: DocumentRow[]; optional: boolean }) {
   const router = useRouter()
   const tone = groupColor(rows, optional)
-  const [open, setOpen] = useState(!optional && tone === DOC_COLORS.required) // a missing required document opens its group; the optional group starts closed
-  const uploaded = rows.filter((r) => r.state !== 'none').length
+  const alert = groupNeedsAction(rows, optional)
+  const [open, setOpen] = useState(alert) // a group that needs attention starts open, the others closed
+  useEffect(() => {
+    if (alert) setOpen(true) // a document rejected or deleted later opens it too
+  }, [alert])
+  const approved = rows.filter((r) => r.state === 'approved').length
   return (
     <View>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={styles.toggle}>
-        <Text style={[styles.groupTitle, { color: tone }]}>{`${title} (${uploaded}/${rows.length})`}</Text>
-        <Text style={[styles.groupTitle, { color: tone }]}>{open ? '▴' : '▾'}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={styles.toggle}>
+        <Text style={[styles.groupTitle, { color: tone }]}>{`${title} (${approved}/${rows.length})`}</Text>
+        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.groupTitle, { color: tone }]}>{open ? '▴' : '▾'}</Text>
       </Pressable>
       {open &&
         rows.map((r) => {

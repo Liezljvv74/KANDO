@@ -125,7 +125,9 @@ test('group colours: required is red while one is missing or rejected, else gree
   const row = (optional: boolean, state: DocumentRow['state']): DocumentRow => ({ requirement: 'x', optional, state, note: null })
   expect(groupColor([row(false, 'approved'), row(false, 'none')], false)).toBe(DOC_COLORS.required)
   expect(groupColor([row(false, 'rejected')], false)).toBe(DOC_COLORS.required)
-  expect(groupColor([row(false, 'approved'), row(false, 'pending')], false)).toBe(DOC_COLORS.approved)
+  expect(groupColor([row(false, 'approved'), row(false, 'pending')], false)).toBe(DOC_COLORS.pending) // in review is not approved
+  expect(groupColor([row(false, 'approved')], false)).toBe(DOC_COLORS.approved)
+  expect(groupColor([row(true, 'rejected'), row(true, 'none')], true)).toBe(DOC_COLORS.required) // a rejected optional one must be seen
   expect(groupColor([row(true, 'none'), row(true, 'none')], true)).toBe(DOC_COLORS.optional)
   expect(groupColor([row(true, 'none'), row(true, 'pending')], true)).toBe(DOC_COLORS.pending)
 })
