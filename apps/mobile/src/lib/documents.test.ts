@@ -1,5 +1,5 @@
 import type { Category, Document, OwnService } from '@kando/contract'
-import { DOC_COLORS, canShare, deleteBodyKey, docTone, documentRows, serviceDocNote, submittedDocs, type DocumentRow } from './documents'
+import { DOC_COLORS, canShare, groupColor, deleteBodyKey, docTone, documentRows, serviceDocNote, submittedDocs, type DocumentRow } from './documents'
 
 const cats = [
   { id: 'c1', requiredDocuments: ['police-certificate'] },
@@ -119,4 +119,15 @@ test('a compulsory document not approved is red, an optional one orange, pending
     expect(docTone(row(optional, 'approved'))).toBe('approved')
   }
   expect(new Set(Object.values(DOC_COLORS)).size).toBe(4)
+})
+
+test('group colours: required is red while one is missing or rejected, else green; optional is indigo while none is uploaded, else neutral', () => {
+  const row = (optional: boolean, state: DocumentRow['state']): DocumentRow => ({ requirement: 'x', optional, state, note: null })
+  expect(groupColor([row(false, 'approved'), row(false, 'none')], false)).toBe(DOC_COLORS.required)
+  expect(groupColor([row(false, 'rejected')], false)).toBe(DOC_COLORS.required)
+  expect(groupColor([row(false, 'approved'), row(false, 'pending')], false)).toBe(DOC_COLORS.pending) // in review is not approved
+  expect(groupColor([row(false, 'approved')], false)).toBe(DOC_COLORS.approved)
+  expect(groupColor([row(true, 'rejected'), row(true, 'none')], true)).toBe(DOC_COLORS.required) // a rejected optional one must be seen
+  expect(groupColor([row(true, 'none'), row(true, 'none')], true)).toBe(DOC_COLORS.optional)
+  expect(groupColor([row(true, 'none'), row(true, 'pending')], true)).toBe(DOC_COLORS.pending)
 })
