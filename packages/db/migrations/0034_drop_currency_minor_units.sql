@@ -1,0 +1,1 @@
+ALTER TABLE "currencies" DROP COLUMN "minor_units";

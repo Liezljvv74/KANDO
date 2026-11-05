@@ -1,0 +1,88 @@
+{
+  "title": "Choose the look of KANDO (bolder set)",
+  "question": "A bolder set, all new. Pick one for the entry screens, Home, Search and the provider page, or ask for another set.",
+  "options": [
+    {
+      "id": "strassenfest",
+      "kind": "assigned",
+      "label": "Das Straßenfest",
+      "kicker": "THE ROLL",
+      "lineage": "a neighbourhood street party: bunting, painted banners, folding tables",
+      "thesis": "Hilfe from next door is a party you are invited to: huge friendly type, bunting across the top, and every helper a bright flag.",
+      "palette": ["#FFC93C", "#E8452C", "#12A3A3", "#1B2A57", "#FFF8E7"],
+      "materials": ["painted banner cloth", "triangle bunting", "flat poster ink"],
+      "viewport": "A sun-yellow screen, a row of bunting flags across the top, a giant navy headline, helper flags in red and teal, and one huge red button.",
+      "risk": "Loud colour and big type can tip into children's-party kitsch; forms, prices and payment must drop to a calm white surface.",
+      "html": ".impeccable/mocks/decision/strassenfest.html",
+      "htmlFrame": "390x844"
+    },
+    {
+      "id": "scherenschnitt",
+      "kind": "dealt",
+      "label": "Der Scherenschnitt",
+      "kicker": "ALSO DEALT",
+      "lineage": "Matisse-style cut-paper shapes: leaves, houses, hands and suns in flat saturated colour",
+      "thesis": "Every kind of help is a bold cut-paper shape, and the whole street is a collage of people you can trust.",
+      "palette": ["#F4EBDD", "#1F5FBF", "#F2542D", "#2FA36B", "#FFC93C"],
+      "materials": ["cut paper", "gouache", "paper grain"],
+      "viewport": "A cream sheet, huge cut-paper leaf, house and sun shapes, a blue headline, and category shapes as big tappable cut-outs.",
+      "risk": "Organic shapes behind text can reduce contrast; every text block needs a solid cut-paper plate.",
+      "html": ".impeccable/mocks/decision/scherenschnitt.html",
+      "htmlFrame": "390x844"
+    },
+    {
+      "id": "nachbarschaftskarte",
+      "kind": "dealt",
+      "label": "Die Nachbarschaftskarte",
+      "kicker": "ALSO DEALT",
+      "lineage": "a hand-painted illustrated neighbourhood map, like a local festival poster",
+      "thesis": "Home is a bright illustrated map of your street, and every helper is a pin you can walk to.",
+      "palette": ["#BDE3C4", "#FFF4D6", "#E8452C", "#2B6CB0", "#FFC93C"],
+      "materials": ["painted map", "round pins", "street labels"],
+      "viewport": "A green and cream painted map with fat streets, little houses, three red helper pins with faces, and a bottom sheet listing who is near.",
+      "risk": "A map competes with a list for the main screen; users who just want a price list must reach it in one tap.",
+      "html": ".impeccable/mocks/decision/nachbarschaftskarte.html",
+      "htmlFrame": "390x844"
+    },
+    {
+      "id": "challenger-merz",
+      "kind": "challenger",
+      "catalogId": "design-canon-merz-collage-page",
+      "label": "Torn-paper collage",
+      "verdict": "declined",
+      "lineage": "dada collage of tram tickets and newsprint",
+      "palette": ["#E9E1CF", "#111111", "#C33A2F"],
+      "materials": ["torn newsprint", "printers' rules"],
+      "case": "Loses both: a found-object layout makes money and ID screens hard to trust.",
+      "kept": "Pasted-on paper labels for helper tags."
+    },
+    {
+      "id": "challenger-treasure",
+      "kind": "challenger",
+      "catalogId": "wayfinding-cartography-signage-salt-stiffened-treasure-map",
+      "label": "Treasure map",
+      "verdict": "declined",
+      "lineage": "salt-stiffened vellum treasure map",
+      "palette": ["#D9C49A", "#6B4A2B"],
+      "materials": ["vellum", "tide marks"],
+      "case": "Loses both: false trails and coded marginalia are the opposite of a clear booking path.",
+      "kept": "The map as the way to explore, taken into the neighbourhood map."
+    },
+    {
+      "id": "challenger-kiln",
+      "kind": "challenger",
+      "catalogId": "clay-ceramics-fracture-glaze-river-shelf",
+      "label": "Glaze river shelf",
+      "verdict": "declined",
+      "lineage": "kiln shelf with run glazes",
+      "palette": ["#F2F0EA", "#1E4FA3"],
+      "materials": ["chalk shelf", "cobalt glaze"],
+      "case": "Loses both: an elegant craft piece, but a warning-state spill looks like an error on a payment screen.",
+      "kept": "One saturated blue as the single accent colour."
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code", "toggle": false},
+  "canon": false,
+  "steer": true
+}

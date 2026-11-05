@@ -32,7 +32,7 @@ export function withTimeOfDay(current: Date | null, picked: Date): Date {
   return d
 }
 
-/** The provider's answer starts from the customer's time (empty when the request has none, an old request). */
+/** The provider's answer starts from the customer's time (empty when the request has none: an additional-task request). */
 export function whenFromRequest(r: { startAt: string | null; durationMin: number | null }): WhenWhere {
   const empty = emptyWhenWhere()
   return r.startAt ? { ...empty, when: new Date(r.startAt), duration: String(r.durationMin ?? 60) } : empty

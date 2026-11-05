@@ -17,7 +17,7 @@ export const requests = pgTable(
       .references(() => providers.id, { onDelete: 'cascade' }),
     serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
     description: text().notNull(),
-    // The customer's proposed time and place (flow 1). Null on requests made before it existed; revision counts the customer's changes.
+    // The customer's proposed time and place (flow 1). Null only on an additional-task request (parent_booking_id set): it belongs to a booking that has its own time and place. Revision counts the customer's changes.
     startAt: timestamp('start_at', { withTimezone: true }),
     durationMin: integer('duration_min'),
     onSite: boolean('on_site'),

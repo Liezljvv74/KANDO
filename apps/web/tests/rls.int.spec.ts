@@ -28,7 +28,7 @@ it('public reference tables are readable by app_user and not writable', async ()
   const r = await asUser(null, (tx) => tx.execute(sql`SELECT code FROM countries WHERE code = 'DE'`))
   expect(r.rows).toEqual([{ code: 'DE' }])
   await expect(
-    asUser(null, (tx) => tx.execute(sql`INSERT INTO currencies (code, minor_units) VALUES ('XXX', 2)`)),
+    asUser(null, (tx) => tx.execute(sql`INSERT INTO currencies (code) VALUES ('XXX')`)),
   ).rejects.toMatchObject({ cause: { message: expect.stringContaining("permission denied") } })
 })
 
