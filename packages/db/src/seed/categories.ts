@@ -30,7 +30,7 @@ const list = (docs: string[] = []) => sql`ARRAY[${sql.join(docs.map((d) => sql`$
 
 /**
  * Upserts the categories and their German and English names; safe to run any number of times. The document lists are
- * set on INSERT only: a re-run must keep what staff edited in the back office (applyDocumentLists, used by the seed test, resets them).
+ * set on INSERT only: a re-run must keep what staff edited in the back office.
  */
 export async function seedCategories(): Promise<number> {
   for (const [i, c] of CATEGORIES.entries()) {
@@ -48,7 +48,7 @@ export async function seedCategories(): Promise<number> {
   return CATEGORIES.length
 }
 
-/** Overwrites both document lists of the seeded categories with the table above (only the seed test uses it, to check the table; the one-off script for an old database is gone). */
+/** Overwrites both document lists of the seeded categories with the table above (the seed test uses it to check the table). */
 export async function applyDocumentLists(): Promise<number> {
   for (const c of CATEGORIES)
     await db.execute(sql`UPDATE categories SET required_documents = ${list(c.requiredDocuments)}, optional_documents = ${list(c.optionalDocuments)} WHERE slug = ${c.slug}`)
