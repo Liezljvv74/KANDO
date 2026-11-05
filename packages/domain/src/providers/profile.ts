@@ -189,6 +189,7 @@ export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
   const slugBase = slugify(fresh.publicName ?? '') // '' (no name) falls back to 'profile'
   const ok = (await tx.execute<{ ok: boolean }>(sql`SELECT set_provider_published(true, ${slugBase}) AS ok`)).rows[0]!.ok
   if (!ok) fail(409, { error: 'Profile suspended' })
+  await tx.update(users).set({ isProvider: true }).where(eq(users.id, userId)) // publishing after stopOffering is an explicit offer: the flag and the tab come back
   return (await getMyProfile(tx, userId))!
 }
 
@@ -201,15 +202,15 @@ export async function unpublish(tx: Tx, userId: string): Promise<MyProfile> {
 /**
  * Stops offering services: 409 OFFER_HAS_OPEN_JOBS while the person has open work as provider, else the profile goes back to draft
  * (off search and the public page) and is_provider turns false. The profile, services, bookings, reviews and invoices stay; ensureDraft brings it back.
- * Open = a booking not yet ended (anything but expired, declined, withdrawn, completed, cancelled, refunded) or paid and not released,
+ * Open = a booking not yet ended (anything but expired, declined, withdrawn, completed, cancelled, refunded) or completed/disputed with money paid and not yet released (a cancelled or refunded booking never releases),
  * a request still open or quoted, or a quote still sent. Disputes are bookings in status 'disputed'. No provider row: only the flag is cleared.
  */
-export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true }> {
+export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true; hadProfile: boolean }> {
   await lockProfile(tx, userId)
   const row = await ownProvider(tx, userId)
   if (row) {
     const open = (
-      await tx.execute(sql`SELECT 1 FROM bookings WHERE provider_id = ${row.id} AND (status NOT IN ('expired','declined','withdrawn','completed','cancelled','refunded') OR (paid_at IS NOT NULL AND released_at IS NULL))
+      await tx.execute(sql`SELECT 1 FROM bookings WHERE provider_id = ${row.id} AND (status NOT IN ('expired','declined','withdrawn','completed','cancelled','refunded') OR (paid_at IS NOT NULL AND released_at IS NULL AND status NOT IN ('cancelled','refunded')))
         UNION ALL SELECT 1 FROM requests WHERE provider_id = ${row.id} AND status IN ('open','quoted')
         UNION ALL SELECT 1 FROM quotes WHERE provider_id = ${row.id} AND status = 'sent' LIMIT 1`)
     ).rows.length
@@ -217,5 +218,5 @@ export async function stopOffering(tx: Tx, userId: string): Promise<{ ok: true }
     await tx.execute(sql`SELECT set_provider_published(false, '')`)
   }
   await tx.update(users).set({ isProvider: false }).where(eq(users.id, userId))
-  return { ok: true }
+  return { ok: true, hadProfile: !!row }
 }

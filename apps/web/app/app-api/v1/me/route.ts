@@ -8,6 +8,8 @@ export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) => Resp
 
 export const PATCH = appRequest({ auth: 'required', maxBodyBytes: 4096, allowStaleTerms: true }, async ({ tx, user, request }) => {
   const patch = await parseBody(MePatchSchema, request)
+  // Until the new terms are accepted only the acceptance itself may be written, nothing else about the account.
+  if (user!.termsStale && Object.keys(patch).some((k) => k !== 'termsAccepted' && k !== 'termsVersion')) return Response.json({ error: 'terms-required' }, { status: 428 })
   const me = await updateMe(tx, user!.id, patch)
   if (patch.firstName !== undefined || patch.lastName !== undefined) refreshPublicPages('providers') // the name on a provider page
   return Response.json(me)

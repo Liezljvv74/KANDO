@@ -40,6 +40,12 @@ describe('terms version', () => {
     expect((await write('tv1')).status).toBe(200) // marking things seen and push switches never bring the pop-up back
   })
 
+  it('with stale terms PATCH /me takes only the acceptance: any other change is 428', async () => {
+    await setVersion('tv1', '2020-01-01')
+    expect((await call(meRoute.PATCH, 'tv1', 'PATCH', { firstName: 'Zed' })).status).toBe(428)
+    expect((await call(meRoute.PATCH, 'tv1', 'PATCH', { termsAccepted: true, termsVersion: TERMS_VERSION, firstName: 'Zed' })).status).toBe(428)
+  })
+
   it('accepting the current version on PATCH /me is allowed, stamps time and version, and opens the writes again', async () => {
     const before = await row('tv1')
     const res = await call(meRoute.PATCH, 'tv1', 'PATCH', { termsAccepted: true, termsVersion: TERMS_VERSION })
