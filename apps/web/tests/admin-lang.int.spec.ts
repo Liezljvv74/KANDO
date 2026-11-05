@@ -55,7 +55,7 @@ describe('login failure text', () => {
 
 describe('adminLangCookie', () => {
   it('lasts a year for the whole site', () =>
-    expect(adminLangCookie('en')).toBe('admin-lang=en; path=/; max-age=31536000; SameSite=Lax'))
+    expect(adminLangCookie('en')).toBe('admin-lang=en; path=/; max-age=31536000; SameSite=Lax; Secure'))
 })
 
 describe('useAt', () => {
