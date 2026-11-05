@@ -54,7 +54,7 @@ export const RequestSchema = z.object({
   providerId: z.string(),
   serviceId: z.string().nullable(),
   description: z.string(),
-  /** The customer's proposed time and place; null on a request from before it was asked for. */
+  /** The customer's proposed time and place; null on an additional-task request (it belongs to a booking that has its own time and place). */
   startAt: z.string().nullable(),
   durationMin: z.number().int().nullable(),
   onSite: z.boolean().nullable(),

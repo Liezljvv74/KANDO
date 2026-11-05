@@ -15,7 +15,6 @@ export const countries = pgTable('countries', {
 
 export const currencies = pgTable('currencies', {
   code: text().primaryKey(),
-  minorUnits: integer('minor_units').notNull(),
 })
 
 export const postcodes = pgTable(

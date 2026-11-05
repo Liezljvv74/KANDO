@@ -305,7 +305,7 @@ it('GET /requests/{id} carries the thread id', async () => {
 })
 
 it("a quote takes the currency of the provider's country", async () => {
-  await pool.query("INSERT INTO currencies (code, minor_units) VALUES ('ZAR', 2) ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO currencies (code) VALUES ('ZAR') ON CONFLICT DO NOTHING")
   await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZZ', 'Zz', 'Zz', '^\\d+$', 'ZAR')")
   try {
     const r = await newRequest(pRemote)
