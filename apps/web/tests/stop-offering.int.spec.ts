@@ -78,3 +78,10 @@ it('can offer again: the old draft comes back, no second profile', async () => {
   expect(await isProvider(U.a)).toBe(true)
   expect((await pool.query('SELECT id FROM providers WHERE owner_id = $1', [U.a])).rows.map((r) => r.id)).toEqual([pA])
 })
+
+it('a paid booking that was cancelled or refunded never releases and does not block stopping', async () => {
+  await pool.query("UPDATE providers SET status = 'published' WHERE id = $1", [pA]) // offered again earlier: back online for this case
+  const booking = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.a, providerId: pA, startAt: new Date(start.getTime() + 3 * 86_400_000) })
+  await pool.query("UPDATE bookings SET status = 'refunded', paid_at = now(), released_at = NULL WHERE id = $1", [booking.id])
+  expect((await call(stop.POST, U.a, 'POST')).status).toBe(200)
+})

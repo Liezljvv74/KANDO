@@ -13,8 +13,6 @@ import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
 export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null; termsStale: boolean }
 
-/** The person accepted the Terms once, but not the current version (the published terms changed since): they must accept again in the app. Accounts that never accepted (old test accounts) are not held back. */
-/** The current version was accepted: what the AI features require, as the AI use is disclosed in the terms. */
 export type StaffRole = 'admin' | 'reviewer'
 export type StaffUser = { id: string; email: string; staffRole: StaffRole }
 
