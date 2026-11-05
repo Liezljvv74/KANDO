@@ -135,4 +135,4 @@ GitHub Actions (`.github/workflows/ci.yml`) needs two repository secrets, `NEON_
 
 ## Document requirements per category
 
-Each category has required documents (needed to go live) and optional documents (a slot; an approved one shows as a badge). The seed sets both lists only when it creates a category, so a re-seed never overwrites what staff edited in the back office. A database seeded before this table existed keeps its old lists until staff edit them or the table is applied once: run `pnpm --filter @kando/db apply:required-documents` with the target `DATABASE_URL` (and `ALLOW_PRODUCTION=1` outside the dev branch). It overwrites both lists of the 14 seeded categories.
+Each category has required documents (needed to go live) and optional documents (a slot; an approved one shows as a badge). The seed sets both lists only when it creates a category, so a re-seed never overwrites what staff edited in the back office. Staff edit the lists in the back office. Production already has the lists on all 14 categories (checked 5 November 2026); the one-off script that reapplied the table to an old database has been removed.

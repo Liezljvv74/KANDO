@@ -79,7 +79,7 @@ it('the seeded requirement table matches the sheet: everyone needs an ID, the tr
   }
 })
 
-it('a re-seed keeps the lists staff edited, but keeps the sort current; the one-off script resets them', async () => {
+it('a re-seed keeps the lists staff edited, but keeps the sort current; applyDocumentLists resets them', async () => {
   await pool.query("UPDATE categories SET required_documents = ARRAY['permit'], optional_documents = ARRAY['id-document'], sort = 99 WHERE slug = 'gardening'")
   await seedCategories()
   const { rows } = await pool.query("SELECT required_documents, optional_documents, sort FROM categories WHERE slug = 'gardening'")
