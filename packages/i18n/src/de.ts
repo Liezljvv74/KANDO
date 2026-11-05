@@ -120,6 +120,8 @@ export const de = {
   'setup.services': 'Leistungen',
   'setup.removeService': 'Entfernen',
   'setup.documents.title': 'Nachweise zur Prüfung',
+  'setup.documents.required': 'Erforderliche Nachweise',
+  'setup.documents.optional': 'Optionale Nachweise',
   'setup.documents.add': 'Hinzufügen',
   'setup.liveMessage': 'Dein Profil ist online. Erzähl es weiter.',
   'setup.pendingMessage': 'Dein Profil ist online. Deine Leistung {category} geht online, sobald wir dein Dokument geprüft haben.',

@@ -45,8 +45,12 @@ export const deleteBodyKey = (status: Document['status']): Key => (status === 'a
 
 export type DocTone = 'required' | 'optional' | 'pending' | 'approved'
 
-/** A document row's colour: red while a compulsory one is not approved, orange for an optional one, neutral while in review, green when approved. */
+/** A document row's colour: red while a compulsory one is not approved, indigo (an accent colour) for an optional one, neutral while in review, green when approved. */
 export const docTone = (r: DocumentRow): DocTone => (r.state === 'approved' ? 'approved' : r.state === 'pending' ? 'pending' : r.optional ? 'optional' : 'required')
 
 /** Text colours per tone, readable (4.5:1 or more) on the white and on the green card. */
-export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#9A5B00', pending: '#4F4E7D', approved: '#08674F' }
+export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#34328A', pending: '#4F4E7D', approved: '#08674F' }
+
+/** The heading colour of a group: the required group is red while one of its documents is missing or rejected, else green; the optional group is indigo while nothing of it is uploaded, else neutral. */
+export const groupColor = (rows: DocumentRow[], optional: boolean): string =>
+  optional ? (rows.every((r) => r.state === 'none') ? DOC_COLORS.optional : DOC_COLORS.pending) : rows.some((r) => r.state === 'none' || r.state === 'rejected') ? DOC_COLORS.required : DOC_COLORS.approved
