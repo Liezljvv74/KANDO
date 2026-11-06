@@ -433,3 +433,17 @@ it('an unpaid additional task cannot be paid once its root has ended; a payment 
     expect((await pool.query("SELECT amount::float AS a FROM ledger_entries WHERE booking_id = $1 AND kind = 'refund'", [kid])).rows, ended).toEqual([{ a: 40 }])
   }
 })
+
+it('an additional-task quote without invoicing consent is refused', async () => {
+  const root = await paidRoot()
+  const r = RequestSchema.parse(await (await start(U.cust, root.id)).json())
+  await pool.query('UPDATE providers SET invoice_consent_at = NULL WHERE id = $1', [providerId])
+  vi.stubEnv('PAYMENTS_ENABLED', 'true')
+  try {
+    const res = await quote(r.id)
+    expect([res.status, (await res.json()).error]).toEqual([409, 'PAYOUT_SETUP_FIRST'])
+  } finally {
+    vi.unstubAllEnvs()
+    await pool.query('UPDATE providers SET invoice_consent_at = now() WHERE id = $1', [providerId])
+  }
+})
