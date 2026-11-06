@@ -16,4 +16,7 @@ describe('quote gate', () => {
       ['taxId', 'quoteGate.taxId', undefined],
     ])
   })
+  it('ignores a step this app does not know', () => {
+    expect(gateRows(['consent', 'future' as never]).map((r) => r.step)).toEqual(['consent'])
+  })
 })

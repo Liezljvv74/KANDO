@@ -15,4 +15,4 @@ export const quoteBlocked = (steps: MyProfile['quoteSteps']): boolean => (steps?
 
 export const gateHeading = (n: number): Key => (n === 1 ? 'quoteGate.headingOne' : 'quoteGate.headingMany')
 
-export const gateRows = (steps: Step[]) => steps.map((step) => ({ step, ...ROWS[step] }))
+export const gateRows = (steps: Step[]) => steps.filter((s) => s in ROWS).map((step) => ({ step, ...ROWS[step] }))

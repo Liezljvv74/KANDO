@@ -79,7 +79,7 @@ const idOf = (payload: object, key: 'bookingId' | 'requestId'): string | null =>
 
 /** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting", the commission invoice list for a new commission invoice, else the booking, or the request (first for request-withdrawn, -declined and -reopened: their booking has ended), or the list; null for the rest or a malformed id. */
 export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): { path: string } | null => {
-  if (n.kind === 'customers-waiting') return { path: '/my-profile' }
+  if (n.kind === 'customers-waiting' || n.kind === 'payout-setup-complete') return { path: '/my-profile' }
   if (n.kind === 'commission-invoice-ready') return { path: '/invoices/commission' }
   if (n.kind === 'profile-live' || n.kind === 'message-received') return null
   if (n.kind === 'provider-available') {
@@ -98,4 +98,4 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): {
 }
 
 /** A notice about a booking or request (shown on My bookings): it has an id to open, or is one of the list-level kinds. */
-export const isBookingNotice = (n: Pick<Notification, 'kind' | 'payload'>): boolean => n.kind !== 'provider-available' && n.kind !== 'customers-waiting' && n.kind !== 'commission-invoice-ready' && notificationTarget(n) !== null
+export const isBookingNotice = (n: Pick<Notification, 'kind' | 'payload'>): boolean => n.kind !== 'provider-available' && n.kind !== 'customers-waiting' && n.kind !== 'payout-setup-complete' && n.kind !== 'commission-invoice-ready' && notificationTarget(n) !== null

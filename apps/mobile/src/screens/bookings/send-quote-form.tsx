@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { BookingRequest, QuoteInput } from '@kando/contract'
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
-import { getMyProfile, servicesApi } from '@/api/my-profile'
+import { servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { parseAmount } from '@/lib/amount'
-import { doQuoteStep } from '@/lib/do-quote-step'
+import { doQuoteStep, getProfileFresh } from '@/lib/do-quote-step'
 import { paymentsProblem } from '@/lib/payments-off'
 import { quoteBlocked } from '@/lib/quote-gate'
 import { buildQuoteTime, whenFromRequest } from '@/lib/when-where'
@@ -29,12 +29,15 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const loadProfile = useCallback(() => getMyProfile(), [])
+  const loadProfile = useCallback(() => getProfileFresh(), [])
   const profile = useLoad(loadProfile) // re-reads on focus and when the app returns from Stripe, so the gate clears itself
   const steps = profile.data?.quoteSteps ?? []
   const blocked = quoteBlocked(steps)
 
+  const stepping = useRef(false) // a double tap must not start Stripe or save twice
   async function doStep(step: (typeof steps)[number]) {
+    if (stepping.current) return
+    stepping.current = true
     setError(null)
     try {
       await doQuoteStep(step)
@@ -42,6 +45,7 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
     } catch (e) {
       setError(paymentsProblem(e))
     }
+    stepping.current = false
   }
 
   // a request for one of the provider's fixed-price services starts with that price (the provider can change it)
@@ -87,8 +91,8 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
       <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
       {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}
       <ErrorText text={error} />
-      {blocked && <QuoteGate steps={steps} onDo={doStep} />}
       <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} disabled={blocked} />
+      {blocked && <QuoteGate steps={steps} onDo={doStep} />}
     </>
   )
 }

@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
+import { documentsApi, ensureDraft, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { NotificationBanners } from '@/components/notification-banner'
@@ -12,6 +12,7 @@ import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/correspondence'
+import { getProfileFresh } from '@/lib/do-quote-step'
 import { canShare, documentRows } from '@/lib/documents'
 import { createStaleGuard } from '@/lib/stale-guard'
 import { InvoicesCard } from '../invoices/invoices-card'
@@ -46,7 +47,7 @@ export default function SetupScreen() {
   const stamp = useRef(createStaleGuard()).current
   const loadAll = useCallback(async () => {
     const fresh = stamp()
-    const profile = (await getMyProfile()) ?? (await ensureDraft())
+    const profile = (await getProfileFresh()) ?? (await ensureDraft())
     const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
     // Opening the page marks the notifications seen; a /me failure must not hold the page back.
     loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
@@ -55,6 +56,7 @@ export default function SetupScreen() {
   const { done, data, error, retry } = useLoad(loadAll)
   const { categories } = useCategories()
   const me = useMe()
+  const [taxAsked, setTaxAsked] = useState(0) // the tax number step opens the field in the payout card
   const title = welcome ? t('setup.welcome') : t('setup.title')
   if (!done || !data) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
   const { profile, services, references, photos, verifications } = data
@@ -63,7 +65,7 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
-      <PublishBar profile={profile} services={services} onChanged={retry} />
+      <PublishBar profile={profile} services={services} onChanged={retry} onTaxId={() => setTaxAsked((n) => n + 1)} />
       <NotificationBanners me={me} canShare={canShare(services)} />
       <Card>
         <View style={styles.row}>
@@ -76,7 +78,7 @@ export default function SetupScreen() {
         {profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date() ? <ErrorText text={errorText('Profile suspended')} /> : null}
       </Card>
 
-      <PayoutCard />
+      <PayoutCard profile={profile} onChanged={retry} taxAsked={taxAsked} />
 
       <ServicesCard services={services} docRows={docRows} />
 
