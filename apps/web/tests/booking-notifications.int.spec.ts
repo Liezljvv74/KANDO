@@ -36,7 +36,7 @@ it('a request: one in-app row and one German email for the provider', async () =
   const res = await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'Bitte helfen', ...requestTime() })
   const r = RequestSchema.parse(await res.json())
   expect(await rows(U.owner)).toEqual([{ kind: 'request-received', payload: { requestId: r.id } }])
-  expect(subjects(U.owner).map((m) => m.subject)).toEqual([expect.stringMatching(/^\#\d+ .+: Du hast eine neue Anfrage$/)])
+  expect(subjects(U.owner).map((m) => m.subject)).toEqual([expect.stringMatching(/^#\d+.+: Du hast eine neue Anfrage$/)])
 })
 
 it('a quote: the customer gets one row and an English email naming the 7-day expiry date', async () => {

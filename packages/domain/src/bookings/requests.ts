@@ -1,6 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
-import { bookings, categoryTexts, db, providers, quotes, requestAppInsert, requests, services, users, type Tx } from '@kando/db'
-import { DEFAULT_LANG, t, type Lang } from '@kando/i18n'
+import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
 import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
