@@ -30,7 +30,8 @@ test('the heading is singular for one thing', () => {
 
 test('all set only when nothing is missing and no quote step remains', () => {
   expect(allSet([], [])).toBe(true)
-  expect(allSet([], undefined)).toBe(true)
+  expect(allSet([], undefined)).toBe(false) // an old server sends no steps: unknown is not all set
+  expect(allSet([], ['future' as never])).toBe(true) // an unknown step is not a row
   expect(allSet(['skills'], [])).toBe(false)
   expect(allSet([], ['consent'])).toBe(false)
 })

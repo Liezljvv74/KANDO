@@ -6,7 +6,7 @@ import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
 import { servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
-import { SwitchRow } from '@/components/form-ui'
+import { SmallButton, SwitchRow } from '@/components/form-ui'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { parseAmount } from '@/lib/amount'
@@ -33,6 +33,8 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const profile = useLoad(loadProfile) // re-reads on focus and when the app returns from Stripe, so the gate clears itself
   const steps = profile.data?.quoteSteps ?? []
   const blocked = quoteBlocked(steps)
+  // Disabled while the first load runs; after a failed load the button stays usable (the server still refuses) with a retry line.
+  const checking = !profile.done && !profile.error
 
   const stepping = useRef(false) // a double tap must not start Stripe or save twice
   async function doStep(step: (typeof steps)[number]) {
@@ -91,7 +93,13 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
       <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
       {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}
       <ErrorText text={error} />
-      <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} disabled={blocked} />
+      <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} disabled={blocked || checking} />
+      {!profile.done && !!profile.error && (
+        <>
+          <Info text={t('quoteGate.loadFailed')} />
+          <SmallButton label={t('common.retry')} onPress={profile.retry} />
+        </>
+      )}
       {blocked && <QuoteGate steps={steps} onDo={doStep} />}
     </>
   )

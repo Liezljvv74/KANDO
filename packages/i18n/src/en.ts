@@ -581,6 +581,8 @@ export const en: Record<AppKey, string> = {
   'setup.checklistOne': '1 thing to do first',
   'setup.checklistMany': '{n} things to do first',
   'setup.allSet': 'You are all set',
+  'setup.bookableNote': 'You can go live without these.',
+  'quoteGate.loadFailed': 'Could not check your set-up.',
   'setup.bookableHeading': 'Before customers can book you',
   'error.booking.own-service': 'You cannot book your own service. Choose a service from another provider.',
   'error.booking.not-open': 'This is no longer open: it was already answered or has expired. Please reload the page.',

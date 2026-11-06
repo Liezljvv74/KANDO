@@ -2,6 +2,7 @@ import type { Missing, MyProfile } from '@kando/contract'
 
 import type { Key } from '@/i18n'
 import { COMPULSORY } from './compulsory'
+import { gateRows } from './quote-gate'
 
 // Each missing item opens the screen that holds its field (the setup page has no scroll-to-field, so a card's own edit screen is the target).
 const aboutRow = (field: keyof typeof COMPULSORY) => ({ label: COMPULSORY[field].label, path: '/my-profile/about' })
@@ -23,4 +24,4 @@ export const checklistItems = (missing: Missing[]) => missing.filter((m) => m in
 export const checklistHeading = (n: number): Key => (n === 1 ? 'setup.checklistOne' : 'setup.checklistMany')
 
 /** Nothing is missing for Live and no step remains before customers can book: the list becomes one green line. */
-export const allSet = (missing: Missing[], steps: MyProfile['quoteSteps']) => checklistItems(missing).length === 0 && (steps?.length ?? 0) === 0
+export const allSet = (missing: Missing[], steps: MyProfile['quoteSteps']) => steps !== undefined && checklistItems(missing).length === 0 && gateRows(steps).length === 0

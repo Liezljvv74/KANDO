@@ -1,5 +1,5 @@
 import * as WebBrowser from 'expo-web-browser'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
@@ -27,9 +27,12 @@ export function PayoutCard({ profile, onChanged, taxAsked }: { profile: MyProfil
   const state = payoutState(data?.ready, opened)
   // The status call just recorded the payout as ready: reload the profile so the checklist drops the step (one Stripe call, one profile read per focus).
   const stale = !!data?.ready && !!profile.quoteSteps?.includes('payout')
+  // Once per status load (and when the profile arrives later), never in a loop: a reload that returns the same profile does not retrigger it.
+  const changed = useRef(onChanged)
+  changed.current = onChanged
   useEffect(() => {
-    if (stale) onChanged()
-  }, [stale])
+    if (stale) changed.current()
+  }, [data, stale])
   if (error && noteIfOff(error)) return null // payments are off: nothing to set up, and a Retry could never succeed
 
   async function open() {
@@ -71,15 +74,20 @@ export function PayoutCard({ profile, onChanged, taxAsked }: { profile: MyProfil
           <SmallButton label={t(state === 'waiting' ? 'payouts.continue' : 'payouts.setUp')} onPress={open} busy={busy} />
         ))}
       <ErrorText text={problem} />
-      <InvoicingFields key={`${profile.invoiceConsent}|${profile.taxNumber}`} initial={profile} onChanged={onChanged} taxAsked={taxAsked} />
+      <InvoicingFields initial={profile} onChanged={onChanged} taxAsked={taxAsked} />
     </Card>
   )
 }
 
-/** Invoicing, part of being ready to take work while payments are on: the tax number printed on invoices, and the consent tick. It takes the screen's profile (keyed on what it shows) and reloads it after each save, so the checklist above agrees. */
+/** Invoicing, part of being ready to take work while payments are on: the tax number printed on invoices, and the consent tick. It follows the screen's saved profile (a half-typed tax number is never overwritten) and reloads it after each save, so the checklist above agrees. */
 function InvoicingFields({ initial, onChanged, taxAsked }: { initial: MyProfile; onChanged: () => void; taxAsked: number }) {
   const [taxNumber, setTaxNumber] = useState(initial.taxNumber ?? '')
   const [consent, setConsent] = useState(!!initial.invoiceConsent)
+  const taxDirty = useRef(false)
+  useEffect(() => {
+    if (!taxDirty.current) setTaxNumber(initial.taxNumber ?? '')
+  }, [initial.taxNumber])
+  useEffect(() => setConsent(!!initial.invoiceConsent), [initial.invoiceConsent])
   const [taxOpen, setTaxOpen] = useState(taxAsked > 0) // collapsed until the person needs it
   useEffect(() => {
     if (taxAsked > 0) setTaxOpen(true)
@@ -89,6 +97,7 @@ function InvoicingFields({ initial, onChanged, taxAsked }: { initial: MyProfile;
     setProblem(null)
     try {
       await saveMyProfile(body)
+      taxDirty.current = false
       onChanged()
     } catch (e) {
       setProblem(paymentsProblem(e))
@@ -100,7 +109,10 @@ function InvoicingFields({ initial, onChanged, taxAsked }: { initial: MyProfile;
         <Text style={styles.toggleText}>{taxNumber.trim() && !taxOpen ? `${t('payouts.taxNumber')}: ${taxNumber.trim()}` : t('payouts.taxNumber')}</Text>
         <Text style={styles.toggleText}>{taxOpen ? '▴' : '▾'}</Text>
       </Pressable>
-      {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={setTaxNumber} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />}
+      {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={(v) => {
+        taxDirty.current = true
+        setTaxNumber(v)
+      }} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />}
       <SwitchRow
         label={t('payouts.invoiceConsent')}
         value={consent}

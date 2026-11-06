@@ -7,13 +7,14 @@ import { t, type Key } from '@/i18n'
 import { gateHeading, gateRows } from '@/lib/quote-gate'
 
 /** What a provider still needs before quoting: a heading and one row per missing step. `onDo` runs that step's existing flow. */
-export function QuoteGate({ steps, onDo, heading }: { heading?: string; steps: NonNullable<MyProfile['quoteSteps']>; onDo: (step: NonNullable<MyProfile['quoteSteps']>[number]) => void }) {
+export function QuoteGate({ steps, onDo, heading, note }: { heading?: string; note?: string; steps: NonNullable<MyProfile['quoteSteps']>; onDo: (step: NonNullable<MyProfile['quoteSteps']>[number]) => void }) {
   const rows = gateRows(steps) // the count counts what is shown (a step this app does not know is not a row)
   return (
     <Card>
       <Text style={styles.title} accessibilityRole="header">
         {heading ?? t(gateHeading(rows.length), { n: rows.length })}
       </Text>
+      {!!note && <Text style={styles.hint}>{note}</Text>}
       {rows.map((r) => (
         <GateRow key={r.step} title={r.title} hint={r.hint} onDo={() => onDo(r.step)} />
       ))}

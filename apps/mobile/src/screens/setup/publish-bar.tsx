@@ -101,7 +101,7 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
       )}
       <ErrorText text={problem} />
     </Card>
-    {quoteBlocked(later) && <QuoteGate steps={later} onDo={doStep} heading={t('setup.bookableHeading')} />}
+    {quoteBlocked(later) && <QuoteGate steps={later} onDo={doStep} heading={t('setup.bookableHeading')} note={t('setup.bookableNote')} />}
     </>
   )
 }

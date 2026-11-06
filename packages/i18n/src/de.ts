@@ -580,6 +580,8 @@ export const de = {
   'setup.checklistOne': '1 Sache zuerst erledigen',
   'setup.checklistMany': '{n} Sachen zuerst erledigen',
   'setup.allSet': 'Alles erledigt',
+  'setup.bookableNote': 'Ohne diese kannst du trotzdem online gehen.',
+  'quoteGate.loadFailed': 'Deine Einrichtung konnte nicht geprüft werden.',
   'setup.bookableHeading': 'Bevor Kunden dich buchen können',
   'error.booking.own-service': 'Du kannst Deine eigene Leistung nicht buchen. Wähle eine Leistung eines anderen Anbieters.',
   'error.booking.not-open': 'Das ist nicht mehr offen: Es wurde schon beantwortet oder ist abgelaufen. Bitte lade die Seite neu.',
