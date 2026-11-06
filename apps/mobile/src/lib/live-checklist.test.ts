@@ -39,7 +39,8 @@ test('all set only when nothing is missing and no quote step remains', () => {
 test('an item under our check is a checking row, listed after the open rows, with no screen to open', () => {
   const rows = checklistItems({ missing: ['skills'], underCheck: ['id-document'] })
   expect(rows.map((r) => [r.item, r.state])).toEqual([['skills', 'open'], ['id-document', 'checking']])
-  expect(rows[1]).toMatchObject({ label: 'doc.short.id-document', path: undefined })
+  expect(rows[1]).toMatchObject({ label: 'doc.short.id-document' })
+  expect(rows[1]!.path).toBeUndefined()
 })
 
 test('an item under check is not counted as open and does not block all set', () => {

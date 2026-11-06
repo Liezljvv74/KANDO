@@ -88,7 +88,7 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
         <>
           <Text style={styles.heading} accessibilityRole="header">{t(checklistHeading(items.length), { n: items.length })}</Text>
           {items.map((r) => (
-            <GateRow key={r.item} title={r.label} onDo={() => go(r.path!)} />
+            <GateRow key={r.item} title={r.label} onDo={() => go(r.path)} />
           ))}
         </>
       )}

@@ -133,15 +133,18 @@ it('listNotifications adds job number, title and other party; the email names th
   expect(subjects(U.owner)[0]!.subject).toContain(jobLabel(n!.job!))
   // the final sent push (the owner has no token in this spec, so give one): names the job, no placeholder, no forbidden word
   await pool.query("INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, 'ExponentPushToken[bn-owner]', 'android') ON CONFLICT DO NOTHING", [U.owner])
-  clearPushOutbox()
-  await notifyBookingEvent('request-received', U.owner, { requestId: r.id }, { written: true })
-  const sent = pushOutboxForTests().filter((m) => m.to === 'ExponentPushToken[bn-owner]')
-  expect(sent).toHaveLength(1)
-  expect(sent[0]!.body).toContain(jobLabel(n!.job!))
-  for (const text of [sent[0]!.title, sent[0]!.body]) {
-    expect(text).not.toMatch(/[{}]/)
-    expect(text.toLowerCase()).not.toMatch(/treuhand|escrow|garantie|guarantee/)
+  try {
+    clearPushOutbox()
+    await notifyBookingEvent('request-received', U.owner, { requestId: r.id }, { written: true })
+    const sent = pushOutboxForTests().filter((m) => m.to === 'ExponentPushToken[bn-owner]')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.body).toContain(jobLabel(n!.job!))
+    for (const text of [sent[0]!.title, sent[0]!.body]) {
+      expect(text).not.toMatch(/[{}]/)
+      expect(text.toLowerCase()).not.toMatch(/treuhand|escrow|garantie|guarantee/)
+    }
+  } finally {
+    await pool.query("DELETE FROM push_tokens WHERE user_id = $1", [U.owner])
   }
-  await pool.query("DELETE FROM push_tokens WHERE user_id = $1", [U.owner])
   expect(await jobsForNotices(db as never, U.cust2, [{ requestId: r.id }, { requestId: 'not-an-id' }])).toEqual([null, null])
 })

@@ -94,15 +94,18 @@ async function threadRows(tx: Tx, userId: string, where: SQL | undefined, limit:
     if (q) rootReq.set(t.id, q)
   }
   const jobs = await rootJobs(tx, [...new Set(rootReq.values())], userId)
-  const toThread = ({ t, last, blocked }: (typeof rows)[number]): Thread => ({
+  const toThread = ({ t, last, blocked }: (typeof rows)[number]): Thread => {
+    const job = jobs.get(rootReq.get(t.id) ?? '')
+    return {
     id: t.id,
     requestId: t.requestId,
     bookingId: t.bookingId,
     otherName: others.get(t.id) ?? '',
-    ...(jobs.get(rootReq.get(t.id) ?? '') && { jobNumber: jobs.get(rootReq.get(t.id)!)!.jobNumber, title: jobs.get(rootReq.get(t.id)!)!.title }),
+    ...(job && { jobNumber: job.jobNumber, title: job.title }),
     lastMessageAt: last ? new Date(last).toISOString() : null,
     blocked,
-  })
+    }
+  }
   return rows.map((r) => ({ ...r, thread: toThread(r) }))
 }
 

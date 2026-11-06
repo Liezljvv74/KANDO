@@ -26,7 +26,7 @@ export default function ThreadList() {
     <FormScreen title={title}>
       {more.docs.length === 0 && <Text style={styles.small}>{t('chat.empty')}</Text>}
       {more.docs.map((th) => (
-        <Pressable key={th.id} onPress={() => go(`/threads/${th.id}`)} accessibilityRole="button" accessibilityLabel={th.otherName}>
+        <Pressable key={th.id} onPress={() => go(`/threads/${th.id}`)} accessibilityRole="button" accessibilityLabel={th.jobNumber !== undefined ? `#${th.jobNumber} ${th.title ?? ''}, ${th.otherName}` : th.otherName}>
           <Card list>
             {th.jobNumber !== undefined && <Text style={styles.name}>{`#${th.jobNumber} ${th.title ?? ''}`.trim()}</Text>}
             <Text style={th.jobNumber !== undefined ? styles.small : styles.name}>{th.otherName}</Text>
