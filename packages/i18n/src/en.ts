@@ -82,6 +82,7 @@ export const en: Record<AppKey, string> = {
   'tab.myProfile': 'My business',
   'tab.correspondence': 'Correspondence',
   'common.save': 'Save',
+  'job.fallbackTitle': 'Job',
   'common.cancel': 'Cancel',
   'common.typeToSearch': 'Type to search',
   'common.noMatches': 'No matches',

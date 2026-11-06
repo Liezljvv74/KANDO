@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, categoryTexts, db, providers, quotes, requestAppInsert, requests, services, users, type Tx } from '@kando/db'
-import { DEFAULT_LANG } from '@kando/i18n'
+import { DEFAULT_LANG, t, type Lang } from '@kando/i18n'
 import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -100,56 +100,94 @@ async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map
   return out
 }
 
+type Db = Tx | typeof db
+
 /**
- * The jobs' titles by request id: the provider's service title, else the category name in the viewer's language (default language
- * when missing). The mappers are sync and read one row, so every DTO that leaves the server goes through withRequestRefs or
- * withBookingRefs below. A service the viewer cannot read (row security) or that was deleted leaves an empty title.
+ * Job number, title and task numbers for DTOs. The mappers are sync and read one row, so every DTO that leaves the server goes
+ * through withRequestRefs or withBookingRefs. An additional task is a request of its own (own, unused job number): its refs are
+ * the ROOT job's, found by following parent_booking_id up to the root booking. Requests and bookings are read on `x` (the caller
+ * is a party, so row security shows them; a row just inserted on the request connection is not visible on the owner one); the
+ * service title, category names and language are public or own data and are read on the owner connection, so a hidden service
+ * (suspended provider) or a deleted one never leaves the title empty: service title, else the category name, else a fixed text.
  */
-async function jobTitles(x: Tx | typeof db, requestIds: string[], userId?: string): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
-  if (!requestIds.length) return out
-  const lang = (userId && (await x.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l) || DEFAULT_LANG
-  const rows = await x
-    .select({ id: requests.id, title: services.title, lang: categoryTexts.lang, name: categoryTexts.name })
-    .from(requests)
-    .leftJoin(services, eq(services.id, requests.serviceId))
-    .leftJoin(categoryTexts, eq(categoryTexts.categoryId, services.categoryId))
-    .where(inArray(requests.id, requestIds))
-  for (const id of new Set(rows.map((r) => r.id))) {
-    const mine = rows.filter((r) => r.id === id)
-    const name = (mine.find((r) => r.lang === lang) ?? mine.find((r) => r.lang === DEFAULT_LANG))?.name ?? ''
-    out.set(id, jobTitle(mine[0]!.title, name))
+async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, { id: string; requestId: string | null }>> {
+  const rows = new Map<string, { id: string; requestId: string | null; parentBookingId: string | null }>()
+  let todo = [...new Set(bookingIds)]
+  for (let i = 0; i < 8 && todo.length; i++) {
+    const found = await x.select({ id: bookings.id, requestId: bookings.requestId, parentBookingId: bookings.parentBookingId }).from(bookings).where(inArray(bookings.id, todo))
+    for (const r of found) rows.set(r.id, r)
+    todo = [...new Set(found.flatMap((r) => (r.parentBookingId && !rows.has(r.parentBookingId) ? [r.parentBookingId] : [])))]
+  }
+  const out = new Map<string, { id: string; requestId: string | null }>()
+  for (const id of bookingIds) {
+    let r = rows.get(id)
+    for (let i = 0; r?.parentBookingId && rows.has(r.parentBookingId) && i < 8; i++) r = rows.get(r.parentBookingId)
+    if (r) out.set(id, { id: r.id, requestId: r.requestId })
   }
   return out
 }
 
-/** Adds the job title to request DTOs (the job number comes from the row, see toRequest). */
-export async function withRequestRefs<T extends BookingRequest>(x: Tx | typeof db, list: T[], userId?: string): Promise<T[]> {
-  const titles = await jobTitles(x, [...new Set(list.map((r) => r.id))], userId)
-  return list.map((r) => ({ ...r, title: titles.get(r.id) ?? '' }))
+/** Root request id > job number and title, for the given root request ids. */
+async function rootJobs(x: Db, rootRequestIds: string[], userId?: string): Promise<Map<string, { jobNumber: number; title: string }>> {
+  const out = new Map<string, { jobNumber: number; title: string }>()
+  if (!rootRequestIds.length) return out
+  const reqs = await x.select({ id: requests.id, n: requests.jobNumber, serviceId: requests.serviceId, categoryId: requests.categoryId }).from(requests).where(inArray(requests.id, rootRequestIds))
+  const lang = ((userId && (await db.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l) || DEFAULT_LANG) as Lang
+  const serviceIds = reqs.flatMap((r) => (r.serviceId ? [r.serviceId] : []))
+  const svc = new Map((serviceIds.length ? await db.select({ id: services.id, title: services.title, categoryId: services.categoryId }).from(services).where(inArray(services.id, serviceIds)) : []).map((r) => [r.id, r]))
+  const catOf = (r: (typeof reqs)[number]) => r.categoryId ?? (r.serviceId ? svc.get(r.serviceId)?.categoryId : undefined)
+  const catIds = [...new Set(reqs.flatMap((r) => catOf(r) ?? []))]
+  const names = catIds.length ? await db.select({ id: categoryTexts.categoryId, lang: categoryTexts.lang, name: categoryTexts.name }).from(categoryTexts).where(inArray(categoryTexts.categoryId, catIds)) : []
+  for (const r of reqs) {
+    const mine = names.filter((n) => n.id === catOf(r))
+    const name = (mine.find((n) => n.lang === lang) ?? mine.find((n) => n.lang === DEFAULT_LANG))?.name ?? ''
+    out.set(r.id, { jobNumber: r.n, title: jobTitle(r.serviceId ? svc.get(r.serviceId)?.title : null, name) || t(lang, 'job.fallbackTitle') })
+  }
+  return out
+}
+
+/** Adds the root job's number and title to request DTOs (an additional task's request shows its job's). */
+export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string): Promise<T[]> {
+  const parents = [...new Set(list.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : [])))]
+  const roots = await rootsOf(x, parents)
+  const rootOf = (r: T) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? r.id : r.id)
+  const jobs = await rootJobs(x, [...new Set(list.map(rootOf))], userId)
+  return list.map((r) => {
+    const j = jobs.get(rootOf(r))
+    return j ? { ...r, jobNumber: j.jobNumber, title: j.title } : r
+  })
 }
 
 /**
- * Adds the job number, title and task number to booking DTOs. The task's position is its place among the request's bookings by
- * (created_at, id), 1-based: the original booking is the job itself (bookings are never deleted, so a position never changes).
+ * Adds the job number, title and task number to booking DTOs. A job is its root booking plus the additional tasks that hang
+ * below it (by parent_booking_id); the root booking is `#1040`, its tasks are `#1040-2`, `#1040-3` in the order they were created
+ * (created_at, id), every status counted (bookings are never deleted, so a position never changes), whichever batch shows them.
  */
-export async function withBookingRefs(x: Tx | typeof db, list: Booking[], userId?: string): Promise<Booking[]> {
-  const ids = [...new Set(list.flatMap((b) => (b.requestId ? [b.requestId] : [])))]
-  if (!ids.length) return list
-  const titles = await jobTitles(x, ids, userId)
-  const numbers = new Map((await x.select({ id: requests.id, n: requests.jobNumber }).from(requests).where(inArray(requests.id, ids))).map((r) => [r.id, r.n]))
-  const siblings = await x.select({ id: bookings.id, requestId: bookings.requestId }).from(bookings).where(inArray(bookings.requestId, ids)).orderBy(bookings.createdAt, bookings.id)
-  const position = new Map<string, number>()
-  const seen = new Map<string, number>()
-  for (const s of siblings) {
-    const n = (seen.get(s.requestId!) ?? 0) + 1
-    seen.set(s.requestId!, n)
-    position.set(s.id, n)
+export async function withBookingRefs(x: Db, list: Booking[], userId?: string): Promise<Booking[]> {
+  if (!list.some((b) => b.requestId)) return list
+  const roots = await rootsOf(x, list.filter((b) => b.requestId).map((b) => b.id))
+  const rootReqs = [...new Set([...roots.values()].flatMap((r) => r.requestId ?? []))]
+  const jobs = await rootJobs(x, rootReqs, userId)
+  // every root booking of each root request, then all their descendants: the task positions
+  const rootBookings = await x.select({ id: bookings.id, requestId: bookings.requestId }).from(bookings).where(and(inArray(bookings.requestId, rootReqs), isNull(bookings.parentBookingId)))
+  const jobOfBooking = new Map(rootBookings.map((r) => [r.id, r.requestId!]))
+  const family = new Map<string, { id: string; at: number }[]>() // root request id > its tasks
+  let frontier = rootBookings.map((r) => r.id)
+  for (let i = 0; i < 8 && frontier.length; i++) {
+    const kids = await x.select({ id: bookings.id, parent: bookings.parentBookingId, createdAt: bookings.createdAt }).from(bookings).where(inArray(bookings.parentBookingId, frontier))
+    for (const k of kids) {
+      const job = jobOfBooking.get(k.parent!)!
+      jobOfBooking.set(k.id, job)
+      family.set(job, [...(family.get(job) ?? []), { id: k.id, at: k.createdAt.getTime() }])
+    }
+    frontier = kids.map((k) => k.id)
   }
+  const position = new Map<string, number>()
+  for (const kids of family.values()) kids.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1)).forEach((k, i) => position.set(k.id, i + 2))
   return list.map((b) => {
-    const n = b.requestId ? numbers.get(b.requestId) : undefined
-    if (n === undefined) return b
-    return { ...b, jobNumber: n, title: titles.get(b.requestId!) ?? '', taskNumber: taskNumber(n, position.get(b.id) ?? 1) }
+    const rr = roots.get(b.id)?.requestId
+    const j = rr ? jobs.get(rr) : undefined
+    return j ? { ...b, jobNumber: j.jobNumber, title: j.title, taskNumber: taskNumber(j.jobNumber, position.get(b.id) ?? 1) } : b
   })
 }
 
@@ -244,6 +282,7 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       customerId: userId,
       providerId: provider.id,
       serviceId: input.serviceId ?? null,
+      categoryId: input.serviceId ? (await tx.select({ c: services.categoryId }).from(services).where(eq(services.id, input.serviceId)))[0]?.c ?? null : null,
       description: input.description,
       startAt,
       durationMin,

@@ -81,6 +81,7 @@ export const de = {
   'tab.myProfile': 'Mein Geschäft',
   'tab.correspondence': 'Korrespondenz',
   'common.save': 'Speichern',
+  'job.fallbackTitle': 'Auftrag',
   'common.cancel': 'Abbrechen',
   'common.typeToSearch': 'Tippen zum Suchen',
   'common.noMatches': 'Nichts gefunden',

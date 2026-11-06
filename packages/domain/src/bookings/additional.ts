@@ -61,7 +61,7 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
     if ((await o.select({ id: requests.id }).from(requests).where(and(eq(requests.parentBookingId, b.id), liveRequest(now)))).length) fail(409, { error: 'additional-limit' })
     const [row] = await o
       .insert(requests)
-      .values({ customerId: b.customerId, providerId: b.providerId, serviceId: b.serviceId, parentBookingId: b.id, description: input.description, answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY), createdAt: now, updatedAt: now })
+      .values({ customerId: b.customerId, providerId: b.providerId, serviceId: b.serviceId, categoryId: b.requestId ? (await o.select({ c: requests.categoryId }).from(requests).where(eq(requests.id, b.requestId)))[0]?.c ?? null : null, parentBookingId: b.id, description: input.description, answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY), createdAt: now, updatedAt: now })
       .returning()
     return { row: row!, threadId: await threadForBooking(o, b.id) }
   })

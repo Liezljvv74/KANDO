@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { boolean, check, index, uniqueIndex, integer, numeric, pgTable, text, timestamp, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { providers, services } from './providers'
+import { categories } from './reference'
 import { users } from './users'
 
 // Private to the two parties (rls.ts). Status moves: rls.ts APP_STATUS_MOVES (the app role makes only those, from the listed side).
@@ -17,6 +18,8 @@ export const requestAppColumns = () => ({
     .notNull()
     .references(() => providers.id, { onDelete: 'cascade' }),
   serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
+  // The service's category at request time (migration 0036): the job title falls back to its name when the service is gone. Null only on rows older than the column whose service was already deleted.
+  categoryId: uuid('category_id').references(() => categories.id),
   description: text().notNull(),
   // The customer's proposed time and place (flow 1). Null only on an additional-task request (parent_booking_id set): it belongs to a booking that has its own time and place. `revision` counts the customer's changes to the time and place.
   startAt: timestamp('start_at', { withTimezone: true }),

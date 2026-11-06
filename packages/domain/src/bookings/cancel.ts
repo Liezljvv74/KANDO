@@ -117,7 +117,7 @@ export async function beginCancelBooking(tx: Tx, userId: string, bookingId: stri
   return async () => {
     for (const b of done) await trySettleCancelled(b.id, b.customerId, now)
     for (const b of done) await tellCancelled(b)
-    return reload(bookingId)
+    return reload(bookingId, userId)
   }
 }
 
@@ -149,7 +149,7 @@ export async function reportNoShow(tx: Tx, userId: string, bookingId: string, no
     const to = them === 'customer' ? row.customerId : await ownerOf(row.providerId)
     if (to) await notifyBookingEvent('no-show-reported', to, { bookingId: row.id, date: objectBy(row).toISOString() })
   }
-  return reload(bookingId)
+  return reload(bookingId, userId)
 }
 
 /**
@@ -172,7 +172,7 @@ export async function objectNoShow(tx: Tx, userId: string, bookingId: string, in
     return b
   })
   if (opened) await tellDisputeOpened(opened)
-  return reload(bookingId)
+  return reload(bookingId, userId)
 }
 
 /**

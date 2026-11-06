@@ -32,7 +32,7 @@ export async function stopJob(tx: Tx, userId: string, bookingId: string, now = n
     const to = side === 'customer' ? await ownerOf(row.providerId) : row.customerId
     if (to) await notifyBookingEvent('job-stopped', to, { bookingId: row.id })
   }
-  return reload(bookingId)
+  return reload(bookingId, userId)
 }
 
 /**
@@ -59,7 +59,7 @@ export async function stateStopAmount(tx: Tx, userId: string, bookingId: string,
     return (await o.update(bookings).set({ stopAmount: (cents / 100).toFixed(2), stopNote: note, stopStatedAt: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning())[0]!
   })
   if (row) await notifyBookingEvent('stop-amount-stated', row.customerId, { bookingId: row.id, date: new Date(now.getTime() + STOP_ANSWER_DAYS * DAY).toISOString() })
-  return reload(bookingId)
+  return reload(bookingId, userId)
 }
 
 /**
@@ -93,6 +93,6 @@ export async function beginAnswerStop(tx: Tx, userId: string, bookingId: string,
   return async () => {
     if (r?.agree) await tryRelease(db, r.b.id, r.b.customerId, now)
     else if (r) await tellDisputeOpened(r.b)
-    return reload(bookingId)
+    return reload(bookingId, userId)
   }
 }
