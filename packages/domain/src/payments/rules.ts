@@ -65,10 +65,19 @@ export function commissionFor(share: number, rate: number): number {
 
 export type TransactFacts = { payoutsReadyAt: Date | null; invoiceConsentAt: Date | null; legalStatus: string | null; vatId: string | null; taxNumber: string | null }
 
+export type QuoteStep = 'payout' | 'consent' | 'taxId'
+
 /**
- * With payments off every provider can transact. With payments on only one whose payout set-up is complete, who agreed
- * that the platform issues invoices in their name, and (Kleinunternehmer or business) has a VAT id or tax number for them.
+ * What a provider still needs before quoting, in order. Empty with payments off. With payments on: payout set-up complete,
+ * agreed that the platform issues invoices in their name, and (Kleinunternehmer or business) a VAT id or tax number for them.
  */
-export const canTransact = (p: TransactFacts): boolean =>
-  !paymentsEnabled() ||
-  (p.payoutsReadyAt !== null && p.invoiceConsentAt !== null && (!(p.legalStatus === 'kleinunternehmer' || p.legalStatus === 'business') || !!(p.vatId?.trim() || p.taxNumber?.trim())))
+export const quoteSteps = (p: TransactFacts): QuoteStep[] => {
+  if (!paymentsEnabled()) return []
+  const steps: QuoteStep[] = []
+  if (p.payoutsReadyAt === null) steps.push('payout')
+  if (p.invoiceConsentAt === null) steps.push('consent')
+  if ((p.legalStatus === 'kleinunternehmer' || p.legalStatus === 'business') && !(p.vatId?.trim() || p.taxNumber?.trim())) steps.push('taxId')
+  return steps
+}
+
+export const canTransact = (p: TransactFacts): boolean => quoteSteps(p).length === 0

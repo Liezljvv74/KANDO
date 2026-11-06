@@ -2,6 +2,7 @@ import { assertNoContactDetailsIn } from '../chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
 import { lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
 import type { Missing, MyProfile, ProfileInput } from '@kando/contract'
+import { quoteSteps } from '../payments/rules'
 import { fail } from './http'
 import { publicNameFor } from './public-name'
 import { slugify } from './slug'
@@ -27,6 +28,7 @@ const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
   missing,
   taxNumber: r.taxNumber,
   invoiceConsent: r.invoiceConsentAt !== null,
+  quoteSteps: quoteSteps(r),
 })
 
 /** The caller's provider row (RLS also shows published rows of others; the owner filter picks the caller's). */
