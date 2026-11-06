@@ -106,6 +106,8 @@ test('a notice with a job names it in the text and opens the job page; without a
   for (const kind of ['request-received', 'quote-received', 'quote-expiring', 'request-expired', 'request-withdrawn', 'request-declined', 'request-reopened', 'request-updated', 'time-proposed'] as const) expect(notificationTarget({ kind, payload: { requestId: 'req-1' }, job })).toEqual({ path: '/bookings/request/req-1' })
   // an additional task's quote: the notice's job is the ROOT request, the payload names the child request: the child's screen opens
   expect(notificationTarget({ kind: 'quote-received', payload: { requestId: 'child-1' }, job })).toEqual({ path: '/bookings/request/child-1' })
+  // a request-stage notice that names only a booking keeps the booking screen
+  expect(notificationTarget({ kind: 'time-proposed', payload: { bookingId: 'b-1' }, job })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' } })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' }, job: null })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'customers-waiting', payload: {}, job })).toEqual({ path: '/my-profile' })

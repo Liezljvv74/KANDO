@@ -93,10 +93,7 @@ export const EMAIL_KEYS: Record<Template, string> = {
 function compose(lang: Lang, template: Template, params: Params) {
   const key = EMAIL_KEYS[template]
   const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
-  const body = t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', percent: String(Math.round(LATE_CANCEL_SHARE * 100)), contact: REPLY_TO })
-  const text = `${body}${template.startsWith('account-deleted') ? '' : `
-
-${APP_LINK}`}`
+  const text = `${t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', percent: String(Math.round(LATE_CANCEL_SHARE * 100)), contact: REPLY_TO })}${template.startsWith('account-deleted') ? '' : `\n\n${APP_LINK}`}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
   const subject = t(lang, `${key}.subject` as Parameters<typeof t>[1])
   return { subject: params.job ? t(lang, 'notice.withJob', { job: params.job, text: subject }) : subject, text, html }

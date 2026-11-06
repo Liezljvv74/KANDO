@@ -4,7 +4,7 @@ import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t, type Key } from '@kando/i18n'
 import { sendEmail, type BookingTemplate, type Template } from '../email'
 import { describeError } from '../log-error'
-import { jobLabel, jobsForNotices } from './notice-job'
+import { jobLabel, jobsForNotices, pushWithJob } from './notice-job'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime, providerUrl } from '../notifications'
 import { pushReaches, sendPush } from '../push'
@@ -73,7 +73,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
     }
     // invoice-ready names what the provider issued: an invoice, or (private providers) a receipt
     const push = kind === 'invoice-ready' && params.variant === 'receipt' ? 'invoice-ready.receipt' : kind
-    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: ((b) => (job ? t(lang, 'notice.withJob', { job: `#${job.number}`, text: b }) : b))(t(lang, `push.${push}.body` as Key)), url: appUrl(kind, params) })
+    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: pushWithJob(lang, job, t(lang, `push.${push}.body` as Key)), url: appUrl(kind, params) })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

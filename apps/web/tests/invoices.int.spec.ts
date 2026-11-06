@@ -110,6 +110,28 @@ it('the invoice prints the job number and title; an additional task line carries
   expect(invoiceLines(draft, 'de').join(' ')).toContain(`Auftrag (Job): #${req.job_number} `)
 })
 
+it('a re-booked request: the invoice task number equals the one the app shows (positions run over every root booking of the request)', async () => {
+  const p = await provider()
+  const req = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Zaun', now() + interval '1 day') RETURNING id, job_number", [U.cust, p.id])).rows[0]
+  const q1 = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, version) VALUES ($1, $2, 100, 'Zaun', now() + interval '1 day', 1) RETURNING id", [req.id, p.id])).rows[0].id
+  const q2 = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, version) VALUES ($1, $2, 100, 'Zaun', now() + interval '1 day', 2) RETURNING id", [req.id, p.id])).rows[0].id
+  const root1 = await paid(p.id, { quote: q1 })
+  const taskA = await paid(p.id, { parent: root1, amount: 40, status: 'confirmed' })
+  await pool.query("UPDATE bookings SET created_at = now() - interval '2 hours' WHERE id = $1", [taskA])
+  const root2 = await paid(p.id, { quote: q2 })
+  await pool.query('UPDATE bookings SET request_id = $1 WHERE id IN ($2, $3)', [req.id, root1, root2])
+  const taskB = await paid(p.id, { parent: root2, amount: 40, status: 'confirmed' })
+  await pool.query("UPDATE bookings SET status = 'finished' WHERE id = $1", [taskB])
+  await tryRelease(db, root2, U.cust, new Date())
+  await tryRelease(db, taskB, U.cust, new Date())
+  await issueDueInvoices(db, new Date(), { bookingId: root2 })
+  const draft = (await invoicesOf(p.id))[0].draft as InvoiceDraft
+  const { withBookingRefs } = await import('@kando/domain/src/bookings/requests')
+  const shown = await withBookingRefs(db as never, [{ id: taskB, requestId: req.id } as never])
+  expect(shown[0]!.taskNumber).toBe(`#${req.job_number}-3`)
+  expect(draft.lines.find((l) => l.bookingId === taskB)!.task).toBe(shown[0]!.taskNumber)
+})
+
 it('a group with an open additional task waits; when the task is released the invoice has two lines', async () => {
   const p = await provider()
   const root = await paid(p.id)

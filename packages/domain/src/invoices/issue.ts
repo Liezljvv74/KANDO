@@ -4,7 +4,7 @@ import { bookings, db, invoices, providers, type Tx } from '@kando/db'
 import type { Invoice } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { notifyBookingEvent } from '../bookings/notify'
-import { rootJobs } from '../bookings/requests'
+import { rootJobs, taskPositions } from '../bookings/job-lookup'
 import { taskNumber } from '../bookings/job-ref'
 import { describeError } from '../log-error'
 import { createNotification } from '../notifications-store'
@@ -133,13 +133,8 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
     const [c] = (await o.execute<{ first_name: string | null; last_name: string | null }>(sql`SELECT first_name, last_name FROM users WHERE id = ${root.customerId}`)).rows
     if (!p || !c) return null
     // the job number and title of the root request; an additional task is #N-2, #N-3 in the order it was made (the same rule as withBookingRefs)
-    const job = root.requestId ? (await rootJobs(o, [root.requestId])).get(root.requestId) : undefined
-    const position = new Map(
-      group
-        .filter((g) => g.parent_booking_id)
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || (a.id < b.id ? -1 : 1))
-        .map((g, i) => [g.id, i + 2]),
-    )
+    const job = root.requestId ? (await rootJobs(o, [root.requestId], undefined, o)).get(root.requestId) : undefined
+    const position = root.requestId ? await taskPositions(o, [root.requestId]) : new Map<string, number>()
     const draft = buildInvoice({
       ...(job && { job: { number: job.jobNumber, title: job.title } }),
       provider: p.provider,
@@ -158,7 +153,7 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
         title: g.title,
         cancelledBy: g.cancelled_by,
         noShow: g.no_show,
-        ...(job && g.parent_booking_id && { task: taskNumber(job.jobNumber, position.get(g.id)!) }),
+        ...(job && g.parent_booking_id && { task: taskNumber(job.jobNumber, position.get(g.id) ?? 2) }),
       })),
       country: p.country,
       currency: root.currency,

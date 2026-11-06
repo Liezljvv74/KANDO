@@ -1,5 +1,5 @@
 import { and, eq, notInArray, or } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
+import { bookings, db, providers, quotes, requests, services, type Tx } from '@kando/db'
 import { DAY, HOUR, type AdditionalTaskInput, type BookingRequest } from '@kando/contract'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
@@ -10,6 +10,7 @@ import { fail } from '../providers/http'
 import { ADDITIONAL_PAY_HOURS } from './ending-rules'
 import { notifyBookingEvent } from './notify'
 import { lockRow, partyOf } from './party'
+import { rootsOf } from './job-lookup'
 import { liveRequest, toRequest, withRequestRefs } from './requests'
 import { REQUEST_ANSWER_DAYS } from './rules'
 
@@ -59,9 +60,13 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
     const b = await lockRow(o, bookingId)
     if (!takesAdditional(b)) fail(409, { error: 'not-open' })
     if ((await o.select({ id: requests.id }).from(requests).where(and(eq(requests.parentBookingId, b.id), liveRequest(now)))).length) fail(409, { error: 'additional-limit' })
+    // the category of the ROOT request (b may itself be an additional task's booking), else the service's, as createRequest does
+    const rootRequest = (await rootsOf(o, [b.id])).get(b.id)?.requestId
+    const fromRoot = rootRequest ? (await o.select({ c: requests.categoryId }).from(requests).where(eq(requests.id, rootRequest)))[0]?.c : null
+    const categoryId = fromRoot ?? (b.serviceId ? (await o.select({ c: services.categoryId }).from(services).where(eq(services.id, b.serviceId)))[0]?.c : null) ?? null
     const [row] = await o
       .insert(requests)
-      .values({ customerId: b.customerId, providerId: b.providerId, serviceId: b.serviceId, categoryId: b.requestId ? (await o.select({ c: requests.categoryId }).from(requests).where(eq(requests.id, b.requestId)))[0]?.c ?? null : null, parentBookingId: b.id, description: input.description, answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY), createdAt: now, updatedAt: now })
+      .values({ customerId: b.customerId, providerId: b.providerId, serviceId: b.serviceId, categoryId, parentBookingId: b.id, description: input.description, answerBy: new Date(now.getTime() + REQUEST_ANSWER_DAYS * DAY), createdAt: now, updatedAt: now })
       .returning()
     return { row: row!, threadId: await threadForBooking(o, b.id) }
   })

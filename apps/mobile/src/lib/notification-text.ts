@@ -94,7 +94,7 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'> & {
     return slug ? { path: `/provider/${slug}` } : null
   }
   // PR 4: every kind opens the job page once /bookings/request/[id] is the job page
-  if (n.job && REQUEST_STAGE.includes(n.kind) && ID.test(n.job.id) && (idOf(n.payload, 'bookingId') || idOf(n.payload, 'requestId')) && (idOf(n.payload, 'requestId') ?? n.job.id) === n.job.id) return { path: `/bookings/request/${n.job.id}` } // the job page; an app or notice without `job` keeps the old target below
+  if (n.job && REQUEST_STAGE.includes(n.kind) && ID.test(n.job.id) && idOf(n.payload, 'requestId') === n.job.id) return { path: `/bookings/request/${n.job.id}` } // the job page; an app or notice without `job` keeps the old target below
   const bookingId = idOf(n.payload, 'bookingId')
   const requestId = idOf(n.payload, 'requestId')
   const [first, second] = REQUEST_SCREEN_KINDS.includes(n.kind) ? [['request', requestId], ['booking', bookingId]] as const : [['booking', bookingId], ['request', requestId]] as const

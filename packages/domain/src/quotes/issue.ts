@@ -7,7 +7,7 @@ import { formatQuoteNumber, isTestNumber, nextNumber, quoteSeries, yearOf } from
 import { describeError } from '../log-error'
 import { LIVE_PAYMENTS_ALLOWED } from '../payments/rules'
 import type { Exec } from '../providers/eligibility'
-import { rootJobs } from '../bookings/requests'
+import { rootJobs } from '../bookings/job-lookup'
 import { lapseReason } from '../bookings/rules'
 import { fail } from '../providers/http'
 import { ownProvider } from '../providers/profile'
@@ -39,7 +39,7 @@ async function issueOne(quoteId: string, now: Date, live: boolean): Promise<type
     const p = await invoiceProvider(o, q.providerId)
     const [c] = await o.select({ f: users.firstName, l: users.lastName }).from(users).where(eq(users.id, r.customerId))
     if (!p || !c) return null
-    const job = (await rootJobs(o, [r.id])).get(r.id)
+    const job = (await rootJobs(o, [r.id], undefined, o)).get(r.id)
     const draft = buildQuoteDraft({
       ...(job && { job: { number: job.jobNumber, title: job.title } }),
       provider: p.provider,
