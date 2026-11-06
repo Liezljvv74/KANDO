@@ -10,8 +10,11 @@ import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { canShare } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
+import { bookableGroup, liveLocked } from '@/lib/compulsory'
+import { doQuoteStep } from '@/lib/do-quote-step'
 import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
+import { QuoteGate } from '@/screens/bookings/quote-gate'
 
 /**
  * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
@@ -54,8 +57,19 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
   const waitingServices = services.filter((s) => (s.waitingFor ?? []).length > 0)
   const waiting = waitingServices.length
   // Switched off and greyed out while the profile is incomplete; the starred fields say what is needed.
-  const locked = !live && profile.missing.length > 0 && !refused
+  const locked = liveLocked(profile, refused)
+  const later = profile.quoteSteps ?? []
+  const doStep = async (step: (typeof later)[number]) => {
+    setProblem(null)
+    try {
+      await doQuoteStep(step)
+      onChanged()
+    } catch (e) {
+      setProblem(errorText(e instanceof ApiError ? e.code : 'network'))
+    }
+  }
   return (
+    <>
     <Card>
       <SwitchRow label={t('setup.live')} value={live} onChange={change} disabled={busy || locked} />
       {locked ? <Text style={styles.hint}>{t('setup.liveLocked')}</Text> : null}
@@ -69,6 +83,8 @@ export function PublishBar({ profile, services, onChanged }: { profile: MyProfil
       )}
       <ErrorText text={problem} />
     </Card>
+    {bookableGroup(later).length > 0 && <QuoteGate steps={later} onDo={doStep} heading={t('setup.bookableHeading')} />}
+    </>
   )
 }
 

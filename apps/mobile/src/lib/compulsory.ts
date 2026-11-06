@@ -1,5 +1,6 @@
-import type { Missing } from '@kando/contract'
+import type { Missing, MyProfile } from '@kando/contract'
 import { t, type Key } from '@/i18n'
+import { gateRows } from './quote-gate'
 
 /**
  * The fields the server's `missing` list asks for (domain `completeness`), each with its label and the short lead text
@@ -24,3 +25,9 @@ export const compulsory = (field: keyof typeof COMPULSORY) => ({
   label: `${t(COMPULSORY[field].label)} *`,
   placeholder: t(COMPULSORY[field].placeholder),
 })
+
+/** The second checklist group, "Before customers can book you": the same rows the quote gate shows (the server decides which steps apply to this provider). */
+export const bookableGroup = (steps: MyProfile['quoteSteps']) => gateRows(steps ?? [])
+
+/** The Live switch is locked by the first group only (`missing`); the second group never blocks going live. */
+export const liveLocked = (p: Pick<MyProfile, 'status' | 'missing'>, refused: boolean) => p.status !== 'published' && p.missing.length > 0 && !refused

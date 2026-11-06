@@ -1,21 +1,18 @@
-import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useEffect, useState } from 'react'
 
 import type { BookingRequest, QuoteInput } from '@kando/contract'
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
-import { getMyProfile, saveMyProfile, servicesApi } from '@/api/my-profile'
-import { startPayoutSetup } from '@/api/payments'
+import { getMyProfile, servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { parseAmount } from '@/lib/amount'
-import { go } from '@/lib/go'
+import { doQuoteStep } from '@/lib/do-quote-step'
 import { paymentsProblem } from '@/lib/payments-off'
 import { quoteBlocked } from '@/lib/quote-gate'
-import { isHttps } from '@/lib/safe-url'
 import { buildQuoteTime, whenFromRequest } from '@/lib/when-where'
 import { QuoteGate } from '@/screens/bookings/quote-gate'
 import { proposalError, WhenWhereFields } from '@/screens/bookings/when-where-fields'
@@ -37,19 +34,11 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const steps = profile.data?.quoteSteps ?? []
   const blocked = quoteBlocked(steps)
 
-  // The steps reuse the existing flows: payout opens Stripe (as the payout card does), consent is one save, the tax number field is in the payout card on the profile tab.
   async function doStep(step: (typeof steps)[number]) {
     setError(null)
     try {
-      if (step === 'consent') {
-        await saveMyProfile({ invoiceConsent: true })
-        profile.retry()
-      } else if (step === 'payout') {
-        const { url } = await startPayoutSetup()
-        if (!isHttps(url)) throw new Error('bad link')
-        await WebBrowser.openBrowserAsync(url)
-        profile.retry()
-      } else go('/my-profile')
+      await doQuoteStep(step)
+      profile.retry()
     } catch (e) {
       setError(paymentsProblem(e))
     }
