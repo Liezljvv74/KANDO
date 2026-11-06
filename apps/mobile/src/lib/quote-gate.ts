@@ -11,8 +11,10 @@ const ROWS: Record<Step, { title: Key; hint?: Key }> = {
 }
 
 /** The gate shows while a step is missing (an old server without `quoteSteps` never greys the button; the server still refuses). */
-export const quoteBlocked = (steps: MyProfile['quoteSteps']): boolean => (steps?.length ?? 0) > 0
+export const quoteBlocked = (steps: MyProfile['quoteSteps']): boolean => gateRows(steps ?? []).length > 0
 
 export const gateHeading = (n: number): Key => (n === 1 ? 'quoteGate.headingOne' : 'quoteGate.headingMany')
 
-export const gateRows = (steps: Step[]) => steps.filter((s) => s in ROWS).map((step) => ({ step, ...ROWS[step] }))
+export function gateRows(steps: Step[]) {
+  return steps.filter((s) => s in ROWS).map((step) => ({ step, ...ROWS[step] }))
+}

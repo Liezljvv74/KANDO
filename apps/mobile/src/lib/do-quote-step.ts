@@ -11,8 +11,8 @@ import { isHttps } from '@/lib/safe-url'
 export async function getProfileFresh() {
   const p = await getMyProfile()
   if (!p?.quoteSteps?.includes('payout')) return p
-  await payoutStatus().catch(() => {})
-  return getMyProfile()
+  const status = await payoutStatus().catch(() => null)
+  return status?.ready ? getMyProfile() : p
 }
 
 /** Runs one missing step with the existing flows: payout opens Stripe (as the payout card does), consent is one save, the tax number opens its field (`onTaxId`, on My business) or the profile tab. The caller reloads the profile afterwards. */

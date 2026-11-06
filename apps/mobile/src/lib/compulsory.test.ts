@@ -1,6 +1,6 @@
 import { MissingSchema } from '@kando/contract'
 import { setLang, t } from '@/i18n'
-import { bookableGroup, COMPULSORY, compulsory, liveLocked } from './compulsory'
+import { COMPULSORY, compulsory, liveLocked } from './compulsory'
 
 // `name` is the account's name, edited on the account screen, not on the profile page.
 const ON_ACCOUNT_SCREEN = ['name']
@@ -31,13 +31,6 @@ test('provider type shows as a question and nothing is saved by showing it', () 
   expect(compulsory('providerType').placeholder).toBe('Choose Private person or Business')
   setLang('de')
   expect(compulsory('providerType').placeholder).toBe('Wähle Privatperson oder Unternehmen')
-})
-
-test('the second group has one row per missing step, none without steps', () => {
-  expect(bookableGroup(undefined)).toEqual([])
-  expect(bookableGroup([])).toEqual([])
-  expect(bookableGroup(['payout', 'consent', 'taxId']).map((r) => r.step)).toEqual(['payout', 'consent', 'taxId'])
-  expect(bookableGroup(['payout', 'consent']).map((r) => r.step)).toEqual(['payout', 'consent'])
 })
 
 test('the Live switch ignores the second group', () => {

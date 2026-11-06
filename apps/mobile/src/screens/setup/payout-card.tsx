@@ -25,6 +25,11 @@ export function PayoutCard({ profile, onChanged, taxAsked }: { profile: MyProfil
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const state = payoutState(data?.ready, opened)
+  // The status call just recorded the payout as ready: reload the profile so the checklist drops the step (one Stripe call, one profile read per focus).
+  const stale = !!data?.ready && !!profile.quoteSteps?.includes('payout')
+  useEffect(() => {
+    if (stale) onChanged()
+  }, [stale])
   if (error && noteIfOff(error)) return null // payments are off: nothing to set up, and a Retry could never succeed
 
   async function open() {

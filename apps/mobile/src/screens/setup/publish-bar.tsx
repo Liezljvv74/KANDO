@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text } from 'react-native'
+import { Alert, StyleSheet, Text } from 'react-native'
 
 import type { MyProfile, OwnService } from '@kando/contract'
 
@@ -10,14 +10,15 @@ import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { canShare } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
-import { bookableGroup, liveLocked } from '@/lib/compulsory'
+import { liveLocked } from '@/lib/compulsory'
 import { go } from '@/lib/go'
 import { allSet, checklistHeading, checklistItems } from '@/lib/live-checklist'
 import { paymentsProblem } from '@/lib/payments-off'
 import { doQuoteStep } from '@/lib/do-quote-step'
 import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
-import { QuoteGate } from '@/screens/bookings/quote-gate'
+import { quoteBlocked } from '@/lib/quote-gate'
+import { GateRow, QuoteGate } from '@/screens/bookings/quote-gate'
 
 /**
  * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
@@ -85,10 +86,7 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
         <>
           <Text style={styles.heading} accessibilityRole="header">{t(checklistHeading(items.length), { n: items.length })}</Text>
           {items.map((r) => (
-            <Pressable key={r.item} accessibilityRole="button" accessibilityLabel={`${t(r.label)}: ${t('quoteGate.doIt')}`} onPress={() => go(r.path)} style={styles.row}>
-              <Text style={styles.rowText}>{t(r.label)}</Text>
-              <Text style={styles.rowDo}>{t('quoteGate.doIt')}</Text>
-            </Pressable>
+            <GateRow key={r.item} title={r.label} onDo={() => go(r.path)} />
           ))}
         </>
       )}
@@ -103,7 +101,7 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
       )}
       <ErrorText text={problem} />
     </Card>
-    {bookableGroup(later).length > 0 && <QuoteGate steps={later} onDo={doStep} heading={t('setup.bookableHeading')} />}
+    {quoteBlocked(later) && <QuoteGate steps={later} onDo={doStep} heading={t('setup.bookableHeading')} />}
     </>
   )
 }
@@ -112,8 +110,5 @@ const styles = StyleSheet.create({
   live: { fontSize: 16, fontWeight: '700', color: '#34328A' },
   hint: { fontSize: 14, color: '#4F4E7D' },
   heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 44 },
-  rowText: { flex: 1, fontSize: 16, color: '#1D1C4A' },
-  rowDo: { fontSize: 15, fontWeight: '600', color: '#34328A' },
   done: { fontSize: 16, fontWeight: '700', color: '#1F6B3A' },
 })

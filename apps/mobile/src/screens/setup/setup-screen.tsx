@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { documentsApi, ensureDraft, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
+import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
 import { NotificationBanners } from '@/components/notification-banner'
@@ -12,7 +12,6 @@ import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/correspondence'
-import { getProfileFresh } from '@/lib/do-quote-step'
 import { canShare, documentRows } from '@/lib/documents'
 import { createStaleGuard } from '@/lib/stale-guard'
 import { InvoicesCard } from '../invoices/invoices-card'
@@ -47,7 +46,7 @@ export default function SetupScreen() {
   const stamp = useRef(createStaleGuard()).current
   const loadAll = useCallback(async () => {
     const fresh = stamp()
-    const profile = (await getProfileFresh()) ?? (await ensureDraft())
+    const profile = (await getMyProfile()) ?? (await ensureDraft())
     const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
     // Opening the page marks the notifications seen; a /me failure must not hold the page back.
     loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
