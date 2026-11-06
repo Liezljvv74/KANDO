@@ -105,3 +105,21 @@ it('applyRls is all or nothing', async () => {
   const r = await pool.query("SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'owner_only'")
   expect(r.rowCount).toBe(1)
 })
+
+it('the app role cannot update job_number', async () => {
+  await pool.query("INSERT INTO users (id, email) VALUES ('jn-c', 'jn-c@test.skilled.invalid'), ('jn-p', 'jn-p@test.skilled.invalid')")
+  const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('jn-p', 'published') RETURNING id")).rows[0].id
+  const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('jn-c', $1, 'x', now() + interval '3 days') RETURNING id, job_number", [p])).rows[0]
+  try {
+    await expect(
+      asUser('jn-c', (tx) => tx.execute(sql`UPDATE requests SET job_number = 1 WHERE id = ${r.id}`)),
+    ).rejects.toMatchObject({ cause: { message: expect.stringContaining('permission denied') } })
+    // the app role can still create a request: the default draws from the sequence it may use
+    const made = await asUser('jn-c', (tx) =>
+      tx.execute(sql`INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('jn-c', ${p}, 'y', now() + interval '3 days') RETURNING job_number`),
+    )
+    expect(made.rows[0]!.job_number).toBeGreaterThan(r.job_number)
+  } finally {
+    await pool.query("DELETE FROM requests WHERE customer_id = 'jn-c'; DELETE FROM providers WHERE owner_id = 'jn-p'; DELETE FROM users WHERE id IN ('jn-c', 'jn-p')")
+  }
+})

@@ -244,3 +244,48 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   expect((await pool.query("SELECT 1 FROM pg_indexes WHERE indexname = 'bookings_proposed_answer_by_idx'")).rows).toHaveLength(0)
   await pool.query('DELETE FROM notifications; DELETE FROM bookings; DELETE FROM quotes; DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
 }, 60_000)
+
+const seedParty = async (tag: string) => {
+  await pool.query('INSERT INTO users (id, email) VALUES ($1, $2), ($3, $4)', [`${tag}-c`, `${tag}-c@test.skilled.invalid`, `${tag}-p`, `${tag}-p@test.skilled.invalid`])
+  return (await pool.query("INSERT INTO providers (owner_id, status) VALUES ($1, 'published') RETURNING id", [`${tag}-p`])).rows[0].id as string
+}
+const wipe = () => pool.query('DELETE FROM requests; DELETE FROM providers; DELETE FROM users')
+
+it('job_number is assigned by the database starting at 1000', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await migrate()
+  const p = await seedParty('jn1')
+  const add = async () =>
+    (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('jn1-c', $1, 'x', now() + interval '3 days') RETURNING job_number", [p])).rows[0].job_number as number
+  expect(await add()).toBe(1000)
+  expect(await add()).toBe(1001)
+  await expect(pool.query("UPDATE requests SET job_number = 5 WHERE customer_id = 'jn1-c'")).rejects.toThrow()
+  await wipe()
+}, 60_000)
+
+it('existing requests are numbered in creation order', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  const upTo34 = mkdtempSync(join(tmpdir(), 'mig34-'))
+  cpSync(join(process.cwd(), '../../packages/db/migrations'), upTo34, { recursive: true })
+  const journalPath = join(upTo34, 'meta/_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0035')
+  writeFileSync(journalPath, JSON.stringify(journal))
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await drizzleMigrate(db, { migrationsFolder: upTo34 })
+  const p = await seedParty('jn2')
+  const add = async (description: string, ago: string) =>
+    (await pool.query(`INSERT INTO requests (customer_id, provider_id, description, answer_by, created_at) VALUES ('jn2-c', $1, $2, now() + interval '3 days', now() - interval '${ago}') RETURNING id`, [p, description])).rows[0].id as string
+  const newest = await add('newest', '1 day')
+  const oldest = await add('oldest', '3 days')
+  const middle = await add('middle', '2 days')
+  await migrate()
+  const { rows } = await pool.query('SELECT id, job_number FROM requests ORDER BY job_number')
+  expect(rows).toEqual([{ id: oldest, job_number: 1000 }, { id: middle, job_number: 1001 }, { id: newest, job_number: 1002 }])
+  const created = await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('jn2-c', $1, 'later', now() + interval '3 days') RETURNING job_number", [p])
+  expect(created.rows[0].job_number).toBe(1003)
+  await wipe()
+}, 60_000)

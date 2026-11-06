@@ -81,7 +81,7 @@ export const IMMUTABLE_COLUMNS: Record<string, string[]> = {
   // A quote is final once sent (the booking's price is copied from it): only status and reminder_sent_at change.
   quotes: ['request_id', 'provider_id', 'amount', 'currency', 'scope', 'start_at', 'duration_min', 'proposed_other_time', 'expires_at'],
   bookings: ['customer_id', 'provider_id', 'request_id', 'parent_booking_id'],
-  requests: ['customer_id', 'provider_id', 'parent_booking_id'],
+  requests: ['customer_id', 'provider_id', 'parent_booking_id', 'job_number'],
 }
 
 // Columns app_user may not insert or update, per table: staff write them on the owner connection, the domain through
@@ -102,6 +102,8 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
     'cancelled_by', 'late_cancel', 'no_show', 'no_show_reported_at', 'stopped_at', 'stopped_by', 'stop_amount', 'stop_note',
     'stop_stated_at', 'material_amount', 'time_proposed_by', 'time_proposed_start_at', 'time_proposed_duration_min', 'time_proposed_on_site', 'time_answer_by',
   ],
+  // Numbered by the database (sequence default); never written by the app.
+  requests: ['job_number'],
   // The cached eligibility: only the offerable triggers below write it.
   services: ['offerable'],
 }

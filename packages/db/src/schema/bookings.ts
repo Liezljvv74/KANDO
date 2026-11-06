@@ -9,6 +9,8 @@ export const requests = pgTable(
   'requests',
   {
     id: uuid().primaryKey().defaultRandom(),
+    // The job number people see (sequence job_number_seq from 1000, migration 0035); only the database writes it (rls.ts COLUMN_STAFF_ONLY).
+    jobNumber: integer('job_number').notNull().unique().default(sql`nextval('job_number_seq')`),
     customerId: text('customer_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
