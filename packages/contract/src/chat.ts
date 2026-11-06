@@ -39,6 +39,9 @@ export const ThreadSchema = z.object({
   requestId: z.string().nullable(),
   bookingId: z.string().nullable(),
   otherName: z.string(),
+  /** The job's number and title ("#1040 Title" is the row's heading); absent for a thread of a booking made without a request. */
+  jobNumber: z.number().int().optional(),
+  title: z.string().optional(),
   lastMessageAt: z.string().nullable(),
   blocked: z.boolean(),
 })

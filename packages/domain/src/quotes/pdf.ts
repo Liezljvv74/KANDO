@@ -29,6 +29,8 @@ export type QuoteDraft = {
   /** 1 for the first quote; the revision count printed is version - 1. */
   version: number
   notes: string[]
+  /** The job it is for (absent on quotes issued before job numbers); the quote keeps its own number. */
+  job?: { number: number; title: string }
 }
 
 export type QuoteDraftInput = {
@@ -43,6 +45,7 @@ export type QuoteDraftInput = {
   currency: string
   validUntil: Date
   version: number
+  job?: { number: number; title: string }
 }
 
 export function buildQuoteDraft(i: QuoteDraftInput): QuoteDraft {
@@ -62,6 +65,7 @@ export function buildQuoteDraft(i: QuoteDraftInput): QuoteDraft {
     validUntil: i.validUntil.toISOString(),
     version: i.version,
     notes: legalStatus === 'kleinunternehmer' ? [`${S19_NOTE.de} / ${S19_NOTE.en}`] : [],
+    ...(i.job && { job: i.job }),
   }
 }
 
@@ -77,6 +81,7 @@ export function quoteLines(d: QuoteDraft, number: string): string[] {
   const out = [
     'Angebot (Quote)',
     ...(rev ? [`Überarbeitung Nr. ${rev} dieses Angebots (Revision ${rev} of this quote)`] : []),
+    ...(d.job ? [`Auftrag (Job): #${d.job.number} ${d.job.title}`] : []),
     ...party('Von (From):', d.issuer),
     `An (To): ${d.customerName}`,
     `Leistung (Service): ${d.scope}`,

@@ -45,6 +45,16 @@ describe('rules and entity', () => {
   })
 })
 
+describe('job number on the invoice', () => {
+  it('prints the job number and title, and the task number for an additional task', () => {
+    const d = buildInvoice({ provider: provider('business'), customer, country: 'DE', currency: 'EUR', job: { number: 1040, title: 'Wand streichen' }, bookings: [booking(), booking({ id: 'task', parentBookingId: 'root', title: 'Tür', task: '#1040-2' })] })!
+    const text = invoiceLines(d, 'de').join(' ')
+    expect(text).toContain('Auftrag (Job): #1040 Wand streichen')
+    expect(text).toContain('Zusatzauftrag (Additional task) #1040-2: Tür')
+    expect(invoiceLines(build([booking()])!, 'de').join(' ')).not.toContain('Auftrag (Job)')
+  })
+})
+
 describe('buildInvoice', () => {
   it('kleinunternehmer: invoice with the section 19 note and no VAT', () => {
     const d = build([booking()], 'kleinunternehmer')!

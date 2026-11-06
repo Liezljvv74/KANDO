@@ -56,6 +56,13 @@ describe('the quote document', () => {
     expect(text).toContain('20. November 2026')
   })
 
+  it('quote PDF text contains the job number and title; an old snapshot without a job prints none', async () => {
+    const text = await drawn(await renderQuotePdf(buildQuoteDraft(input({ job: { number: 1040, title: 'Zaun streichen' } })), 'Q-ABCDEF12-2026-0001', new Date('2026-11-01T10:00:00Z'), false))
+    expect(text).toContain('Auftrag (Job): #1040 Zaun streichen')
+    expect(text).toContain('Q-ABCDEF12-2026-0001')
+    expect(quoteLines(buildQuoteDraft(input()), 'Q-X-2026-0001').join(' ')).not.toContain('Auftrag (Job)')
+  })
+
   it('a quote without a time says date and time are to be confirmed', () => {
     const lines = quoteLines(buildQuoteDraft(input({ startAt: null, durationMin: null })), 'Q-X-2026-0001').join('\n')
     expect(lines).toContain('werden noch bestätigt')

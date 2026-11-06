@@ -28,7 +28,8 @@ export default function ThreadList() {
       {more.docs.map((th) => (
         <Pressable key={th.id} onPress={() => go(`/threads/${th.id}`)} accessibilityRole="button" accessibilityLabel={th.otherName}>
           <Card list>
-            <Text style={styles.name}>{th.otherName}</Text>
+            {th.jobNumber !== undefined && <Text style={styles.name}>{`#${th.jobNumber} ${th.title ?? ''}`.trim()}</Text>}
+            <Text style={th.jobNumber !== undefined ? styles.small : styles.name}>{th.otherName}</Text>
             {th.lastMessageAt && <Text style={styles.small}>{formatWhen(th.lastMessageAt)}</Text>}
             {th.blocked && <Text style={styles.small}>{t('chat.blocked')}</Text>}
           </Card>

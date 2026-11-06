@@ -110,7 +110,7 @@ type Db = Tx | typeof db
  * service title, category names and language are public or own data and are read on the owner connection, so a hidden service
  * (suspended provider) or a deleted one never leaves the title empty: service title, else the category name, else a fixed text.
  */
-async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, { id: string; requestId: string | null }>> {
+export async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, { id: string; requestId: string | null }>> {
   const rows = new Map<string, { id: string; requestId: string | null; parentBookingId: string | null }>()
   let todo = [...new Set(bookingIds)]
   for (let i = 0; i < 8 && todo.length; i++) {
@@ -128,7 +128,7 @@ async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, { id: s
 }
 
 /** Root request id > job number and title, for the given root request ids. */
-async function rootJobs(x: Db, rootRequestIds: string[], userId?: string): Promise<Map<string, { jobNumber: number; title: string }>> {
+export async function rootJobs(x: Db, rootRequestIds: string[], userId?: string): Promise<Map<string, { jobNumber: number; title: string }>> {
   const out = new Map<string, { jobNumber: number; title: string }>()
   if (!rootRequestIds.length) return out
   const reqs = await x.select({ id: requests.id, n: requests.jobNumber, serviceId: requests.serviceId, categoryId: requests.categoryId }).from(requests).where(inArray(requests.id, rootRequestIds))

@@ -4,6 +4,7 @@ import { LIST_PAGE, type Page, type Thread } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
 import { notFound } from '../providers/http'
+import { rootJobs, rootsOf } from '../bookings/requests'
 import { publicNameFor } from '../providers/public-name'
 import { olderThan, pageOf, stampOf } from '../paging'
 
@@ -85,11 +86,20 @@ async function threadRows(tx: Tx, userId: string, where: SQL | undefined, limit:
     .orderBy(desc(activity), desc(threads.id))
     .limit(limit)
   const others = await otherSides(userId, rows.map((r) => r.t))
+  // job number and title: a request's thread by its request, a booking's thread by its root booking's request (no request: none)
+  const rootReq = new Map<string, string>()
+  const byBooking = await rootsOf(tx, rows.flatMap((r) => (r.t.bookingId ? [r.t.bookingId] : [])))
+  for (const { t } of rows) {
+    const q = t.requestId ?? (t.bookingId ? byBooking.get(t.bookingId)?.requestId : null)
+    if (q) rootReq.set(t.id, q)
+  }
+  const jobs = await rootJobs(tx, [...new Set(rootReq.values())], userId)
   const toThread = ({ t, last, blocked }: (typeof rows)[number]): Thread => ({
     id: t.id,
     requestId: t.requestId,
     bookingId: t.bookingId,
     otherName: others.get(t.id) ?? '',
+    ...(jobs.get(rootReq.get(t.id) ?? '') && { jobNumber: jobs.get(rootReq.get(t.id)!)!.jobNumber, title: jobs.get(rootReq.get(t.id)!)!.title }),
     lastMessageAt: last ? new Date(last).toISOString() : null,
     blocked,
   })
