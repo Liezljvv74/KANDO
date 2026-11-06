@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
+import { bookings, db, providers, quotes, requestAppInsert, requests, type Tx } from '@kando/db'
 import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -182,8 +182,8 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
   const startAt = new Date(wanted)
   await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin, onSite, now, clash: false })
   if (input.note) await assertNoContactDetails(userId, input.note)
-  const [row] = await tx
-    .insert(requests)
+  const [created] = await tx
+    .insert(requestAppInsert) // job_number is numbered by the database, the app role has no grant on it
     .values({
       customerId: userId,
       providerId: provider.id,
@@ -198,7 +198,8 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
+    .returning({ id: requestAppInsert.id })
+  const [row] = await tx.select().from(requests).where(eq(requests.id, created!.id))
   await threadForRequest(tx, row!.id) // the chat opens with the request
   afterCommit(() => notifyBookingEvent('request-received', provider.ownerId, { requestId: row!.id }))
   return toRequest(row!, now)

@@ -50,6 +50,8 @@ it('customer creates a request; provider sees it incoming', async () => {
   expect(ids(await asProvider.json())).toContain(r.id)
   expect(ids(await (await call(requests.GET, U.owner)).json())).not.toContain(r.id) // as a customer the owner has none
   expect(ids(await (await call(requests.GET, U.cust)).json())).toContain(r.id)
+  // createRequest runs as the app role, which has no grant on job_number: the database numbers the row
+  expect((await pool.query('SELECT job_number FROM requests WHERE id = $1', [r.id])).rows[0].job_number).toBeGreaterThanOrEqual(1000)
 })
 
 it('request to an unpublished or suspended provider is 404', async () => {

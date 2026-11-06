@@ -267,8 +267,7 @@ it('job_number is assigned by the database starting at 1000', async () => {
 
 it('the 0035 setval can never go below the sequence minimum', () => {
   const sqlText = readFileSync(join(process.cwd(), '../../packages/db/migrations/0035_job_number.sql'), 'utf8')
-  const setval = sqlText.split('
-').find((l) => l.startsWith('SELECT setval'))!
+  const setval = sqlText.split('SELECT setval')[1]!
   expect(setval).toContain('1000')
   expect(setval).toContain(', false)')
 })
