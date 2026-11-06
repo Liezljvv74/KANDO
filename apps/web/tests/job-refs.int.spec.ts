@@ -106,3 +106,22 @@ it('jobsForNotices: an additional task resolves to the root job; the other party
   expect(asOwner[0]!.otherParty).toBe('Clara K.')
   expect(asOwner[2]!.number).toBe(n)
 })
+
+it('an additional task whose root booking has no request shows no job refs (not its own unused number)', async () => {
+  const { jobsForNotices } = await import('@kando/domain')
+  const { db } = await import('@kando/db')
+  const root = await paidJob(U.owner, providerId)
+  const r = RequestSchema.parse(await (await call(startRoute.POST, U.cust, 'POST', { description: 'Noch etwas' }, { id: root.id })).json())
+  const c = await pool.connect() // as a direct booking: the guard trigger forbids the change, so it is off for this one statement
+  try {
+    await c.query('BEGIN')
+    await c.query("SET LOCAL session_replication_role = 'replica'")
+    await c.query('UPDATE bookings SET request_id = NULL WHERE id = $1', [root.id])
+    await c.query('COMMIT')
+  } finally {
+    c.release()
+  }
+  const got = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: r.id })).json())
+  expect(got.jobNumber).toBeUndefined()
+  expect(await jobsForNotices(db as never, U.cust, [{ requestId: r.id }])).toEqual([null])
+})

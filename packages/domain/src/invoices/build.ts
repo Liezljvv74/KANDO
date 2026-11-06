@@ -174,7 +174,7 @@ export function invoiceLines(draft: InvoiceDraft, lang: Lang): string[] {
     ...party('An (To):', draft.recipient),
   ]
   for (const l of draft.lines) {
-    out.push(`${KIND_LABEL[l.kind]}${l.kind === 'additional-task' && l.task ? ` ${l.task}` : ''}: ${l.description}, Leistungsdatum (Service date): ${date(l.serviceDate)}`)
+    out.push(`${KIND_LABEL[l.kind]}${l.kind !== 'job' && l.task ? ` ${l.task}` : ''}: ${l.description}, Leistungsdatum (Service date): ${date(l.serviceDate)}`)
     if (l.labour || l.material) out.push(`  Arbeitskosten (Labour): ${m(l.labour)}, Material (Material): ${m(l.material)}`)
     out.push(vat ? `  Netto (Net): ${m(l.net)}, ${ust}: ${m(l.vat)}, Brutto (Gross): ${m(l.gross)}` : `  Betrag (Amount): ${m(l.gross)}`)
   }

@@ -58,7 +58,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
         console.error('[notify] booking notification failed', describeError(e)) // the email must still go out
       }
     }
-    // the job the event is about, by its number and title, in the email and the push (the push template itself stays free of placeholders)
+    // the job the event is about: number and title in the email, the number only in the push (lock-screen privacy; the push template itself stays free of placeholders)
     const job = (await jobsForNotices(db, userId, [params]).catch(() => [null]))[0]
     const label = job ? jobLabel(job) : undefined
     const iso = params.date ?? (await dateOf(kind, params))
@@ -73,7 +73,7 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
     }
     // invoice-ready names what the provider issued: an invoice, or (private providers) a receipt
     const push = kind === 'invoice-ready' && params.variant === 'receipt' ? 'invoice-ready.receipt' : kind
-    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: ((b) => (label ? t(lang, 'notice.withJob', { job: label, text: b }) : b))(t(lang, `push.${push}.body` as Key)), url: appUrl(kind, params) })
+    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: ((b) => (job ? t(lang, 'notice.withJob', { job: `#${job.number}`, text: b }) : b))(t(lang, `push.${push}.body` as Key)), url: appUrl(kind, params) })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }

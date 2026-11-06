@@ -145,6 +145,12 @@ describe('buildInvoice', () => {
     expect(build([booking({ status: 'refunded' })])).toBeNull()
   })
 
+  it('a fee line of an additional task carries the task number and prints it', () => {
+    const d = buildInvoice({ provider: provider('business'), customer, country: 'DE', currency: 'EUR', job: { number: 1040, title: 'Wand streichen' }, bookings: [booking(), booking({ id: 'task', parentBookingId: 'root', title: 'Tür', task: '#1040-2', status: 'cancelled', cancelledBy: 'customer', providerShare: 30 })] })!
+    expect(d.lines[1]).toMatchObject({ kind: 'late-cancel-fee', task: '#1040-2' })
+    expect(invoiceLines(d, 'de').join(' | ')).toContain('#1040-2: Tür')
+  })
+
   it('a late customer cancellation is a fee line with no labour or material', () => {
     const d = build([booking({ status: 'cancelled', cancelledBy: 'customer', providerShare: 50, materialAmount: 20 })])!
     expect(d.lines[0]).toMatchObject({ kind: 'late-cancel-fee', gross: 50, labour: 0, material: 0 })

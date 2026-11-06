@@ -28,9 +28,9 @@ export async function jobsForNotices(x: Db, userId: string, refs: Ref[]): Promis
   const people = new Map((ids.length ? await db.select({ id: users.id, first: users.firstName, last: users.lastName }).from(users).where(inArray(users.id, ids)) : []).map((u) => [u.id, u]))
   const prov = new Map(provs.map((p) => [p.id, p]))
   const roots = await rootsOf(x, [...bks.map((b) => b.id), ...rqs.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : []))])
-  const rootOfReq = (r: (typeof rqs)[number]) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? r.id : r.id)
+  const rootOfReq = (r: (typeof rqs)[number]) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id)
   const rootOfBooking = (b: (typeof bks)[number]) => roots.get(b.id)?.requestId ?? null
-  const jobs = await rootJobs(x, [...new Set([...bks.flatMap((b) => rootOfBooking(b) ?? []), ...rqs.map(rootOfReq)])], userId)
+  const jobs = await rootJobs(x, [...new Set([...bks.flatMap((b) => rootOfBooking(b) ?? []), ...rqs.flatMap((r) => rootOfReq(r) ?? [])])], userId)
   const otherParty = (s: (typeof sides)[number]): string | null => {
     const p = prov.get(s.providerId)
     const owner = p && people.get(p.ownerId)

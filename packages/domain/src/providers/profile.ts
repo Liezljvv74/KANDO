@@ -73,10 +73,11 @@ export function completeness(
 async function view(tx: Tx, userId: string, row: Row): Promise<MyProfile> {
   const svc = await tx.select({ categoryId: services.categoryId, priceType: services.priceType, price: services.price }).from(services).where(eq(services.providerId, row.id))
   const person = (await tx.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId)))[0]
-  // Submitted, not yet decided ('pending'): the Photo ID always counts, other documents only when one of the services needs them.
+  // Submitted, not yet decided ('pending'), and not already approved (a renewal of an approved document is not 'awaiting'; documents have no expiry date, so approved means valid): the Photo ID always counts, other documents only when one of the services needs them.
   const pending = await tx.execute(sql`
     SELECT DISTINCT d.requirement FROM documents d
-    WHERE d.owner_id = ${userId} AND d.status = 'pending' AND (d.requirement = 'id-document' OR d.requirement IN (
+    WHERE d.owner_id = ${userId} AND d.status = 'pending'
+      AND NOT EXISTS (SELECT 1 FROM documents a WHERE a.owner_id = d.owner_id AND a.requirement = d.requirement AND a.status = 'approved') AND (d.requirement = 'id-document' OR d.requirement IN (
       SELECT unnest(c.required_documents) FROM services s JOIN categories c ON c.id = s.category_id WHERE s.provider_id = ${row.id}))
     ORDER BY d.requirement`)
   const underCheck = (pending.rows as { requirement: string }[]).map((x) => x.requirement)

@@ -310,4 +310,7 @@ it('underCheck lists a submitted but unapproved document; an approved one is nei
   expect((await read()).underCheck).toEqual(['id-document'])
   await pool.query("UPDATE documents SET status = 'approved' WHERE owner_id = 'pp-uc'")
   expect((await read()).underCheck).toEqual([])
+  // a renewal (new pending row) of an approved document is not awaiting approval
+  await pool.query("INSERT INTO documents (owner_id, requirement, key) VALUES ('pp-uc', 'id-document', 'k3')")
+  expect((await read()).underCheck).toEqual([])
 })

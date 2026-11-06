@@ -138,7 +138,8 @@ it('listNotifications adds job number, title and other party; the email names th
     await notifyBookingEvent('request-received', U.owner, { requestId: r.id }, { written: true })
     const sent = pushOutboxForTests().filter((m) => m.to === 'ExponentPushToken[bn-owner]')
     expect(sent).toHaveLength(1)
-    expect(sent[0]!.body).toContain(jobLabel(n!.job!))
+    expect(sent[0]!.body).toContain(`#${n!.job!.number}`) // the number only: the title stays off the lock screen
+    expect(sent[0]!.body).not.toContain(n!.job!.title)
     for (const text of [sent[0]!.title, sent[0]!.body]) {
       expect(text).not.toMatch(/[{}]/)
       expect(text.toLowerCase()).not.toMatch(/treuhand|escrow|garantie|guarantee/)

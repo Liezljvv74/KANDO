@@ -150,11 +150,15 @@ export async function rootJobs(x: Db, rootRequestIds: string[], userId?: string)
 export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string): Promise<T[]> {
   const parents = [...new Set(list.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : [])))]
   const roots = await rootsOf(x, parents)
-  const rootOf = (r: T) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? r.id : r.id)
-  const jobs = await rootJobs(x, [...new Set(list.map(rootOf))], userId)
+  // a task whose root booking has no request (booked direct) has no job to show: no refs, never its own unused number
+  const rootOf = (r: T) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id)
+  const jobs = await rootJobs(x, [...new Set(list.flatMap((r) => rootOf(r) ?? []))], userId)
   return list.map((r) => {
-    const j = jobs.get(rootOf(r))
-    return j ? { ...r, jobNumber: j.jobNumber, title: j.title } : r
+    const root = rootOf(r)
+    const j = root ? jobs.get(root) : undefined
+    if (j) return { ...r, jobNumber: j.jobNumber, title: j.title }
+    if (r.parentBookingId) { const { jobNumber: _own, title: _t, ...rest } = r; return rest as T } // a task with no root request: not its own unused number
+    return r
   })
 }
 
