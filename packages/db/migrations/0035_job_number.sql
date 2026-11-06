@@ -4,4 +4,4 @@ UPDATE "requests" r SET "job_number" = n.num FROM (SELECT id, (row_number() OVER
 ALTER TABLE "requests" ALTER COLUMN "job_number" SET DEFAULT nextval('job_number_seq');--> statement-breakpoint
 ALTER TABLE "requests" ALTER COLUMN "job_number" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "requests" ADD CONSTRAINT "requests_job_number_unique" UNIQUE("job_number");--> statement-breakpoint
-SELECT setval('job_number_seq', GREATEST((SELECT max("job_number") FROM "requests"), 999), true);
+SELECT setval('job_number_seq', GREATEST(COALESCE((SELECT max("job_number") FROM "requests"), 999) + 1, 1000), false);

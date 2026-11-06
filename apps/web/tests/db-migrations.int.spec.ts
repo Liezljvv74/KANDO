@@ -265,6 +265,14 @@ it('job_number is assigned by the database starting at 1000', async () => {
   await wipe()
 }, 60_000)
 
+it('the 0035 setval can never go below the sequence minimum', () => {
+  const sqlText = readFileSync(join(process.cwd(), '../../packages/db/migrations/0035_job_number.sql'), 'utf8')
+  const setval = sqlText.split('
+').find((l) => l.startsWith('SELECT setval'))!
+  expect(setval).toContain('1000')
+  expect(setval).toContain(', false)')
+})
+
 it('existing requests are numbered in creation order', async () => {
   assertTestDatabase(pool.options.connectionString!)
   const upTo34 = mkdtempSync(join(tmpdir(), 'mig34-'))
