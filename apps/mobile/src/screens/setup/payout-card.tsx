@@ -1,10 +1,10 @@
 import * as WebBrowser from 'expo-web-browser'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
 
-import { getMyProfile, saveMyProfile } from '@/api/my-profile'
+import { saveMyProfile } from '@/api/my-profile'
 import { payoutStatus, startPayoutSetup } from '@/api/payments'
 import { ErrorText, Field } from '@/components/auth-ui'
 import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
@@ -17,7 +17,7 @@ import { payoutState, saveSwitch } from '@/lib/payouts'
 import { isHttps } from '@/lib/safe-url'
 
 /** "Set up payouts": the status and the Stripe link. `useLoad` re-checks the status on focus and when the app returns to the front (no polling). */
-export function PayoutCard() {
+export function PayoutCard({ profile, onChanged, taxAsked }: { profile: MyProfile; onChanged: () => void; taxAsked: number }) {
   const me = useMe()
   const fetch = useCallback(() => payoutStatus(), [])
   const { data, error, retry } = useLoad(fetch)
@@ -25,6 +25,14 @@ export function PayoutCard() {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const state = payoutState(data?.ready, opened)
+  // The status call just recorded the payout as ready: reload the profile so the checklist drops the step (one Stripe call, one profile read per focus).
+  const stale = !!data?.ready && !!profile.quoteSteps?.includes('payout')
+  // Once per status load (and when the profile arrives later), never in a loop: a reload that returns the same profile does not retrigger it.
+  const changed = useRef(onChanged)
+  changed.current = onChanged
+  useEffect(() => {
+    if (stale) changed.current()
+  }, [data, stale])
   if (error && noteIfOff(error)) return null // payments are off: nothing to set up, and a Retry could never succeed
 
   async function open() {
@@ -66,27 +74,31 @@ export function PayoutCard() {
           <SmallButton label={t(state === 'waiting' ? 'payouts.continue' : 'payouts.setUp')} onPress={open} busy={busy} />
         ))}
       <ErrorText text={problem} />
-      <Invoicing />
+      <InvoicingFields initial={profile} onChanged={onChanged} taxAsked={taxAsked} />
     </Card>
   )
 }
 
-/** Invoicing, part of being ready to take work while payments are on: the tax number printed on invoices, and the consent tick. */
-function Invoicing() {
-  const fetch = useCallback(() => getMyProfile(), [])
-  const { data } = useLoad(fetch)
-  return data ? <InvoicingFields initial={data} /> : null
-}
-
-function InvoicingFields({ initial }: { initial: MyProfile }) {
+/** Invoicing, part of being ready to take work while payments are on: the tax number printed on invoices, and the consent tick. It follows the screen's saved profile (a half-typed tax number is never overwritten) and reloads it after each save, so the checklist above agrees. */
+function InvoicingFields({ initial, onChanged, taxAsked }: { initial: MyProfile; onChanged: () => void; taxAsked: number }) {
   const [taxNumber, setTaxNumber] = useState(initial.taxNumber ?? '')
   const [consent, setConsent] = useState(!!initial.invoiceConsent)
-  const [taxOpen, setTaxOpen] = useState(false) // collapsed until the person needs it
+  const taxDirty = useRef(false)
+  useEffect(() => {
+    if (!taxDirty.current) setTaxNumber(initial.taxNumber ?? '')
+  }, [initial.taxNumber])
+  useEffect(() => setConsent(!!initial.invoiceConsent), [initial.invoiceConsent])
+  const [taxOpen, setTaxOpen] = useState(taxAsked > 0) // collapsed until the person needs it
+  useEffect(() => {
+    if (taxAsked > 0) setTaxOpen(true)
+  }, [taxAsked])
   const [problem, setProblem] = useState<string | null>(null)
   async function save(body: object) {
     setProblem(null)
     try {
       await saveMyProfile(body)
+      taxDirty.current = false
+      onChanged()
     } catch (e) {
       setProblem(paymentsProblem(e))
     }
@@ -97,14 +109,17 @@ function InvoicingFields({ initial }: { initial: MyProfile }) {
         <Text style={styles.toggleText}>{taxNumber.trim() && !taxOpen ? `${t('payouts.taxNumber')}: ${taxNumber.trim()}` : t('payouts.taxNumber')}</Text>
         <Text style={styles.toggleText}>{taxOpen ? '▴' : '▾'}</Text>
       </Pressable>
-      {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={setTaxNumber} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />}
+      {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={(v) => {
+        taxDirty.current = true
+        setTaxNumber(v)
+      }} onBlur={() => save({ taxNumber: taxNumber.trim() || null })} maxLength={40} autoCapitalize="none" autoCorrect={false} />}
       <SwitchRow
         label={t('payouts.invoiceConsent')}
         value={consent}
         onChange={(v) => {
           setProblem(null)
           // a failed save puts the switch back, so it never shows a consent the server does not have
-          saveSwitch(v, setConsent, (x) => saveMyProfile({ invoiceConsent: x })).catch((e) => setProblem(paymentsProblem(e)))
+          saveSwitch(v, setConsent, (x) => saveMyProfile({ invoiceConsent: x })).then(onChanged, (e) => setProblem(paymentsProblem(e)))
         }}
       />
       {!consent && <Text style={styles.small}>{t('payouts.invoiceConsentNeeded')}</Text>}

@@ -99,3 +99,29 @@ it('only the provider of the request quotes it; a rejection ends the request and
   expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('declined')
   expect((await send(r.id, { amount: 50, scope: 'x' })).status).toBe(409)
 })
+
+/** Runs `fn` with payments on: the seeded provider has no payout set-up, so it is not ready. */
+const withPaymentsOn = async <T>(fn: () => Promise<T>): Promise<T> => {
+  vi.stubEnv('PAYMENTS_ENABLED', 'true')
+  try {
+    return await fn()
+  } finally {
+    vi.unstubAllEnvs()
+  }
+}
+
+it('revising a quote without payout is refused with PAYOUT_SETUP_FIRST, and the quote already sent stays valid', async () => {
+  const r = await newRequest()
+  const first = QuoteSchema.parse(await (await send(r.id, { amount: 90, scope: 'Fence' })).json())
+  const res = await withPaymentsOn(() => send(r.id, { amount: 70, scope: 'Fence, cheaper' }))
+  expect([res.status, (await res.json()).error]).toEqual([409, 'PAYOUT_SETUP_FIRST'])
+  expect((await row(first.id)).status).toBe('sent')
+})
+
+it('declining still works when the provider is not ready', async () => {
+  const r = await newRequest()
+  await send(r.id, { amount: 90, scope: 'Fence' })
+  const res = await withPaymentsOn(() => call(decline.POST, U.owner, 'POST', undefined, { id: r.id }))
+  expect(res.status).toBe(200)
+  expect((await pool.query('SELECT status FROM requests WHERE id = $1', [r.id])).rows[0].status).toBe('declined')
+})

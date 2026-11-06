@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { BookingRequest, QuoteInput } from '@kando/contract'
 
@@ -6,10 +6,15 @@ import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
 import { servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
-import { SwitchRow } from '@/components/form-ui'
+import { SmallButton, SwitchRow } from '@/components/form-ui'
+import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { parseAmount } from '@/lib/amount'
+import { doQuoteStep, getProfileFresh } from '@/lib/do-quote-step'
+import { paymentsProblem } from '@/lib/payments-off'
+import { quoteBlocked } from '@/lib/quote-gate'
 import { buildQuoteTime, whenFromRequest } from '@/lib/when-where'
+import { QuoteGate } from '@/screens/bookings/quote-gate'
 import { proposalError, WhenWhereFields } from '@/screens/bookings/when-where-fields'
 
 /**
@@ -24,6 +29,26 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const loadProfile = useCallback(() => getProfileFresh(), [])
+  const profile = useLoad(loadProfile) // re-reads on focus and when the app returns from Stripe, so the gate clears itself
+  const steps = profile.data?.quoteSteps ?? []
+  const blocked = quoteBlocked(steps)
+  // Disabled while the first load runs; after a failed load the button stays usable (the server still refuses) with a retry line.
+  const checking = !profile.done && !profile.error
+
+  const stepping = useRef(false) // a double tap must not start Stripe or save twice
+  async function doStep(step: (typeof steps)[number]) {
+    if (stepping.current) return
+    stepping.current = true
+    setError(null)
+    try {
+      await doQuoteStep(step)
+      profile.retry()
+    } catch (e) {
+      setError(paymentsProblem(e))
+    }
+    stepping.current = false
+  }
 
   // a request for one of the provider's fixed-price services starts with that price (the provider can change it)
   useEffect(() => {
@@ -68,7 +93,14 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
       <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
       {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}
       <ErrorText text={error} />
-      <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} />
+      <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} disabled={blocked || checking} />
+      {!profile.done && !!profile.error && (
+        <>
+          <Info text={t('quoteGate.loadFailed')} />
+          <SmallButton label={t('common.retry')} onPress={profile.retry} />
+        </>
+      )}
+      {blocked && <QuoteGate steps={steps} onDo={doStep} />}
     </>
   )
 }

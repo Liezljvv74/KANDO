@@ -52,7 +52,7 @@ export const de = {
   'email.paymentLateRefunded.body':
     'Deine Zahlung konnte für die Buchung nicht verwendet werden: Sie war abgelaufen, zurückgezogen oder schon bezahlt. Du bekommst den vollen Betrag zurück. Bis die Erstattung auf deinem Konto erscheint, kann es einige Tage dauern. Wenn du den Auftrag noch brauchst, sende eine neue Anfrage.',
   'email.payoutSetupComplete.subject': 'Deine Auszahlung ist eingerichtet',
-  'email.payoutSetupComplete.body': 'Die Einrichtung deiner Auszahlung ist abgeschlossen. Dein Profil zeigt das Zeichen „Verifiziert“. Um Angebote zu senden und Buchungen anzunehmen, stimme auf der Auszahlungskarte auch der Rechnungsstellung zu (Kleinunternehmer und Unternehmen: mit Steuernummer oder USt-IdNr.).',
+  'email.payoutSetupComplete.body': 'Die Einrichtung deiner Auszahlung ist abgeschlossen. Dein Profil zeigt das Zeichen „Verifiziert“. Öffne „Mein Geschäft“, um zu sehen, ob noch etwas fehlt, bevor Kunden dich buchen können.',
   'email.customersWaiting.subject': 'Kunden möchten bei dir buchen',
   'email.customersWaiting.body':
     'Kunden, die bei dir buchen möchten: {count}. Schließe in der App die Einrichtung deiner Auszahlung ab, damit sie dir Anfragen senden und bei dir buchen können. Wir sagen ihnen Bescheid, sobald du so weit bist. Zum Schutz ihrer Privatsphäre sagen wir nicht, wer sie sind.',

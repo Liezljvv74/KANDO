@@ -29,6 +29,8 @@ export const MyProfileSchema = z.object({
   /** Invoicing (payout set-up card): the tax number, and whether the provider agreed that the platform issues invoices in their name. */
   taxNumber: z.string().nullish(),
   invoiceConsent: z.boolean().optional(),
+  /** What the provider still needs before quoting (empty when payments are off); the server always sends it. */
+  quoteSteps: z.array(z.enum(['payout', 'consent', 'taxId'])).optional(),
 })
 export type MyProfile = z.infer<typeof MyProfileSchema>
 

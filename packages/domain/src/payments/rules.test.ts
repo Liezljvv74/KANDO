@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateway, setGatewayForTests, type PaymentsGateway } from './gateway'
-import { belowMinCharge, canTransact, checkoutExpiry, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, toCents } from './rules'
+import { belowMinCharge, canTransact, checkoutExpiry, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, quoteSteps, toCents } from './rules'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -81,6 +81,31 @@ describe('paymentsEnabled and canTransact', () => {
       expect(canTransact({ ...ready, legalStatus, taxNumber: '12/345/67890' })).toBe(true)
       expect(canTransact({ ...ready, legalStatus, vatId: 'DE123456789' })).toBe(true)
     }
+  })
+  it('quoteSteps lists payout and consent for a new provider', () => {
+    vi.stubEnv('PAYMENTS_ENABLED', 'true')
+    expect(quoteSteps({ ...ready, payoutsReadyAt: null, invoiceConsentAt: null })).toEqual(['payout', 'consent'])
+    expect(quoteSteps({ ...ready, payoutsReadyAt: null })).toEqual(['payout'])
+  })
+  it('quoteSteps adds taxId only for kleinunternehmer and business without vatId or taxNumber', () => {
+    vi.stubEnv('PAYMENTS_ENABLED', 'true')
+    for (const legalStatus of ['kleinunternehmer', 'business']) {
+      expect(quoteSteps({ ...ready, legalStatus })).toEqual(['taxId'])
+      expect(quoteSteps({ ...ready, legalStatus, taxNumber: ' ' })).toEqual(['taxId'])
+      expect(quoteSteps({ ...ready, legalStatus, vatId: 'DE123456789' })).toEqual([])
+    }
+    expect(quoteSteps({ ...ready, legalStatus: 'private' })).toEqual([])
+  })
+  it('quoteSteps is empty for a private person with payout and consent, and when payments are off', () => {
+    vi.stubEnv('PAYMENTS_ENABLED', 'true')
+    expect(quoteSteps({ ...ready, legalStatus: 'private' })).toEqual([])
+    vi.stubEnv('PAYMENTS_ENABLED', '')
+    expect(quoteSteps({ ...ready, payoutsReadyAt: null, invoiceConsentAt: null, legalStatus: 'business' })).toEqual([])
+  })
+  it('canTransact equals no missing steps', () => {
+    vi.stubEnv('PAYMENTS_ENABLED', 'true')
+    for (const p of [ready, { ...ready, payoutsReadyAt: null }, { ...ready, legalStatus: 'business' }])
+      expect(canTransact(p)).toBe(quoteSteps(p).length === 0)
   })
   it('live payments stay off and the hold limit is a positive number of days', () => {
     expect(LIVE_PAYMENTS_ALLOWED).toBe(false)

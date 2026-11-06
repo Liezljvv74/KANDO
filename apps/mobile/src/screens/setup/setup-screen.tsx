@@ -55,6 +55,7 @@ export default function SetupScreen() {
   const { done, data, error, retry } = useLoad(loadAll)
   const { categories } = useCategories()
   const me = useMe()
+  const [taxAsked, setTaxAsked] = useState(0) // the tax number step opens the field in the payout card
   const title = welcome ? t('setup.welcome') : t('setup.title')
   if (!done || !data) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
   const { profile, services, references, photos, verifications } = data
@@ -63,7 +64,7 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
-      <PublishBar profile={profile} services={services} onChanged={retry} />
+      <PublishBar profile={profile} services={services} onChanged={retry} onTaxId={() => setTaxAsked((n) => n + 1)} />
       <NotificationBanners me={me} canShare={canShare(services)} />
       <Card>
         <View style={styles.row}>
@@ -76,7 +77,7 @@ export default function SetupScreen() {
         {profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date() ? <ErrorText text={errorText('Profile suspended')} /> : null}
       </Card>
 
-      <PayoutCard />
+      <PayoutCard profile={profile} onChanged={retry} taxAsked={taxAsked} />
 
       <ServicesCard services={services} docRows={docRows} />
 

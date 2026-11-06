@@ -47,7 +47,7 @@ test('where a notice leads: provider-available to the provider page, customers-w
   expect(at('provider-available', { url: 'https://skillweb.space/other' })).toBeNull()
   expect(at('provider-available', {})).toBeNull()
   expect(at('customers-waiting', { count: 2 })).toEqual({ path: '/my-profile' })
-  expect(at('payout-setup-complete', {})).toBeNull()
+  expect(at('payout-setup-complete', {})).toEqual({ path: '/my-profile' })
   expect(notificationTarget({ kind: 'commission-invoice-ready', payload: { url: 'skilled://invoices/commission' } })).toEqual({ path: '/invoices/commission' })
 })
 
@@ -58,7 +58,7 @@ test('the booking-ending kinds have a text each', () => {
 })
 
 const at = (kind: string, payload: object) => notificationTarget({ kind, payload } as never)
-const NOT_BOOKING = ['profile-live', 'message-received', 'provider-available', 'customers-waiting', 'commission-invoice-ready']
+const NOT_BOOKING = ['profile-live', 'message-received', 'provider-available', 'customers-waiting', 'payout-setup-complete', 'commission-invoice-ready']
 
 test('every booking kind with a bookingId opens the booking', () => {
   for (const kind of NOTIFICATION_KINDS.filter((k) => !NOT_BOOKING.includes(k))) expect([kind, at(kind, { bookingId: 'b-1' })]).toEqual([kind, { path: '/bookings/b-1' }])

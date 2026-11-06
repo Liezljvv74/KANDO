@@ -1,4 +1,4 @@
-import type { Missing } from '@kando/contract'
+import type { Missing, MyProfile } from '@kando/contract'
 import { t, type Key } from '@/i18n'
 
 /**
@@ -24,3 +24,6 @@ export const compulsory = (field: keyof typeof COMPULSORY) => ({
   label: `${t(COMPULSORY[field].label)} *`,
   placeholder: t(COMPULSORY[field].placeholder),
 })
+
+/** The Live switch is locked by the first group only (`missing`); the second group never blocks going live. */
+export const liveLocked = (p: Pick<MyProfile, 'status' | 'missing'>, refused: boolean) => p.status !== 'published' && p.missing.length > 0 && !refused

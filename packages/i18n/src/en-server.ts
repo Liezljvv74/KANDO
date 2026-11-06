@@ -54,7 +54,7 @@ export const en: Record<ServerKey, string> = {
   'email.paymentLateRefunded.body':
     'Your payment could not be used for the booking: it had expired, was withdrawn or was already paid. You get the full amount back. It can take a few days until the refund shows on your account. If you still need the job, send a new request.',
   'email.payoutSetupComplete.subject': 'Your payouts are set up',
-  'email.payoutSetupComplete.body': 'Your payout set-up is complete. Your profile shows the verified mark. To send quotes and accept bookings, also agree to invoicing on the payout card (small businesses and businesses: with a tax number or VAT ID).',
+  'email.payoutSetupComplete.body': 'Your payout set-up is complete. Your profile shows the verified mark. Open My business to see whether anything is still needed before customers can book you.',
   'email.customersWaiting.subject': 'Customers want to book you',
   'email.customersWaiting.body':
     'Customers waiting to book you: {count}. Finish your payout set-up in the app so they can send you requests and book you. We tell them as soon as you are ready. To protect their privacy we do not say who they are.',
