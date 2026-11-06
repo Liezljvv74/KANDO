@@ -1,15 +1,23 @@
-import { useEffect, useState } from 'react'
+import * as WebBrowser from 'expo-web-browser'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { BookingRequest, QuoteInput } from '@kando/contract'
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
-import { servicesApi } from '@/api/my-profile'
+import { getMyProfile, saveMyProfile, servicesApi } from '@/api/my-profile'
+import { startPayoutSetup } from '@/api/payments'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
+import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { parseAmount } from '@/lib/amount'
+import { go } from '@/lib/go'
+import { paymentsProblem } from '@/lib/payments-off'
+import { quoteBlocked } from '@/lib/quote-gate'
+import { isHttps } from '@/lib/safe-url'
 import { buildQuoteTime, whenFromRequest } from '@/lib/when-where'
+import { QuoteGate } from '@/screens/bookings/quote-gate'
 import { proposalError, WhenWhereFields } from '@/screens/bookings/when-where-fields'
 
 /**
@@ -24,6 +32,28 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const loadProfile = useCallback(() => getMyProfile(), [])
+  const profile = useLoad(loadProfile) // re-reads on focus and when the app returns from Stripe, so the gate clears itself
+  const steps = profile.data?.quoteSteps ?? []
+  const blocked = quoteBlocked(steps)
+
+  // The steps reuse the existing flows: payout opens Stripe (as the payout card does), consent is one save, the tax number field is in the payout card on the profile tab.
+  async function doStep(step: (typeof steps)[number]) {
+    setError(null)
+    try {
+      if (step === 'consent') {
+        await saveMyProfile({ invoiceConsent: true })
+        profile.retry()
+      } else if (step === 'payout') {
+        const { url } = await startPayoutSetup()
+        if (!isHttps(url)) throw new Error('bad link')
+        await WebBrowser.openBrowserAsync(url)
+        profile.retry()
+      } else go('/my-profile')
+    } catch (e) {
+      setError(paymentsProblem(e))
+    }
+  }
 
   // a request for one of the provider's fixed-price services starts with that price (the provider can change it)
   useEffect(() => {
@@ -68,7 +98,8 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
       <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
       {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}
       <ErrorText text={error} />
-      <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} />
+      {blocked && <QuoteGate steps={steps} onDo={doStep} />}
+      <Button label={t('booking.sendQuote')} onPress={submit} busy={busy} disabled={blocked} />
     </>
   )
 }
