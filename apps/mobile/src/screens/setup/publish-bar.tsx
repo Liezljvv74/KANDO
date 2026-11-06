@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, StyleSheet, Text } from 'react-native'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 
 import type { MyProfile, OwnService } from '@kando/contract'
 
@@ -12,7 +12,7 @@ import { canShare } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
 import { liveLocked } from '@/lib/compulsory'
 import { go } from '@/lib/go'
-import { allSet, checklistHeading, checklistItems } from '@/lib/live-checklist'
+import { allSet, checklistHeading, checklistItems, openItems } from '@/lib/live-checklist'
 import { paymentsProblem } from '@/lib/payments-off'
 import { doQuoteStep } from '@/lib/do-quote-step'
 import { isLive } from '@/lib/profile-form'
@@ -76,7 +76,9 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
     }
     stepping.current = false
   }
-  const items = checklistItems(profile.missing)
+  const rows = checklistItems(profile)
+  const items = openItems(rows)
+  const checking = rows.filter((r) => r.state === 'checking')
   return (
     <>
     <Card>
@@ -86,11 +88,18 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
         <>
           <Text style={styles.heading} accessibilityRole="header">{t(checklistHeading(items.length), { n: items.length })}</Text>
           {items.map((r) => (
-            <GateRow key={r.item} title={r.label} onDo={() => go(r.path)} />
+            <GateRow key={r.item} title={r.label} onDo={() => go(r.path!)} />
           ))}
         </>
       )}
-      {allSet(profile.missing, profile.quoteSteps) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
+      {checking.map((r) => (
+        <View key={r.item} style={styles.checking}>
+          <Text style={styles.name}>{t(r.label)}</Text>
+          <Text style={styles.awaiting}>{t('setup.awaitingApproval')}</Text>
+          <Text style={styles.hint}>{t('setup.weAreChecking')}</Text>
+        </View>
+      ))}
+      {allSet(profile, profile.quoteSteps) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
       {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
       {justPublished && live && isLive(profile) && (
@@ -110,5 +119,8 @@ const styles = StyleSheet.create({
   live: { fontSize: 16, fontWeight: '700', color: '#34328A' },
   hint: { fontSize: 14, color: '#4F4E7D' },
   heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  checking: { minHeight: 44, justifyContent: 'center' },
+  name: { fontSize: 16, color: '#1D1C4A' },
+  awaiting: { fontSize: 15, fontWeight: '600', color: '#4F4E7D' },
   done: { fontSize: 16, fontWeight: '700', color: '#1F6B3A' },
 })

@@ -581,6 +581,8 @@ export const de = {
   'quoteGate.doIt': 'Erledigen ›',
   'setup.checklistOne': '1 Sache zuerst erledigen',
   'setup.checklistMany': '{n} Sachen zuerst erledigen',
+  'setup.awaitingApproval': 'Wartet auf Freigabe',
+  'setup.weAreChecking': 'Wir prüfen es',
   'setup.allSet': 'Alles erledigt',
   'setup.bookableNote': 'Ohne diese kannst du trotzdem online gehen.',
   'quoteGate.loadFailed': 'Deine Einrichtung konnte nicht geprüft werden.',

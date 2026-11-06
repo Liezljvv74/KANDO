@@ -582,6 +582,8 @@ export const en: Record<AppKey, string> = {
   'quoteGate.doIt': 'Do it ›',
   'setup.checklistOne': '1 thing to do first',
   'setup.checklistMany': '{n} things to do first',
+  'setup.awaitingApproval': 'Awaiting approval',
+  'setup.weAreChecking': 'We are checking it',
   'setup.allSet': 'You are all set',
   'setup.bookableNote': 'You can go live without these.',
   'quoteGate.loadFailed': 'Could not check your set-up.',

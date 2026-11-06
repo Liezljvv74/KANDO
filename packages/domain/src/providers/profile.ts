@@ -9,7 +9,7 @@ import { slugify } from './slug'
 
 type Row = typeof providers.$inferSelect
 
-const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
+const toMyProfile = (r: Row, missing: Missing[], underCheck: string[]): MyProfile => ({
   id: r.id,
   publicName: r.publicName,
   providerType: r.type === null ? null : r.type === 'business' ? 'business' : 'individual',
@@ -26,6 +26,7 @@ const toMyProfile = (r: Row, missing: Missing[]): MyProfile => ({
   slug: r.slug,
   suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
   missing,
+  underCheck,
   taxNumber: r.taxNumber,
   invoiceConsent: r.invoiceConsentAt !== null,
   quoteSteps: quoteSteps(r),
@@ -72,7 +73,14 @@ export function completeness(
 async function view(tx: Tx, userId: string, row: Row): Promise<MyProfile> {
   const svc = await tx.select({ categoryId: services.categoryId, priceType: services.priceType, price: services.price }).from(services).where(eq(services.providerId, row.id))
   const person = (await tx.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId)))[0]
-  return toMyProfile(row, completeness(row, svc, !!person?.first?.trim() && !!person?.last?.trim()))
+  // Submitted, not yet decided ('pending'): the Photo ID always counts, other documents only when one of the services needs them.
+  const pending = await tx.execute(sql`
+    SELECT DISTINCT d.requirement FROM documents d
+    WHERE d.owner_id = ${userId} AND d.status = 'pending' AND (d.requirement = 'id-document' OR d.requirement IN (
+      SELECT unnest(c.required_documents) FROM services s JOIN categories c ON c.id = s.category_id WHERE s.provider_id = ${row.id}))
+    ORDER BY d.requirement`)
+  const underCheck = (pending.rows as { requirement: string }[]).map((x) => x.requirement)
+  return toMyProfile(row, completeness(row, svc, !!person?.first?.trim() && !!person?.last?.trim()), underCheck)
 }
 
 export async function getMyProfile(tx: Tx, userId: string): Promise<MyProfile | null> {
