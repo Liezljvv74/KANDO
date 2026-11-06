@@ -89,3 +89,20 @@ it('an additional task shows the root number, #N-2 and #N-3 (a withdrawn one sti
   expect(by(two.booking.id)?.taskNumber).toBe(`#${n}-3`)
   expect((await getBooking(two.booking.id, U.owner)).taskNumber).toBe(`#${n}-3`) // alone, and as the provider
 })
+
+it('jobsForNotices: an additional task resolves to the root job; the other party is the customer for the provider and the provider for the customer; unknown ids give null', async () => {
+  const { jobsForNotices } = await import('@kando/domain')
+  await pool.query("UPDATE users SET first_name = 'Clara', last_name = 'Kunde' WHERE id = $1", [U.cust])
+  const root = await paidJob(U.owner, providerId)
+  const n = (await pool.query('SELECT job_number FROM requests WHERE id = $1', [root.requestId])).rows[0].job_number
+  const { request, booking } = await child(root.id)
+  const refs = [{ bookingId: booking.id }, { requestId: request.id }, { bookingId: root.id }, { bookingId: randomUUID() }, { requestId: randomUUID() }]
+  const { db } = await import('@kando/db')
+  const asCust = await jobsForNotices(db as never, U.cust, refs)
+  expect(asCust.slice(0, 3).map((j) => [j?.id, j?.number, j?.title])).toEqual(Array(3).fill([root.requestId, n, 'Jr Owner service'])) // the additional task shows the ROOT job
+  expect(asCust[0]!.otherParty).toBe((await pool.query('SELECT public_name FROM providers WHERE id = $1', [providerId])).rows[0].public_name)
+  expect(asCust.slice(3)).toEqual([null, null])
+  const asOwner = await jobsForNotices(db as never, U.owner, refs)
+  expect(asOwner[0]!.otherParty).toBe('Clara K.')
+  expect(asOwner[2]!.number).toBe(n)
+})

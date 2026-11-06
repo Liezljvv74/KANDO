@@ -43,13 +43,13 @@ it('push texts carry no placeholders (no chat text, amounts or contact data) and
   }
 })
 
-it('every notice kind text (in-app, push body, email subject and body) takes the job in German and English, with no unresolved placeholder', () => {
+it('every notice kind text (in-app, push body, email subject) takes the job in German and English, with no unresolved placeholder', () => {
   const job = '#1040 Photo session'
   for (const [lang, texts] of Object.entries(LANGS)) {
     expect(texts['notice.withJob'], lang).toContain('{job}')
     for (const kind of NOTIFICATION_KINDS) {
       const email = (EMAIL_KEYS as Record<string, string>)[kind]
-      for (const key of [`notification.${camel(kind)}`, `push.${kind}.body`, ...(email ? [`${email}.subject`, `${email}.body`] : [])]) {
+      for (const key of [`notification.${camel(kind)}`, `push.${kind}.body`, ...(email ? [`${email}.subject`] : [])]) {
         const base = texts[key]
         if (!base) continue
         const out = t(lang as 'de' | 'en', 'notice.withJob' as never, { job, text: base })

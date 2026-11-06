@@ -94,7 +94,7 @@ function compose(lang: Lang, template: Template, params: Params) {
   const key = EMAIL_KEYS[template]
   const document = params.requirement ? t(lang, `admin.requirement.${params.requirement}` as Parameters<typeof t>[1]) : ''
   const body = t(lang, `${key}.body` as Parameters<typeof t>[1], { document, note: params.note ?? '', reason: params.reason ?? '', date: params.date ?? '', category: params.category ?? '', url: params.url ?? '', months: params.months ?? '', count: params.count ?? '', percent: String(Math.round(LATE_CANCEL_SHARE * 100)), contact: REPLY_TO })
-  const text = `${params.job ? t(lang, 'notice.withJob', { job: params.job, text: body }) : body}${template.startsWith('account-deleted') ? '' : `
+  const text = `${body}${template.startsWith('account-deleted') ? '' : `
 
 ${APP_LINK}`}`
   const html = `<p>${esc(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`

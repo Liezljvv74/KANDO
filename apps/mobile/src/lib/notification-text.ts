@@ -76,6 +76,8 @@ export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>):
   return n.payload.threadId ?? /^skilled:\/\/threads\/([^/?#]+)$/.exec(n.payload.url)?.[1] ?? null
 }
 
+/** Kinds about a request or its quote (no booking yet): the request screen is their job page today; booking-stage kinds keep the booking screen. */
+const REQUEST_STAGE: Notification['kind'][] = ['request-received', 'quote-received', 'quote-expiring', 'request-expired', 'request-withdrawn', 'request-declined', 'request-reopened', 'request-updated', 'time-proposed']
 const ID = /^[\w-]{1,100}$/ // the rule pushRoute uses
 const idOf = (payload: object, key: 'bookingId' | 'requestId'): string | null => {
   const v = (payload as Record<string, unknown>)[key]
@@ -91,7 +93,8 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'> & {
     const slug = 'url' in n.payload ? /^https?:\/\/[^/]+\/providers\/([^/?#]+)/.exec(n.payload.url)?.[1] : undefined
     return slug ? { path: `/provider/${slug}` } : null
   }
-  if (n.job && ID.test(n.job.id) && (idOf(n.payload, 'bookingId') || idOf(n.payload, 'requestId'))) return { path: `/bookings/request/${n.job.id}` } // the job page; an app or notice without `job` keeps the old target below
+  // PR 4: every kind opens the job page once /bookings/request/[id] is the job page
+  if (n.job && REQUEST_STAGE.includes(n.kind) && ID.test(n.job.id) && (idOf(n.payload, 'bookingId') || idOf(n.payload, 'requestId'))) return { path: `/bookings/request/${n.job.id}` } // the job page; an app or notice without `job` keeps the old target below
   const bookingId = idOf(n.payload, 'bookingId')
   const requestId = idOf(n.payload, 'requestId')
   const [first, second] = REQUEST_SCREEN_KINDS.includes(n.kind) ? [['request', requestId], ['booking', bookingId]] as const : [['booking', bookingId], ['request', requestId]] as const
