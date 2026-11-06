@@ -310,6 +310,7 @@ export const de = {
   'notification.requestReceived': 'Du hast eine neue Anfrage mit Datum, Uhrzeit und Ort. Sende ein Angebot oder lehne ab, innerhalb von 3 Tagen.',
   'notification.quoteReceived': 'Für Deine Anfrage liegt ein Angebot vor. Bestätige es, um zu buchen; es gilt 7 Tage.',
   'notification.bookingAccepted': 'Zahlung fällig: Datum und Uhrzeit sind von beiden Seiten bestätigt. Zahle bis zu dem in der App angezeigten Datum.',
+  'notice.withJob': '{job}: {text}',
   'notification.more': '+{n} weitere Nachrichten',
   'notification.bookingExpired': 'Eine Buchung ist abgelaufen, weil sie nicht rechtzeitig beantwortet oder bezahlt wurde. Wenn du die Anfrage gestellt hattest und den Auftrag noch brauchst, sende eine neue Anfrage.',
   'notification.paymentReminder': 'Deine Buchung ist noch nicht bezahlt. Bitte zahle, bevor sie abläuft.',

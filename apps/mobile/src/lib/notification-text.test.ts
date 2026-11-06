@@ -96,3 +96,15 @@ test('isBookingNotice is false for profile-live and message-received', () => {
   expect(is('quote-received', { bookingId: 'b-1' })).toBe(true)
   expect(is('requests-ignored', {})).toBe(true)
 })
+
+test('a notice with a job names it in the text and opens the job page; without a job the old target stays', () => {
+  const job = { id: 'req-1', number: 1040, title: 'Photo session', otherParty: 'Anna H.' }
+  expect(notificationText('quote-received', {}, job)).toBe('notice.withJob {"job":"#1040 Photo session","text":"notification.quoteReceived"}')
+  expect(notificationText('quote-received', {}, null)).toBe('notification.quoteReceived')
+  for (const kind of NOTIFICATION_KINDS) expect(notificationText(kind, {}, job) === null).toBe(notificationText(kind, {}) === null)
+  expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' }, job })).toEqual({ path: '/bookings/request/req-1' })
+  expect(notificationTarget({ kind: 'request-received', payload: { requestId: 'r-9' }, job })).toEqual({ path: '/bookings/request/req-1' })
+  expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' } })).toEqual({ path: '/bookings/b-1' })
+  expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' }, job: null })).toEqual({ path: '/bookings/b-1' })
+  expect(notificationTarget({ kind: 'customers-waiting', payload: {}, job })).toEqual({ path: '/my-profile' })
+})

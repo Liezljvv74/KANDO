@@ -27,6 +27,9 @@ export const BirthDateSchema = z
 export const NOTIFICATION_KINDS = ['profile-live', 'request-received', 'quote-received', 'booking-accepted', 'booking-expired', 'payment-reminder', 'quote-expiring', 'request-expired', 'requests-ignored', 'message-received', 'booking-paid', 'payment-received', 'payment-late-refunded', 'payout-setup-complete', 'customers-waiting', 'provider-available', 'refund-issued', 'job-finished', 'confirm-reminder', 'payment-released', 'was-job-done', 'booking-cancelled', 'no-show-reported', 'dispute-opened', 'dispute-decided', 'job-stopped', 'stop-amount-stated', 'additional-task-requested', 'review-requested', 'review-visible', 'provider-warning', 'invoice-ready', 'commission-invoice-ready', 'request-withdrawn', 'request-declined', 'request-reopened', 'request-updated', 'time-proposed', 'time-to-confirm', 'quote-confirmed'] as const
 /** Kinds about a request whose booking (if named) has ended: the push and the in-app notice open the request, not the booking. */
 export const REQUEST_SCREEN_KINDS: readonly (typeof NOTIFICATION_KINDS)[number][] = ['request-withdrawn', 'request-declined', 'request-reopened']
+/** The job a notice is about, looked up when the notice is read (never stored): the root request's id, its number and title, and the other party's public name. */
+export const NoticeJobSchema = z.object({ id: z.string(), number: z.number().int(), title: z.string(), otherParty: z.string() })
+export type NoticeJob = z.infer<typeof NoticeJobSchema>
 export const NotificationSchema = z.object({
   id: z.string(),
   kind: z.enum(NOTIFICATION_KINDS),
@@ -35,6 +38,8 @@ export const NotificationSchema = z.object({
   createdAt: z.string(),
   seenAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),
+  /** Additive: absent from older servers, null when the notice has no job or it cannot be resolved. */
+  job: NoticeJobSchema.nullable().optional().catch(null),
 })
 export type Notification = z.infer<typeof NotificationSchema>
 

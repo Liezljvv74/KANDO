@@ -311,6 +311,7 @@ export const en: Record<AppKey, string> = {
   'notification.requestReceived': 'You have a new request with a date, time and place. Send a quote or decline within 3 days.',
   'notification.quoteReceived': 'A quote is ready for your request. Confirm it to book; it is valid for 7 days.',
   'notification.bookingAccepted': 'Payment due: the date and time are confirmed by both sides. Pay by the date shown in the app.',
+  'notice.withJob': '{job}: {text}',
   'notification.more': '+{n} more messages',
   'notification.bookingExpired': 'A booking expired because it was not answered or paid in time. If you made the request and still need the job, send a new request.',
   'notification.paymentReminder': 'Your booking is not paid yet. Please pay before it expires.',

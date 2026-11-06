@@ -4,6 +4,7 @@ import { bookings, db, quotes, users } from '@kando/db'
 import { DEFAULT_LANG, isLang, t, type Key } from '@kando/i18n'
 import { sendEmail, type BookingTemplate, type Template } from '../email'
 import { describeError } from '../log-error'
+import { jobLabel, jobsForNotices } from './notice-job'
 import { createNotification, type NotificationKind } from '../notifications-store'
 import { emailDateTime, providerUrl } from '../notifications'
 import { pushReaches, sendPush } from '../push'
@@ -57,6 +58,9 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
         console.error('[notify] booking notification failed', describeError(e)) // the email must still go out
       }
     }
+    // the job the event is about, by its number and title, in the email and the push (the push template itself stays free of placeholders)
+    const job = (await jobsForNotices(db, userId, [params]).catch(() => [null]))[0]
+    const label = job ? jobLabel(job) : undefined
     const iso = params.date ?? (await dateOf(kind, params))
     const template: Template =
       kind === 'additional-task-requested' && params.role === 'provider' ? 'additional-task-requested-provider'
@@ -65,11 +69,11 @@ export async function notifyBookingEvent(kind: BookingKind, userId: string, para
       : kind === 'refund-issued' && params.role === 'provider' ? 'refund-issued-provider'
       : kind
     if (kind !== 'message-received' || !(await pushReaches(userId, kind))) {
-      await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason } })
+      await sendEmail({ to: user.email, lang, template, params: { date: iso ? emailDateTime(new Date(iso), lang) : '', url, count: params.count, reason: params.reason, job: label } })
     }
     // invoice-ready names what the provider issued: an invoice, or (private providers) a receipt
     const push = kind === 'invoice-ready' && params.variant === 'receipt' ? 'invoice-ready.receipt' : kind
-    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: t(lang, `push.${push}.body` as Key), url: appUrl(kind, params) })
+    await sendPush(userId, { kind, title: t(lang, `push.${push}.title` as Key), body: ((b) => (label ? t(lang, 'notice.withJob', { job: label, text: b }) : b))(t(lang, `push.${push}.body` as Key)), url: appUrl(kind, params) })
   } catch (e) {
     console.error('[notify] booking event failed', describeError(e))
   }
