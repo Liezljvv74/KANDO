@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
-import { ProviderDetailSchema } from '@kando/contract'
+import { OwnServicesListSchema, ProviderDetailSchema } from '@kando/contract'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
+import { call, cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/providers/[slug]/route')
+const services = await import('../app/app-api/v1/services/route')
 
 let categoryId: string
 let docCategoryId: string
@@ -81,4 +82,11 @@ it("anonymous: the page carries the owner's profile photo and the public name, n
   const raw = await (await get('pp-lena-slug')).json()
   expect(raw).not.toHaveProperty('displayName')
   expect(ProviderDetailSchema.parse(raw)).toMatchObject({ publicName: 'Lena F.', photoUrl: 'https://media.test/users/pp-lena/profile.jpg' })
+})
+
+it('public profile and My business show the same service title', async () => {
+  const mine = OwnServicesListSchema.parse(await (await call(services.GET, 'pp-a')).json())
+  const res = await get('pp-a-slug', '?lang=en')
+  const pub = ProviderDetailSchema.parse(await res.json())
+  expect(pub.services.map((s) => s.title).sort()).toEqual(mine.docs.filter((s) => s.visibleInSearch).map((s) => s.title).sort())
 })

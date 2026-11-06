@@ -3,7 +3,8 @@ import { lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
 import { DOCUMENT_TYPES, type ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
 import { canTransact, paymentsEnabled } from './payments/rules'
-import type { Lang } from '@kando/i18n'
+import { DEFAULT_LANG, type Lang } from '@kando/i18n'
+import { jobTitle } from './bookings/job-ref'
 import { photoUrl } from './storage'
 import { needsTranslation, textsOf } from './translate'
 import { latestReviews, ratingsOf } from './reviews'
@@ -49,8 +50,9 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
   if (!ids.length) return null // same rule as search: no page until a service may be offered
 
   // one after another: one request transaction is one connection, and pg queues (and pg 9 refuses) parallel queries on it
-  const services = await tx.execute<{ id: string; category: string; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
-    SELECT s.id, c.slug AS category, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
+  const services = await tx.execute<{ id: string; category: string; category_name: string | null; title: string; description: string | null; price_type: string; price: string | null; currency: string }>(sql`
+    SELECT s.id, c.slug AS category,
+           COALESCE((SELECT name FROM category_texts WHERE category_id = c.id AND lang = ${lang}), (SELECT name FROM category_texts WHERE category_id = c.id AND lang = ${DEFAULT_LANG})) AS category_name, s.title, s.description, s.price_type, s.price, s.currency FROM services s JOIN categories c ON c.id = s.category_id
     WHERE s.provider_id = ${p.id} AND s.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
     ORDER BY s.sort, s.created_at, s.id`)
   const references = await tx.execute<{ id: string; client_name: string; description: string; year: number | null }>(sql`
@@ -86,7 +88,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     services: services.rows.map((s) => ({
       id: s.id,
       category: s.category,
-      title: s.title,
+      title: jobTitle(s.title, s.category_name ?? ''), // the same rule as the job title, so My business and the public page agree
       description: s.description,
       priceType: s.price_type as 'fixed' | 'hourly' | 'from' | 'on-request',
       price: s.price === null ? null : Number(s.price),

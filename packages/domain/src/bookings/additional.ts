@@ -10,7 +10,7 @@ import { fail } from '../providers/http'
 import { ADDITIONAL_PAY_HOURS } from './ending-rules'
 import { notifyBookingEvent } from './notify'
 import { lockRow, partyOf } from './party'
-import { liveRequest, toRequest } from './requests'
+import { liveRequest, toRequest, withRequestRefs } from './requests'
 import { REQUEST_ANSWER_DAYS } from './rules'
 
 type Row = typeof bookings.$inferSelect
@@ -68,7 +68,7 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
   await postCard(r.threadId, userId, { type: 'additional-task', refId: r.row.id })
   const to = side === 'customer' ? (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, r.row.providerId)))[0]?.id : r.row.customerId
   if (to) await notifyBookingEvent('additional-task-requested', to, { requestId: r.row.id, ...(side === 'customer' && { role: 'provider' }) }) // the provider is asked to quote
-  return toRequest(r.row, now)
+  return (await withRequestRefs(tx, [toRequest(r.row, now)], userId))[0]!
 }
 
 /**

@@ -169,3 +169,11 @@ it('an optional document never holds a service back, and an approved one changes
   await pool.query("INSERT INTO documents (owner_id, requirement, key, status) VALUES ('sr2', 'police-certificate', 'k2', 'approved')")
   expect((await find('Mixed')).waitingFor).toEqual([])
 })
+
+it('a blank or whitespace title patch restores the category name, never a blank title', async () => {
+  await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenpflege'), ($1, 'en', 'Gardening') ON CONFLICT DO NOTHING", [categoryId])
+  const created = OwnServiceSchema.parse(await (await call(services.POST, 'sr1', 'POST', svc({ title: 'Eigener Titel' }))).json())
+  const res = await call(service.PATCH, 'sr1', 'PATCH', { title: '   ' }, { id: created.id })
+  expect(res.status).toBe(200)
+  expect(['Gartenpflege', 'Gardening']).toContain(OwnServiceSchema.parse(await res.json()).title)
+})
