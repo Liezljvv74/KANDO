@@ -8,6 +8,8 @@ How to use: do the parts in order, tick each line, write what you saw next to an
 
 ## Part 0: before you start
 
+Note (5 November 2026): all earlier test users were deleted from production (only the admin remains), so sign up a new customer and a new provider account first.
+
 - [ ] Installed the newest build (preview, Android). The version code is on the EAS page.
 - [ ] Sign-up shows an unticked checkbox with links to the terms and the privacy policy. Without the tick, sign-up refuses with a clear text (German and English). The links open the pages (they show "not found" until the pages are published: note it).
 - [ ] German is the default language; switching to English changes every screen you visit.
@@ -75,6 +77,16 @@ Taps (quote to paid): ____
 - [ ] The person sees nothing extra on screen (owner decision of 3 November).
 - [ ] Staff see the suggestion panel in the back office and decide as before.
 - [ ] A document of an account that has not accepted the terms goes to staff with the reason "terms not accepted".
+
+Documents screen (added 5 November 2026, PR #90; provider account, My profile, documents):
+
+- [ ] The screen has two collapsible groups: Required documents and Optional documents.
+- [ ] Required is red while any required document is missing or rejected, and it starts open.
+- [ ] Required turns green only when every required document is approved; while documents are in review it is neutral.
+- [ ] Optional is indigo while none is uploaded, and it starts closed.
+- [ ] A rejected optional document turns that group red and opens it, with the rejection note visible.
+- [ ] The counter next to each heading counts approved documents only, for example 1/2.
+- [ ] The arrow toggles the group, and the rows keep their add and edit buttons.
 
 ## Part 7: scan your ID card (optional feature; a made-up or your own test card, never someone else's)
 
