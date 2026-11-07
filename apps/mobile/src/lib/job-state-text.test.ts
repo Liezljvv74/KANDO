@@ -22,10 +22,39 @@ test.each(['de', 'en'] as const)('every state key has a text for both viewers in
     }
 })
 
-test('missing placeholders get a plain stand-in, never a raw {name}', () => {
+const ctxs = [{}, { number: 7 }, { amount: 10 }, { net: 8, date: '2027-01-05T10:00:00Z' }, { refund: true }, { refund: true, amount: 10, number: 7 }, ctx]
+const variants = (key: string) => [st(key), ...(key === 'time_to_agree' ? [st(key, { buttons: ['agree_time'] })] : [])]
+
+test.each(['de', 'en'] as const)('with any missing value no text prints a placeholder, a dash or a double space (%s)', (l) => {
+  mockLang = l
+  for (const c of ctxs)
+    for (const key of JOB_STATE_KEYS)
+      for (const state of variants(key))
+        for (const viewer of ['customer', 'provider'] as const) {
+          const x = stateText(state, viewer, c)!
+          for (const text of [x.title, x.body]) {
+            expect(text).not.toMatch(/[{}]|–| {2}|job\.state/)
+            expect(text.length).toBeGreaterThan(0)
+          }
+        }
+})
+
+test('texts without the unknown clause (German)', () => {
+  mockLang = 'de'
+  expect(stateText(st('paid_upcoming'), 'provider')!.body).toBe('Du erhältst das Geld nach dem Auftrag.')
+  expect(stateText(st('problem_reported'), 'customer', { number: 5 })!.body).toBe('Unser Team entscheidet. Auftrag #5. Bis dahin wird kein Geld bewegt.')
+  expect(stateText(st('time_to_agree'), 'customer')!.title).toBe('Termin vorgeschlagen')
+  expect(stateText(st('time_to_agree'), 'provider')!.body).toContain('Du hast einen Termin vorgeschlagen')
+  expect(stateText(st('delayed'), 'customer', { refund: true, amount: 12, number: 3 })!.title).toBe('Erstattung verzögert')
+  expect(stateText(st('delayed'), 'customer', { refund: true, amount: 12, number: 3 })!.body).toBe('Wir konnten deine Erstattung von EUR 12 nicht abschließen. Unser Team kümmert sich darum. Auftrag #3.')
+})
+
+test('a provider on a cancelled and delayed booking is owed nothing: no amount waits for them', () => {
   mockLang = 'en'
-  const x = stateText(st('work_done_waiting'), 'customer')!
-  expect(x.body).not.toMatch(/[{}]/)
+  const x = stateText(st('delayed'), 'provider', { refund: true, net: 8, number: 3 })!
+  expect(x.body).toBe('A payment step is delayed. Our team is on it.')
+  expect(stateText(st('delayed'), 'provider', { net: 8, number: 3 })!.body).toContain('EUR 8 is waiting')
+  expect(stateText(st('delayed'), 'provider', { number: 3 })!.body).not.toContain('waiting')
 })
 
 test('amounts, dates and the job number are filled in', () => {
@@ -56,6 +85,12 @@ test('an unknown key shows the generic text; a missing state is null', () => {
   mockLang = 'en'
   expect(stateText(st('something_new'), 'customer')).toEqual({ title: 'Job status', body: 'Open the job to see what happens next.' })
   expect(stateText(undefined, 'customer')).toBeNull()
+})
+
+test('a cancelled booking never gets a date from answerBy', () => {
+  const b = { amount: 50, currency: 'EUR', payBy: 'P', confirmBy: 'C', answerBy: 'A', startAt: 'S', status: 'cancelled' }
+  expect(bookingStateCtx({ ...b, jobState: st('cancelled') }).date).toBeUndefined()
+  expect(bookingStateCtx({ ...b, jobState: st('time_to_agree') }).date).toBe('A')
 })
 
 test('the context helpers pick the date that belongs to the state', () => {
