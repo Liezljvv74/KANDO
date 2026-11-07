@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { currentBookingOf, deriveJobState, type JobBookingInput, type JobButton, type JobViewer } from './job-state'
+import { CHECKOUT_PATIENCE_MS, currentBookingOf, deriveJobState, type JobBookingInput, type JobButton, type JobViewer } from './job-state'
 
 const at = (h: number) => new Date(Date.UTC(2026, 10, 10, 12 + h)) // hours from now
 const now = at(0)
@@ -27,7 +27,7 @@ describe('request without a booking', () => {
   })
   it('quoted: quote sent', () => {
     const request = { status: 'quoted', answerBy: at(24), quoteValidUntil: at(48) }
-    expect(pick(state('customer', null, { request }))).toEqual(['quote_sent', 'needs_you', ['accept_quote', 'open_chat']])
+    expect(pick(state('customer', null, { request }))).toEqual(['quote_sent', 'needs_you', ['accept_quote', 'ask_question', 'open_chat']])
     expect(pick(state('provider', null, { request }))).toEqual(['quote_sent', 'active', chat])
   })
   it('expired quote, unanswered request past its deadline, withdrawn, declined, expired: past', () => {
@@ -44,14 +44,26 @@ describe('booking states, both viewers, exact buttons', () => {
   it('awaiting time (no agreed time): quote_sent, active, chat only', () => {
     for (const v of ['customer', 'provider'] as const) expect(pick(state(v, { status: 'awaiting-time', answerBy: at(10) }))).toEqual(['quote_sent', 'active', chat])
   })
+  it('a proposed time waits for the other side', () => {
+    const b = { status: 'awaiting-time', answerBy: at(10), timeProposedBy: 'customer' }
+    expect(pick(state('customer', b))).toEqual(['time_to_agree', 'active', chat])
+    expect(pick(state('provider', b))).toEqual(['time_to_agree', 'needs_you', ['agree_time', 'open_chat']])
+    expect(pick(state('customer', { ...b, timeProposedBy: 'provider' }))).toEqual(['time_to_agree', 'needs_you', ['agree_time', 'open_chat']])
+  })
   it('awaiting time past answerBy: declined_expired', () => expect(state('customer', { status: 'awaiting-time', answerBy: at(-1) }).key).toBe('declined_expired'))
   it('payment due', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30) }
     expect(pick(state('customer', b))).toEqual(['payment_due', 'needs_you', ['pay']])
     expect(pick(state('provider', b))).toEqual(['payment_due', 'active', []])
   })
-  it('checkout not completed', () => {
+  it('a fresh or unknown-age checkout is still payment due', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1' }
+    expect(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS) }).key).toBe('payment_due')
+    expect(pick(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - 60_000) }))).toEqual(['payment_due', 'needs_you', ['pay']])
+    expect(state('customer', b).key).toBe('payment_due')
+  })
+  it('checkout not completed', () => {
+    const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1', checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS - 1) }
     expect(pick(state('customer', b))).toEqual(['checkout_not_completed', 'needs_you', ['pay']])
     expect(pick(state('provider', b))).toEqual(['checkout_not_completed', 'active', []])
   })
