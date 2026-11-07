@@ -6,8 +6,8 @@ const at = (h: number) => new Date(Date.UTC(2026, 10, 10, 12 + h)) // hours from
 const now = at(0)
 const booking = (o: Partial<JobBookingInput> = {}): JobBookingInput => ({ id: 'b1', status: 'confirmed', createdAt: at(-100), startAt: at(-1), ...o })
 const reqOpen = { status: 'open', answerBy: at(24) }
-const state = (viewer: JobViewer, b: Partial<JobBookingInput> | null, o: { request?: Parameters<typeof deriveJobState>[0]['request']; delayedFlag?: boolean; ready?: boolean } = {}) =>
-  deriveJobState({ viewer, request: o.request ?? { status: 'booked', answerBy: at(24) }, bookings: b ? [booking(b)] : [], delayedFlag: o.delayedFlag ?? false, providerPayoutReady: o.ready ?? true, now })
+const state = (viewer: JobViewer, b: Partial<JobBookingInput> | null, o: { request?: Parameters<typeof deriveJobState>[0]['request']; delayedFlag?: boolean; ready?: boolean; unread?: boolean } = {}) =>
+  deriveJobState({ viewer, request: o.request ?? { status: 'booked', answerBy: at(24) }, bookings: b ? [booking(b)] : [], delayedFlag: o.delayedFlag ?? false, providerPayoutReady: o.ready ?? true, unread: o.unread ?? false, now })
 const pick = (s: ReturnType<typeof deriveJobState>) => [s.key, s.section, s.buttons] as [string, string, JobButton[]]
 const chat: JobButton[] = ['open_chat']
 
@@ -32,7 +32,7 @@ describe('request without a booking', () => {
   })
   it('expired quote, unanswered request past its deadline, withdrawn, declined, expired: past', () => {
     for (const request of [{ status: 'quoted', answerBy: at(24), quoteValidUntil: at(-1) }, { status: 'open', answerBy: at(-1) }, { status: 'withdrawn', answerBy: at(24) }, { status: 'declined', answerBy: at(24) }, { status: 'expired', answerBy: at(24) }])
-      for (const v of ['customer', 'provider'] as const) expect(pick(state(v, null, { request }))).toEqual(['declined_expired', 'past', []])
+      for (const v of ['customer', 'provider'] as const) expect(pick(state(v, null, { request }))).toEqual(['declined_expired', 'past', v === 'customer' ? ['ask_someone_else'] : []])
   })
   it('a lapsed booking on a request that reads open again falls back to the request', () => {
     expect(state('customer', { status: 'expired', startAt: at(5) }, { request: reqOpen }).key).toBe('request_sent')
@@ -79,15 +79,15 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('paid, upcoming: customer paid_upcoming, provider before_start_time with the start time and finish', () => {
     const b = { status: 'confirmed', startAt: at(5) }
-    expect(pick(state('customer', b))).toEqual(['paid_upcoming', 'active', ['open_chat', 'cancel']])
+    expect(pick(state('customer', b))).toEqual(['paid_upcoming', 'active', ['add_task', 'open_chat', 'cancel']])
     const p = state('provider', b)
     expect(pick(p)).toEqual(['before_start_time', 'active', ['finish', 'open_chat', 'cancel']])
     expect(p.startAt).toEqual(at(5))
   })
   it('start time passed', () => {
     const b = { status: 'confirmed', startAt: at(-1) }
-    expect(pick(state('customer', b))).toEqual(['start_time_passed', 'active', chat])
-    expect(pick(state('provider', b))).toEqual(['start_time_passed', 'needs_you', ['finish', 'open_chat']])
+    expect(pick(state('customer', b))).toEqual(['start_time_passed', 'active', ['open_chat', 'no_show']])
+    expect(pick(state('provider', b))).toEqual(['start_time_passed', 'needs_you', ['finish', 'open_chat', 'no_show']])
   })
   it('customer asked "was it done" without a finish: customer confirms', () => {
     const b = { status: 'confirmed', startAt: at(-3), askedDoneAt: at(-1) }
@@ -108,7 +108,7 @@ describe('booking states, both viewers, exact buttons', () => {
   it('payout account missing', () => {
     const b = { status: 'finished', confirmBy: at(-1) }
     expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', []])
-    expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', []])
+    expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', ['set_up_payouts']])
   })
   it('problem reported (disputed, no-show, stopped without an amount)', () => {
     for (const b of [{ status: 'disputed' }, { status: 'confirmed', noShow: 'provider' }, { status: 'stopped' }])
@@ -126,7 +126,7 @@ describe('booking states, both viewers, exact buttons', () => {
   it('completed: past, with the payout date', () => {
     for (const v of ['customer', 'provider'] as const) {
       const s = state(v, { status: 'completed', releasedAt: at(-2) })
-      expect(pick(s)).toEqual(['completed', 'past', []])
+      expect(pick(s)).toEqual(['completed', 'past', ['review', 'receipt']])
       expect(s.paidOutAt).toEqual(at(-2))
     }
   })
@@ -136,7 +136,7 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('a failed refund (open flag) is delayed, Active', () => expect(pick(state('customer', { status: 'cancelled' }, { delayedFlag: true }))).toEqual(['delayed', 'active', ['contact_support']]))
   it('declined, expired, withdrawn booking: past, no buttons', () => {
-    for (const status of ['declined', 'expired', 'withdrawn']) for (const v of ['customer', 'provider'] as const) expect(pick(state(v, { status }, { request: { status: 'booked', answerBy: at(1) } }))).toEqual(['declined_expired', 'past', []])
+    for (const status of ['declined', 'expired', 'withdrawn']) for (const v of ['customer', 'provider'] as const) expect(pick(state(v, { status }, { request: { status: 'booked', answerBy: at(1) } }))).toEqual(['declined_expired', 'past', v === 'customer' ? ['ask_someone_else'] : []])
   })
   it('a problem sits in active whatever else is open (flag, unready payout, unread-style states)', () => {
     for (const v of ['customer', 'provider'] as const) {
@@ -148,5 +148,33 @@ describe('booking states, both viewers, exact buttons', () => {
   it('a live booking beats a newer cancelled one in the derived state', () => {
     const s = deriveJobState({ viewer: 'customer', request: { status: 'booked', answerBy: at(1) }, bookings: [booking({ id: 'a', status: 'confirmed', startAt: at(5), createdAt: at(-5) }), booking({ id: 'b', status: 'cancelled', createdAt: at(-1) })], delayedFlag: false, providerPayoutReady: true, now })
     expect(s.key).toBe('paid_upcoming')
+  })
+})
+
+describe('unread messages (spec 8b point 5)', () => {
+  const b = { status: 'confirmed', startAt: at(5) }
+  it('an active job with an unread message goes to needs_you and counts', () => {
+    const s = state('customer', b, { unread: true })
+    expect([s.key, s.section, s.countsForMe]).toEqual(['paid_upcoming', 'needs_you', true])
+  })
+  it('no unread: the section is unchanged and does not count', () => {
+    const s = state('customer', b)
+    expect([s.section, s.countsForMe]).toEqual(['active', false])
+  })
+  it('a problem or a delayed payment stays active, and counts only when unread', () => {
+    for (const [bk, o] of [[{ status: 'disputed' }, {}], [{ status: 'completed' }, { delayedFlag: true }]] as const) {
+      const s = state('customer', bk, { ...o, unread: true })
+      expect([s.section, s.countsForMe]).toEqual(['active', true])
+      expect([state('customer', bk, o).section, state('customer', bk, o).countsForMe]).toEqual(['active', false])
+    }
+  })
+  it('a past job with an unread message goes to needs_you', () => {
+    const s = state('customer', { status: 'completed', releasedAt: at(-2) }, { unread: true })
+    expect([s.key, s.section, s.countsForMe]).toEqual(['completed', 'needs_you', true])
+  })
+  it('needs_you counts even without unread', () => expect(state('provider', { status: 'confirmed', startAt: at(-1) }).countsForMe).toBe(true))
+  it('a request without a booking also follows the rule', () => {
+    const s = state('customer', null, { request: reqOpen, unread: true })
+    expect([s.key, s.section, s.countsForMe]).toEqual(['request_sent', 'needs_you', true])
   })
 })

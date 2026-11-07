@@ -7,6 +7,7 @@ export type JobStateKey =
   | 'work_done_waiting' | 'payout_on_its_way' | 'payout_account_missing' | 'problem_reported' | 'delayed' | 'completed' | 'cancelled' | 'declined_expired' | 'time_to_agree'
 
 export type JobButton = 'accept_quote' | 'ask_question' | 'send_quote' | 'decline' | 'pay' | 'cancel' | 'finish' | 'confirm' | 'report_problem' | 'contact_support' | 'open_chat' | 'agree_time'
+  | 'set_up_payouts' | 'add_task' | 'review' | 'receipt' | 'no_show' | 'ask_someone_else'
 
 export type JobViewer = 'customer' | 'provider'
 export type JobSection = 'needs_you' | 'active' | 'past'
@@ -55,13 +56,16 @@ export function currentBookingOf<B extends { id: string; status: string; created
  * `time_to_agree` (awaiting-time with a time proposed by one side): spec 4.4 has no row for it, the owner will be told.
  */
 type Out = { key: JobStateKey; section: JobSection; tone: JobTone; buttons: JobButton[]; paidOutAt?: Date; startAt?: Date }
+/** `countsForMe`: the job adds to the viewer's "Needs you" counter (section needs_you, or a problem/delayed job with an unread message). */
+export type JobState = Out & { countsForMe: boolean }
 
 /**
  * Decisions where the spec table and the stored statuses do not line up:
  * - the request's own state is used when there is no booking, or when the current booking lapsed (expired/declined/withdrawn) and the job reads open again.
  * - `awaiting-time` (quote accepted, time not agreed yet) has no row: shown as `quote_sent` (Active, open chat); it is `declined_expired` once answerBy passed.
  * - `checkout_not_completed` = awaiting-payment with a checkout reference older than CHECKOUT_PATIENCE_MS or whose session deadline passed (the phone-memory pay state is gone).
- * - the customer's "Withdraw request" is the `cancel` button; no JobButton exists for set-up-payouts, additional task, review, receipt, no-show: the app derives them from the key.
+ * - the customer's "Withdraw request" is the `cancel` button; the other table buttons (set_up_payouts, add_task, review, receipt, no_show, ask_someone_else) are emitted per the spec table.
+ * - `unread` (spec 8b point 5, 4.2): an active or past job with an unread message moves to needs_you, except problem_reported and delayed, which stay active (red) and only count.
  * - `before_start_time` is provider-only (the table shows a customer nothing special): the customer sees `paid_upcoming`. It returns `startAt`.
  * - confirmed + noShow reported, `disputed`, and `stopped` without an agreed amount (no confirmBy) are `problem_reported`; `stopped` with confirmBy is paid like `finished`.
  * - confirmed past start with askedDoneAt: the customer gets `work_done_waiting` (confirm or report); the provider still gets `start_time_passed`.
@@ -70,17 +74,26 @@ type Out = { key: JobStateKey; section: JobSection; tone: JobTone; buttons: JobB
  */
 export function deriveJobState(i: {
   viewer: JobViewer
+  /** The viewer has an unread message in the job's chat. */
+  unread?: boolean
   request: JobRequestInput
   bookings: JobBookingInput[]
   delayedFlag: boolean
   providerPayoutReady: boolean
   now: Date
-}): Out {
+}): JobState {
+  const s = baseState(i)
+  const stays = s.key === 'problem_reported' || s.key === 'delayed'
+  const section = i.unread && !stays ? 'needs_you' : s.section
+  return { ...s, section, countsForMe: section === 'needs_you' || !!i.unread }
+}
+
+function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
   const { viewer, request, now } = i
   const customer = viewer === 'customer'
   const out = (key: JobStateKey, section: JobSection, tone: JobTone, buttons: JobButton[], extra: Partial<Out> = {}): Out => ({ key, section, tone, buttons, ...extra })
   const chat: JobButton[] = ['open_chat']
-  const dead = out('declined_expired', 'past', 'info', [])
+  const dead = out('declined_expired', 'past', 'info', customer ? ['ask_someone_else'] : [])
 
   const b = currentBookingOf(i.bookings)
   const shown = b ? bookingShownStatus({ status: b.status, answerBy: b.answerBy ?? null, payBy: b.payBy ?? null }, now) : undefined
@@ -101,7 +114,7 @@ export function deriveJobState(i: {
   const paidOut = b.releasedAt ?? undefined
   const payoutStage = () => {
     if (i.delayedFlag) return delayed
-    if (!i.providerPayoutReady) return customer ? out('payout_account_missing', 'active', 'info', []) : out('payout_account_missing', 'needs_you', 'warn', [])
+    if (!i.providerPayoutReady) return customer ? out('payout_account_missing', 'active', 'info', []) : out('payout_account_missing', 'needs_you', 'warn', ['set_up_payouts'])
     return out('payout_on_its_way', 'active', 'ok', chat)
   }
   const waiting = () => (customer ? out('work_done_waiting', 'needs_you', 'warn', ['confirm', 'report_problem', ...chat]) : out('work_done_waiting', 'active', 'info', chat))
@@ -121,11 +134,11 @@ export function deriveJobState(i: {
     case 'confirmed': {
       if (b.noShow) return problem
       if (b.startAt > now) {
-        if (customer) return out('paid_upcoming', 'active', 'ok', ['open_chat', 'cancel'])
+        if (customer) return out('paid_upcoming', 'active', 'ok', ['add_task', 'open_chat', 'cancel'])
         return out('before_start_time', 'active', 'info', ['finish', 'open_chat', 'cancel'], { startAt: b.startAt })
       }
-      if (customer) return b.askedDoneAt ? waiting() : out('start_time_passed', 'active', 'info', chat)
-      return out('start_time_passed', 'needs_you', 'warn', ['finish', ...chat])
+      if (customer) return b.askedDoneAt ? waiting() : out('start_time_passed', 'active', 'info', [...chat, 'no_show'])
+      return out('start_time_passed', 'needs_you', 'warn', ['finish', ...chat, 'no_show'])
     }
     case 'finished':
       return b.confirmBy && b.confirmBy > now ? waiting() : payoutStage()
@@ -135,7 +148,7 @@ export function deriveJobState(i: {
     case 'disputed':
       return problem
     case 'completed':
-      return paidOut ? out('completed', 'past', 'ok', [], { paidOutAt: paidOut }) : payoutStage()
+      return paidOut ? out('completed', 'past', 'ok', ['review', 'receipt'], { paidOutAt: paidOut }) : payoutStage()
     case 'cancelled':
     case 'refunded':
       return i.delayedFlag ? delayed : out('cancelled', 'past', 'info', chat)
