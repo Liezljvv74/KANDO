@@ -85,7 +85,7 @@ export default function RequestDetail() {
       </Card>
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       <OpenChat find={async () => request.threadId ?? null} />
-      {!!request.jobState?.buttons.includes('contact_support') && <Button label={t('job.button.contactSupport')} onPress={() => openSupport({ number: request.jobNumber ?? 0, title: request.title ?? '' })} />}
+      {!!request.jobState?.buttons.includes('contact_support') && <Button label={t('job.button.contactSupport')} onPress={() => openSupport({ number: request.jobNumber, title: request.title })} />}
       <SectionTitle text={t('booking.quotes')} />
       {quotes.length === 0 && <Text style={styles.small}>{t('booking.noQuotes')}</Text>}
       {quotes.map((q) => (

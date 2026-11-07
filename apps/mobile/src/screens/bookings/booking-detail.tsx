@@ -122,7 +122,7 @@ export default function BookingDetail() {
       {b.status === 'disputed' && <DisputeInfo booking={b} />}
       {b.status === 'completed' && !b.parentBookingId && <ReviewPanel booking={b} />}
       <OpenChat find={async () => data.threadId} />
-      {!!b.jobState?.buttons.includes('contact_support') && <Button label={t('job.button.contactSupport')} onPress={() => openSupport({ number: b.jobNumber ?? 0, title: b.title ?? '' })} />}
+      {!!b.jobState?.buttons.includes('contact_support') && <Button label={t('job.button.contactSupport')} onPress={() => openSupport({ number: b.jobNumber, title: b.title })} />}
       {!!notice && <Info text={notice} />}
       <ErrorText text={problem} />
       {bookingActions(b, viewer, now).map((a) => (

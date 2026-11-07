@@ -49,12 +49,15 @@ export function stateText(state: JobStateDto | undefined, viewer: 'customer' | '
   return { title: pick('title'), body: pick('body') }
 }
 
-/** The amounts and dates a booking's state text names (spec 4.4); what the DTO does not carry stays empty and reads "–". */
-export function bookingStateCtx(b: { amount: number; currency: string; payBy: string | null; confirmBy: string | null; answerBy: string | null; startAt: string; jobNumber?: number; status: string; jobState?: JobStateDto }): StateCtx {
+/** The amounts and dates a booking's state text names (spec 4.4). What the DTO does not carry stays out, and the text then reads without that clause. */
+export function bookingStateCtx(b: { amount: number; currency: string; payBy: string | null; confirmBy: string | null; answerBy: string | null; startAt: string; jobNumber?: number; status: string; stopAmount?: number | null; jobState?: JobStateDto }): StateCtx {
   const key = b.jobState?.key
-  // a date only from the field that truly means it; every other state reads without a date
-  const date = key === 'payment_due' || key === 'checkout_not_completed' ? b.payBy : key === 'completed' ? b.jobState?.paidOutAt : key === 'work_done_waiting' || key === 'payout_on_its_way' ? b.confirmBy : key === 'request_sent' || key === 'time_to_agree' ? b.answerBy : undefined
-  return { amount: b.amount, currency: b.currency, date, startAt: b.jobState?.startAt ?? b.startAt, number: b.jobNumber, refund: b.status === 'cancelled' }
+  // a date only from the field that truly means it; every other state reads without a date (payout_on_its_way: confirmBy is already past)
+  const date = key === 'payment_due' || key === 'checkout_not_completed' ? b.payBy : key === 'completed' ? b.jobState?.paidOutAt : key === 'work_done_waiting' ? b.confirmBy : key === 'request_sent' || key === 'time_to_agree' ? b.answerBy : undefined
+  const refund = b.status === 'cancelled' || b.status === 'refunded'
+  // the amount that is due: a stopped job pays the agreed stop amount (none known: no amount); a delayed refund may be only part of the price (late cancel)
+  const amount = b.status === 'stopped' ? (b.stopAmount ?? undefined) : key === 'delayed' && refund ? undefined : b.amount
+  return { amount, currency: b.currency, date, startAt: b.jobState?.startAt ?? b.startAt, number: b.jobNumber, refund }
 }
 
 /** The same for a request; `quote` is its newest live quote when the screen has loaded it. */

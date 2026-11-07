@@ -102,3 +102,34 @@ test('the context helpers pick the date that belongs to the state', () => {
   expect(requestStateCtx({ answerBy: 'A', jobState: st('quote_sent') }).date).toBeUndefined()
   expect(requestStateCtx({ answerBy: 'A' }, { amount: 9, currency: 'EUR', expiresAt: 'E' }).date).toBe('E')
 })
+
+test.each([
+  ['en', 'A payment step', 'We could not complete your refund. Our team is on it. Job #3.'],
+  ['de', 'Ein Zahlungsschritt', 'Wir konnten deine Erstattung nicht abschließen. Unser Team kümmert sich darum. Auftrag #3.'],
+] as const)('a delayed refund names no amount (%s): a late cancel refunds only part', (l, _p, body) => {
+  mockLang = l
+  const base = { amount: 100, currency: 'EUR', payBy: null, confirmBy: null, answerBy: null, startAt: 'S', jobNumber: 3 }
+  for (const status of ['cancelled', 'refunded']) {
+    const c = bookingStateCtx({ ...base, status, jobState: st('delayed') })
+    expect(c.amount).toBeUndefined()
+    expect(c.refund).toBe(true)
+    expect(stateText(st('delayed'), 'customer', c)!.body).toBe(body)
+  }
+})
+
+test.each(['de', 'en'] as const)('a stopped job names the stop amount, or none (%s)', (l) => {
+  mockLang = l
+  const base = { amount: 100, currency: 'EUR', payBy: null, confirmBy: 'C', answerBy: null, startAt: 'S', status: 'stopped' }
+  const withStop = bookingStateCtx({ ...base, stopAmount: 40, jobState: st('work_done_waiting') })
+  expect(withStop.amount).toBe(40)
+  expect(stateText(st('work_done_waiting'), 'customer', withStop)!.body).toContain('EUR 40')
+  expect(stateText(st('work_done_waiting'), 'customer', withStop)!.body).not.toContain('EUR 100')
+  const none = bookingStateCtx({ ...base, stopAmount: null, jobState: st('work_done_waiting') })
+  expect(none.amount).toBeUndefined()
+  expect(stateText(st('work_done_waiting'), 'customer', none)!.body).not.toMatch(/EUR|[{}]/)
+})
+
+test('payout_on_its_way never names a date (confirmBy is already past)', () => {
+  const b = { amount: 50, currency: 'EUR', payBy: null, confirmBy: 'C', answerBy: null, startAt: 'S', status: 'finished' }
+  expect(bookingStateCtx({ ...b, jobState: st('payout_on_its_way') }).date).toBeUndefined()
+})
