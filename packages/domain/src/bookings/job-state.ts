@@ -32,6 +32,8 @@ export type JobBookingInput = {
   timeProposedBy?: string | null
   /** When the open checkout was created. No column holds it today (checkout_ref is JSON {sessionId,url,expiresAt}); null/absent: unknown. */
   checkoutStartedAt?: Date | null
+  /** The checkout session's deadline (stored expiresAt): past it, the session certainly did not complete. */
+  checkoutExpiresAt?: Date | null
 }
 
 /** A checkout younger than this may still be in the customer's hands: not yet "did not go through" (the old CONFIRMING_MS of the phone). */
@@ -58,7 +60,7 @@ type Out = { key: JobStateKey; section: JobSection; tone: JobTone; buttons: JobB
  * Decisions where the spec table and the stored statuses do not line up:
  * - the request's own state is used when there is no booking, or when the current booking lapsed (expired/declined/withdrawn) and the job reads open again.
  * - `awaiting-time` (quote accepted, time not agreed yet) has no row: shown as `quote_sent` (Active, open chat); it is `declined_expired` once answerBy passed.
- * - `checkout_not_completed` = awaiting-payment with a checkout reference older than CHECKOUT_PATIENCE_MS (the phone-memory pay state is gone).
+ * - `checkout_not_completed` = awaiting-payment with a checkout reference older than CHECKOUT_PATIENCE_MS or whose session deadline passed (the phone-memory pay state is gone).
  * - the customer's "Withdraw request" is the `cancel` button; no JobButton exists for set-up-payouts, additional task, review, receipt, no-show: the app derives them from the key.
  * - `before_start_time` is provider-only (the table shows a customer nothing special): the customer sees `paid_upcoming`. It returns `startAt`.
  * - confirmed + noShow reported, `disputed`, and `stopped` without an agreed amount (no confirmBy) are `problem_reported`; `stopped` with confirmBy is paid like `finished`.
@@ -109,8 +111,10 @@ export function deriveJobState(i: {
       if (b.timeProposedBy) return b.timeProposedBy === viewer ? out('time_to_agree', 'active', 'info', chat) : out('time_to_agree', 'needs_you', 'warn', ['agree_time', ...chat])
       return out('quote_sent', 'active', 'info', chat)
     case 'awaiting-payment': {
-      // checkout_not_completed only once the checkout is older than the patience; no known start time: still payment_due
-      const stale = !!b.checkoutRef && !!b.checkoutStartedAt && now.getTime() - b.checkoutStartedAt.getTime() > CHECKOUT_PATIENCE_MS
+      // checkout_not_completed when the session expired (checkoutExpiresAt past), or its start is older than the patience; no known timestamp: still payment_due
+      const expired = !!b.checkoutExpiresAt && now > b.checkoutExpiresAt
+      const old = !!b.checkoutStartedAt && now.getTime() - b.checkoutStartedAt.getTime() > CHECKOUT_PATIENCE_MS
+      const stale = !!b.checkoutRef && (expired || old)
       const key = stale ? 'checkout_not_completed' : 'payment_due'
       return customer ? out(key, 'needs_you', 'warn', ['pay']) : out(key, 'active', 'info', [])
     }

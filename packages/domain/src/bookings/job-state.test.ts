@@ -62,6 +62,16 @@ describe('booking states, both viewers, exact buttons', () => {
     expect(pick(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - 60_000) }))).toEqual(['payment_due', 'needs_you', ['pay']])
     expect(state('customer', b).key).toBe('payment_due')
   })
+  it('checkout expiry: expired is not completed; unexpired follows the patience; no timestamp is payment due', () => {
+    const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1' }
+    const young = new Date(now.getTime() - 60_000)
+    const old = new Date(now.getTime() - CHECKOUT_PATIENCE_MS - 1)
+    expect(state('customer', { ...b, checkoutExpiresAt: new Date(now.getTime() - 1), checkoutStartedAt: young }).key).toBe('checkout_not_completed')
+    expect(state('customer', { ...b, checkoutExpiresAt: new Date(now.getTime() - 1) }).key).toBe('checkout_not_completed')
+    expect(state('customer', { ...b, checkoutExpiresAt: at(1), checkoutStartedAt: young }).key).toBe('payment_due')
+    expect(state('customer', { ...b, checkoutExpiresAt: at(1), checkoutStartedAt: old }).key).toBe('checkout_not_completed')
+    expect(state('customer', b).key).toBe('payment_due')
+  })
   it('checkout not completed', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1', checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS - 1) }
     expect(pick(state('customer', b))).toEqual(['checkout_not_completed', 'needs_you', ['pay']])
