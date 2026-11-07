@@ -42,7 +42,12 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
   const [provider] = await db.select({ status: providers.status }).from(providers).where(eq(providers.id, b.providerId))
   if (provider?.status !== 'published' || (await isSuspendedNow(db, b.providerId))) fail(409, { error: 'provider-unavailable' })
   const stored = readRef(b.checkoutRef)
-  if (stored && new Date(stored.expiresAt).getTime() > now.getTime() + REUSE_MIN_MS) return { url: stored.url }
+  if (stored && new Date(stored.expiresAt).getTime() > now.getTime() + REUSE_MIN_MS) {
+    // the wait for "did not go through" counts from the LAST pay tap, not the first
+    const again: CheckoutRef = { ...stored, startedAt: now.toISOString() }
+    await db.update(bookings).set({ checkoutRef: JSON.stringify(again) }).where(and(eq(bookings.id, b.id), eq(bookings.status, 'awaiting-payment')))
+    return { url: stored.url }
+  }
   if (b.parentBookingId ? await parentBlocksPayment(db, b) : await slotIsHeld(db, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) fail(409, { error: b.parentBookingId ? 'not-open' : 'slot-pending' }) // a lapsed hold can overlap until the sweep; an additional task has its parent's time
   const expiresAt = checkoutExpiry(b.payBy, now)
   if (!expiresAt) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' })
@@ -70,7 +75,7 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
     if (e instanceof RangeError) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' }) // the clock moved past the 31-minute edge
     throw e
   }
-  const ref: CheckoutRef = { sessionId: session.sessionId, url: session.url, expiresAt: expiresAt.toISOString(), startedAt: new Date().toISOString() }
+  const ref: CheckoutRef = { sessionId: session.sessionId, url: session.url, expiresAt: expiresAt.toISOString(), startedAt: now.toISOString() }
   const saved = await db.update(bookings).set({ checkoutRef: JSON.stringify(ref) }).where(and(eq(bookings.id, b.id), eq(bookings.status, 'awaiting-payment'))).returning({ id: bookings.id })
   if (!saved.length) return fail(409, { error: 'not-open' }) // withdrawn or expired meanwhile: a payment through this session is refunded
   return { url: session.url }

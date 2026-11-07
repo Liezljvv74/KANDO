@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { BookingViewSchema, RequestSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, runDueTimers } from '@kando/domain'
+import { cancelBooking, clearOutbox, createPayLink, runDueTimers } from '@kando/domain'
 import { setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, makeAwaitingPayment, makeQuote, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
@@ -76,6 +76,21 @@ it('a checkout reference older than the patience reads checkout_not_completed; o
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString(), startedAt: new Date(Date.now() - 11 * 60_000).toISOString() })
   expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay'] })
   expect((await stateOf(U.owner, b.id)).buttons).toEqual([])
+})
+
+it('a repeated pay tap reuses the session and restarts the wait: payment_due, not checkout_not_completed; an expired session still is', async () => {
+  const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(23) })
+  const first = await createPayLink(db, U.cust, b.id, new Date(Date.now() - 30 * 60_000))
+  expect((await stateOf(U.cust, b.id)).key).toBe('checkout_not_completed') // 30 minutes after the first tap
+  const second = await createPayLink(db, U.cust, b.id, new Date())
+  expect(second.url).toBe(first.url)
+  expect(g.attempts.createCheckout).toBe(1) // reused
+  const ref = JSON.parse((await pool.query('SELECT checkout_ref FROM bookings WHERE id = $1', [b.id])).rows[0].checkout_ref)
+  expect(ref).toMatchObject({ sessionId: expect.any(String), url: first.url, expiresAt: expect.any(String) })
+  expect(Date.now() - Date.parse(ref.startedAt)).toBeLessThan(60_000)
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay'] })
+  await pool.query('UPDATE bookings SET checkout_ref = $2 WHERE id = $1', [b.id, JSON.stringify({ ...ref, expiresAt: new Date(Date.now() - 1000).toISOString() })])
+  expect((await stateOf(U.cust, b.id)).key).toBe('checkout_not_completed')
 })
 
 it('GET a request and the request list return jobState for each side', async () => {

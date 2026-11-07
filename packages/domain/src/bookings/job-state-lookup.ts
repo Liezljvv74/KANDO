@@ -30,9 +30,13 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
   const requestIds = [...new Set(items.flatMap((i) => i.requestId ?? []))]
   const bookingIds = rows.map((r) => r.id)
 
-  const flagged = new Set(bookingIds.length ? (await db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), inArray(staffFlags.refId, bookingIds), isNull(staffFlags.resolvedAt)))).map((r) => r.ref) : [])
   const providerIds = [...new Set(items.map((i) => i.providerId))]
-  const ready = new Set((await db.select({ id: providers.id }).from(providers).where(and(inArray(providers.id, providerIds), sql`${providers.payoutsReadyAt} IS NOT NULL`))).map((r) => r.id))
+  const [flags, readyRows] = await Promise.all([
+    bookingIds.length ? db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), inArray(staffFlags.refId, bookingIds), isNull(staffFlags.resolvedAt))) : [],
+    db.select({ id: providers.id }).from(providers).where(and(inArray(providers.id, providerIds), sql`${providers.payoutsReadyAt} IS NOT NULL`)),
+  ])
+  const flagged = new Set(flags.map((r) => r.ref))
+  const ready = new Set(readyRows.map((r) => r.id))
 
   // the quote's validity, for requests that read "quoted"
   const quotedIds = items.filter((i) => i.request.status === 'quoted' && i.requestId).map((i) => i.requestId!)
