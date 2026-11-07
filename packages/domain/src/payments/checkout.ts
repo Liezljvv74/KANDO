@@ -16,7 +16,7 @@ import { belowMinCharge, checkoutExpiry, MAX_PAY_AHEAD_DAYS, toCents } from './r
 const REUSE_MIN_MS = 5 * 60_000
 
 /** What bookings.checkout_ref holds (staff-only column, owner connection): the open Checkout session, so a second tap reuses it. */
-type CheckoutRef = { sessionId: string; url: string; expiresAt: string }
+type CheckoutRef = { sessionId: string; url: string; expiresAt: string; /** when the session was made; refs from before this field have none */ startedAt?: string }
 const readRef = (v: string | null): CheckoutRef | null => {
   try {
     return v ? (JSON.parse(v) as CheckoutRef) : null
@@ -80,7 +80,7 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
     if (e instanceof RangeError) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' }) // the clock moved past the 31-minute edge
     throw e
   }
-  const ref: CheckoutRef = { sessionId: session.sessionId, url: session.url, expiresAt: expiresAt.toISOString() }
+  const ref: CheckoutRef = { sessionId: session.sessionId, url: session.url, expiresAt: expiresAt.toISOString(), startedAt: new Date().toISOString() }
   const saved = await db.update(bookings).set({ checkoutRef: JSON.stringify(ref) }).where(and(eq(bookings.id, b.id), eq(bookings.status, 'awaiting-payment'))).returning({ id: bookings.id })
   if (!saved.length) return fail(409, { error: 'not-open' }) // withdrawn or expired meanwhile: a payment through this session is refunded
   return { url: session.url }

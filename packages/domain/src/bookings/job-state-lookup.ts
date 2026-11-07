@@ -1,0 +1,87 @@
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { bookings, db, notifications, providers, quotes, staffFlags, threads, type Tx } from '@kando/db'
+import type { JobStateDto } from '@kando/contract'
+import { currentBookingOf, deriveJobState, type JobBookingInput, type JobRequestInput, type JobState, type JobViewer } from './job-state'
+
+// Imports no requests/chat/notify module (requests.ts imports this one).
+type Db = Tx | typeof db
+
+/** One DTO to give a state: `key` is how the caller finds it again (request id or booking id). */
+export type JobStateItem = { key: string; viewer: JobViewer; providerId: string; requestId: string | null; bookingId?: string; request: JobRequestInput }
+
+/** An open money flag of the booking: a failed release, settle or refund (kinds written by attemptMoney and the webhook). The text is never read. */
+const MONEY_FLAGS = ['payment-unprocessed', 'refund-failed']
+
+/** bookings.checkout_ref is JSON {sessionId,url,expiresAt,startedAt?}; an unreadable or older ref only leaves the dates unknown. */
+function readRef(v: string | null | undefined): { startedAt: Date | null; expiresAt: Date | null } {
+  try {
+    const r = v ? (JSON.parse(v) as { startedAt?: string; expiresAt?: string }) : {}
+    return { startedAt: r.startedAt ? new Date(r.startedAt) : null, expiresAt: r.expiresAt ? new Date(r.expiresAt) : null }
+  } catch {
+    return { startedAt: null, expiresAt: null }
+  }
+}
+
+/**
+ * The derived job state for each item, in a fixed number of queries (no N+1). The request item sees all bookings of its request, a
+ * booking item only its own booking. `x` is the caller's transaction (parties only, by row security); staff flags, payout readiness
+ * and the viewer's own notices are read on the owner pool for ids the caller already may see.
+ * Unread: the viewer has a `message-received` notice for the job's thread that is neither seen nor dismissed (the chat has no
+ * read marker of its own; ponytail: the notice is throttled per thread, so it flags "something new", not a count).
+ */
+export async function jobStates(x: Db, userId: string, items: JobStateItem[], now = new Date()): Promise<Map<string, JobState>> {
+  const out = new Map<string, JobState>()
+  if (!items.length) return out
+  const byRequest = [...new Set(items.filter((i) => !i.bookingId && i.requestId).map((i) => i.requestId!))]
+  const byId = [...new Set(items.flatMap((i) => i.bookingId ?? []))]
+  const where = or(byRequest.length ? inArray(bookings.requestId, byRequest) : undefined, byId.length ? inArray(bookings.id, byId) : undefined)
+  const rows = where ? await x.select().from(bookings).where(where) : []
+  const requestIds = [...new Set(items.flatMap((i) => i.requestId ?? []))]
+  const bookingIds = rows.map((r) => r.id)
+
+  const flagged = new Set(bookingIds.length ? (await db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), inArray(staffFlags.refId, bookingIds), isNull(staffFlags.resolvedAt)))).map((r) => r.ref) : [])
+  const providerIds = [...new Set(items.map((i) => i.providerId))]
+  const ready = new Set((await db.select({ id: providers.id }).from(providers).where(and(inArray(providers.id, providerIds), sql`${providers.payoutsReadyAt} IS NOT NULL`))).map((r) => r.id))
+
+  // the quote's validity, for requests that read "quoted"
+  const quotedIds = items.filter((i) => i.request.status === 'quoted' && i.requestId).map((i) => i.requestId!)
+  const validUntil = new Map<string, Date>()
+  if (quotedIds.length)
+    for (const q of await x.select({ requestId: quotes.requestId, expiresAt: quotes.expiresAt }).from(quotes).where(and(inArray(quotes.requestId, quotedIds), eq(quotes.status, 'sent'))))
+      if (!validUntil.has(q.requestId) || q.expiresAt > validUntil.get(q.requestId)!) validUntil.set(q.requestId, q.expiresAt)
+
+  // unread: thread (of the request, or of a direct booking) > unseen message notice of the viewer
+  const unreadThreads = new Set<string>()
+  const owned = [requestIds.length ? inArray(threads.requestId, requestIds) : undefined, bookingIds.length ? inArray(threads.bookingId, bookingIds) : undefined]
+  const ts = requestIds.length || bookingIds.length ? await x.select({ id: threads.id, requestId: threads.requestId, bookingId: threads.bookingId }).from(threads).where(or(...owned)) : []
+  if (ts.length) {
+    const notices = await x
+      .select({ threadId: sql<string>`${notifications.payload}->>'threadId'` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.kind, 'message-received'), isNull(notifications.seenAt), isNull(notifications.dismissedAt)))
+    const open = new Set(notices.map((n) => n.threadId))
+    for (const t of ts) if (open.has(t.id)) unreadThreads.add(t.requestId ?? t.bookingId!)
+  }
+
+  for (const i of items) {
+    const mine = rows.filter((r) => (i.bookingId ? r.id === i.bookingId : r.requestId === i.requestId))
+    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c.startedAt, checkoutExpiresAt: c.expiresAt } })() }))
+    const current = currentBookingOf(inputs)
+    out.set(
+      i.key,
+      deriveJobState({
+        viewer: i.viewer,
+        request: { ...i.request, quoteValidUntil: i.requestId ? validUntil.get(i.requestId) ?? null : null },
+        bookings: inputs,
+        delayedFlag: !!current && flagged.has(current.id),
+        providerPayoutReady: ready.has(i.providerId),
+        unread: (!!i.requestId && unreadThreads.has(i.requestId)) || mine.some((r) => unreadThreads.has(r.id)),
+        now,
+      }),
+    )
+  }
+  return out
+}
+
+/** The state as the API sends it (dates as ISO text). */
+export const toJobStateDto = ({ paidOutAt, startAt, ...s }: JobState): JobStateDto => ({ ...s, ...(paidOutAt && { paidOutAt: paidOutAt.toISOString() }), ...(startAt && { startAt: startAt.toISOString() }) })

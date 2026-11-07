@@ -97,6 +97,7 @@ it('the customer gets a pay link; the provider and a third user get 404', async 
   expect(args!.successUrl).toMatch(/\/payment-done$/)
   expect(String(args!.successUrl)).not.toContain(b.id) // nothing of the booking in the return address
   expect((await row(b.id)).checkout_ref).toContain('cs_fake_1') // stored on the owner connection (staff-only column)
+  expect(Number.isNaN(Date.parse(JSON.parse((await row(b.id)).checkout_ref).startedAt))).toBe(false) // when the session was made (job state: checkout_not_completed)
 })
 
 it('pay link, paid event, then the booking reads confirmed', async () => {
