@@ -1,0 +1,89 @@
+<style>
+  .phone{width:300px;background:#fff;border:2px solid #2b2a6b;border-radius:22px;overflow:hidden;font:13px/1.35 system-ui,Segoe UI,sans-serif;color:#1D1C4A}
+  .ph-top{background:#34328A;color:#fff;padding:10px 12px;font-weight:700;font-size:14px}
+  .ph-body{padding:10px 12px}
+  .wrap{display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-top:10px}
+  .col{display:flex;flex-direction:column;align-items:center}
+  .cap{text-align:center;color:#555;font-size:12px;margin:8px 10px 0;max-width:300px}
+  .card{border-radius:10px;padding:9px 10px;margin:8px 0}
+  .ok{background:#dff5ea;color:#0b6b46}.warn{background:#fff1d6;color:#8a5a00}.bad{background:#fde1e1;color:#9b1c1c}.info{background:#e4e8ff;color:#2b2a6b}
+  .sw{display:flex;justify-content:space-between;align-items:center;border:1px solid #c9c8e6;border-radius:10px;padding:8px 10px;margin:8px 0;background:#f4f4fa;color:#8b8aaf}
+  .tog{width:36px;height:20px;border-radius:10px;background:#c9c8e6;position:relative}
+  .tog:after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+  .tog.on{background:#0b6b46}.tog.on:after{left:18px}
+  .ck{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e3e2f3;padding:8px 2px}
+  .ck small{color:#6b6a95;display:block}
+  .y{color:#0b6b46;font-weight:700}.n{color:#b35c00;font-weight:700}
+  .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#34328A;margin:12px 0 2px;font-weight:700}
+  .btn{display:inline-block;background:#34328A;color:#fff;border-radius:8px;padding:5px 10px;font-weight:600}
+  table.s{border-collapse:collapse;width:100%;font:12px/1.3 system-ui,Segoe UI,sans-serif;color:#1D1C4A}
+  table.s th{background:#34328A;color:#fff;text-align:left;padding:6px 8px;font-size:11px}
+  table.s td{border-bottom:1px solid #e3e2f3;padding:6px 8px;vertical-align:top}
+  .sec{font-size:10px;font-weight:700;border-radius:8px;padding:1px 6px;white-space:nowrap}
+  .s1{background:#fde4ee;color:#9b1c4a}.s2{background:#e4e8ff;color:#2b2a6b}.s3{background:#eee;color:#555}
+  .who{display:inline-block;font-size:10px;font-weight:700;border-radius:8px;padding:0 6px;margin-right:4px;white-space:nowrap}
+  .wc{background:#d9ecff;color:#0b4a8a}.wp{background:#dcf3e3;color:#0b6b46}.wb{background:#e6e6ee;color:#444}
+  .bl{display:block;margin-bottom:3px}
+</style>
+
+<h2>Status wording and the Live checklist</h2>
+<p class="subtitle">Rule for every status: say what happened, what happens next (with a date), and what you can do. German will mirror each text. In the last column: <span class="who wc">Customer</span> <span class="who wp">Provider</span> <span class="who wb">Both</span> show who sees each button.</p>
+
+<h3>1. Every job status, in plain words</h3>
+<table class="s">
+  <tr><th>State</th><th>Section</th><th>Customer sees</th><th>Provider sees</th><th>Buttons (who sees them)</th></tr>
+  <tr><td>Request sent</td><td><span class="sec s2">Active</span></td><td>Request sent. Answer expected by {date}.</td><td><span class="sec s1">Needs you</span> New request. Answer by {date}.</td><td><span class="bl"><span class="who wp">Provider</span>Send a quote, Decline</span><span class="bl"><span class="who wc">Customer</span>Withdraw request</span><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Quote sent</td><td><span class="sec s1">Needs you</span> (customer)</td><td>Quote €{x} waiting for you. Valid until {date}.</td><td><span class="sec s2">Active</span> Quote €{x} sent, waiting for the customer.</td><td><span class="bl"><span class="who wc">Customer</span>Accept quote</span><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Payment due</td><td><span class="sec s1">Needs you</span> (customer)</td><td>Pay €{x} by {date}.</td><td><span class="sec s2">Active</span> Waiting for the customer's payment.</td><td><span class="bl"><span class="who wc">Customer</span>Pay now</span><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Checkout not completed</td><td><span class="sec s1">Needs you</span> (customer)</td><td>Your payment did not go through. Nothing was charged. Try again.</td><td><span class="sec s2">Active</span> Waiting for the customer's payment.</td><td><span class="bl"><span class="who wc">Customer</span>Pay again</span><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Paid, work upcoming</td><td><span class="sec s2">Active</span></td><td>€{x} paid. Held safely until the job is done.</td><td>Paid. You receive €{net} after the job.</td><td><span class="bl"><span class="who wc">Customer</span>Add an additional task</span><span class="bl"><span class="who wb">Both</span>Open chat, Cancel the booking</span></td></tr>
+  <tr><td>Start time passed</td><td><span class="sec s1">Needs you</span> (provider)</td><td><span class="sec s2">Active</span> Job time has started.</td><td>Job time has started. Mark it finished when done.</td><td><span class="bl"><span class="who wp">Provider</span>Job finished</span><span class="bl"><span class="who wb">Both</span>The other side did not turn up</span></td></tr>
+  <tr><td>Before the start time</td><td><span class="sec s2">Active</span></td><td>–</td><td>You can mark this finished from {start time}.</td><td><span class="bl"><span class="who wp">Provider</span>Job finished (greyed, with the line)</span></td></tr>
+  <tr><td>Work done, waiting for confirmation</td><td><span class="sec s1">Needs you</span> (customer)</td><td>Work done. Confirm, or report a problem by {date}. Otherwise €{x} is paid out then.</td><td><span class="sec s2">Active</span> Finished. €{net} is paid out on {date} unless a problem is reported.</td><td><span class="bl"><span class="who wc">Customer</span>Yes, it was done, Report a problem</span><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Payout on its way</td><td><span class="sec s2">Active</span></td><td>Confirmed. €{x} goes to the provider on {date}.</td><td>Confirmed. €{net} sent to your payout account on {date}.</td><td><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Payout account missing</td><td><span class="sec s1">Needs you</span> (provider)</td><td><span class="sec s2">Active</span> Confirmed. The payout waits for the provider.</td><td>Set up payouts to receive €{net}.</td><td><span class="bl"><span class="who wp">Provider</span>Set up payouts</span></td></tr>
+  <tr><td>Problem reported</td><td><span class="sec s2">Active</span> (red, first)</td><td>On hold. Our team decides by {date}. Job #{n}. No money moves until then.</td><td>On hold. Our team decides by {date}. Job #{n}. No money moves until then.</td><td><span class="bl"><span class="who wb">Both</span>Open chat, Contact support</span></td></tr>
+  <tr><td>Delayed (payout or refund failed)</td><td><span class="sec s2">Active</span> (red)</td><td>Delayed. We could not complete the payment step. Our team is on it. Job #{n}.</td><td>Delayed. We could not complete the payment step. Our team is on it. Job #{n}.</td><td><span class="bl"><span class="who wb">Both</span>Contact support</span></td></tr>
+  <tr><td>Completed</td><td><span class="sec s3">Past</span></td><td>✓ Paid €{x}</td><td>✓ €{net} paid out on {date}</td><td><span class="bl"><span class="who wb">Both</span>Write a review, Receipt (PDF)</span></td></tr>
+  <tr><td>Cancelled</td><td><span class="sec s3">Past</span></td><td>↩ Cancelled. €{x} refunded on {date} (or: refund on its way, a few days).</td><td>Cancelled by the customer. Nothing to pay out.</td><td><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+  <tr><td>Declined / expired</td><td><span class="sec s3">Past</span></td><td>✕ Declined by the provider. / Time ran out, nothing charged.</td><td>✕ You declined. / Time ran out.</td><td><span class="bl"><span class="who wc">Customer</span>Ask someone else (same category)</span><span class="bl"><span class="who wb">Both</span>Open chat</span></td></tr>
+</table>
+<p class="subtitle" style="margin-top:6px">"Delayed" is the only state that says "our team is on it", and it always has a way to reach us. Nothing says "being processed" without a date. <b>My call, to check:</b> the provider no longer sees "Report a problem" on a finished job (the test found it confusing). A provider with a problem uses Open chat or Contact support.</p>
+
+<h3 style="margin-top:22px">2. The Live checklist (provider, on My business)</h3>
+<div class="wrap">
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top">My business</div>
+      <div class="ph-body">
+        <div class="card warn" style="margin-top:0"><b>Draft: not visible to customers</b></div>
+        <div class="sw"><span><b>Go live</b><br><small>2 things to do first</small></span><span class="tog"></span></div>
+        <div class="lbl">To go live</div>
+        <div class="ck"><span>Services (3)</span><span class="y">✓</span></div>
+        <div class="ck"><span>About you</span><span class="y">✓</span></div>
+        <div class="ck"><span><b>Provider type</b><small>Choose Private person or Business</small></span><span class="n">Do it ›</span></div>
+        <div class="ck"><span><b>Photo ID</b><small>Waiting for our check</small></span><span class="n">Waiting</span></div>
+        <div class="lbl">Before you can send quotes and get paid</div>
+        <div class="ck"><span><b>Payout account</b><small>Takes about 5 minutes with Stripe</small></span><span class="n">Do it ›</span></div>
+        <div class="ck"><span>Invoices in your name</span><span class="y">✓</span></div>
+      </div>
+    </div>
+    <div class="cap">Not live yet. The switch says why, and every open item opens its own field. Provider type shows as a question, not as a chosen answer.</div>
+  </div>
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top">My business</div>
+      <div class="ph-body">
+        <div class="card ok" style="margin-top:0"><b>Published: visible to customers</b></div>
+        <div class="sw" style="background:#fff;color:#1D1C4A"><span><b>Live</b><br><small>Customers can find and ask you</small></span><span class="tog on"></span></div>
+        <div class="ck"><span>Services (3)</span><span class="y">✓</span></div>
+        <div class="ck"><span>About you</span><span class="y">✓</span></div>
+        <div class="ck"><span>Verification: 2 of 2 approved</span><span class="y">✓</span></div>
+        <div class="ck"><span>Payout account</span><span class="y">✓</span></div>
+        <div class="ck"><span>Invoices in your name</span><span class="y">✓</span></div>
+        <div style="margin-top:8px"><span class="btn">Share my profile</span></div>
+      </div>
+    </div>
+    <div class="cap">Everything done: the checklist turns into a summary, and the old Home banner ("Your payouts are set up. Agree to invoicing...") is not needed any more.</div>
+  </div>
+</div>

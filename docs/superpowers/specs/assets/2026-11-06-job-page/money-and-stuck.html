@@ -1,0 +1,159 @@
+<style>
+  .phone{width:300px;background:#fff;border:2px solid #2b2a6b;border-radius:22px;overflow:hidden;font:13px/1.35 system-ui,Segoe UI,sans-serif;color:#1D1C4A}
+  .ph-top{background:#34328A;color:#fff;padding:10px 12px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+  .ph-top small{font-weight:600;font-size:11px;background:#4b49a8;border-radius:8px;padding:2px 8px}
+  .ph-body{padding:10px 12px}
+  .wrap{display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-top:10px}
+  .col{display:flex;flex-direction:column;align-items:center}
+  .cap{text-align:center;color:#555;font-size:12px;margin:8px 10px 0;max-width:300px}
+  .info{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px;background:#f6f7ff;border-radius:10px;padding:8px 10px}
+  .info div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:600;color:#1D1C4A}
+  .info .k{margin-right:4px}
+  .info .k:after{content:":"}
+  .card{border-radius:10px;padding:9px 10px;margin:8px 0}
+  .ok{background:#dff5ea;color:#0b6b46}.warn{background:#fff1d6;color:#8a5a00}.bad{background:#fde1e1;color:#9b1c1c}.inf{background:#e4e8ff;color:#2b2a6b}
+  .money{background:#f6f7ff;border-radius:10px;padding:8px 10px;margin-top:8px;font-size:12px}
+  .money div{display:flex;justify-content:space-between;padding:1px 0}
+  .money .sub{color:#6b6a95;font-size:11px;padding-left:10px}
+  .money .tot{border-top:1px solid #d6d8f0;margin-top:3px;padding-top:4px;font-size:13px}
+  .btn{display:inline-block;background:#34328A;color:#fff;border-radius:8px;padding:7px 14px;font-weight:600;margin:4px 6px 0 0}
+  .btn.o{background:#fff;color:#34328A;border:1px solid #34328A}
+  .sum{display:flex;gap:6px;margin-bottom:8px}
+  .sum div{flex:1;background:#eef0ff;border-radius:8px;padding:5px 6px;font-size:11px}
+  .sum b{display:block;font-size:14px}
+  .field{border:1px solid #c9c8e6;border-radius:8px;padding:6px 8px;margin:4px 0 2px;font-weight:700}
+  .lbl{font-size:11px;color:#6b6a95;font-weight:700;margin-top:6px}
+  .prev{background:#eef9f2;color:#0b6b46;border-radius:8px;padding:6px 8px;font-size:12px;margin:4px 0 8px}
+  .sec{display:flex;justify-content:space-between;border-top:1px solid #e3e2f3;padding:8px 2px}
+  small.g{color:#6b6a95}
+  .tabs{display:flex;gap:6px;font-size:11px;margin-bottom:6px}
+  .seg{display:flex;border:1px solid #34328A;border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .seg div{flex:1;text-align:center;padding:5px 0;font-weight:600}
+  .seg .on{background:#34328A;color:#fff}
+  .n{display:inline-block;min-width:18px;border-radius:9px;background:#e0245e;color:#fff;font-size:11px;padding:0 5px;margin-left:4px}
+</style>
+
+<h2>Provider money view and stuck-payment wording</h2>
+<p class="subtitle">Money lives in two places only: a summary strip on the Jobs list, and a box on each job page. The year is now shown as '26.</p>
+
+<div class="wrap">
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top"><span>Jobs</span><small>Invoices ›</small></div>
+      <div class="ph-body">
+        <div class="seg"><div>As customer <span class="n">2</span></div><div class="on">As provider <span class="n">3</span></div></div>
+        <div class="sum"><div><b>€17.60</b>received in November</div><div><b>€105.60</b>on its way</div><div><b>€17.60</b>on hold</div></div>
+        <small class="g">All amounts are what you receive, after commission. Tap an amount to see the jobs behind it.</small>
+      </div>
+    </div>
+    <div class="cap">The strip on the Jobs list. "Invoices ›" is the one link to receipts and the monthly commission invoices (they belong to a month, not to one job).</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top"><span>← Photo session</span></div>
+      <div class="ph-body">
+        <div class="info" id="grid-m">
+          <div><span class="k">Job #</span><span class="v">1040</span></div>
+          <div><span class="k">Customer</span><span class="v">Customer T.</span></div>
+          <div><span class="k">Date</span><span class="v">Sat 14 Nov '26</span></div>
+          <div><span class="k">Time</span><span class="v">14:00</span></div>
+          <div><span class="k">Duration</span><span class="v">60 min</span></div>
+          <div><span class="k">Location</span><span class="v">10115 Berlin</span></div>
+        </div>
+        <div class="card inf"><b>Finished</b><br>€145.20 is paid out on Sat 21 Nov '26 unless a problem is reported.</div>
+        <div class="money">
+          <div><span>Photo session</span><span>€120.00</span></div>
+          <div><span>Additional task #1040-2</span><span>€45.00</span></div>
+          <div class="sub"><span>of which materials</span><span>€8.00</span></div>
+          <div><span>Total paid by the customer</span><span>€165.00</span></div>
+          <div><span>Commission 12%</span><span>−€19.80</span></div>
+          <div class="tot"><b>You receive</b><b>€145.20</b></div>
+        </div>
+        <div class="sec" style="margin-top:8px"><span>Chat</span><span>›</span></div>
+        <div class="sec"><span>Receipts (2)</span><span>PDF ›</span></div>
+      </div>
+    </div>
+    <div class="cap">The money box on a job page: original and additional task together, materials as part of the price, commission, and the net amount with its date.</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top"><span>← Send a quote</span></div>
+      <div class="ph-body">
+        <div class="lbl">Amount in euro</div>
+        <div class="field">120.00</div>
+        <div class="prev">You receive €105.60 after 12% commission.</div>
+        <div class="lbl">Scope of the work</div>
+        <div class="field" style="font-weight:400;color:#6b6a95">One hour session, 20 edited photos…</div>
+        <div style="margin-top:10px"><span class="btn">Send a quote</span></div>
+      </div>
+    </div>
+    <div class="cap">The commission before you take a job: a live line under the amount, so no provider is surprised afterwards.</div>
+  </div>
+</div>
+
+<h3 style="margin-top:24px">When a payment gets stuck</h3>
+<p class="subtitle">One state, "Delayed", for every failed payment step. Both sides are told in plain words, with the job number and one way to reach us.</p>
+
+<div class="wrap">
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top"><span>← Hedge trimming</span></div>
+      <div class="ph-body">
+        <div class="info">
+          <div><span class="k">Job #</span><span class="v">1036</span></div>
+          <div><span class="k">Provider</span><span class="v">All T.</span></div>
+          <div><span class="k">Date</span><span class="v">Wed 11 Nov '26</span></div>
+          <div><span class="k">Time</span><span class="v">10:00</span></div>
+          <div><span class="k">Duration</span><span class="v">3 h</span></div>
+          <div><span class="k">Location</span><span class="v">10115 Berlin</span></div>
+        </div>
+        <div class="card warn"><b>Delayed</b><br>You confirmed the job, but the payment to the provider could not be completed. Our team has been told and is on it. Your money is safe. We will tell you when it is sorted.<br><span class="btn o">Contact support</span></div>
+      </div>
+    </div>
+    <div class="cap">Customer: payout delayed.</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top"><span>← Hedge trimming</span></div>
+      <div class="ph-body">
+        <div class="info">
+          <div><span class="k">Job #</span><span class="v">1036</span></div>
+          <div><span class="k">Customer</span><span class="v">Customer T.</span></div>
+          <div><span class="k">Date</span><span class="v">Wed 11 Nov '26</span></div>
+          <div><span class="k">Time</span><span class="v">10:00</span></div>
+          <div><span class="k">Duration</span><span class="v">3 h</span></div>
+          <div><span class="k">Location</span><span class="v">10115 Berlin</span></div>
+        </div>
+        <div class="card warn"><b>Delayed</b><br>Your payout of €73.92 could not be completed. Our team has been told and is on it. You do not need to do anything. We will tell you when it is sent.<br><span class="btn o">Contact support</span></div>
+        <div class="money">
+          <div><span>Total paid by the customer</span><span>€84.00</span></div>
+          <div><span>Commission 12%</span><span>−€10.08</span></div>
+          <div class="tot"><b>You receive</b><b>€73.92</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">Provider: same job, same state, its own wording and the amount that is waiting.</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top"><span>← Move-out clean</span></div>
+      <div class="ph-body">
+        <div class="info">
+          <div><span class="k">Job #</span><span class="v">1037</span></div>
+          <div><span class="k">Provider</span><span class="v">All T.</span></div>
+          <div><span class="k">Date</span><span class="v">Tue 17 Nov '26</span></div>
+          <div><span class="k">Time</span><span class="v">09:00</span></div>
+          <div><span class="k">Duration</span><span class="v">4 h</span></div>
+          <div><span class="k">Location</span><span class="v">10115 Berlin</span></div>
+        </div>
+        <div class="card warn"><b>Refund delayed</b><br>You cancelled in time and get the full €85.00 back. We could not send it yet. Our team is on it. Job #1037.<br><span class="btn o">Contact support</span></div>
+        <small class="g">"Contact support" opens an email to info@skillweb.space with the job number and title already filled in. No extra screen.</small>
+      </div>
+    </div>
+    <div class="cap">Customer: refund delayed. A refund that worked says "Refunded on {date}" instead.</div>
+  </div>
+</div>

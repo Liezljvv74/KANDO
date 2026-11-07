@@ -1,0 +1,82 @@
+<style>
+  .phone{width:300px;background:#fff;border:2px solid #2b2a6b;border-radius:22px;overflow:hidden;font:13px/1.35 system-ui,Segoe UI,sans-serif;color:#1D1C4A}
+  .ph-top{background:#34328A;color:#fff;padding:10px 12px;font-weight:700;font-size:14px}
+  .ph-body{padding:10px 12px}
+  .wrap{display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-top:10px}
+  .col{display:flex;flex-direction:column;align-items:center}
+  .cap{text-align:center;color:#555;font-size:12px;margin:8px 10px 0;max-width:300px}
+  .card{border-radius:10px;padding:9px 10px;margin:8px 0}
+  .ok{background:#dff5ea;color:#0b6b46}.warn{background:#fff1d6;color:#8a5a00}.bad{background:#fde1e1;color:#9b1c1c}.info{background:#e4e8ff;color:#2b2a6b}
+  .sw{display:flex;justify-content:space-between;align-items:center;border:1px solid #c9c8e6;border-radius:10px;padding:8px 10px;margin:8px 0;background:#f4f4fa;color:#8b8aaf}
+  .tog{width:36px;height:20px;border-radius:10px;background:#c9c8e6;position:relative}
+  .tog:after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+  .ck{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #e3e2f3;padding:8px 2px}
+  .ck small{color:#6b6a95;display:block}
+  .ck .r{white-space:nowrap}
+  .y{color:#0b6b46;font-weight:700}.n{color:#b35c00;font-weight:700}
+  .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#34328A;margin:12px 0 2px;font-weight:700}
+  .btn{display:inline-block;background:#34328A;color:#fff;border-radius:8px;padding:7px 14px;font-weight:600;margin-right:6px}
+  .btn.off{background:#d9d9e6;color:#8b8aaf}
+  .btn.o{background:#fff;color:#34328A;border:1px solid #34328A}
+  .gate{border:1px solid #f0c987;background:#fff8e8;border-radius:10px;padding:8px 10px;margin-top:8px;font-size:12px}
+  .gate b{display:block;margin-bottom:3px;color:#8a5a00}
+  .gate .st{display:flex;justify-content:space-between;border-top:1px solid #f3dfb4;padding:6px 0 0;margin-top:6px}
+  .gate .go{color:#34328A;font-weight:700;white-space:nowrap}
+  .req{border:1px solid #e3e2f3;border-radius:10px;padding:8px 10px;margin:8px 0;font-size:12px}
+  small.g{color:#6b6a95}
+</style>
+
+<h2>Live checklist (updated) and the "Send a quote" gate</h2>
+<p class="subtitle">Live stays as it is. Only the "Send a quote" button waits for payout and invoicing, and the reason is right next to it.</p>
+
+<div class="wrap">
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top">My business</div>
+      <div class="ph-body">
+        <div class="card warn" style="margin-top:0"><b>Draft: not visible to customers</b></div>
+        <div class="sw"><span><b>Go live</b><br><small>2 things to do first</small></span><span class="tog"></span></div>
+        <div class="lbl">To go live</div>
+        <div class="ck"><span>Services (3)</span><span class="y r">✓</span></div>
+        <div class="ck"><span>About you</span><span class="y r">✓</span></div>
+        <div class="ck"><span><b>Provider type</b><small>Choose Private person or Business</small></span><span class="n r">Do it ›</span></div>
+        <div class="ck" id="docrow"><span><b>Photo ID</b><small>We are checking it</small></span><span class="n r" id="docstate">Awaiting approval</span></div>
+        <div class="lbl">Before you can send quotes and get paid</div>
+        <div class="ck"><span><b>Payout account</b><small>About 5 minutes with Stripe</small></span><span class="n r">Do it ›</span></div>
+        <div class="ck"><span>Invoices in your name</span><span class="y r">✓</span></div>
+      </div>
+    </div>
+    <div class="cap">"Awaiting approval" on one line. The small line under "Photo ID" now says "We are checking it", so the two don't say the same thing twice.</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top">← Dog walk for Bruno</div>
+      <div class="ph-body">
+        <small class="g">Job #1044 · Customer T. · Sun 15 Nov, 10:00, 45 min · 10115 Berlin</small>
+        <div class="req">"Walk for my dog Bruno: friendly, needs a leash, afraid of loud noises."</div>
+        <span class="btn off">Send a quote</span><span class="btn o">Decline</span>
+        <div class="gate">
+          <b>To send quotes, 2 steps are missing</b>
+          <div class="st"><span>1. Set up your payout account<br><small class="g">About 5 minutes with Stripe</small></span><span class="go">Do it ›</span></div>
+          <div class="st"><span>2. Agree to invoices in your name<br><small class="g">One tap</small></span><span class="go">Do it ›</span></div>
+        </div>
+        <div style="margin-top:8px"><span class="btn o">Open chat</span></div>
+      </div>
+    </div>
+    <div class="cap">Blocked: the button is greyed, and right under it is what to do, each step one tap away. Decline and chat still work.</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="ph-top">← Dog walk for Bruno</div>
+      <div class="ph-body">
+        <small class="g">Job #1044 · Customer T. · Sun 15 Nov, 10:00, 45 min · 10115 Berlin</small>
+        <div class="req">"Walk for my dog Bruno: friendly, needs a leash, afraid of loud noises."</div>
+        <span class="btn">Send a quote</span><span class="btn o">Decline</span>
+        <div style="margin-top:8px"><span class="btn o">Open chat</span></div>
+      </div>
+    </div>
+    <div class="cap">Ready: both steps done, the button is active and the message is gone.</div>
+  </div>
+</div>
