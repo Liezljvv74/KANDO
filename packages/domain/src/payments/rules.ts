@@ -81,3 +81,13 @@ export const quoteSteps = (p: TransactFacts): QuoteStep[] => {
 }
 
 export const canTransact = (p: TransactFacts): boolean => quoteSteps(p).length === 0
+
+/** What bookings.checkout_ref holds (staff-only column, owner connection): the open Checkout session, so a second tap reuses it. */
+export type CheckoutRef = { sessionId: string; url: string; expiresAt: string; /** when the session was made; refs from before this field have none */ startedAt?: string }
+export const readRef = (v: string | null): CheckoutRef | null => {
+  try {
+    return v ? (JSON.parse(v) as CheckoutRef) : null
+  } catch {
+    return null // an unreadable ref only means a new session
+  }
+}

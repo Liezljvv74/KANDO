@@ -14,6 +14,8 @@ import { confirmDanger } from '@/lib/confirm'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 import { go } from '@/lib/go'
+import { bookingStateCtx, stateText } from '@/lib/job-state-text'
+import { openSupport } from '@/lib/support'
 import { placeText } from '@/lib/place'
 import { CancelSheet } from '@/screens/bookings/cancel-sheet'
 import { DescriptionForm, DisputeInfo } from '@/screens/bookings/dispute-form'
@@ -78,6 +80,7 @@ export default function BookingDetail() {
   const showDays = viewer === 'customer' && b.status === 'finished' && !!b.confirmBy && daysLeft(b.confirmBy, now) > 0
   const days = b.confirmBy ? daysLeft(b.confirmBy, now) : 0
   const awaitingTime = b.status === 'awaiting-time'
+  const state = stateText(b.jobState, viewer, bookingStateCtx(b))
   const pending = awaitingTime ? b.pendingTime : null
 
   return (
@@ -85,9 +88,19 @@ export default function BookingDetail() {
       <Card>
         {!!b.parentBookingId && <Text style={styles.small}>{t('booking.additionalTask')}</Text>}
         {!!data.quoteNumber && <Text style={styles.small}>{`${t('quote.label')} ${data.quoteNumber}`}</Text>}
-        <Text style={styles.status} accessibilityRole="header">
-          {bookingStatusText(b, viewer, now)}
-        </Text>
+        {state && !(awaitingTime && b.jobState?.key === 'quote_sent') ? (
+          <>
+            <Text style={styles.status} accessibilityRole="header">
+              {state.title}
+            </Text>
+            <Text style={styles.text}>{state.body}</Text>
+            {b.jobState?.key === 'problem_reported' && <Text style={styles.small}>{bookingStatusText(b, viewer, now)}</Text>}
+          </>
+        ) : (
+          <Text style={styles.status} accessibilityRole="header">
+            {bookingStatusText(b, viewer, now)}
+          </Text>
+        )}
         {showDays && <Text style={styles.text}>{days === 1 ? t('booking.daysLeft.one') : t('booking.daysLeft.other', { n: days })}</Text>}
         {awaitingTime ? (
           // the start time stored for an awaiting-time booking is only a stand-in: never shown
@@ -109,6 +122,7 @@ export default function BookingDetail() {
       {b.status === 'disputed' && <DisputeInfo booking={b} />}
       {b.status === 'completed' && !b.parentBookingId && <ReviewPanel booking={b} />}
       <OpenChat find={async () => data.threadId} />
+      {!!b.jobState?.buttons.includes('contact_support') && <Button label={t('job.button.contactSupport')} onPress={() => openSupport({ number: b.jobNumber, title: b.title })} />}
       {!!notice && <Info text={notice} />}
       <ErrorText text={problem} />
       {bookingActions(b, viewer, now).map((a) => (

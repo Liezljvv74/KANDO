@@ -32,7 +32,7 @@ export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'p
     .limit(LIST_PAGE + 1)
   const { rows, next } = pageOf(found)
   const kids = rows.length ? await tx.select().from(bookings).where(and(mine, inArray(bookings.parentBookingId, rows.map((r) => r.id)))).orderBy(asc(bookings.createdAt), asc(bookings.id)) : []
-  return { docs: await withBookingRefs(tx, rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), userId), next }
+  return { docs: await withBookingRefs(tx, rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), userId, true), next }
 }
 
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */
@@ -40,7 +40,7 @@ export async function getBooking(tx: Tx, userId: string, id: string): Promise<Bo
   const { role } = await partyOf(tx, userId, id) // 404 for anyone else
   // joined with the quote's document number, so the provider sees exactly which quote was accepted (both parties may read the document)
   const found = (await tx.select({ b: bookings, quoteNumber: quoteDocuments.number }).from(bookings).leftJoin(quoteDocuments, eq(quoteDocuments.quoteId, bookings.quoteId)).where(eq(bookings.id, id)))[0] ?? notFound()
-  return { booking: (await withBookingRefs(tx, [view(found.b, userId)], userId))[0]!, viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
+  return { booking: (await withBookingRefs(tx, [view(found.b, userId)], userId, true))[0]!, viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
 }
 
 /** "I no longer need this": the customer, from awaiting-time or awaiting-payment. */

@@ -40,11 +40,12 @@ export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; vie
     const sub = AppState.addEventListener('change', (s) => {
       if (s !== 'active' || !waiting.current) return
       waiting.current = false
+      if (booking.jobState) return onRefresh() // the server state decides what shows now
       sessions.set(id, { openedAt: Date.now(), gaveUp: false })
       rerender((n) => n + 1)
     })
     return () => sub.remove()
-  }, [id])
+  }, [id, booking.jobState, onRefresh])
 
   async function pay() {
     setBusy(true)
@@ -57,7 +58,7 @@ export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; vie
       await WebBrowser.openBrowserAsync(url)
       if (Platform.OS === 'ios') {
         waiting.current = false
-        mark({ openedAt: Date.now(), gaveUp: false })
+        if (!booking.jobState) mark({ openedAt: Date.now(), gaveUp: false })
       }
       onRefresh()
     } catch (e) {
@@ -66,6 +67,18 @@ export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; vie
     setBusy(false)
   }
 
+  // The server state (jobState) decides: Pay now, or Pay again when the checkout did not go through. The card text is the state card above.
+  const key = booking.jobState?.key
+  if (booking.jobState) {
+    if (viewer !== 'customer' || (key !== 'payment_due' && key !== 'checkout_not_completed')) return null
+    return (
+      <Card>
+        {paymentsOff(me) ? <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text> : <SmallButton label={t(key === 'checkout_not_completed' ? 'booking.payAgain' : 'booking.payNow')} onPress={pay} busy={busy} />}
+        <ErrorText text={problem} />
+      </Card>
+    )
+  }
+  // An older server without jobState: the phone's own memory of the pay link decides.
   const s = sessions.get(id)
   const kind = payCard(booking, viewer, s?.openedAt ?? null, s?.gaveUp ?? false)
   if (kind === 'none') return null

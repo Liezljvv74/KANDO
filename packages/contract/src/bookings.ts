@@ -48,6 +48,26 @@ export const RequestInputSchema = z
   .refine((v) => (v.startAt === undefined) === (v.durationMin === undefined) && (v.startAt === undefined) === (v.onSite === undefined), { message: 'Start, duration and place go together', path: ['startAt'] })
   .refine(onSiteNeedsAddress, { message: 'Address required when on site', path: ['address'] })
 
+/**
+ * The one derived job state (rules in packages/domain bookings/job-state.ts): the server decides, the app renders. The viewer is the caller.
+ * Always sent, optional so an older server still parses; the old payment and status fields stay as they were.
+ */
+export const JOB_STATE_KEYS = ['request_sent', 'quote_sent', 'payment_due', 'checkout_not_completed', 'paid_upcoming', 'before_start_time', 'start_time_passed', 'work_done_waiting', 'payout_on_its_way', 'payout_account_missing', 'problem_reported', 'delayed', 'completed', 'cancelled', 'declined_expired', 'time_to_agree'] as const
+export const JOB_BUTTONS = ['accept_quote', 'ask_question', 'send_quote', 'decline', 'pay', 'cancel', 'finish', 'confirm', 'report_problem', 'contact_support', 'open_chat', 'agree_time', 'set_up_payouts', 'add_task', 'review', 'receipt', 'no_show', 'ask_someone_else'] as const
+export const JobStateSchema = z.object({
+  key: z.enum(JOB_STATE_KEYS),
+  section: z.enum(['needs_you', 'active', 'past']),
+  tone: z.enum(['info', 'ok', 'warn', 'bad']),
+  buttons: z.array(z.enum(JOB_BUTTONS)),
+  /** True when the job adds to the viewer's "Needs you" counter. */
+  countsForMe: z.boolean(),
+  /** completed: when the payout was made. */
+  paidOutAt: IsoSchema.optional(),
+  /** before_start_time: when "Job finished" opens. */
+  startAt: IsoSchema.optional(),
+})
+export type JobStateDto = z.infer<typeof JobStateSchema>
+
 export const RequestSchema = z.object({
   id: z.string(),
   customerId: z.string(),
@@ -80,6 +100,7 @@ export const RequestSchema = z.object({
   customerRating: RatingSchema.nullish(),
   /** On GET /requests/:id only: the request's chat (an additional task's is its booking's). */
   threadId: z.string().nullish(),
+  jobState: JobStateSchema.optional(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
@@ -223,6 +244,7 @@ export const BookingSchema = z.object({
   jobNumber: z.number().int().optional(),
   title: z.string().optional(),
   taskNumber: z.string().optional(),
+  jobState: JobStateSchema.optional(),
 })
 export type Booking = z.infer<typeof BookingSchema>
 
