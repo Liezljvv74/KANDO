@@ -119,6 +119,18 @@ it('customer cancels 25 hours before: full refund, no commission', async () => {
   expect(await notes(id)).toHaveLength(1)
 })
 
+it('a cancel whose refund Stripe already issued under another key is not flagged and ends refunded, once', async () => {
+  const now = new Date()
+  const { id } = await paidBooking({ startAt: new Date(now.getTime() + 30 * HOUR) })
+  const ref = (await pool.query('SELECT payment_ref FROM bookings WHERE id = $1', [id])).rows[0].payment_ref as string
+  g.priorRefunds.set(ref, { refundId: 're_staff_earlier', cents: 10_000 })
+  expect((await cancel(U.cust, id, now)).status).toBe('cancelled')
+  expect((await cancel(U.cust, id, new Date(now.getTime() + MIN))).status).toBe('cancelled')
+  expect((await pool.query('SELECT kind, amount, gateway_ref FROM ledger_entries WHERE booking_id = $1 AND kind = $2', [id, 'refund'])).rows).toEqual([{ kind: 'refund', amount: '100.00', gateway_ref: 're_staff_earlier' }])
+  expect((await pool.query("SELECT 1 FROM staff_flags WHERE ref_id = $1 AND kind IN ('payment-unprocessed', 'refund-failed')", [id])).rows).toHaveLength(0)
+  expect((await row(id)).released_at).not.toBeNull()
+})
+
 it('customer cancels 23 hours before: provider share 50%, commission on that 50% only', async () => {
   const now = new Date()
   const { id } = await paidBooking({ startAt: new Date(now.getTime() + 23 * HOUR) })

@@ -142,11 +142,20 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
     async refund(i) {
       const existing = (await client.refunds.list({ payment_intent: i.paymentRef, limit: 100 })).data.find((r) => r.metadata?.idempotencyKey === i.idempotencyKey)
       if (existing) return { refundId: existing.id }
-      const refund = await client.refunds.create(
-        { payment_intent: i.paymentRef, amount: i.amountCents, metadata: { bookingId: i.bookingId, idempotencyKey: i.idempotencyKey } },
-        { idempotencyKey: i.idempotencyKey },
-      )
-      return { refundId: refund.id }
+      try {
+        const refund = await client.refunds.create(
+          { payment_intent: i.paymentRef, amount: i.amountCents, metadata: { bookingId: i.bookingId, idempotencyKey: i.idempotencyKey } },
+          { idempotencyKey: i.idempotencyKey },
+        )
+        return { refundId: refund.id }
+      } catch (e) {
+        // A charge already refunded under ANOTHER key (an earlier attempt, a staff refund, the webhook path) makes create fail although
+        // the customer's money is back: when the live refunds cover the amount, that refund is this one. Anything else still raises.
+        const live = (await client.refunds.list({ payment_intent: i.paymentRef, limit: 100 })).data.filter((r) => r.status === 'succeeded' || r.status === 'pending')
+        const covered = live.reduce((sum, r) => sum + r.amount, 0)
+        if (live.length && covered >= i.amountCents) return { refundId: live[0]!.id }
+        throw e
+      }
     },
 
     verifyEvent(rawBody, signature) {

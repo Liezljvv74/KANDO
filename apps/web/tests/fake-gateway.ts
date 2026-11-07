@@ -10,6 +10,8 @@ export type FakeGateway = PaymentsGateway & {
   attempts: Record<string, number>
   /** Simulates the idempotency window running out: keys are forgotten, created objects stay (found again by key like the Stripe lookup). */
   forgetKeys(): void
+  /** Refunds Stripe already issued under another key, by paymentRef: a refund that they cover returns the existing one (the Stripe gateway's contract). */
+  priorRefunds: Map<string, { refundId: string; cents: number }>
   /** Account ids that accountReady reports as ready. */
   ready: Set<string>
   /** A body and signature that this gateway's verifyEvent accepts. */
@@ -62,6 +64,7 @@ export function fakeGateway(): FakeGateway {
     attempts,
     forgetKeys: () => byKey.clear(),
     ready: new Set(),
+    priorRefunds: new Map(),
     createAccount: (args) => once('createAccount', args, (i) => ({ accountId: `acct_fake_${i}` })),
     async onboardingLink(args) {
       record('onboardingLink', args)
@@ -73,7 +76,14 @@ export function fakeGateway(): FakeGateway {
     },
     createCheckout: (args) => once('createCheckout', args, (i) => ({ sessionId: `cs_fake_${i}`, url: `https://stripe.fake/pay/cs_fake_${i}` })),
     transfer: (args) => lookup('transfer', args, (i) => ({ transferId: `tr_fake_${i}` })),
-    refund: (args) => lookup('refund', args, (i) => ({ refundId: `re_fake_${i}` })),
+    refund(args) {
+      const prior = g.priorRefunds.get(args.paymentRef)
+      if (prior && prior.cents >= args.amountCents) {
+        attempts.refund = (attempts.refund ?? 0) + 1
+        return Promise.resolve({ refundId: prior.refundId })
+      }
+      return lookup('refund', args, (i) => ({ refundId: `re_fake_${i}` }))
+    },
     verifyEvent(rawBody, signature) {
       if (signed.get(signature) !== rawBody) throw new BadSignatureError('Invalid signature')
       return JSON.parse(rawBody) as GatewayEvent

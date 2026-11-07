@@ -206,6 +206,23 @@ describe('stripeGateway: calls', () => {
     expect(m.refundsCreate).not.toHaveBeenCalled()
   })
 
+  it('refund counts once: a charge already refunded under another key is a success when those refunds cover the amount', async () => {
+    const { m, g } = mockClient()
+    const staff = [{ id: 're_failed', status: 'failed', amount: 500, metadata: {} }, { id: 're_staff', status: 'succeeded', amount: 500, metadata: { idempotencyKey: 'staff-refund:b-1:1' } }]
+    m.refundsList.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: staff })
+    m.refundsCreate.mockRejectedValueOnce(Object.assign(new Error('Charge ch_1 has already been refunded.'), { code: 'charge_already_refunded' }))
+    expect(await g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' })).toEqual({ refundId: 're_staff' })
+  })
+
+  it('refund still raises when the existing refunds do not cover the amount (or there are none)', async () => {
+    const { m, g } = mockClient()
+    m.refundsList.mockResolvedValue({ data: [{ id: 're_part', status: 'succeeded', amount: 200, metadata: {} }] })
+    m.refundsCreate.mockRejectedValue(new Error('amount exceeds the refundable amount'))
+    await expect(g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' })).rejects.toThrow(/refundable/)
+    m.refundsList.mockResolvedValue({ data: [] })
+    await expect(g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-2' })).rejects.toThrow(/refundable/)
+  })
+
   it('the client times out a hung call after 15 s and retries at most twice (a hung call holds the booking lock)', () => {
     const c = stripeClient('sk_test_fake')
     expect(c.getApiField('timeout')).toBe(15_000)
