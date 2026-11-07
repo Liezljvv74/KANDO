@@ -37,15 +37,45 @@ export async function threadForBooking(tx: Exec, bookingId: string): Promise<str
   return (await tx.select({ id: threads.id }).from(threads).where(eq(threads.bookingId, b.id)))[0]!.id
 }
 
+/** What decides where a job talks: its own booking, its request, else (an additional task) its parent booking's. `key` finds the answer again. */
+export type ThreadLookup = { key: string; bookingId: string | null; requestId: string | null; parentBookingId: string | null }
+
 /**
- * The thread a booking talks in, read-only (none is created): its own, else its request's, else its parent booking's.
+ * THE rule for which thread a booking (or request) talks in, read-only (none is created): its own, else its request's, else its
+ * parent booking's, up to 8 levels. Batched: one query per level for all entries. key > thread id (null: none yet).
  * `exec` is the caller's request transaction (RLS) or the owner connection.
  */
+export async function threadIdsOf(exec: Exec, entries: ThreadLookup[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  let todo = entries
+  for (let i = 0; i < 8 && todo.length; i++) {
+    const bIds = todo.flatMap((e) => e.bookingId ?? [])
+    const rIds = todo.flatMap((e) => e.requestId ?? [])
+    const found = bIds.length || rIds.length ? await exec.select({ id: threads.id, bookingId: threads.bookingId, requestId: threads.requestId }).from(threads).where(or(bIds.length ? inArray(threads.bookingId, bIds) : undefined, rIds.length ? inArray(threads.requestId, rIds) : undefined)) : []
+    const up: ThreadLookup[] = []
+    for (const e of todo) {
+      const own = found.find((t) => (e.bookingId && t.bookingId === e.bookingId) || (e.requestId && t.requestId === e.requestId))
+      if (own) out.set(e.key, own.id)
+      else if (e.parentBookingId) up.push(e)
+      else out.set(e.key, null)
+    }
+    const parents = up.length ? await exec.select({ id: bookings.id, requestId: bookings.requestId, parentBookingId: bookings.parentBookingId }).from(bookings).where(inArray(bookings.id, up.map((e) => e.parentBookingId!))) : []
+    todo = up.flatMap((e) => {
+      const p = parents.find((q) => q.id === e.parentBookingId)
+      if (!p) {
+        out.set(e.key, null)
+        return []
+      }
+      return [{ key: e.key, bookingId: p.id, requestId: p.requestId, parentBookingId: p.parentBookingId }]
+    })
+  }
+  for (const e of todo) out.set(e.key, null)
+  return out
+}
+
+/** The thread a booking talks in (see threadIdsOf). */
 export async function threadIdOf(exec: Exec, b: { id: string; requestId: string | null; parentBookingId: string | null }): Promise<string | null> {
-  const own = (await exec.select({ id: threads.id }).from(threads).where(or(eq(threads.bookingId, b.id), b.requestId ? eq(threads.requestId, b.requestId) : undefined)).limit(1))[0]
-  if (own || !b.parentBookingId) return own?.id ?? null
-  const parent = (await exec.select({ id: bookings.id, requestId: bookings.requestId, parentBookingId: bookings.parentBookingId }).from(bookings).where(eq(bookings.id, b.parentBookingId)))[0]
-  return parent ? threadIdOf(exec, parent) : null
+  return (await threadIdsOf(exec, [{ key: b.id, bookingId: b.id, requestId: b.requestId, parentBookingId: b.parentBookingId }])).get(b.id) ?? null
 }
 
 /** Who may read a thread: its customer or the provider's owner. Anyone else (and a bad id) gets 404. */

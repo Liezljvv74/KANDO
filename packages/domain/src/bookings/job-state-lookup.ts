@@ -1,14 +1,15 @@
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
-import { bookings, db, notifications, providers, quotes, staffFlags, threads, type Tx } from '@kando/db'
+import { bookings, db, notifications, providers, quotes, staffFlags, type Tx } from '@kando/db'
 import type { JobStateDto } from '@kando/contract'
+import { threadIdsOf } from '../chat/threads'
 import { readRef } from '../payments/rules'
 import { currentBookingOf, deriveJobState, type JobBookingInput, type JobRequestInput, type JobState, type JobViewer } from './job-state'
 
-// Imports no requests/chat/notify module (requests.ts imports this one).
+// Imports no requests/notify module (requests.ts imports this one); the thread rule is chat/threads.ts threadIdsOf.
 type Db = Tx | typeof db
 
 /** One DTO to give a state: `key` is how the caller finds it again (request id or booking id). */
-export type JobStateItem = { key: string; viewer: JobViewer; providerId: string; requestId: string | null; bookingId?: string; request: JobRequestInput }
+export type JobStateItem = { key: string; viewer: JobViewer; providerId: string; requestId: string | null; bookingId?: string; /** a request item: the booking an additional task adds to (its chat is that booking's) */ parentBookingId?: string | null; request: JobRequestInput }
 
 /** An open money flag of the booking: a failed release, settle or refund (kinds written by attemptMoney and the webhook). The text is never read. */
 const MONEY_FLAGS = ['payment-unprocessed', 'refund-failed']
@@ -27,7 +28,6 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
   const byId = [...new Set(items.flatMap((i) => i.bookingId ?? []))]
   const where = or(byRequest.length ? inArray(bookings.requestId, byRequest) : undefined, byId.length ? inArray(bookings.id, byId) : undefined)
   const rows = where ? await x.select().from(bookings).where(where) : []
-  const requestIds = [...new Set(items.flatMap((i) => i.requestId ?? []))]
   const bookingIds = rows.map((r) => r.id)
 
   const providerIds = [...new Set(items.map((i) => i.providerId))]
@@ -45,18 +45,22 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
     for (const q of await x.select({ requestId: quotes.requestId, expiresAt: quotes.expiresAt }).from(quotes).where(and(inArray(quotes.requestId, quotedIds), eq(quotes.status, 'sent'))))
       if (!validUntil.has(q.requestId) || q.expiresAt > validUntil.get(q.requestId)!) validUntil.set(q.requestId, q.expiresAt)
 
-  // unread: thread (of the request, or of a direct booking) > unseen message notice of the viewer
-  const unreadThreads = new Set<string>()
-  const owned = [requestIds.length ? inArray(threads.requestId, requestIds) : undefined, bookingIds.length ? inArray(threads.bookingId, bookingIds) : undefined]
-  const ts = requestIds.length || bookingIds.length ? await x.select({ id: threads.id, requestId: threads.requestId, bookingId: threads.bookingId }).from(threads).where(or(...owned)) : []
-  if (ts.length) {
+  // unread: the job's thread (threadIdsOf: own, request's, else the parent booking's) has an unseen message notice of the viewer
+  const lookups = [
+    ...rows.map((r) => ({ key: r.id, bookingId: r.id, requestId: r.requestId, parentBookingId: r.parentBookingId })),
+    ...items.filter((i) => i.requestId && !i.bookingId).map((i) => ({ key: `r:${i.requestId}`, bookingId: null, requestId: i.requestId, parentBookingId: i.parentBookingId ?? null })),
+  ]
+  const threadOf = await threadIdsOf(x, lookups)
+  const threadIds = [...new Set([...threadOf.values()].flatMap((t) => t ?? []))]
+  const open = new Set<string>()
+  if (threadIds.length) {
     const notices = await x
       .select({ threadId: sql<string>`${notifications.payload}->>'threadId'` })
       .from(notifications)
-      .where(and(eq(notifications.userId, userId), eq(notifications.kind, 'message-received'), sql`${notifications.payload}->>'threadId' IN (${sql.join(ts.map((t) => sql`${t.id}`), sql`, `)})`, isNull(notifications.seenAt), isNull(notifications.dismissedAt)))
-    const open = new Set(notices.map((n) => n.threadId))
-    for (const t of ts) if (open.has(t.id)) unreadThreads.add(t.requestId ?? t.bookingId!)
+      .where(and(eq(notifications.userId, userId), eq(notifications.kind, 'message-received'), sql`${notifications.payload}->>'threadId' IN (${sql.join(threadIds.map((t) => sql`${t}`), sql`, `)})`, isNull(notifications.seenAt), isNull(notifications.dismissedAt)))
+    for (const n of notices) open.add(n.threadId)
   }
+  const unreadKey = (k: string) => { const t = threadOf.get(k); return !!t && open.has(t) }
 
   for (const i of items) {
     const mine = rows.filter((r) => (i.bookingId ? r.id === i.bookingId : r.requestId === i.requestId))
@@ -70,7 +74,7 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
         bookings: inputs,
         delayedFlag: !!current && flagged.has(current.id),
         providerPayoutReady: ready.has(i.providerId),
-        unread: (!!i.requestId && unreadThreads.has(i.requestId)) || mine.some((r) => unreadThreads.has(r.id)),
+        unread: (!!i.requestId && !i.bookingId && unreadKey(`r:${i.requestId}`)) || mine.some((r) => unreadKey(r.id)),
         now,
       }),
     )

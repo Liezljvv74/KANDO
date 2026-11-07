@@ -1,13 +1,11 @@
+import type { JOB_BUTTONS, JOB_STATE_KEYS } from '@kando/contract'
 import { bookingShownStatus } from './rules'
 
 /** Pure rules for the one job state (spec 4.4, section rules 8b point 5). No database: the server feeds it rows, the phone only renders the key. */
 
-export type JobStateKey =
-  | 'request_sent' | 'quote_sent' | 'payment_due' | 'checkout_not_completed' | 'paid_upcoming' | 'before_start_time' | 'start_time_passed'
-  | 'work_done_waiting' | 'payout_on_its_way' | 'payout_account_missing' | 'problem_reported' | 'delayed' | 'completed' | 'cancelled' | 'declined_expired' | 'time_to_agree'
-
-export type JobButton = 'accept_quote' | 'ask_question' | 'send_quote' | 'decline' | 'pay' | 'cancel' | 'finish' | 'confirm' | 'report_problem' | 'contact_support' | 'open_chat' | 'agree_time'
-  | 'set_up_payouts' | 'add_task' | 'review' | 'receipt' | 'no_show' | 'ask_someone_else'
+/** One list of keys and buttons: the contract's (JOB_STATE_KEYS, JOB_BUTTONS). */
+export type JobStateKey = (typeof JOB_STATE_KEYS)[number]
+export type JobButton = (typeof JOB_BUTTONS)[number]
 
 export type JobViewer = 'customer' | 'provider'
 export type JobSection = 'needs_you' | 'active' | 'past'

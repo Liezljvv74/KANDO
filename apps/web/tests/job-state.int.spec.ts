@@ -113,6 +113,38 @@ it('an unseen message notice makes the job count for the viewer; seen, it does n
   expect(await stateOf(U.cust, b)).toMatchObject({ section: 'active', countsForMe: false })
 })
 
+it('an unseen notice in the root job chat marks the root request, the root booking, and an additional task (it talks in the root chat)', async () => {
+  const root = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(19) })
+  const thread = (await pool.query('INSERT INTO threads (request_id, customer_id, provider_id) VALUES ($1, $2, $3) ON CONFLICT (request_id) DO UPDATE SET customer_id = threads.customer_id RETURNING id', [root.requestId, U.cust, providerId])).rows[0].id
+  await pool.query("UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_x', commission_rate = 0.12 WHERE id = $1", [root.id])
+  const taskReq = (await pool.query("INSERT INTO requests (customer_id, provider_id, service_id, description, answer_by, parent_booking_id) VALUES ($1, $2, $3, 'Noch ein Tor', now() + interval '3 days', $4) RETURNING id", [U.cust, providerId, serviceId, root.id])).rows[0].id
+  const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 20, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [taskReq, providerId])).rows[0].id
+  const task = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', $4, 60, $5, now() + interval '2 days', now()) RETURNING id", [U.cust, providerId, quote, day(19), root.id])).rows[0].id as string
+  await pool.query("UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_y', commission_rate = 0.12 WHERE id = $1", [task])
+  const counts = async () => ({
+    root: (await stateOf(U.cust, root.id)).countsForMe,
+    task: (await stateOf(U.cust, task)).countsForMe,
+    request: RequestSchema.parse(await (await call(requestOne.GET, U.cust, 'GET', undefined, { id: root.requestId! })).json()).jobState!.countsForMe,
+    taskRequest: RequestSchema.parse(await (await call(requestOne.GET, U.cust, 'GET', undefined, { id: taskReq })).json()).jobState!.countsForMe,
+  })
+  expect(await counts()).toMatchObject({ root: false, task: false })
+  await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ($1, 'message-received', $2)", [U.cust, JSON.stringify({ threadId: thread })])
+  expect(await counts()).toEqual({ root: true, task: true, request: true, taskRequest: true })
+  await pool.query("UPDATE notifications SET seen_at = now() WHERE user_id = $1 AND payload->>'threadId' = $2", [U.cust, thread])
+  expect(await counts()).toEqual({ root: false, task: false, request: false, taskRequest: false })
+})
+
+it('jobState is sent on reads and not on a mutation response', async () => {
+  const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(18) })
+  const withdraw = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
+  const list = (await (await call((await import('../app/app-api/v1/bookings/route')).GET, U.cust)).json()) as { docs: { id: string; jobState?: unknown }[] }
+  expect(list.docs.find((x) => x.id === b.id)?.jobState).toBeTruthy()
+  expect((await view(U.cust, b.id)).booking.jobState).toBeTruthy()
+  const res = (await (await call(withdraw.POST, U.cust, 'POST', undefined, { id: b.id })).json()) as { status: string; jobState?: unknown }
+  expect(res.status).toBe('withdrawn')
+  expect(res.jobState).toBeUndefined()
+})
+
 it('an open release-failed flag is delayed for both sides; once resolved it is not', async () => {
   const b = await paidBooking({ status: 'completed' })
   expect(await stateOf(U.cust, b)).toMatchObject({ key: 'payout_on_its_way' })
