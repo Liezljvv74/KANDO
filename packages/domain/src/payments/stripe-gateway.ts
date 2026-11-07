@@ -149,12 +149,17 @@ export function stripeGateway(client: Stripe): PaymentsGateway {
         )
         return { refundId: refund.id }
       } catch (e) {
-        // A charge already refunded under ANOTHER key (an earlier attempt, a staff refund, the webhook path) makes create fail although
-        // the customer's money is back: when the live refunds cover the amount, that refund is this one. Anything else still raises.
+        // Only the "already refunded" failure may count as done (Stripe error codes, https://docs.stripe.com/error-codes#charge-already-refunded):
+        // code `charge_already_refunded`, or an invalid-request error whose message says the amount is "greater than unrefunded amount"
+        // (Stripe sends that text for a partly refunded charge, code `amount_too_large` or none). Network errors, rate limits,
+        // balance_insufficient, idempotency errors and anything else rethrow, so the flag is written.
+        const err = e as { code?: string; message?: string }
+        if (err.code !== 'charge_already_refunded' && !/greater than unrefunded amount/i.test(err.message ?? '')) throw e
+        // The charge was refunded by an earlier attempt or by hand in the Dashboard. It is done only when the live refunds are EXACTLY the
+        // amount asked: less means money still owed, more means the ledger row would be smaller than what Stripe refunded.
         const live = (await client.refunds.list({ payment_intent: i.paymentRef, limit: 100 })).data.filter((r) => r.status === 'succeeded' || r.status === 'pending')
-        const covered = live.reduce((sum, r) => sum + r.amount, 0)
-        if (live.length && covered >= i.amountCents) return { refundId: live[0]!.id }
-        throw e
+        if (live.reduce((sum, r) => sum + r.amount, 0) !== i.amountCents) throw e
+        return { refundId: (live.find((r) => r.metadata?.idempotencyKey === i.idempotencyKey) ?? live[0]!).id }
       }
     },
 

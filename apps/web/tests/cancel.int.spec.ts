@@ -131,6 +131,19 @@ it('a cancel whose refund Stripe already issued under another key is not flagged
   expect((await row(id)).released_at).not.toBeNull()
 })
 
+it('a charge refunded for MORE than the plan is flagged and nothing is transferred or released', async () => {
+  const now = new Date()
+  const { id } = await paidBooking({ startAt: new Date(now.getTime() + 20 * HOUR) }) // late: the plan refunds 50.00
+  const ref = (await pool.query('SELECT payment_ref FROM bookings WHERE id = $1', [id])).rows[0].payment_ref as string
+  g.priorRefunds.set(ref, { refundId: 're_dashboard_full', cents: 10_000 })
+  expect((await cancel(U.cust, id, now)).status).toBe('cancelled')
+  expect(callsOf('transfer')).toHaveLength(0)
+  expect(await ledger(id)).toEqual([])
+  expect((await row(id)).released_at).toBeNull()
+  expect((await pool.query("SELECT 1 FROM staff_flags WHERE ref_id = $1 AND kind = 'payment-unprocessed'", [id])).rows).toHaveLength(1)
+  await pool.query('UPDATE bookings SET released_at = now() WHERE id = $1', [id]) // keeps the timer sweeps of later tests off this stuck booking
+})
+
 it('customer cancels 23 hours before: provider share 50%, commission on that 50% only', async () => {
   const now = new Date()
   const { id } = await paidBooking({ startAt: new Date(now.getTime() + 23 * HOUR) })

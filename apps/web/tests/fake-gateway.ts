@@ -10,7 +10,7 @@ export type FakeGateway = PaymentsGateway & {
   attempts: Record<string, number>
   /** Simulates the idempotency window running out: keys are forgotten, created objects stay (found again by key like the Stripe lookup). */
   forgetKeys(): void
-  /** Refunds Stripe already issued under another key, by paymentRef: a refund that they cover returns the existing one (the Stripe gateway's contract). */
+  /** Refunds Stripe already issued under another key, by paymentRef: a refund of EXACTLY that amount returns the existing one, any other amount fails like Stripe's already-refunded error (the Stripe gateway's contract). */
   priorRefunds: Map<string, { refundId: string; cents: number }>
   /** Account ids that accountReady reports as ready. */
   ready: Set<string>
@@ -78,8 +78,9 @@ export function fakeGateway(): FakeGateway {
     transfer: (args) => lookup('transfer', args, (i) => ({ transferId: `tr_fake_${i}` })),
     refund(args) {
       const prior = g.priorRefunds.get(args.paymentRef)
-      if (prior && prior.cents >= args.amountCents) {
+      if (prior) {
         attempts.refund = (attempts.refund ?? 0) + 1
+        if (prior.cents !== args.amountCents) return Promise.reject(Object.assign(new Error('Charge has already been refunded.'), { code: 'charge_already_refunded' }))
         return Promise.resolve({ refundId: prior.refundId })
       }
       return lookup('refund', args, (i) => ({ refundId: `re_fake_${i}` }))

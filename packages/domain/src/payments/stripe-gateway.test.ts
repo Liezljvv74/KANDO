@@ -206,21 +206,46 @@ describe('stripeGateway: calls', () => {
     expect(m.refundsCreate).not.toHaveBeenCalled()
   })
 
-  it('refund counts once: a charge already refunded under another key is a success when those refunds cover the amount', async () => {
-    const { m, g } = mockClient()
-    const staff = [{ id: 're_failed', status: 'failed', amount: 500, metadata: {} }, { id: 're_staff', status: 'succeeded', amount: 500, metadata: { idempotencyKey: 'staff-refund:b-1:1' } }]
-    m.refundsList.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: staff })
-    m.refundsCreate.mockRejectedValueOnce(Object.assign(new Error('Charge ch_1 has already been refunded.'), { code: 'charge_already_refunded' }))
-    expect(await g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' })).toEqual({ refundId: 're_staff' })
-  })
-
-  it('refund still raises when the existing refunds do not cover the amount (or there are none)', async () => {
-    const { m, g } = mockClient()
-    m.refundsList.mockResolvedValue({ data: [{ id: 're_part', status: 'succeeded', amount: 200, metadata: {} }] })
-    m.refundsCreate.mockRejectedValue(new Error('amount exceeds the refundable amount'))
-    await expect(g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' })).rejects.toThrow(/refundable/)
-    m.refundsList.mockResolvedValue({ data: [] })
-    await expect(g.refund({ paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-2' })).rejects.toThrow(/refundable/)
+  describe('refund when create fails', () => {
+    const ask = { paymentRef: 'pi_1', amountCents: 500, bookingId: 'b-1', idempotencyKey: 'refund:b-1' }
+    const fail = (m: ReturnType<typeof mockClient>['m'], error: object, refunds: number[]) => {
+      m.refundsList.mockResolvedValueOnce({ data: [] }).mockResolvedValue({ data: refunds.map((amount, n) => ({ id: `re_${n}`, status: 'succeeded', amount, metadata: {} })) })
+      m.refundsCreate.mockRejectedValueOnce(Object.assign(new Error((error as { message?: string }).message ?? 'x'), error))
+    }
+    it('(d) charge_already_refunded with refunds exactly covering resolves with the existing refund', async () => {
+      const { m, g } = mockClient()
+      fail(m, { code: 'charge_already_refunded', message: 'Charge ch_1 has already been refunded.' }, [500])
+      expect(await g.refund(ask)).toEqual({ refundId: 're_0' })
+    })
+    it('the "greater than unrefunded amount" message counts too, and the refund with this key is preferred', async () => {
+      const { m, g } = mockClient()
+      m.refundsList.mockResolvedValueOnce({ data: [] }).mockResolvedValue({ data: [{ id: 're_a', status: 'succeeded', amount: 200, metadata: {} }, { id: 're_b', status: 'pending', amount: 300, metadata: { idempotencyKey: 'refund:b-1' } }, { id: 're_x', status: 'failed', amount: 900, metadata: {} }] })
+      m.refundsCreate.mockRejectedValueOnce(new Error('Refund amount ($5.00) is greater than unrefunded amount on charge ($0.00)'))
+      expect(await g.refund(ask)).toEqual({ refundId: 're_b' })
+    })
+    it('(a) a connection error rejects even when refunds exactly cover', async () => {
+      const { m, g } = mockClient()
+      fail(m, { type: 'StripeConnectionError', message: 'An error occurred with our connection to Stripe.' }, [500])
+      await expect(g.refund(ask)).rejects.toThrow(/connection/)
+    })
+    it('(b) balance_insufficient rejects even when refunds exactly cover', async () => {
+      const { m, g } = mockClient()
+      fail(m, { code: 'balance_insufficient', message: 'Insufficient funds in your Stripe account.' }, [500])
+      await expect(g.refund(ask)).rejects.toThrow(/Insufficient/)
+    })
+    it('(c) over-coverage rejects', async () => {
+      const { m, g } = mockClient()
+      fail(m, { code: 'charge_already_refunded', message: 'Charge ch_1 has already been refunded.' }, [1000])
+      await expect(g.refund(ask)).rejects.toThrow(/already been refunded/)
+    })
+    it('(e) partial cover and no refunds reject', async () => {
+      const { m, g } = mockClient()
+      fail(m, { code: 'charge_already_refunded', message: 'Charge ch_1 has already been refunded.' }, [200])
+      await expect(g.refund(ask)).rejects.toThrow(/already been refunded/)
+      const two = mockClient()
+      fail(two.m, { code: 'charge_already_refunded', message: 'Charge ch_1 has already been refunded.' }, [])
+      await expect(two.g.refund(ask)).rejects.toThrow(/already been refunded/)
+    })
   })
 
   it('the client times out a hung call after 15 s and retries at most twice (a hung call holds the booking lock)', () => {
