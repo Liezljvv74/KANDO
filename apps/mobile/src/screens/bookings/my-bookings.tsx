@@ -14,6 +14,7 @@ import { t, useLang, type Key } from '@/i18n'
 import { bookingStatusText } from '@/lib/booking-status'
 import { formatWhen } from '@/lib/booking-time'
 import { go } from '@/lib/go'
+import { bookingStateCtx, requestStateCtx, stateText } from '@/lib/job-state-text'
 import { isBookingNotice } from '@/lib/notification-text'
 
 /** "My requests and bookings": as customer, and as provider for people who offer services. */
@@ -52,7 +53,7 @@ export default function MyBookings() {
         <Pressable key={b.id} accessibilityRole="button" onPress={() => go(`/bookings/${b.id}`)}>
           <Card list>
             <Text style={styles.text}>{formatWhen(b.startAt)}</Text>
-            <Text style={styles.small}>{bookingStatusText(b, role)}</Text>
+            <Text style={styles.small}>{stateText(b.jobState, role, bookingStateCtx(b))?.title ?? bookingStatusText(b, role)}</Text>
           </Card>
         </Pressable>
       ))}
@@ -65,7 +66,7 @@ export default function MyBookings() {
             <Text style={styles.text} numberOfLines={2}>
               {r.description}
             </Text>
-            <Text style={styles.small}>{t(`requestStatus.${r.status}` as Key)}</Text>
+            <Text style={styles.small}>{stateText(r.jobState, role, requestStateCtx(r))?.title ?? t(`requestStatus.${r.status}` as Key)}</Text>
           </Card>
         </Pressable>
       ))}

@@ -10,6 +10,8 @@ import { useLoad } from '@/hooks/use-load'
 import { useMe } from '@/hooks/use-me'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang, type Key } from '@/i18n'
+import { font } from '@/theme'
+import { requestStateCtx, stateText } from '@/lib/job-state-text'
 import { formatWhen } from '@/lib/booking-time'
 import { confirmDanger } from '@/lib/confirm'
 import { goReplace } from '@/lib/go'
@@ -50,6 +52,8 @@ export default function RequestDetail() {
   const confirm = (quoteId: string) => accepting.submit(async () => goReplace(`/bookings/${(await (extra ? acceptQuote(quoteId, {}) : confirmQuote(quoteId))).id}`))
   const quoted = request.status === 'quoted'
   const place = placeText(request.onSite, request.address)
+  const liveQuote = quotes.filter((q) => q.status === 'sent').sort((a, b) => b.version - a.version)[0]
+  const state = stateText(request.jobState, isCustomer ? 'customer' : 'provider', requestStateCtx(request, liveQuote))
   const close = async () => {
     if (isCustomer && quoted) return setAskChat(true)
     const [ask, yes, call] = isCustomer ? (['request.withdrawConfirm', 'request.withdraw', withdrawRequest] as const) : (['request.declineConfirm', 'request.decline', declineRequest] as const)
@@ -64,8 +68,19 @@ export default function RequestDetail() {
         {!!place && <Text style={styles.small}>{place}</Text>}
         {!!request.note && <Text style={styles.small}>{request.note}</Text>}
         {extra && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
-        <Text style={styles.small}>{t(`requestStatus.${request.status}` as Key)}</Text>
-        {open && <Text style={styles.small}>{t('booking.answerBy', { date: formatWhen(request.answerBy) })}</Text>}
+        {state ? (
+          <>
+            <Text style={styles.status} accessibilityRole="header">
+              {state.title}
+            </Text>
+            <Text style={styles.small}>{state.body}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.small}>{t(`requestStatus.${request.status}` as Key)}</Text>
+            {open && <Text style={styles.small}>{t('booking.answerBy', { date: formatWhen(request.answerBy) })}</Text>}
+          </>
+        )}
       </Card>
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       <OpenChat find={async () => request.threadId ?? null} />
@@ -92,6 +107,7 @@ export default function RequestDetail() {
 }
 
 const styles = StyleSheet.create({
+  status: { fontSize: 18, fontFamily: font.heading, color: '#34328A' },
   text: { fontSize: 16, color: '#1D1C4A' },
   small: { fontSize: 14, color: '#4F4E7D' },
 })
