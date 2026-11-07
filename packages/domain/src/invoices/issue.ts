@@ -4,6 +4,8 @@ import { bookings, db, invoices, providers, type Tx } from '@kando/db'
 import type { Invoice } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import { notifyBookingEvent } from '../bookings/notify'
+import { rootJobs, taskPositions } from '../bookings/job-lookup'
+import { taskNumber } from '../bookings/job-ref'
 import { describeError } from '../log-error'
 import { createNotification } from '../notifications-store'
 import { LIVE_PAYMENTS_ALLOWED } from '../payments/rules'
@@ -84,6 +86,7 @@ type GroupRow = {
   no_show: string | null
   title: string
   share: string
+  created_at: Date | string
 }
 
 const nameOf = (first: string | null, last: string | null) => [first, last].filter((x) => x?.trim()).join(' ') || '-'
@@ -120,7 +123,7 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
     const group = (
       await o.execute<GroupRow>(sql`
       SELECT b.id, b.parent_booking_id, b.status, b.amount::text AS amount, b.material_amount::text AS material_amount, b.start_at,
-        b.cancelled_by, b.no_show, coalesce(q.scope, s.title, rq.description, '') AS title,
+        b.cancelled_by, b.no_show, b.created_at, coalesce(q.scope, s.title, rq.description, '') AS title,
         (CASE WHEN b.released_at IS NULL THEN 0
           ELSE coalesce((SELECT sum(l.amount) FROM ledger_entries l WHERE l.booking_id = b.id AND l.kind IN ('transfer', 'commission')), 0) END)::text AS share
       FROM bookings b LEFT JOIN quotes q ON q.id = b.quote_id LEFT JOIN services s ON s.id = b.service_id LEFT JOIN requests rq ON rq.id = b.request_id
@@ -129,7 +132,11 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
     const p = await invoiceProvider(o, root.providerId)
     const [c] = (await o.execute<{ first_name: string | null; last_name: string | null }>(sql`SELECT first_name, last_name FROM users WHERE id = ${root.customerId}`)).rows
     if (!p || !c) return null
+    // the job number and title of the root request; an additional task is #N-2, #N-3 in the order it was made (the same rule as withBookingRefs)
+    const job = root.requestId ? (await rootJobs(o, [root.requestId], undefined, o)).get(root.requestId) : undefined
+    const position = root.requestId ? await taskPositions(o, [root.requestId]) : new Map<string, number>()
     const draft = buildInvoice({
+      ...(job && { job: { number: job.jobNumber, title: job.title } }),
       provider: p.provider,
       customer: {
         fullName: nameOf(c.first_name, c.last_name),
@@ -146,6 +153,7 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
         title: g.title,
         cancelledBy: g.cancelled_by,
         noShow: g.no_show,
+        ...(job && g.parent_booking_id && { task: taskNumber(job.jobNumber, position.get(g.id) ?? 2) }),
       })),
       country: p.country,
       currency: root.currency,

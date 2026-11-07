@@ -1,4 +1,4 @@
-import { REQUEST_SCREEN_KINDS, type Notification } from '@kando/contract'
+import { REQUEST_SCREEN_KINDS, type NoticeJob, type Notification } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 
@@ -48,7 +48,12 @@ const KEY: Record<Notification['kind'], Key> = {
 }
 
 /** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */
-export function notificationText(kind: string, payload: object = {}): string | null {
+export function notificationText(kind: string, payload: object = {}, job?: Pick<NoticeJob, 'number' | 'title'> | null): string | null {
+  const text = baseText(kind, payload)
+  return text && job ? t('notice.withJob', { job: `#${job.number} ${job.title}`, text }) : text
+}
+
+function baseText(kind: string, payload: object): string | null {
   const count = 'count' in payload && typeof payload.count === 'number' ? payload.count : 0 // customers-waiting: how many, never who
   if (kind === 'customers-waiting' && count > 0) return count === 1 ? t('notification.customersWaitingOne') : t('notification.customersWaitingMany', { count })
   return kind in KEY ? t(KEY[kind as Notification['kind']]) : null
@@ -71,6 +76,8 @@ export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>):
   return n.payload.threadId ?? /^skilled:\/\/threads\/([^/?#]+)$/.exec(n.payload.url)?.[1] ?? null
 }
 
+/** Kinds about a request or its quote (no booking yet): the request screen is their job page today; booking-stage kinds keep the booking screen. */
+const REQUEST_STAGE: Notification['kind'][] = ['request-received', 'quote-received', 'quote-expiring', 'request-expired', 'request-withdrawn', 'request-declined', 'request-reopened', 'request-updated', 'time-proposed']
 const ID = /^[\w-]{1,100}$/ // the rule pushRoute uses
 const idOf = (payload: object, key: 'bookingId' | 'requestId'): string | null => {
   const v = (payload as Record<string, unknown>)[key]
@@ -78,7 +85,7 @@ const idOf = (payload: object, key: 'bookingId' | 'requestId'): string | null =>
 }
 
 /** The screen a notice opens: the provider's page for "now available" (the slug is in the payload link), the profile page (payout card) for "customers waiting", the commission invoice list for a new commission invoice, else the booking, or the request (first for request-withdrawn, -declined and -reopened: their booking has ended), or the list; null for the rest or a malformed id. */
-export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): { path: string } | null => {
+export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'> & { job?: Pick<NoticeJob, 'id'> | null }): { path: string } | null => {
   if (n.kind === 'customers-waiting' || n.kind === 'payout-setup-complete') return { path: '/my-profile' }
   if (n.kind === 'commission-invoice-ready') return { path: '/invoices/commission' }
   if (n.kind === 'profile-live' || n.kind === 'message-received') return null
@@ -86,6 +93,8 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'>): {
     const slug = 'url' in n.payload ? /^https?:\/\/[^/]+\/providers\/([^/?#]+)/.exec(n.payload.url)?.[1] : undefined
     return slug ? { path: `/provider/${slug}` } : null
   }
+  // PR 4: every kind opens the job page once /bookings/request/[id] is the job page
+  if (n.job && REQUEST_STAGE.includes(n.kind) && ID.test(n.job.id) && idOf(n.payload, 'requestId') === n.job.id) return { path: `/bookings/request/${n.job.id}` } // the job page; an app or notice without `job` keeps the old target below
   const bookingId = idOf(n.payload, 'bookingId')
   const requestId = idOf(n.payload, 'requestId')
   const [first, second] = REQUEST_SCREEN_KINDS.includes(n.kind) ? [['request', requestId], ['booking', bookingId]] as const : [['booking', bookingId], ['request', requestId]] as const

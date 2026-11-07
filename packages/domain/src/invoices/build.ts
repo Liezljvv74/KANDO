@@ -12,6 +12,8 @@ export type InvoiceLine = {
   kind: 'job' | 'additional-task' | 'late-cancel-fee' | 'no-show-fee'
   description: string
   serviceDate: string
+  /** `#1040` or `#1040-2`: the job or additional task the line is for (absent on invoices issued before job numbers). */
+  task?: string
   labour: number
   material: number
   net: number
@@ -30,6 +32,8 @@ export type InvoiceDraft = {
   vatRate: number
   currency: string
   notes: string[]
+  /** The job the document is for (absent on documents issued before job numbers); the invoice keeps its own number. */
+  job?: { number: number; title: string }
 }
 
 export type InvoiceInput = {
@@ -57,7 +61,9 @@ export type InvoiceInput = {
     title: string
     cancelledBy: string | null
     noShow: string | null
+    task?: string
   }[]
+  job?: { number: number; title: string }
   country: string
   currency: string
 }
@@ -110,6 +116,7 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
       kind,
       description: b.title,
       serviceDate: day.format(b.startAt),
+      ...(b.task && { task: b.task }),
       labour: eur(fee ? 0 : share - material),
       material: eur(material),
       net: eur(net),
@@ -140,6 +147,7 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
     vatRate: lineRate,
     currency: input.currency,
     notes,
+    ...(input.job && { job: input.job }),
   }
 }
 
@@ -161,11 +169,12 @@ export function invoiceLines(draft: InvoiceDraft, lang: Lang): string[] {
   const party = (label: string, x: Party) => [label, ...(x.address?.startsWith(x.name) ? [] : [x.name]), ...(x.address ? [x.address] : []), ...(x.taxId ? [`Steuernummer / USt-IdNr. (Tax number / VAT ID): ${x.taxId}`] : [])]
   const out = [
     draft.kind === 'invoice' ? 'Rechnung (Invoice)' : 'Quittung (Receipt)',
+    ...(draft.job ? [`Auftrag (Job): #${draft.job.number} ${draft.job.title}`] : []),
     ...party('Von (From):', draft.issuer),
     ...party('An (To):', draft.recipient),
   ]
   for (const l of draft.lines) {
-    out.push(`${KIND_LABEL[l.kind]}: ${l.description}, Leistungsdatum (Service date): ${date(l.serviceDate)}`)
+    out.push(`${KIND_LABEL[l.kind]}${l.kind !== 'job' && l.task ? ` ${l.task}` : ''}: ${l.description}, Leistungsdatum (Service date): ${date(l.serviceDate)}`)
     if (l.labour || l.material) out.push(`  Arbeitskosten (Labour): ${m(l.labour)}, Material (Material): ${m(l.material)}`)
     out.push(vat ? `  Netto (Net): ${m(l.net)}, ${ust}: ${m(l.vat)}, Brutto (Gross): ${m(l.gross)}` : `  Betrag (Amount): ${m(l.gross)}`)
   }

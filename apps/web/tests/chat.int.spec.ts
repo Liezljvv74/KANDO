@@ -65,6 +65,14 @@ it('creating a request opens a thread; both parties list it', async () => {
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE request_id = $1', [r.id])).rows[0].n).toBe(1)
 })
 
+it('thread list rows carry jobNumber and title', async () => {
+  const r = await newRequest()
+  const th = await threadOf(U.cust, r.id)
+  expect(th.jobNumber).toBe(r.jobNumber)
+  expect(th.title).toBe(r.title)
+  expect(th.jobNumber).toBeGreaterThan(0)
+})
+
 it("a quote and its acceptance appear as cards in the request's thread", async () => {
   const r = await newRequest()
   const q = QuoteSchema.parse(await (await call(quotes.POST, U.owner, 'POST', { amount: 99.5, scope: 'Fence' }, { id: r.id })).json())

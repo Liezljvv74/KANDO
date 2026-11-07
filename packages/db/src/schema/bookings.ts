@@ -1,40 +1,53 @@
 import { sql } from 'drizzle-orm'
 import { boolean, check, index, uniqueIndex, integer, numeric, pgTable, text, timestamp, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { providers, services } from './providers'
+import { categories } from './reference'
 import { users } from './users'
 
 // Private to the two parties (rls.ts). Status moves: rls.ts APP_STATUS_MOVES (the app role makes only those, from the listed side).
 // Money columns are staff-only (rls.ts COLUMN_STAFF_ONLY).
+/**
+ * The request columns the app role writes: `job_number` is database-only (rls.ts COLUMN_STAFF_ONLY.requests). A Drizzle
+ * insert names every column of its table, so app inserts go through `requestAppInsert` (../app-tables.ts), this shape.
+ */
+export const requestAppColumns = () => ({
+  customerId: text('customer_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  providerId: uuid('provider_id')
+    .notNull()
+    .references(() => providers.id, { onDelete: 'cascade' }),
+  serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
+  // The service's category at request time (migration 0036): the job title falls back to its name when the service is gone. Null only on rows older than the column whose service was already deleted.
+  categoryId: uuid('category_id').references(() => categories.id),
+  description: text().notNull(),
+  // The customer's proposed time and place (flow 1). Null only on an additional-task request (parent_booking_id set): it belongs to a booking that has its own time and place. `revision` counts the customer's changes to the time and place.
+  startAt: timestamp('start_at', { withTimezone: true }),
+  durationMin: integer('duration_min'),
+  onSite: boolean('on_site'),
+  addressStreet: text('address_street'),
+  addressPostcode: text('address_postcode'),
+  addressCity: text('address_city'),
+  note: text(),
+  revision: integer().notNull().default(0),
+  // When the customer last changed the time (null: never); the round rule looks for chat messages after it.
+  revisedAt: timestamp('revised_at', { withTimezone: true }),
+  status: text().notNull().default('open'),
+  answerBy: timestamp('answer_by', { withTimezone: true }).notNull(),
+  // An additional task's request: the paid booking it adds to (trigger check_parent_booking, never changed: rls.ts).
+  // Cascade: an account deletion removes the bookings before the requests (bookings.request_id points the other way).
+  parentBookingId: uuid('parent_booking_id').references((): AnyPgColumn => bookings.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const requests = pgTable(
   'requests',
   {
     id: uuid().primaryKey().defaultRandom(),
-    customerId: text('customer_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    providerId: uuid('provider_id')
-      .notNull()
-      .references(() => providers.id, { onDelete: 'cascade' }),
-    serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
-    description: text().notNull(),
-    // The customer's proposed time and place (flow 1). Null only on an additional-task request (parent_booking_id set): it belongs to a booking that has its own time and place. `revision` counts the customer's changes to the time and place.
-    startAt: timestamp('start_at', { withTimezone: true }),
-    durationMin: integer('duration_min'),
-    onSite: boolean('on_site'),
-    addressStreet: text('address_street'),
-    addressPostcode: text('address_postcode'),
-    addressCity: text('address_city'),
-    note: text(),
-    revision: integer().notNull().default(0),
-    // When the customer last changed the time (null: never); the round rule looks for chat messages after it.
-    revisedAt: timestamp('revised_at', { withTimezone: true }),
-    status: text().notNull().default('open'),
-    answerBy: timestamp('answer_by', { withTimezone: true }).notNull(),
-    // An additional task's request: the paid booking it adds to (trigger check_parent_booking, never changed: rls.ts).
-    // Cascade: an account deletion removes the bookings before the requests (bookings.request_id points the other way).
-    parentBookingId: uuid('parent_booking_id').references((): AnyPgColumn => bookings.id, { onDelete: 'cascade' }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    // The job number people see (sequence job_number_seq from 1000, migration 0035); only the database writes it (rls.ts COLUMN_STAFF_ONLY).
+    jobNumber: integer('job_number').notNull().unique().default(sql`nextval('job_number_seq')`),
+    ...requestAppColumns(),
   },
   (t) => [
     check('requests_status_check', sql`status in ('open','quoted','booked','expired','withdrawn','declined')`),

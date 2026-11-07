@@ -7,6 +7,7 @@ import { lockProviderSlots, timeIsAcceptable } from './busy'
 import { notifyBookingEvent } from './notify'
 import { lockRow, partyOf } from './party'
 import { view } from './bookings'
+import { withBookingRefs } from './requests'
 import { DAY } from '@kando/contract'
 import { blockedWithProvider } from '../chat/blocks'
 import { canTransact } from '../payments/rules'
@@ -49,7 +50,7 @@ export async function proposeAgreedTime(tx: Tx, userId: string, bookingId: strin
     return [r!, p!.o] as const
   })
   afterCommit(() => notifyBookingEvent('time-to-confirm', role === 'customer' ? ownerId : row.customerId, { bookingId: row.id }))
-  return view(row, userId, now)
+  return (await withBookingRefs(tx, [view(row, userId, now)], userId))[0]!
 }
 
 /**
@@ -84,5 +85,5 @@ export async function confirmAgreedTime(tx: Tx, userId: string, bookingId: strin
   })
   // both sides have confirmed the time: whichever side confirmed last, the customer gets "Payment due" (pay_by from payBy(), the existing payment rules)
   afterCommit(() => notifyBookingEvent('booking-accepted', row.customerId, { bookingId: row.id, date: pay.toISOString() }))
-  return view(row, userId, now)
+  return (await withBookingRefs(tx, [view(row, userId, now)], userId))[0]!
 }

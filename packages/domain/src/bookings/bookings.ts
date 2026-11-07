@@ -7,7 +7,7 @@ import { ownProvider } from '../providers/profile'
 import { threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { lockRow, partyOf } from './party'
-import { toBooking } from './requests'
+import { toBooking, withBookingRefs } from './requests'
 import { canTransition } from './rules'
 
 type Row = typeof bookings.$inferSelect
@@ -32,7 +32,7 @@ export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'p
     .limit(LIST_PAGE + 1)
   const { rows, next } = pageOf(found)
   const kids = rows.length ? await tx.select().from(bookings).where(and(mine, inArray(bookings.parentBookingId, rows.map((r) => r.id)))).orderBy(asc(bookings.createdAt), asc(bookings.id)) : []
-  return { docs: rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), next }
+  return { docs: await withBookingRefs(tx, rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), userId), next }
 }
 
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */
@@ -40,7 +40,7 @@ export async function getBooking(tx: Tx, userId: string, id: string): Promise<Bo
   const { role } = await partyOf(tx, userId, id) // 404 for anyone else
   // joined with the quote's document number, so the provider sees exactly which quote was accepted (both parties may read the document)
   const found = (await tx.select({ b: bookings, quoteNumber: quoteDocuments.number }).from(bookings).leftJoin(quoteDocuments, eq(quoteDocuments.quoteId, bookings.quoteId)).where(eq(bookings.id, id)))[0] ?? notFound()
-  return { booking: view(found.b, userId), viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
+  return { booking: (await withBookingRefs(tx, [view(found.b, userId)], userId))[0]!, viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
 }
 
 /** "I no longer need this": the customer, from awaiting-time or awaiting-payment. */
@@ -49,5 +49,5 @@ export async function withdrawBooking(tx: Tx, userId: string, bookingId: string,
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
-  return view(row!, userId, now)
+  return (await withBookingRefs(tx, [view(row!, userId, now)], userId))[0]!
 }

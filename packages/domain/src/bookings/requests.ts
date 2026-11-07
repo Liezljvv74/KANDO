@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requests, type Tx } from '@kando/db'
+import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
 import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
@@ -19,6 +19,10 @@ import { assertFuture, bookingShownStatus, lapseReason, MAX_OPEN_REQUESTS_PER_PA
 import { acceptAdditional } from './additional'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
+import { taskNumber } from './job-ref'
+import { rootJobs, rootsOf, taskPositions } from './job-lookup'
+
+type Db = Tx | typeof db
 
 const iso = (d: Date) => d.toISOString()
 
@@ -44,6 +48,7 @@ export const toRequest = (r: typeof requests.$inferSelect, now = new Date(), lap
     note: r.note,
     revision: r.revision,
     parentBookingId: r.parentBookingId,
+    jobNumber: r.jobNumber,
     status: (status === 'open' && r.answerBy <= now ? 'expired' : status) as BookingRequest['status'],
     lapsed: status === 'quoted' && lapse?.open ? lapse.reason : null, // the provider's view carries it too; only the customer's app asks
     answerBy: iso(r.answerBy),
@@ -95,6 +100,40 @@ async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map
     if (reason) out.set(b.requestId!, { quoteId: b.quoteId, reason, open: (b.quoteStatus === 'accepted' || b.quoteStatus === 'sent') && b.expiresAt! > now })
   }
   return out
+}
+
+/** Adds the root job's number and title to request DTOs (an additional task's request shows its job's). */
+export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string): Promise<T[]> {
+  const parents = [...new Set(list.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : [])))]
+  const roots = await rootsOf(x, parents)
+  // a task whose root booking has no request (booked direct) has no job to show: no refs, never its own unused number
+  const rootOf = (r: T) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id)
+  const jobs = await rootJobs(x, [...new Set(list.flatMap((r) => rootOf(r) ?? []))], userId)
+  return list.map((r) => {
+    const root = rootOf(r)
+    const j = root ? jobs.get(root) : undefined
+    if (j) return { ...r, jobNumber: j.jobNumber, title: j.title }
+    if (r.parentBookingId) { const { jobNumber: _own, title: _t, ...rest } = r; return rest as T } // a task with no root request: not its own unused number
+    return r
+  })
+}
+
+/**
+ * Adds the job number, title and task number to booking DTOs. A job is its root booking plus the additional tasks that hang
+ * below it (by parent_booking_id); the root booking is `#1040`, its tasks are `#1040-2`, `#1040-3` in the order they were created
+ * (created_at, id), every status counted (bookings are never deleted, so a position never changes), whichever batch shows them.
+ */
+export async function withBookingRefs(x: Db, list: Booking[], userId?: string): Promise<Booking[]> {
+  if (!list.some((b) => b.requestId)) return list
+  const roots = await rootsOf(x, list.filter((b) => b.requestId).map((b) => b.id))
+  const rootReqs = [...new Set([...roots.values()].flatMap((r) => r.requestId ?? []))]
+  const jobs = await rootJobs(x, rootReqs, userId)
+  const position = await taskPositions(x, rootReqs)
+  return list.map((b) => {
+    const rr = roots.get(b.id)?.requestId
+    const j = rr ? jobs.get(rr) : undefined
+    return j ? { ...b, jobNumber: j.jobNumber, title: j.title, taskNumber: taskNumber(j.jobNumber, position.get(b.id) ?? 1) } : b
+  })
 }
 
 /** Null address parts are left out, as the contract has them optional. */
@@ -182,12 +221,13 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
   const startAt = new Date(wanted)
   await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin, onSite, now, clash: false })
   if (input.note) await assertNoContactDetails(userId, input.note)
-  const [row] = await tx
-    .insert(requests)
+  const [created] = await tx
+    .insert(requestAppInsert) // job_number is numbered by the database, the app role has no grant on it
     .values({
       customerId: userId,
       providerId: provider.id,
       serviceId: input.serviceId ?? null,
+      categoryId: input.serviceId ? (await tx.select({ c: services.categoryId }).from(services).where(eq(services.id, input.serviceId)))[0]?.c ?? null : null,
       description: input.description,
       startAt,
       durationMin,
@@ -198,10 +238,11 @@ export async function createRequest(tx: Tx, userId: string, input: RequestInput,
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
+    .returning({ id: requestAppInsert.id })
+  const [row] = await tx.select().from(requests).where(eq(requests.id, created!.id))
   await threadForRequest(tx, row!.id) // the chat opens with the request
   afterCommit(() => notifyBookingEvent('request-received', provider.ownerId, { requestId: row!.id }))
-  return toRequest(row!, now)
+  return (await withRequestRefs(tx, [toRequest(row!, now)], userId))[0]!
 }
 
 /** The job place as the request and booking rows store it: street, postcode and city of an on-site job, none for a remote one. */
@@ -226,7 +267,7 @@ export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'p
     .limit(LIST_PAGE + 1)
   const { rows, next } = pageOf(found)
   const lapsed = await lapsedRoots(tx, rows.map(({ r }) => r.id), now)
-  const list = rows.map(({ r }) => toRequest(r, now, lapsed.get(r.id)))
+  const list = await withRequestRefs(tx, rows.map(({ r }) => toRequest(r, now, lapsed.get(r.id))), userId)
   return { docs: role === 'provider' ? await withCustomerRatings(tx, list.map(hideStreet)) : list, next }
 }
 
@@ -250,7 +291,7 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   // an additional task talks in its booking's thread
   const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
   const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
-  const dto = { ...toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id)), threadId }
+  const dto = { ...(await withRequestRefs(tx, [toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))], userId))[0]!, threadId }
   return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }
 
@@ -285,7 +326,7 @@ export async function reviseRequest(tx: Tx, userId: string, requestId: string, i
   const timeChanged = row.startAt?.getTime() !== startAt.getTime() || row.durationMin !== input.durationMin || row.onSite !== input.onSite
   const otherChange =
     row.note !== (input.note ?? null) || (row.addressStreet ?? null) !== place.addressStreet || (row.addressPostcode ?? null) !== place.addressPostcode || (row.addressCity ?? null) !== place.addressCity
-  if (!timeChanged && !otherChange) return toRequest(row, now)
+  if (!timeChanged && !otherChange) return (await withRequestRefs(tx, [toRequest(row, now)], userId))[0]!
   if (input.note) await assertNoContactDetails(userId, input.note)
   if (timeChanged) {
     await timeIsAcceptable(tx, { providerId: provider.id, startAt, durationMin: input.durationMin, onSite: input.onSite, now, clash: false })
@@ -307,7 +348,7 @@ export async function reviseRequest(tx: Tx, userId: string, requestId: string, i
     return r!
   })
   if (timeChanged) afterCommit(() => notifyBookingEvent('request-updated', provider.ownerId, { requestId }))
-  return toRequest(updated, now)
+  return (await withRequestRefs(tx, [toRequest(updated, now)], userId))[0]!
 }
 
 export async function sendQuote(tx: Tx, userId: string, requestId: string, input: QuoteInput, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Quote> {
@@ -395,7 +436,8 @@ async function closeRequest(tx: Tx, userId: string, requestId: string, by: 'cust
     if (owner) await notifyBookingEvent('request-withdrawn', owner.id, { requestId })
   })
   // The provider declining must not read the customer's street (it is shown only after the customer confirms), like every other provider-facing answer.
-  return by === 'provider' ? (await withCustomerRatings(tx, [hideStreet(toRequest(row!, now))]))[0]! : toRequest(row!, now)
+  const dto = (await withRequestRefs(tx, [toRequest(row!, now)], userId))[0]!
+  return by === 'provider' ? (await withCustomerRatings(tx, [hideStreet(dto)]))[0]! : dto
 }
 
 export const withdrawRequest = (tx: Tx, userId: string, requestId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<BookingRequest> =>
@@ -432,5 +474,5 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   const child = await acceptAdditional(quote, req, input.note ?? null, now)
   const threadId = await threadForRequest(tx, req.id) // the parent's thread
   afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
-  return toBooking(child, now)
+  return (await withBookingRefs(tx, [toBooking(child, now)], userId))[0]!
 }

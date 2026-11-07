@@ -68,6 +68,15 @@ it('a sent quote gets a numbered document and a stored PDF, listed for both side
   }
 })
 
+it('the quote document carries the job number and title of its request', async () => {
+  const p = await provider()
+  const r = await request(p.id, U.c2)
+  const q = await quote(p, r)
+  const { rows } = await pool.query('SELECT d.draft, r.job_number FROM quote_documents d JOIN requests r ON r.id = $2 WHERE d.quote_id = $1', [q.id, r.id])
+  expect(rows[0].draft.job).toMatchObject({ number: rows[0].job_number })
+  expect(rows[0].draft.job.title).not.toBe('')
+})
+
 it('the document never holds the street, only postcode and city', async () => {
   const p = await provider()
   const r = await request(p.id, U.c2, { address: { street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin' } })

@@ -222,6 +222,7 @@ export async function makeQuote(o: {
   durationMin?: number
   onSite?: boolean
   amount?: number
+  serviceId?: string
 }): Promise<{ request: BookingRequest; quote: Quote }> {
   const requests = await import('../app/app-api/v1/requests/route')
   const quotes = await import('../app/app-api/v1/requests/[id]/quotes/route')
@@ -230,7 +231,7 @@ export async function makeQuote(o: {
   const onSite = o.onSite ?? true
   await relaxLimits(o.customerId)
   const place = onSite ? { onSite, address: { postcode: '10115' } } : { onSite }
-  const rq = await call(requests.POST, o.customerId, 'POST', { providerId: o.providerId, description: 'Test job', startAt, durationMin, ...place })
+  const rq = await call(requests.POST, o.customerId, 'POST', { providerId: o.providerId, ...(o.serviceId && { serviceId: o.serviceId }), description: 'Test job', startAt, durationMin, ...place })
   if (!rq.ok) throw new Error(`makeQuote: request ${rq.status} ${await rq.text()}`)
   const request = RequestSchema.parse(await rq.json())
   const qr = await call(quotes.POST, o.ownerId, 'POST', { amount: o.amount ?? 100, scope: 'Test job', startAt, durationMin }, { id: request.id })

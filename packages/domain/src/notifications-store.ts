@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { notifications, type Tx } from '@kando/db'
 import type { Notification } from '@kando/contract'
+import { jobsForNotices } from './bookings/notice-job'
 import { isUuid } from './admin/common'
 import type { Exec } from './providers/eligibility'
 
@@ -19,13 +20,15 @@ export async function listNotifications(tx: Tx, userId: string): Promise<Notific
     .where(and(eq(notifications.userId, userId), isNull(notifications.dismissedAt)))
     .orderBy(desc(notifications.createdAt))
     .limit(20)
-  return rows.map((r) => ({
+  const jobs = await jobsForNotices(tx, userId, rows.map((r) => r.payload as { bookingId?: string; requestId?: string }))
+  return rows.map((r, i) => ({
     id: r.id,
     kind: r.kind as Notification['kind'],
     payload: r.payload as Notification['payload'],
     createdAt: r.createdAt.toISOString(),
     seenAt: r.seenAt?.toISOString() ?? null,
     dismissedAt: r.dismissedAt?.toISOString() ?? null,
+    job: jobs[i] ?? null,
   }))
 }
 

@@ -4,6 +4,7 @@ import { asUser, db, pool } from '@kando/db'
 import { InvoiceListSchema } from '@kando/contract'
 import { cancelBooking, clearOutbox, clearPushOutbox, decideDispute, deleteAccount, dueRoots, issueCommissionInvoices, issueDueInvoices, releaseBooking, runDueTimers, tryRelease, withDeferredInvoices, type InvoiceDraft, type Storage } from '@kando/domain'
 import { pushOutboxForTests, setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
+import { invoiceLines } from '@kando/domain/src/invoices/build'
 import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
@@ -51,14 +52,14 @@ async function provider(o: { legalStatus?: string } = {}): Promise<{ uid: string
 }
 
 /** A paid booking (as the webhook leaves it) with its charge row; `finished` starts the release clock, `parent` makes it an additional task. */
-async function paid(providerId: string, o: { amount?: number; status?: string; parent?: string; startAt?: Date; material?: number; customer?: string } = {}): Promise<string> {
+async function paid(providerId: string, o: { amount?: number; status?: string; parent?: string; startAt?: Date; material?: number; customer?: string; quote?: string } = {}): Promise<string> {
   const amount = o.amount ?? 100
   const startAt = o.startAt ?? new Date(Date.now() - 3 * HOUR)
   const id = (
     await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by, parent_booking_id, material_amount)
-       VALUES ($1, $2, 'direct', $3, $4, 60, true, 'Hauptstr. 1', '10115', 'Berlin', $5, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', $6, 0.12, now(), now() + interval '7 days', $7, $8) RETURNING id`,
-      [o.customer ?? U.cust, providerId, o.status ?? 'finished', startAt, amount, `pi_${++n}`, o.parent ?? null, o.material ?? 0],
+      `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by, parent_booking_id, material_amount, quote_id)
+       VALUES ($1, $2, 'direct', $3, $4, 60, true, 'Hauptstr. 1', '10115', 'Berlin', $5, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', $6, 0.12, now(), now() + interval '7 days', $7, $8, $9) RETURNING id`,
+      [o.customer ?? U.cust, providerId, o.status ?? 'finished', startAt, amount, `pi_${++n}`, o.parent ?? null, o.material ?? 0, o.quote ?? null],
     )
   ).rows[0].id as string
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', $3, 'pi_x', $4)", [id, providerId, amount, `charge:${id}`])
@@ -88,6 +89,47 @@ it('a released booking gets one invoice with one line and a PDF that starts with
   await issueDueInvoices(db, new Date())
   expect(await invoicesOf(p.id)).toHaveLength(1)
   expect(await readyNotices(b)).toHaveLength(2)
+})
+
+it('the invoice prints the job number and title; an additional task line carries its task number', async () => {
+  const p = await provider()
+  const req = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Zaun', now() + interval '1 day') RETURNING id, job_number", [U.cust, p.id])).rows[0]
+  const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at) VALUES ($1, $2, 100, 'Zaun', now() + interval '1 day') RETURNING id", [req.id, p.id])).rows[0].id
+  const root = await paid(p.id, { quote: q })
+  const child = await paid(p.id, { parent: root, amount: 40, status: 'confirmed' })
+  await pool.query("UPDATE requests SET status = 'booked' WHERE id = $1", [req.id])
+  await pool.query("UPDATE bookings SET status = 'finished' WHERE id = $1", [child])
+  await tryRelease(db, root, U.cust, new Date())
+  await tryRelease(db, child, U.cust, new Date())
+  await issueDueInvoices(db, new Date(), { bookingId: root })
+  expect(await invoicesOf(p.id)).toHaveLength(1)
+  const draft = (await invoicesOf(p.id))[0].draft as InvoiceDraft
+  expect(draft.job).toMatchObject({ number: req.job_number })
+  expect(draft.job!.title).not.toBe('')
+  expect(draft.lines.map((l) => l.task)).toEqual([undefined, `#${req.job_number}-2`])
+  expect(invoiceLines(draft, 'de').join(' ')).toContain(`Auftrag (Job): #${req.job_number} `)
+})
+
+it('a re-booked request: the invoice task number equals the one the app shows (positions run over every root booking of the request)', async () => {
+  const p = await provider()
+  const req = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Zaun', now() + interval '1 day') RETURNING id, job_number", [U.cust, p.id])).rows[0]
+  const q1 = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, version) VALUES ($1, $2, 100, 'Zaun', now() + interval '1 day', 1) RETURNING id", [req.id, p.id])).rows[0].id
+  const q2 = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, version) VALUES ($1, $2, 100, 'Zaun', now() + interval '1 day', 2) RETURNING id", [req.id, p.id])).rows[0].id
+  const root1 = await paid(p.id, { quote: q1 })
+  const taskA = await paid(p.id, { parent: root1, amount: 40, status: 'confirmed' })
+  await pool.query("UPDATE bookings SET created_at = now() - interval '2 hours' WHERE id = $1", [taskA])
+  const root2 = await paid(p.id, { quote: q2 })
+  await pool.query('UPDATE bookings SET request_id = $1 WHERE id IN ($2, $3)', [req.id, root1, root2])
+  const taskB = await paid(p.id, { parent: root2, amount: 40, status: 'confirmed' })
+  await pool.query("UPDATE bookings SET status = 'finished' WHERE id = $1", [taskB])
+  await tryRelease(db, root2, U.cust, new Date())
+  await tryRelease(db, taskB, U.cust, new Date())
+  await issueDueInvoices(db, new Date(), { bookingId: root2 })
+  const draft = (await invoicesOf(p.id))[0].draft as InvoiceDraft
+  const { withBookingRefs } = await import('@kando/domain/src/bookings/requests')
+  const shown = await withBookingRefs(db as never, [{ id: taskB, requestId: req.id } as never])
+  expect(shown[0]!.taskNumber).toBe(`#${req.job_number}-3`)
+  expect(draft.lines.find((l) => l.bookingId === taskB)!.task).toBe(shown[0]!.taskNumber)
 })
 
 it('a group with an open additional task waits; when the task is released the invoice has two lines', async () => {

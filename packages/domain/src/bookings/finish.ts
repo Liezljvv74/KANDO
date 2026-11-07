@@ -12,12 +12,12 @@ import { settle } from '../payments/settle'
 import { CONFIRM_DAYS, REVIEW_VISIBLE_DAYS } from './ending-rules'
 import { notifyBookingEvent } from './notify'
 import { lockRow, partyOf } from './party'
-import { toBooking } from './requests'
+import { toBooking, withBookingRefs } from './requests'
 
 /** The note prefix of a staff flag for a failed release (timers.ts orders those bookings last). */
 export const RELEASE_FAILED = 'release failed: '
 
-export const reload = async (id: string) => toBooking((await db.select().from(bookings).where(eq(bookings.id, id)))[0]!)
+export const reload = async (id: string, userId?: string) => (await withBookingRefs(db, [toBooking((await db.select().from(bookings).where(eq(bookings.id, id)))[0]!)], userId))[0]!
 
 /**
  * The provider's "Finished": from `confirmed`, once the agreed start has come (else 409 TOO_EARLY), once (else 409 not-open).
@@ -38,7 +38,7 @@ export async function finishJob(tx: Tx, userId: string, bookingId: string, input
     return r!
   })
   await notifyBookingEvent('job-finished', row.customerId, { bookingId: row.id, date: row.confirmBy!.toISOString() })
-  return toBooking(row)
+  return (await withBookingRefs(db, [toBooking(row)], userId))[0]!
 }
 
 /**
@@ -71,7 +71,7 @@ export async function beginConfirmJob(tx: Tx, userId: string, bookingId: string,
   })
   return async () => {
     if (b.status !== 'completed') await tryRelease(db, b.id, b.customerId, now)
-    return reload(b.id)
+    return reload(b.id, userId)
   }
 }
 

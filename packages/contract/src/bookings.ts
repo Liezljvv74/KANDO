@@ -68,6 +68,9 @@ export const RequestSchema = z.object({
   answerBy: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** The job's number and title (the provider's service title, else the category name): always sent, optional so an older server still parses. */
+  jobNumber: z.number().int().optional(),
+  title: z.string().optional(),
   /**
    * Set (customer's own request and the provider's view alike) while the job reads open again because its booking lapsed and the quote
    * it came from can still be booked: the app then asks "Do you still want it?". Null otherwise.
@@ -216,6 +219,10 @@ export const BookingSchema = z.object({
   stopStatedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** The job's number and title, and this booking's number (`#1040`, `#1040-2`): always sent, optional so an older server still parses. */
+  jobNumber: z.number().int().optional(),
+  title: z.string().optional(),
+  taskNumber: z.string().optional(),
 })
 export type Booking = z.infer<typeof BookingSchema>
 

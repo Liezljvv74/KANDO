@@ -120,7 +120,7 @@ it('blocking is only for someone you share a thread with (404)', async () => {
   expect((await block(U.cust, 'not-a-uuid')).status).toBe(404)
   expect((await block(U.cust, '00000000-0000-4000-8000-000000000000')).status).toBe(404)
   expect((await pool.query('SELECT count(*)::int n FROM blocks WHERE blocker_id = ANY($1)', [[U.third, U.other, U.cust]])).rows[0].n).toBe(0)
-  expect(Object.keys(t).sort()).toEqual(['blocked', 'bookingId', 'id', 'lastMessageAt', 'otherName', 'requestId'])
+  expect(Object.keys(t).sort()).toEqual(['blocked', 'bookingId', 'id', 'jobNumber', 'lastMessageAt', 'otherName', 'requestId', 'title']) // a request's thread carries its job's number and title
 })
 
 it('unblock restores sending', async () => {

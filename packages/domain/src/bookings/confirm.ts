@@ -12,7 +12,7 @@ import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
 import { lockProviderSlots, timeIsAcceptable } from './busy'
 import { notifyBookingEvent } from './notify'
-import { acceptQuote, lockRequest, toBooking } from './requests'
+import { acceptQuote, lockRequest, toBooking, withBookingRefs } from './requests'
 import { AWAITING_TIME_DAYS, payBy } from './rules'
 import { expireLapsedRoot } from './timers'
 
@@ -98,5 +98,5 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
   afterCommit(() => notifyBookingEvent('quote-confirmed', provider.ownerId, { bookingId: row.id }))
   // a quote with a time: the provider's quote and the customer's confirm are both in, so "Payment due" goes out now (pay_by from payBy())
   if (hasTime) afterCommit(() => notifyBookingEvent('booking-accepted', userId, { bookingId: row.id, date: row.payBy!.toISOString() }))
-  return toBooking(row, now)
+  return (await withBookingRefs(tx, [toBooking(row, now)], userId))[0]!
 }

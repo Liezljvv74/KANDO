@@ -29,6 +29,8 @@ export const MyProfileSchema = z.object({
   /** Invoicing (payout set-up card): the tax number, and whether the provider agreed that the platform issues invoices in their name. */
   taxNumber: z.string().nullish(),
   invoiceConsent: z.boolean().optional(),
+  /** Requirements (document types) the provider has submitted that we are still checking: the Photo ID, and any document one of their services needs. The server always sends it. */
+  underCheck: z.array(z.string()).optional(),
   /** What the provider still needs before quoting (empty when payments are off); the server always sends it. */
   quoteSteps: z.array(z.enum(['payout', 'consent', 'taxId'])).optional(),
 })

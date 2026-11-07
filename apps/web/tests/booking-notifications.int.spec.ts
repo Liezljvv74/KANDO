@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { QuoteSchema, RequestSchema } from '@kando/contract'
-import { clearOutbox, notifyBookingEvent, runDueTimers } from '@kando/domain'
-import { outboxForTests } from '@kando/domain/src/testing'
+import { clearOutbox, clearPushOutbox, notifyBookingEvent, runDueTimers } from '@kando/domain'
+import { outboxForTests, pushOutboxForTests } from '@kando/domain/src/testing'
 import { requestTime, call, cleanupUsers, makeAwaitingPayment, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -36,7 +36,7 @@ it('a request: one in-app row and one German email for the provider', async () =
   const res = await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'Bitte helfen', ...requestTime() })
   const r = RequestSchema.parse(await res.json())
   expect(await rows(U.owner)).toEqual([{ kind: 'request-received', payload: { requestId: r.id } }])
-  expect(subjects(U.owner).map((m) => m.subject)).toEqual(['Du hast eine neue Anfrage'])
+  expect(subjects(U.owner).map((m) => m.subject)).toEqual([expect.stringMatching(/^#\d+.+: Du hast eine neue Anfrage$/)])
 })
 
 it('a quote: the customer gets one row and an English email naming the 7-day expiry date', async () => {
@@ -47,7 +47,7 @@ it('a quote: the customer gets one row and an English email naming the 7-day exp
   expect(await rows(U.cust)).toEqual([{ kind: 'quote-received', payload: { requestId: r.id, quoteId: q.id } }])
   const mail = subjects(U.cust)
   expect(mail).toHaveLength(1)
-  expect(mail[0]!.subject).toBe('You have received a quote')
+  expect(mail[0]!.subject).toMatch(/^#\d+ .+: You have received a quote$/)
   const expiry = new Date(q.expiresAt).toLocaleDateString('en-GB', { timeZone: 'Europe/Berlin' })
   expect(mail[0]!.text).toContain(expiry)
   expect(mail[0]!.text).toContain('7 days')
@@ -59,7 +59,7 @@ it('confirming a quote with a time tells the provider and sends the customer "Pa
   const owner = (await rows(U.owner)).filter((x) => x.kind === 'quote-confirmed')
   expect(owner).toEqual([{ kind: 'quote-confirmed', payload: { bookingId: b.id } }])
   expect((await rows(U.cust)).filter((x) => x.kind === 'booking-accepted')).toHaveLength(1)
-  expect(subjects(U.cust).map((m) => m.subject)).toContain('Zahlung fällig für Deine Buchung')
+  expect(subjects(U.cust).map((m) => m.subject).some((x) => x.endsWith(': Zahlung fällig für Deine Buchung'))).toBe(true)
 })
 
 it('timer events: the SQL writes the one row, notifyBookingEvent adds only the email (no duplicate row)', async () => {
@@ -67,7 +67,7 @@ it('timer events: the SQL writes the one row, notifyBookingEvent adds only the e
   await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', 'open', $3)", [U.cust, prov, new Date(stamp.getTime() - 86_400_000)])
   await runDueTimers(db, stamp)
   expect((await rows(U.cust)).filter((x) => x.kind === 'request-expired')).toHaveLength(1)
-  const mail = subjects(U.cust).filter((m) => m.subject === 'Deine Anfrage wurde nicht beantwortet')
+  const mail = subjects(U.cust).filter((m) => m.subject.endsWith('Deine Anfrage wurde nicht beantwortet'))
   expect(mail).toHaveLength(1)
   expect(mail[0]!.text).toContain('anderen Anbieter')
 })
@@ -108,8 +108,8 @@ it('real sweeps: quote-expiring and payment-reminder emails carry their dates, o
   expect((await rows(U.cust)).map((x) => x.kind).sort()).toEqual(['payment-reminder', 'quote-expiring'])
   const de = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' })
   const mails = subjects(U.cust)
-  expect(mails.find((m) => m.subject === 'Dein Angebot läuft bald ab')!.text).toContain(de(expires))
-  expect(mails.find((m) => m.subject === 'Bitte bezahle Deine Buchung')!.text).toContain(de(payBy))
+  expect(mails.find((m) => m.subject.endsWith('Dein Angebot läuft bald ab'))!.text).toContain(de(expires))
+  expect(mails.find((m) => m.subject.endsWith('Bitte bezahle Deine Buchung'))!.text).toContain(de(payBy))
   expect(mails).toHaveLength(2)
 })
 
@@ -121,4 +121,31 @@ it('real sweep: requests-ignored goes to the provider as one row and one email',
   const mails = subjects(U.owner)
   expect(mails).toHaveLength(1)
   expect(mails[0]!.text).toContain('info@skillweb.space')
+})
+
+it('listNotifications adds job number, title and other party; the email names the job; a non-party gets null', async () => {
+  const { listNotifications, jobsForNotices, jobLabel } = await import('@kando/domain')
+  const r = RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: prov, description: 'Bitte helfen', ...requestTime() })).json())
+  const [n] = await listNotifications(db as never, U.owner)
+  expect(n!.payload).toEqual({ requestId: r.id }) // stored payload unchanged
+  expect(n!.job).toMatchObject({ id: r.id, number: r.jobNumber, title: r.title })
+  expect(typeof n!.job!.otherParty).toBe('string')
+  expect(subjects(U.owner)[0]!.subject).toContain(jobLabel(n!.job!))
+  // the final sent push (the owner has no token in this spec, so give one): names the job, no placeholder, no forbidden word
+  await pool.query("INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, 'ExponentPushToken[bn-owner]', 'android') ON CONFLICT DO NOTHING", [U.owner])
+  try {
+    clearPushOutbox()
+    await notifyBookingEvent('request-received', U.owner, { requestId: r.id }, { written: true })
+    const sent = pushOutboxForTests().filter((m) => m.to === 'ExponentPushToken[bn-owner]')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.body).toContain(`#${n!.job!.number}`) // the number only: the title stays off the lock screen
+    expect(sent[0]!.body).not.toContain(n!.job!.title)
+    for (const text of [sent[0]!.title, sent[0]!.body]) {
+      expect(text).not.toMatch(/[{}]/)
+      expect(text.toLowerCase()).not.toMatch(/treuhand|escrow|garantie|guarantee/)
+    }
+  } finally {
+    await pool.query("DELETE FROM push_tokens WHERE user_id = $1", [U.owner])
+  }
+  expect(await jobsForNotices(db as never, U.cust2, [{ requestId: r.id }, { requestId: 'not-an-id' }])).toEqual([null, null])
 })

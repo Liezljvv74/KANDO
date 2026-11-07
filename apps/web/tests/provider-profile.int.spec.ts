@@ -299,3 +299,18 @@ it("the draft's postcode lookup uses the owner's stored country", async () => {
     await pool.query("DELETE FROM countries WHERE code = 'ZZ'")
   }
 })
+
+it('underCheck lists a submitted but unapproved document; an approved one is neither missing nor under check', async () => {
+  await call(GET, 'pp-uc')
+  await call(PUT, 'pp-uc', 'PUT', profile)
+  const read = async () => MyProfileSchema.parse(await (await call(GET, 'pp-uc')).json())
+  expect((await read()).underCheck).toEqual([])
+  await pool.query("INSERT INTO documents (owner_id, requirement, key) VALUES ('pp-uc', 'id-document', 'k1')")
+  await pool.query("INSERT INTO documents (owner_id, requirement, key) VALUES ('pp-uc', 'permit', 'k2')") // not required by any of the services: not listed
+  expect((await read()).underCheck).toEqual(['id-document'])
+  await pool.query("UPDATE documents SET status = 'approved' WHERE owner_id = 'pp-uc'")
+  expect((await read()).underCheck).toEqual([])
+  // a renewal (new pending row) of an approved document is not awaiting approval
+  await pool.query("INSERT INTO documents (owner_id, requirement, key) VALUES ('pp-uc', 'id-document', 'k3')")
+  expect((await read()).underCheck).toEqual([])
+})
