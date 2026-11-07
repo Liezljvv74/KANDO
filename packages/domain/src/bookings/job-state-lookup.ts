@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, notifications, providers, quotes, staffFlags, threads, type Tx } from '@kando/db'
 import type { JobStateDto } from '@kando/contract'
+import { readRef } from '../payments/rules'
 import { currentBookingOf, deriveJobState, type JobBookingInput, type JobRequestInput, type JobState, type JobViewer } from './job-state'
 
 // Imports no requests/chat/notify module (requests.ts imports this one).
@@ -11,16 +12,6 @@ export type JobStateItem = { key: string; viewer: JobViewer; providerId: string;
 
 /** An open money flag of the booking: a failed release, settle or refund (kinds written by attemptMoney and the webhook). The text is never read. */
 const MONEY_FLAGS = ['payment-unprocessed', 'refund-failed']
-
-/** bookings.checkout_ref is JSON {sessionId,url,expiresAt,startedAt?}; an unreadable or older ref only leaves the dates unknown. */
-function readRef(v: string | null | undefined): { startedAt: Date | null; expiresAt: Date | null } {
-  try {
-    const r = v ? (JSON.parse(v) as { startedAt?: string; expiresAt?: string }) : {}
-    return { startedAt: r.startedAt ? new Date(r.startedAt) : null, expiresAt: r.expiresAt ? new Date(r.expiresAt) : null }
-  } catch {
-    return { startedAt: null, expiresAt: null }
-  }
-}
 
 /**
  * The derived job state for each item, in a fixed number of queries (no N+1). The request item sees all bookings of its request, a
@@ -58,14 +49,14 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
     const notices = await x
       .select({ threadId: sql<string>`${notifications.payload}->>'threadId'` })
       .from(notifications)
-      .where(and(eq(notifications.userId, userId), eq(notifications.kind, 'message-received'), isNull(notifications.seenAt), isNull(notifications.dismissedAt)))
+      .where(and(eq(notifications.userId, userId), eq(notifications.kind, 'message-received'), sql`${notifications.payload}->>'threadId' IN (${sql.join(ts.map((t) => sql`${t.id}`), sql`, `)})`, isNull(notifications.seenAt), isNull(notifications.dismissedAt)))
     const open = new Set(notices.map((n) => n.threadId))
     for (const t of ts) if (open.has(t.id)) unreadThreads.add(t.requestId ?? t.bookingId!)
   }
 
   for (const i of items) {
     const mine = rows.filter((r) => (i.bookingId ? r.id === i.bookingId : r.requestId === i.requestId))
-    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c.startedAt, checkoutExpiresAt: c.expiresAt } })() }))
+    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })() }))
     const current = currentBookingOf(inputs)
     out.set(
       i.key,

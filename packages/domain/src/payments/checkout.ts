@@ -10,20 +10,10 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow } from '../providers/profile'
 import { AmountTooSmallError, gateway } from './gateway'
-import { belowMinCharge, checkoutExpiry, MAX_PAY_AHEAD_DAYS, toCents } from './rules'
+import { belowMinCharge, checkoutExpiry, type CheckoutRef, MAX_PAY_AHEAD_DAYS, readRef, toCents } from './rules'
 
 /** A stored session is reused only while it has more than this left: the customer needs time to pay. */
 const REUSE_MIN_MS = 5 * 60_000
-
-/** What bookings.checkout_ref holds (staff-only column, owner connection): the open Checkout session, so a second tap reuses it. */
-type CheckoutRef = { sessionId: string; url: string; expiresAt: string; /** when the session was made; refs from before this field have none */ startedAt?: string }
-const readRef = (v: string | null): CheckoutRef | null => {
-  try {
-    return v ? (JSON.parse(v) as CheckoutRef) : null
-  } catch {
-    return null // an unreadable ref only means a new session
-  }
-}
 
 /**
  * The Stripe-hosted page where the customer pays the booking's full amount. Customer only (anyone else: 404); the booking
