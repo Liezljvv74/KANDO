@@ -516,7 +516,7 @@ export const en: Record<AppKey, string> = {
   'booking.declineAnyway': 'Decline anyway',
   'booking.discussChanges': 'To change something, talk to the provider in the chat. They will send a revised quote, and you accept it.',
   'booking.requestedWhen': 'Requested: {when} ({min} min)',
-  'booking.enterTime': 'Enter the agreed time',
+  'booking.enterTime': 'New proposed/agreed time',
   'booking.confirmTime': 'Confirm this time',
   'booking.pendingTimeYou': 'You entered {when} ({min} min). The other side still has to confirm it.',
   'booking.pendingTimeOther': 'The other side entered {when} ({min} min). Confirm it, or enter another time.',
