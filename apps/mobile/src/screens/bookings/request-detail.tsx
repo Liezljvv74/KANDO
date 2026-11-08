@@ -57,6 +57,7 @@ export default function RequestDetail() {
   const accepting = useSubmit()
   const closing = useSubmit()
   const [payFor, setPayFor] = useState<Booking | null>(null) // the booking to pay, offered right after accepting a quote
+  const [chatSeen, setChatSeen] = useState(false) // the chat was opened from here: its unread count is gone
   const [editing, setEditing] = useState(false) // the provider's Edit quote shows the form again
   const [askChat, setAskChat] = useState(false) // the customer's Withdraw on a quote offers the chat first
   const scroll = useRef<ComponentRef<typeof KeyboardAwareScrollView>>(null)
@@ -118,7 +119,7 @@ export default function RequestDetail() {
   // a booking is listed once it is paid: not while it waits for the time or the payment
   const listed = views.filter((v) => v.booking.status !== 'awaiting-time' && v.booking.status !== 'awaiting-payment')
   const place = placeText(request.onSite, request.address)
-  const common = state && <JobCommonButtons state={state} threadId={request.threadId} unread={request.unread} job={{ number: request.jobNumber, title: request.title }} />
+  const common = state && <JobCommonButtons state={state} threadId={request.threadId} unread={chatSeen ? 0 : request.unread} onChatOpened={() => setChatSeen(true)} job={{ number: request.jobNumber, title: request.title }} />
   // the customer's request and quote stage: Withdraw (left) and Open chat (right) close the page; every other job keeps them under the status card
   const atBottom = isCustomer && canClose && !onBooking
   const closeButtons = (
@@ -156,7 +157,7 @@ export default function RequestDetail() {
           // an older server without a state
           <Text style={styles.small}>{t(`requestStatus.${request.status}` as Key)}</Text>
         )}
-        {(request.unread ?? 0) > 0 && !!request.threadId && <LinkText label={t('job.newMessage')} onPress={() => go(`/threads/${request.threadId}`)} />}
+        {!chatSeen && (request.unread ?? 0) > 0 && !!request.threadId && <LinkText label={t('job.newMessage')} onPress={() => { setChatSeen(true); go(`/threads/${request.threadId}`) }} />}
         {onBooking && current && <BookingStatusLines view={current} />}
       </Card>
       )}

@@ -146,13 +146,13 @@ export function BookingActions({ view, state, onChanged, extra }: { view: Bookin
 }
 
 /** The buttons a job has whatever it acts on: chat, contact support, ask someone else. */
-export function JobCommonButtons({ state, threadId, job, unread }: { state: JobStateDto; threadId: string | null | undefined; unread?: number; job: { number?: number; title?: string } }) {
+export function JobCommonButtons({ state, threadId, job, unread, onChatOpened }: { state: JobStateDto; threadId: string | null | undefined; unread?: number; onChatOpened?: () => void; job: { number?: number; title?: string } }) {
   const has = (x: JobStateDto['buttons'][number]) => state.buttons.includes(x)
   return (
     <>
       {has('contact_support') && <SmallButton label={t('job.button.contactSupport')} onPress={() => openSupport(job)} solid grow />}
       {has('ask_someone_else') && <SmallButton label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} solid grow />}
-      {(has('open_chat') || has('ask_question')) && <OpenChat find={async () => threadId ?? null} grow unread={unread} />}
+      {(has('open_chat') || has('ask_question')) && <OpenChat find={async () => threadId ?? null} grow unread={unread} onOpened={onChatOpened} />}
     </>
   )
 }

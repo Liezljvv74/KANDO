@@ -622,7 +622,6 @@ export const de = {
   'chat.title': 'Nachrichten',
   'chat.empty': 'Noch keine Unterhaltungen.',
   'chat.open': 'Chat öffnen',
-  'chat.openUnread': 'Chat öffnen ({n})',
   'job.newMessage': 'Du hast eine neue Nachricht',
   'chat.noMessages': 'Noch keine Nachrichten. Schreibe die erste.',
   'chat.placeholder': 'Nachricht schreiben',
