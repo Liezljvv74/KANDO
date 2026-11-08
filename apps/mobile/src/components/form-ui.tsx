@@ -49,6 +49,7 @@ export const SmallButton = ({
   disabled,
   busy,
   danger,
+  solid,
 }: {
   label: string
   onPress: () => void
@@ -56,6 +57,8 @@ export const SmallButton = ({
   disabled?: boolean
   busy?: boolean
   danger?: boolean
+  /** Filled like the full-width Button (teal, or red with `danger`), only smaller. */
+  solid?: boolean
 }) => (
   <Pressable
     onPress={onPress}
@@ -63,9 +66,9 @@ export const SmallButton = ({
     accessibilityRole="button"
     accessibilityLabel={accessibilityLabel ?? label}
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
-    style={({ pressed }) => [styles.small, danger && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
+    style={({ pressed }) => [styles.small, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, danger && { color: color.danger }]}>{label}</Text>}
+    {busy ? <ActivityIndicator color={solid ? (danger ? '#fff' : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, solid && { color: danger ? '#fff' : color.ink }, !solid && danger && { color: color.danger }]}>{label}</Text>}
   </Pressable>
 )
 

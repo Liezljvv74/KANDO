@@ -126,7 +126,7 @@ export function BookingActions({ view, state, onChanged, extra }: { view: Bookin
       {/* small buttons side by side: the booking's steps first, then the additional task / scope review with the chat and the like */}
       {[actions.filter((a) => a !== 'additionalTask'), [...actions.filter((a) => a === 'additionalTask')]].map((row, i) => {
         const list = row.map((a) => (
-          <SmallButton key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} />
+          <SmallButton key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} solid />
         ))
         return i === 0 ? (list.length > 0 && <Actions key="steps">{list}</Actions>) : <Actions key="more">{list}{extra}</Actions>
       })}
@@ -151,8 +151,8 @@ export function JobCommonButtons({ state, threadId, job }: { state: JobStateDto;
   return (
     <>
       {(has('open_chat') || has('ask_question')) && <OpenChat find={async () => threadId ?? null} />}
-      {has('contact_support') && <SmallButton label={t('job.button.contactSupport')} onPress={() => openSupport(job)} />}
-      {has('ask_someone_else') && <SmallButton label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} />}
+      {has('contact_support') && <SmallButton label={t('job.button.contactSupport')} onPress={() => openSupport(job)} solid />}
+      {has('ask_someone_else') && <SmallButton label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} solid />}
     </>
   )
 }

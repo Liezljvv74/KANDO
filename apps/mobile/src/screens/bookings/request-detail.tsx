@@ -116,7 +116,7 @@ export default function RequestDetail() {
   const closeButtons = (
     <>
       <ErrorText text={closing.problem} />
-      {canClose && !askChat && (atBottom ? <Actions><SmallButton label={t('request.withdraw')} onPress={close} busy={closing.busy} danger />{common}</Actions> : <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />)}
+      {canClose && !askChat && (atBottom ? <Actions><SmallButton label={t('request.withdraw')} onPress={close} busy={closing.busy} danger solid />{common}</Actions> : <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />)}
       {canClose && askChat && (
         <Card>
           <Text style={styles.text}>{t('booking.talkFirst')}</Text>
@@ -166,8 +166,8 @@ export default function RequestDetail() {
       <ErrorText text={accepting.problem} />
       {quoteOut && !editing && (
         <Actions>
-          <SmallButton label={t('booking.editQuote')} onPress={() => setEditing(true)} />
-          <SmallButton label={t('booking.cancelQuote')} onPress={cancelQuote} busy={closing.busy} danger />
+          <SmallButton label={t('booking.editQuote')} onPress={() => setEditing(true)} solid />
+          <SmallButton label={t('booking.cancelQuote')} onPress={cancelQuote} busy={closing.busy} danger solid />
         </Actions>
       )}
       {!isCustomer && has('send_quote') && (!quoteOut || editing) && (
