@@ -35,5 +35,7 @@ export function useLoad<T>(fn: () => Promise<T>) {
     setState((s) => ({ ...s, error: null }))
     load()
   }
-  return { ...state, retry }
+  /** Replaces part of the held data with a save's answer, without a reload. */
+  const update = useCallback((f: (data: T) => T) => setState((s) => (s.data === undefined ? s : { ...s, data: f(s.data) })), [])
+  return { ...state, retry, update }
 }

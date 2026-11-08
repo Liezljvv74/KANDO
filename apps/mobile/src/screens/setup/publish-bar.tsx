@@ -8,6 +8,7 @@ import { publishProfile, unpublishProfile } from '@/api/my-profile'
 import { ErrorText } from '@/components/auth-ui'
 import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
+import { useQuoteSteps } from '@/hooks/use-me'
 import { canShare } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
 import { liveLocked } from '@/lib/compulsory'
@@ -24,8 +25,9 @@ import { GateRow, QuoteGate } from '@/screens/bookings/quote-gate'
  * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
  * `missing` list of the latest profile response. `onChanged` reloads the profile afterwards.
  */
-export function PublishBar({ profile, services, onChanged, onTaxId }: { profile: MyProfile; services: OwnService[]; onChanged: () => void; onTaxId?: () => void }) {
+export function PublishBar({ profile, services, onChanged, onSaved, onTaxId }: { profile: MyProfile; services: OwnService[]; onChanged: () => void; onSaved: (p: MyProfile) => void; onTaxId?: () => void }) {
   const { categories } = useCategories()
+  const { steps } = useQuoteSteps()
   const [busy, setBusy] = useState(false)
   // Set when a publish succeeded here: the live message (with Share) shows until the page is left.
   const [justPublished, setJustPublished] = useState(false)
@@ -62,15 +64,15 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
   const waiting = waitingServices.length
   // Switched off and greyed out while the profile is incomplete; the starred fields say what is needed.
   const locked = liveLocked(profile, refused)
-  const later = profile.quoteSteps ?? []
+  const later = steps ?? []
   const stepping = useRef(false) // a double tap must not start Stripe or save twice
   const doStep = async (step: (typeof later)[number]) => {
     if (stepping.current) return
     stepping.current = true
     setProblem(null)
     try {
-      await doQuoteStep(step, onTaxId)
-      onChanged()
+      const saved = await doQuoteStep(step, onTaxId) // the step updates /me itself; only a save's answer is handed up (no list reload)
+      if (saved) onSaved(saved)
     } catch (e) {
       setProblem(paymentsProblem(e))
     }
@@ -99,7 +101,7 @@ export function PublishBar({ profile, services, onChanged, onTaxId }: { profile:
           <Text style={styles.hint}>{t('setup.weAreChecking')}</Text>
         </View>
       ))}
-      {allSet(profile, profile.quoteSteps) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
+      {allSet(profile, steps) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
       {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
       {justPublished && live && isLive(profile) && (

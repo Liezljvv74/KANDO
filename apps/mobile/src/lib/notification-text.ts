@@ -106,5 +106,11 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'> & {
   return n.kind === 'requests-ignored' || n.kind === 'provider-warning' ? { path: '/bookings' } : null
 }
 
+/** A banner's Open target: none when it would open the page the banner already sits on (`here`), e.g. "payouts set up" on My business. */
+export const bannerTarget = (n: Parameters<typeof notificationTarget>[0], here?: string) => {
+  const target = notificationTarget(n)
+  return target && target.path !== here ? target : null
+}
+
 /** A notice about a booking or request (shown on My bookings): it has an id to open, or is one of the list-level kinds. */
 export const isBookingNotice = (n: Pick<Notification, 'kind' | 'payload'>): boolean => n.kind !== 'provider-available' && n.kind !== 'customers-waiting' && n.kind !== 'payout-setup-complete' && n.kind !== 'commission-invoice-ready' && notificationTarget(n) !== null

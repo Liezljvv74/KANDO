@@ -1,5 +1,5 @@
 import { getMe, setOnTermsRequired } from '@/api/client'
-import { clearMe, currentMe, loadMe, unseenOf } from './use-me'
+import { clearMe, currentMe, ensureMe, loadMe, noteQuoteSteps, unseenOf } from './use-me'
 
 jest.mock('@/api/client', () => ({ getMe: jest.fn(), setOnTermsRequired: jest.fn() }))
 // Taken at load, before any test clears the mock.
@@ -34,6 +34,26 @@ test('a refused write (428 terms-required) reloads /me, whose termsRequired show
   onTermsRequired!()
   await new Promise((r) => setTimeout(r, 0))
   expect(currentMe()?.termsRequired).toBe(true)
+})
+
+test('two consumers of useQuoteSteps trigger one request (the first load is shared), and a held /me makes none', async () => {
+  clearMe()
+  jest.mocked(getMe).mockReset().mockResolvedValue({ id: 'p', quoteSteps: ['consent'], notifications: [] } as never)
+  await Promise.all([ensureMe(), ensureMe()])
+  expect(getMe).toHaveBeenCalledTimes(1)
+  await ensureMe()
+  expect(getMe).toHaveBeenCalledTimes(1)
+})
+
+test('a saved profile updates the held quote steps without a request; nothing is invented before /me arrives', async () => {
+  clearMe()
+  noteQuoteSteps([])
+  expect(currentMe()).toBeNull()
+  jest.mocked(getMe).mockReset().mockResolvedValue({ id: 'p', quoteSteps: ['consent', 'taxId'], notifications: [] } as never)
+  await ensureMe()
+  noteQuoteSteps(['taxId'])
+  expect(currentMe()?.quoteSteps).toEqual(['taxId'])
+  expect(getMe).toHaveBeenCalledTimes(1)
 })
 
 test('unseenOf keeps only notifications without a seenAt and copes with no list', () => {

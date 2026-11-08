@@ -62,6 +62,8 @@ export const MeSchema = z.object({
   termsRequired: z.boolean().optional(),
   /** Whether the server takes payments (optional: an older server lacks it). */
   paymentsEnabled: z.boolean().optional(),
+  /** Providers only (absent for a customer and from older servers): what is still needed before quoting, as on the provider profile. */
+  quoteSteps: z.array(z.enum(['payout', 'consent', 'taxId'])).optional(),
   /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
   notifications: z.array(z.unknown()).transform((items) => items.flatMap((i) => { const r = NotificationSchema.safeParse(i); return r.success ? [r.data] : [] })),
 })

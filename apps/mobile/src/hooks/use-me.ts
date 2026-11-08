@@ -69,15 +69,32 @@ export async function dismissNotification(id: string) {
   if (me) set({ ...me, notifications: me.notifications.map((n) => (n.id === id ? { ...n, dismissedAt: new Date().toISOString() } : n)) })
 }
 
+let firstLoad: Promise<Me> | null = null
+/** Loads `/me` unless it is held or already on its way: any number of screens mounting together make one request. */
+export function ensureMe() {
+  if (me) return Promise.resolve(me)
+  return (firstLoad ??= loadMe().finally(() => (firstLoad = null)))
+}
+
+/** A save answered with the provider's profile: its fresh quote steps replace the held ones without a request. */
+export function noteQuoteSteps(steps: Me['quoteSteps']) {
+  if (me && steps) set({ ...me, quoteSteps: steps })
+}
+
 export function useMe() {
   const value = useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => me,
   )
   useEffect(() => {
-    if (!me) loadMe().catch(() => {})
+    ensureMe().catch(() => {})
   }, [])
   return value
+}
+
+/** What a provider still needs before quoting, read from the shared `/me` (the job page, the quote gate and My business): undefined until `/me` arrives, or from an older server. */
+export function useQuoteSteps() {
+  return { steps: useMe()?.quoteSteps, reload: loadMe }
 }
 
 /** true while the accept pop-up must cover the app: the Terms changed since the person accepted and they have not set it aside. */

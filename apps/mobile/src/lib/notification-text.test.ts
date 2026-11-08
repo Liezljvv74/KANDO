@@ -1,8 +1,15 @@
 import { NOTIFICATION_KINDS } from '@kando/contract'
 
-import { isBookingNotice, notificationTarget, notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
+import { bannerTarget, isBookingNotice, notificationTarget, notificationText, notificationThreadId, notificationUrl, splitBanners } from './notification-text'
 
 jest.mock('@/i18n', () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k} ${JSON.stringify(p)}` : k) }))
+
+test('a banner on My business offers no Open that leads to My business; elsewhere it still does', () => {
+  const n = { kind: 'payout-setup-complete', payload: {} } as never
+  expect(bannerTarget(n, '/my-profile')).toBeNull()
+  expect(bannerTarget(n)).toEqual({ path: '/my-profile' })
+  expect(bannerTarget({ kind: 'requests-ignored', payload: {} } as never, '/my-profile')).toEqual({ path: '/bookings' })
+})
 
 test('every known kind has a text and an unknown kind is skipped without throwing', () => {
   expect(notificationText('requests-ignored')).toBe('notification.requestsIgnored')

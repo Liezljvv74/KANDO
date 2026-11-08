@@ -2,6 +2,8 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
+import type { MyProfile } from '@kando/contract'
+
 import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
@@ -52,7 +54,9 @@ export default function SetupScreen() {
     loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
     return { profile, services, references, photos, verifications, fresh }
   }, [stamp])
-  const { done, data, error, retry } = useLoad(loadAll)
+  const { done, data, error, retry, update } = useLoad(loadAll)
+  // An invoicing save or a checklist step answers with the profile: it replaces the held one, the lists are not reloaded.
+  const onSaved = useCallback((profile: MyProfile) => update((d) => ({ ...d, profile })), [update])
   const { categories } = useCategories()
   const me = useMe()
   const [taxAsked, setTaxAsked] = useState(0) // the tax number step opens the field in the payout card
@@ -64,8 +68,8 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
-      <PublishBar profile={profile} services={services} onChanged={retry} onTaxId={() => setTaxAsked((n) => n + 1)} />
-      <NotificationBanners me={me} canShare={canShare(services)} />
+      <PublishBar profile={profile} services={services} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
+      <NotificationBanners me={me} canShare={canShare(services)} here="/my-profile" />
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />
@@ -77,7 +81,7 @@ export default function SetupScreen() {
         {profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date() ? <ErrorText text={errorText('Profile suspended')} /> : null}
       </Card>
 
-      <PayoutCard profile={profile} onChanged={retry} taxAsked={taxAsked} />
+      <PayoutCard profile={profile} onSaved={onSaved} taxAsked={taxAsked} />
 
       <ServicesCard services={services} docRows={docRows} />
 

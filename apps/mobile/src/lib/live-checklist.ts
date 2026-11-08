@@ -4,8 +4,8 @@ import type { Key } from '@/i18n'
 import { COMPULSORY } from './compulsory'
 import { gateRows } from './quote-gate'
 
-// Each missing item opens the screen that holds its field (the setup page has no scroll-to-field, so a card's own edit screen is the target).
-const aboutRow = (field: keyof typeof COMPULSORY) => ({ label: COMPULSORY[field].label, path: '/my-profile/about' })
+// Each missing item opens the screen that holds its field; on About you `?field=` puts the cursor in that field (the keyboard-aware scroll brings it into view).
+const aboutRow = (field: keyof typeof COMPULSORY) => ({ label: COMPULSORY[field].label, path: `/my-profile/about?field=${field}` })
 const ROW: Record<Missing, { label: Key; path: string }> = {
   name: { label: 'f.name', path: '/account' },
   service: { label: 'setup.services', path: '/my-profile/service/new' },
