@@ -3,7 +3,7 @@ import { bookings, db, providers, requests, users } from '@kando/db'
 import type { NoticeJob } from '@kando/contract'
 import { t, type Lang } from '@kando/i18n'
 import { publicNameFor } from '../providers/public-name'
-import { rootJobs, rootsOf } from './job-lookup'
+import { rootJobs, rootRequestId, rootsOf } from './job-lookup'
 
 type Db = Parameters<typeof rootsOf>[0]
 type Ref = { bookingId?: string; requestId?: string }
@@ -32,7 +32,7 @@ export async function jobsForNotices(x: Db, userId: string, refs: Ref[]): Promis
   const people = new Map((ids.length ? await db.select({ id: users.id, first: users.firstName, last: users.lastName }).from(users).where(inArray(users.id, ids)) : []).map((u) => [u.id, u]))
   const prov = new Map(provs.map((p) => [p.id, p]))
   const roots = await rootsOf(x, [...bks.map((b) => b.id), ...rqs.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : []))])
-  const rootOfReq = (r: (typeof rqs)[number]) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id)
+  const rootOfReq = (r: (typeof rqs)[number]) => rootRequestId(r, roots)
   const rootOfBooking = (b: (typeof bks)[number]) => roots.get(b.id)?.requestId ?? null
   const jobs = await rootJobs(x, [...new Set([...bks.flatMap((b) => rootOfBooking(b) ?? []), ...rqs.flatMap((r) => rootOfReq(r) ?? [])])], userId)
   const otherParty = (s: (typeof sides)[number]): string | null => {
@@ -53,6 +53,8 @@ export async function jobsForNotices(x: Db, userId: string, refs: Ref[]): Promis
     const root = b ? rootOfBooking(b) : q ? rootOfReq(q) : null
     const job = root ? jobs.get(root) : undefined
     const other = side ? otherParty(side) : null
-    return root && job && other !== null ? { id: root, number: job.jobNumber, title: job.title, otherParty: other } : null
+    // the page that shows the ref: its request (an additional task's own), a booking's request; none for a booking without one
+    const page = b ? b.requestId : q?.id
+    return root && job && other !== null ? { id: root, number: job.jobNumber, title: job.title, otherParty: other, ...(page && { requestId: page }) } : null
   })
 }

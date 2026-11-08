@@ -102,6 +102,8 @@ it('jobsForNotices: an additional task resolves to the root job; the other party
   expect(asCust.slice(0, 3).map((j) => [j?.id, j?.number, j?.title])).toEqual(Array(3).fill([root.requestId, n, 'Jr Owner service'])) // the additional task shows the ROOT job
   expect(asCust[0]!.otherParty).toBe((await pool.query('SELECT public_name FROM providers WHERE id = $1', [providerId])).rows[0].public_name)
   expect(asCust.slice(3)).toEqual([null, null])
+  // the page that shows each ref: the task's own request (for its booking and its request), the root booking's request
+  expect(asCust.slice(0, 3).map((j) => j?.requestId)).toEqual([request.id, request.id, root.requestId])
   const asOwner = await jobsForNotices(db as never, U.owner, refs)
   expect(asOwner[0]!.otherParty).toBe('Clara K.')
   expect(asOwner[2]!.number).toBe(n)

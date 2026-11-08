@@ -109,12 +109,21 @@ test('a notice with a job names it in the text and opens the job page; without a
   expect(notificationText('quote-received', {}, job)).toBe('notice.withJob {"job":"#1040 Photo session","text":"notification.quoteReceived"}')
   expect(notificationText('quote-received', {}, null)).toBe('notification.quoteReceived')
   for (const kind of NOTIFICATION_KINDS) expect(notificationText(kind, {}, job) === null).toBe(notificationText(kind, {}) === null)
-  expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' }, job })).toEqual({ path: '/bookings/b-1' }) // booking stage keeps the booking screen until PR 4
-  for (const kind of ['request-received', 'quote-received', 'quote-expiring', 'request-expired', 'request-withdrawn', 'request-declined', 'request-reopened', 'request-updated', 'time-proposed'] as const) expect(notificationTarget({ kind, payload: { requestId: 'req-1' }, job })).toEqual({ path: '/bookings/request/req-1' })
-  // an additional task's quote: the notice's job is the ROOT request, the payload names the child request: the child's screen opens
+  // the server names the page (job.requestId): every job kind opens the job page, a booking's scrolled to that booking
+  const onPage = { ...job, requestId: 'req-1' }
+  for (const kind of NOTIFICATION_KINDS.filter((k) => !['customers-waiting', 'payout-setup-complete', 'commission-invoice-ready', 'profile-live', 'message-received', 'provider-available', 'provider-warning'].includes(k))) {
+    expect(notificationTarget({ kind, payload: { requestId: 'req-1' }, job: onPage })).toEqual({ path: '/bookings/request/req-1' })
+    expect(notificationTarget({ kind, payload: { bookingId: 'b-1' }, job: onPage })).toEqual({ path: '/bookings/request/req-1?booking=b-1' })
+  }
+  // an additional task: the job is the ROOT request, the page is the task's own request
+  expect(notificationTarget({ kind: 'payment-reminder', payload: { bookingId: 'b-2' }, job: { ...job, requestId: 'child-1' } })).toEqual({ path: '/bookings/request/child-1?booking=b-2' })
+  // kinds without a job keep their target; a provider warning keeps the booking link; a malformed id opens nothing
+  expect(notificationTarget({ kind: 'provider-warning', payload: { bookingId: 'b-1' }, job: onPage })).toEqual({ path: '/bookings/b-1' })
+  expect(notificationTarget({ kind: 'requests-ignored', payload: {}, job: null })).toEqual({ path: '/bookings' })
+  expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b 1' }, job: onPage })).toBeNull()
+  // an older server (a job without requestId, or no job): the old booking or request link, which lands on the same job page
+  expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' }, job })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'quote-received', payload: { requestId: 'child-1' }, job })).toEqual({ path: '/bookings/request/child-1' })
-  // a request-stage notice that names only a booking keeps the booking screen
-  expect(notificationTarget({ kind: 'time-proposed', payload: { bookingId: 'b-1' }, job })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' } })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'booking-paid', payload: { bookingId: 'b-1' }, job: null })).toEqual({ path: '/bookings/b-1' })
   expect(notificationTarget({ kind: 'customers-waiting', payload: {}, job })).toEqual({ path: '/my-profile' })
