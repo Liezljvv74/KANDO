@@ -3,7 +3,7 @@ import { useCallback, useRef, useState, type ComponentRef } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import type { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 
-import type { JobStateDto } from '@kando/contract'
+import type { Booking, JobStateDto } from '@kando/contract'
 
 import { acceptQuote, confirmQuote, declineRequest, getBooking, getRequest, listQuotes, withdrawRequest } from '@/api/bookings'
 import { listQuoteDocuments, quotePdf } from '@/api/quotes'
@@ -23,6 +23,7 @@ import { confirmDanger } from '@/lib/confirm'
 import { placeText } from '@/lib/place'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingActions, BookingSection, BookingStatusLines, bookingTitle, JobCommonButtons } from '@/screens/bookings/booking-detail'
+import { PayPrompt } from '@/screens/bookings/pay-card'
 import { JobHeader } from '@/screens/bookings/job-header'
 import { LapsedAsk } from '@/screens/bookings/lapse-banner'
 import { QuoteCard } from '@/screens/bookings/quote-card'
@@ -55,6 +56,7 @@ export default function RequestDetail() {
   const pdf = usePdf()
   const accepting = useSubmit()
   const closing = useSubmit()
+  const [payFor, setPayFor] = useState<Booking | null>(null) // the booking to pay, offered right after accepting a quote
   const [editing, setEditing] = useState(false) // the provider's Edit quote shows the form again
   const [askChat, setAskChat] = useState(false) // the customer's Withdraw on a quote offers the chat first
   const scroll = useRef<ComponentRef<typeof KeyboardAwareScrollView>>(null)
@@ -82,7 +84,10 @@ export default function RequestDetail() {
   const onBooking = !!b && !!state && (!REQUEST_KEYS.includes(state.key) || b.status === 'awaiting-time')
   const extra = !!request.parentBookingId
   // an additional task's quote takes the booking's time; an ordinary one is confirmed as it is. Either way the booking joins this page.
-  const confirm = (quoteId: string) => accepting.submit(() => (extra ? acceptQuote(quoteId, {}) : confirmQuote(quoteId)), retry)
+  const confirm = (quoteId: string) => accepting.submit(async () => {
+      const made = await (extra ? acceptQuote(quoteId, {}) : confirmQuote(quoteId))
+      if (made.status === 'awaiting-payment') setPayFor(made)
+    }, retry)
   const liveQuote = quotes.filter((q) => q.status === 'sent').sort((x, y) => y.version - x.version)[0]
   const head = onBooking && current ? bookingTitle(current, state) : stateText(state, viewer, requestStateCtx(request, liveQuote))
   const close = async () => {
@@ -130,6 +135,7 @@ export default function RequestDetail() {
   )
   return (
     <FormScreen title={request.title ?? t('job.fallbackTitle')} scrollRef={scroll}>
+      {payFor && <PayPrompt booking={payFor} onClose={() => setPayFor(null)} onRefresh={retry} />}
       <JobHeader job={headerJob} viewer={viewer} />
       {quoteReady ? (
         <Text style={styles.status} accessibilityRole="header">

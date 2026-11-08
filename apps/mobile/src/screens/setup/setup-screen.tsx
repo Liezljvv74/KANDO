@@ -7,7 +7,6 @@ import type { MyProfile } from '@kando/contract'
 import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
-import { NotificationBanners } from '@/components/notification-banner'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
@@ -75,7 +74,6 @@ export default function SetupScreen() {
   return (
     <FormScreen title={title} back={false}>
       <PublishBar profile={profile} services={services} docRows={docRows} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
-      <NotificationBanners me={me} canShare={canShare(services)} here="/my-profile" />
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />
