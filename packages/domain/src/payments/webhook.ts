@@ -45,7 +45,8 @@ export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Pro
     if (e.type === 'checkout-paid') return paid(tx, e, now, after)
     // a dispute or a failed refund: staff act by hand (one open flag per booking and kind)
     const bookingId = e.type === 'refund-failed' && e.bookingId ? e.bookingId : await bookingOfPayment(tx, e.paymentRef)
-    // a payment or refund of another environment sharing this Stripe account (its booking is not ours, nor in the ledger): not ours to flag
+    // a payment or refund of another environment sharing this Stripe account (its booking is not ours, nor in the ledger): not ours to flag.
+    // ponytail: a chargeback on one of our payments whose charge row was never written (its paid event is a payment-unprocessed flag) is dropped too; staff see it in Stripe. Add a flag for it if that case ever shows up.
     if (!bookingId || !(await bookingKnown(tx, bookingId))) return console.warn(`[payments] ${e.type} ignored: not a booking of this environment`)
     const customerId = bookingId ? (await tx.select({ c: bookings.customerId }).from(bookings).where(eq(bookings.id, bookingId)))[0]?.c : undefined
     const note = e.type === 'charge-disputed' ? `dispute on payment ${e.paymentRef}` : `refund ${e.refundId} of payment ${e.paymentRef} failed`

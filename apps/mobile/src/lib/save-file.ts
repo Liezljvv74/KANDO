@@ -23,6 +23,11 @@ export async function downloadText(filename: string, text: string, type = 'text/
   } catch {
     return false // the picker was closed
   }
-  folder.createFile(filename, type).write(text)
+  try {
+    folder.createFile(filename, type).write(text)
+  } catch {
+    // the name is taken in that folder (a second export): save beside it under a new name
+    folder.createFile(filename.replace(/(\.[^.]*)?$/, `-${Date.now()}$1`), type).write(text)
+  }
   return true
 }

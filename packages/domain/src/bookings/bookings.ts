@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { bookings, quoteDocuments, type Tx } from '@kando/db'
+import { bookings, quoteDocuments, requests, type Tx } from '@kando/db'
 import type { Booking, BookingView } from '@kando/contract'
 import { fail, notFound } from '../providers/http'
 import { jobStates } from './job-state-lookup'
@@ -35,6 +35,10 @@ export async function withdrawBooking(tx: Tx, userId: string, bookingId: string,
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
   // A quote-born root booking: the trigger gave the quote back, so the job closes with it (the customer's "Withdraw request"; the provider is told).
   // An additional task only ends its own booking.
-  if (row!.requestId && row!.quoteId && !row!.parentBookingId) await withdrawRequest(tx, userId, row!.requestId, now, afterCommit)
+  // Only while the request is open again: a quote past its expiry leaves it expired (trigger), and closing that would refuse and undo this withdraw.
+  if (row!.requestId && row!.quoteId && !row!.parentBookingId) {
+    const [req] = await tx.select({ status: requests.status }).from(requests).where(eq(requests.id, row!.requestId))
+    if (req && ['open', 'quoted'].includes(req.status)) await withdrawRequest(tx, userId, row!.requestId, now, afterCommit)
+  }
   return (await withBookingRefs(tx, [view(row!, userId, now)], userId))[0]!
 }

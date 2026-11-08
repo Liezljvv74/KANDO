@@ -41,18 +41,22 @@ export default function RequestDetail() {
   useLang()
   const { id, booking: focus } = useLocalSearchParams<{ id: string; booking?: string }>()
   const me = useMe()
+  const marked = useRef(false)
   const fetch = useCallback(async () => {
     const [request, quotes, docs] = await Promise.all([getRequest(id), listQuotes(id), listQuoteDocuments(id).catch(() => [])])
     const bookingIds = request.bookingIds ?? []
     // a booking that cannot be read (e.g. a 404) drops only its own section: the page still shows
     const views = (await Promise.all(bookingIds.map((b) => getBooking(b).catch(() => null)))).filter((v) => v !== null)
-    // opening the job page reads its quote and booking notices: they turn seen (the chat's own notices are marked by the chat)
-    loadMe()
-      .then(() => markNotificationsSeen((n) => isJobPageNotice(n, id, bookingIds)))
-      .catch(() => {})
+    // opening the job page reads its quote and booking notices: they turn seen (the chat's own notices are marked by the chat); once, not at every refresh
+    if (!marked.current) {
+      marked.current = true
+      loadMe()
+        .then(() => markNotificationsSeen((n) => isJobPageNotice(n, id, bookingIds)))
+        .catch(() => {})
+    }
     return { request, quotes, views, docOf: new Map(docs.map((d) => [d.quoteId, d.id])) }
   }, [id])
-  const { data, error, retry } = useLoad(fetch, { pollMs: 20_000 }) // a message or payment that arrives while the page is open shows without leaving it
+  const { data, error, retry } = useLoad(fetch, { pollMs: 30_000 }) // a message or payment that arrives while the page is open shows without leaving it
   const pdf = usePdf()
   const accepting = useSubmit()
   const closing = useSubmit()

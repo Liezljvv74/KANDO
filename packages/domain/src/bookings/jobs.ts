@@ -114,7 +114,7 @@ export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = 
   const mine = q.role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   const jobsOf = and(mine, isNull(requests.parentBookingId)) // an additional task is part of its job, not a row
   const derived = [...new Set([...(await alwaysDerived(tx, userId, now)), ...drifted])]
-  const open =await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
+  const open = await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
   const openRows = await rowsOf(tx, userId, q.role, open, now)
   const openList = open.flatMap((f) => openRows.get(f.id) ?? [])
   const pastOutside = and(jobsOf, settled(now), derived.length ? notInArray(requests.id, derived) : undefined)
