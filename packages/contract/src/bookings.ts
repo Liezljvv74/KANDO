@@ -100,6 +100,8 @@ export const RequestSchema = z.object({
   customerRating: RatingSchema.nullish(),
   /** On GET /requests/:id only: the request's chat (an additional task's is its booking's). */
   threadId: z.string().nullish(),
+  /** On GET /requests/:id only: 1 when the job's chat has an unread message for the viewer (same rule as the Jobs list). */
+  unread: z.number().int().min(0).optional(),
   jobState: JobStateSchema.optional(),
   /** On GET /requests/:id only (the job page): the other party's name, the request's bookings (oldest first) and the current one. */
   otherParty: z.string().optional(),

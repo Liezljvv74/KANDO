@@ -111,6 +111,7 @@ async function walk(uid: string, q: Record<string, string>): Promise<{ items: Jo
 }
 
 /** An unseen message notice for `to` (default: the customer) in the job's chat. */
+const page = (uid: string, id: string) => call(requestRoute.GET, uid, 'GET', undefined, { id })
 const unreadNotice = async (customerId: string, requestId: string, to = customerId) => {
   const t = (await pool.query('INSERT INTO threads (request_id, customer_id, provider_id) VALUES ($1, $2, $3) ON CONFLICT (request_id) DO UPDATE SET customer_id = threads.customer_id RETURNING id', [requestId, customerId, providerId])).rows[0].id
   await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ($1, 'message-received', $2)", [to, JSON.stringify({ threadId: t })])
@@ -254,7 +255,6 @@ it('an additional task is part of its job: it leads the row while it needs someo
   expect(await where('jb-towner', 'provider')).toMatchObject({ section: 'active', key: 'payment_due', counts: { needsYou: 0, past: 0 } })
 
   // the job page lists the task (with its own state) to both parties; the task's own page has no task list; a stranger gets 404
-  const page = (uid: string, id: string) => call(requestRoute.GET, uid, 'GET', undefined, { id })
   for (const uid of ['jb-t1', 'jb-towner']) {
     const r = RequestSchema.parse(await (await page(uid, root)).json())
     expect(r.tasks).toEqual([{ id: task, jobState: expect.objectContaining({ key: 'payment_due' }) }])
@@ -278,6 +278,10 @@ it('opening the chat (POST seen) clears its message notices on the server, also 
   await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ('jb-m1', 'message-received', $1)", [JSON.stringify({ threadId: randomUUID() })]) // another chat's: untouched
   const unseen = async () => (await pool.query("SELECT payload->>'threadId' AS t FROM notifications WHERE user_id = 'jb-m1' AND seen_at IS NULL")).rows.map((r: { t: string }) => r.t)
   expect((await list('jb-m1', { section: 'needs_you' })).items.find((i) => i.id === job)?.unread).toBe(1)
+  // the row opens the chat directly; the job page says unread too (receiver 1, the sender's side 0)
+  expect((await list('jb-m1', { section: 'needs_you' })).items.find((i) => i.id === job)?.threadId).toBe(thread)
+  expect(RequestSchema.parse(await (await page('jb-m1', job)).json())).toMatchObject({ unread: 1, threadId: thread })
+  expect(RequestSchema.parse(await (await page('jb-mowner', job)).json()).unread).toBe(0)
   // a stranger's mark is a 404 and changes nothing; the party's read (the poll) is read-only
   expect((await call(seenRoute.POST, U.stranger, 'POST', undefined, { id: thread })).status).toBe(404)
   expect((await call(messagesRoute.GET, 'jb-m1', 'GET', undefined, { id: thread })).status).toBe(200)
@@ -288,6 +292,7 @@ it('opening the chat (POST seen) clears its message notices on the server, also 
   const after = await list('jb-m1', { section: 'active' })
   expect(after.items.find((i) => i.id === job)?.unread).toBe(0)
   expect(after.counts.unread).toBe(0)
+  expect(RequestSchema.parse(await (await page('jb-m1', job)).json()).unread).toBe(0)
 })
 
 it('a job the settled rule calls past but the state does not (drift) shows in its own section, and the counters agree', async () => {

@@ -298,7 +298,7 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   const otherParty = (await jobsForNotices(tx, userId, [{ requestId: row.id }]))[0]?.otherParty
   const taskItems = tasks.map((t) => { const ts = states.get(t.id); return { id: t.id, ...(ts && { jobState: toJobStateDto(ts) }) } })
   const job = { bookingIds: s.bookingIds, currentBookingId: s.currentBookingId, ...(otherParty !== undefined && { otherParty }), ...(!row.parentBookingId && { tasks: taskItems }) }
-  const dto = { ...(await withRequestRefs(tx, [base], userId, states))[0]!, threadId: s.threadId, ...job }
+  const dto = { ...(await withRequestRefs(tx, [base], userId, states))[0]!, threadId: s.threadId, unread: s.unread ? 1 : 0, ...job }
   return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }
 

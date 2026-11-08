@@ -623,6 +623,8 @@ export const en: Record<AppKey, string> = {
   'chat.title': 'Messages',
   'chat.empty': 'No conversations yet.',
   'chat.open': 'Open chat',
+  'chat.openUnread': 'Open chat ({n})',
+  'job.newMessage': 'You have a new message',
   'chat.noMessages': 'No messages yet. Write the first one.',
   'chat.placeholder': 'Write a message',
   'chat.send': 'Send',
