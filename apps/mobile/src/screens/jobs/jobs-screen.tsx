@@ -1,5 +1,5 @@
 import { useCallback, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import type { JobRow } from '@kando/contract'
 
@@ -97,13 +97,15 @@ export default function JobsScreen() {
 
   return (
     <FormScreen title={t('tab.jobs')} back={false}>
-      {/* For everyone, not only providers: customers' receipts live there too (and providers who stopped offering keep theirs). */}
-      <LinkText label={t('jobs.invoices')} onPress={() => go('/invoices')} />
       {both && (
-        <>
-          <Button label={label('customer')} onPress={() => setRole('customer')} disabled={role === 'customer'} selected={role === 'customer'} />
-          <Button label={label('provider')} onPress={() => setRole('provider')} disabled={role === 'provider'} selected={role === 'provider'} />
-        </>
+        <View style={styles.switch}>
+          <View style={styles.half}>
+            <Button label={label('customer')} onPress={() => setRole('customer')} disabled={role === 'customer'} selected={role === 'customer'} />
+          </View>
+          <View style={styles.half}>
+            <Button label={label('provider')} onPress={() => setRole('provider')} disabled={role === 'provider'} selected={role === 'provider'} />
+          </View>
+        </View>
       )}
       <Field
         label={t('jobs.search')}
@@ -154,11 +156,15 @@ export default function JobsScreen() {
           {pastOpen && <More list={past} />}
         </>
       )}
+      {/* For everyone, not only providers: customers' receipts live there too (and providers who stopped offering keep theirs). */}
+      <LinkText label={t('jobs.invoices')} onPress={() => go('/invoices')} />
     </FormScreen>
   )
 }
 
 const styles = StyleSheet.create({
+  switch: { flexDirection: 'row', gap: 8 },
+  half: { flex: 1 },
   text: { fontSize: 16, color: '#1D1C4A' },
   small: { fontSize: 14, color: '#4F4E7D' },
   unread: { fontSize: 14, fontWeight: '700', color: '#34328A' },
