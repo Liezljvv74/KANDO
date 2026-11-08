@@ -852,6 +852,7 @@ export const de = {
   'invoice.commissionNone': 'Du hast noch keine Provisionsrechnungen. {brand} schickt dir jeden Monat eine, in dem Provision einbehalten wurde.',
   'invoice.commissionMonth': 'Provision für {month}',
   'invoice.commissionLabel': 'Provisionsrechnung',
+  'invoice.exportDownload': '{year} als Datei herunterladen (CSV)',
   'invoice.exportHeading': 'Rechnungen eines Jahres',
   'invoice.exportHint': 'Hol dir eine Tabelle (CSV) aller Rechnungen und Quittungen, die du in einem Jahr ausgestellt hast, zum Beispiel für deine Steuererklärung, und schick oder speichere sie über das Teilen-Menü.',
   'invoice.year': 'Jahr',

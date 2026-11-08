@@ -853,6 +853,7 @@ export const en: Record<AppKey, string> = {
   'invoice.commissionNone': 'You have no commission invoices yet. {brand} sends you one each month in which it kept commission.',
   'invoice.commissionMonth': 'Commission for {month}',
   'invoice.commissionLabel': 'Commission invoice',
+  'invoice.exportDownload': 'Download {year} as a file (CSV)',
   'invoice.exportHeading': 'Invoices of one year',
   'invoice.exportHint': 'Get a table (CSV) of all invoices and receipts you issued in one year, for example for your tax return, and send or save it with the share menu.',
   'invoice.year': 'Year',
