@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   headlineRest: { color: color.teal },
   main: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: color.bg },
   // each choice its own colour, all with a solid line: need help (clear), offer (light indigo), learn more (light teal)
-  indigo: { borderStyle: 'solid', borderColor: color.indigo, backgroundColor: '#E1E0F5' },
+  indigo: { borderStyle: 'solid', borderColor: color.indigo, backgroundColor: '#CBCAE6' },
   teal: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: '#D3F3F0' },
   pressed: { opacity: 0.75 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
