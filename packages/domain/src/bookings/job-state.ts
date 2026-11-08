@@ -72,7 +72,7 @@ export type JobState = Out & { countsForMe: boolean }
  * - the customer's "Withdraw request" is the `cancel` button (request_sent, and quote_sent without a booking, where it declines the quote); the other table buttons (set_up_payouts, add_task, review, receipt, no_show, ask_someone_else) are emitted per the spec table.
  * - `unread` (spec 8b point 5, 4.2): an active or past job with an unread message moves to needs_you, except problem_reported and delayed, which stay active (red) and only count.
  * - `before_start_time` is provider-only (the table shows a customer nothing special): the customer sees `paid_upcoming`. It returns `startAt`.
- * - confirmed + noShow reported, `disputed`, and `stopped` without an agreed amount (no confirmBy) are `problem_reported`; `stopped` with confirmBy is paid like `finished`.
+ * - confirmed + noShow reported, `disputed`, and `stopped` without an agreed amount (no confirmBy) are `problem_reported`; `stopped` with confirmBy is paid like `finished`. On a stopped job the customer has one way to disagree: `answer_stop` once the amount is stated (disagree opens the dispute), `report_problem` only before that.
  * - confirmed past start with askedDoneAt: the customer gets `work_done_waiting` (confirm or report); the provider still gets `start_time_passed`.
  * - the payout stage is finished past confirmBy, or completed/stopped-agreed without releasedAt; `delayedFlag` beats it, and beats `cancelled`/`refunded` (failed refund),
  *   but never a released booking (stale flag) and never a no-show or an unagreed stop (`problem_reported`). A `disputed` booking with the flag is
@@ -165,7 +165,7 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
       return s.key === 'delayed' || s.key === 'payout_account_missing' ? s : plus(s, task)
     }
     case 'stopped':
-      if (!b.confirmBy) return plus(problem, customer ? [...(b.stopStatedAt ? ['answer_stop' as const] : []), 'report_problem'] : [...(b.stopStatedAt ? [] : ['state_stop_amount' as const]), 'report_problem'])
+      if (!b.confirmBy) return plus(problem, customer ? [b.stopStatedAt ? 'answer_stop' as const : 'report_problem' as const] : [...(b.stopStatedAt ? [] : ['state_stop_amount' as const]), 'report_problem'])
       return b.confirmBy > now ? waiting() : payoutStage()
     case 'disputed':
       return i.delayedFlag ? delayed : problem

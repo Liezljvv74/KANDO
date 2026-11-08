@@ -130,7 +130,7 @@ describe('booking states, both viewers, exact buttons', () => {
     expect(state('provider', { status: 'stopped' }).buttons).toEqual([...base, 'state_stop_amount', 'report_problem'])
     expect(state('customer', { status: 'stopped' }).buttons).toEqual([...base, 'report_problem'])
     expect(state('provider', { status: 'stopped', stopStatedAt: at(-1) }).buttons).toEqual([...base, 'report_problem'])
-    expect(state('customer', { status: 'stopped', stopStatedAt: at(-1) }).buttons).toEqual([...base, 'answer_stop', 'report_problem'])
+    expect(state('customer', { status: 'stopped', stopStatedAt: at(-1) }).buttons).toEqual([...base, 'answer_stop'])
     for (const v of ['customer', 'provider'] as const) expect(state(v, { status: 'stopped' }).key).toBe('problem_reported')
   })
   it('stopped with an agreed amount is paid like finished', () => {
