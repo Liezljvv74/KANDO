@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { bookings, db, disputes, providers, type Tx } from '@kando/db'
-import { HOUR, NO_SHOW_OBJECTION_HOURS, type Booking, type NoShowObjection } from '@kando/contract'
+import { NO_SHOW_OBJECTION_HOURS, type Booking, type NoShowObjection } from '@kando/contract'
 import { assertNoContactDetails, flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
 import type { Exec } from '../providers/eligibility'
@@ -9,7 +9,7 @@ import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
 import { lockFamily, parentNoShow } from './additional'
 import { openDisputeCore, tellDisputeOpened } from './disputes'
-import { customerCancelShare, isLate } from './ending-rules'
+import { customerCancelShare, isLate, noShowObjectBy } from './ending-rules'
 import { attemptMoney, reload } from './finish'
 import { notifyBookingEvent } from './notify'
 import { lockRow, partyOf } from './party'
@@ -18,7 +18,7 @@ type Row = typeof bookings.$inferSelect
 type Side = 'customer' | 'provider'
 const otherSide = (s: Side): Side => (s === 'customer' ? 'provider' : 'customer')
 export const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
-const objectBy = (b: Row) => new Date(b.noShowReportedAt!.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)
+const objectBy = (b: Row) => noShowObjectBy(b.noShowReportedAt)!
 
 /**
  * What the customer paid, in cents, with this settlement's own refund still counted as paid (settle does the same): the

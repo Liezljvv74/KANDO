@@ -10,6 +10,7 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const bookingOne = await import('../app/app-api/v1/bookings/[id]/route')
 const requestOne = await import('../app/app-api/v1/requests/[id]/route')
 const requestList = await import('../app/app-api/v1/requests/route')
+const noShowRoute = await import('../app/app-api/v1/bookings/[id]/no-show/route')
 
 const U = { cust: 'js-cust', owner: 'js-owner' }
 const HOUR = 3_600_000
@@ -176,4 +177,13 @@ it('a cancellation whose refund fails is delayed; the retry that succeeds counts
   expect((await runDueTimers(db, new Date(now.getTime() + HOUR))).cancelsSettled).toBeGreaterThanOrEqual(1)
   for (const uid of [U.cust, U.owner]) expect(await stateOf(uid, id)).toMatchObject({ key: 'cancelled', section: 'past', buttons: ['open_chat'] })
   expect((await pool.query("SELECT count(*)::int AS n FROM ledger_entries WHERE booking_id = $1 AND kind = 'refund'", [id])).rows[0].n).toBe(1)
+})
+
+it('a reported no-show: the reported side gets object_no_show (the deadline read from the report), the reporter does not, nor after the deadline', async () => {
+  const id = await paidBooking({ startAt: new Date(Date.now() - 2 * HOUR) })
+  expect((await call(noShowRoute.POST, U.cust, 'POST', undefined, { id })).status).toBe(200) // the customer says the provider did not turn up
+  expect(await stateOf(U.owner, id)).toMatchObject({ key: 'problem_reported', buttons: ['open_chat', 'contact_support', 'object_no_show'] })
+  expect((await stateOf(U.cust, id)).buttons).not.toContain('object_no_show')
+  await pool.query("UPDATE bookings SET no_show_reported_at = now() - interval '49 hours' WHERE id = $1", [id])
+  expect((await stateOf(U.owner, id)).buttons).not.toContain('object_no_show')
 })

@@ -84,7 +84,7 @@ export function BookingSection({ view, showTitle }: { view: BookingView; showTit
 
 /**
  * The job's buttons that act on its current booking, from the server's `buttons` only (no rule of its own): pay, set up payouts and
- * the booking steps with their forms. "Job finished" before the start time shows greyed, with the time it opens.
+ * the booking steps with their forms. "Job finished" before the start time shows greyed (the status card's line names the time).
  */
 export function BookingActions({ view, state, onChanged }: { view: BookingView; state: JobStateDto; onChanged: () => void }) {
   const { booking: b, viewer } = view
@@ -114,7 +114,7 @@ export function BookingActions({ view, state, onChanged }: { view: BookingView; 
   const descriptionSheet = (label: Key, hint: Key | undefined, submitLabel: Key, call: (text: string) => Promise<unknown>, after = closeAndReload) => (
     <DescriptionForm label={t(label)} hint={hint && t(hint)} submitLabel={t(submitLabel)} onSubmit={call} onDone={after} />
   )
-  const early = state.key === 'before_start_time' // "Job finished" opens at the start time
+  const early = state.key === 'before_start_time' // "Job finished" opens at the start time; the status card above names the time (said once)
   const actions = state.buttons.flatMap((x) => BUTTON_ACTION[x] ?? [])
   return (
     <>
@@ -125,7 +125,6 @@ export function BookingActions({ view, state, onChanged }: { view: BookingView; 
       {actions.map((a) => (
         <Button key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} />
       ))}
-      {early && actions.includes('finish') && <Text style={styles.small}>{t('job.state.before_start_time.provider.body', { time: formatWhen(state.startAt ?? b.startAt) })}</Text>}
       {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
       {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
       {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}

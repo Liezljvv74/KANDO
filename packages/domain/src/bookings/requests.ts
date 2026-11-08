@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
-import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
+import { DAY, LIST_PAGE, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
@@ -17,6 +17,7 @@ import { issueQuoteDocument } from '../quotes/issue'
 import { canTransact } from '../payments/rules'
 import { assertFuture, bookingShownStatus, lapseReason, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
+import { noShowObjectBy } from './ending-rules'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
 import { taskNumber } from './job-ref'
@@ -180,7 +181,7 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   lateCancel: b.lateCancel,
   noShow: b.noShow as Booking['noShow'],
   noShowReportedAt: b.noShowReportedAt ? iso(b.noShowReportedAt) : null,
-  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)) : null,
+  noShowObjectBy: b.noShowReportedAt ? iso(noShowObjectBy(b.noShowReportedAt)!) : null,
   stoppedAt: b.stoppedAt ? iso(b.stoppedAt) : null,
   stoppedBy: b.stoppedBy as Booking['stoppedBy'],
   stopAmount: b.stopAmount === null ? null : Number(b.stopAmount),

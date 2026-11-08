@@ -3,6 +3,7 @@ import { bookings, db, notifications, providers, quotes, staffFlags, type Tx } f
 import type { JobStateDto } from '@kando/contract'
 import { threadIdsOf } from '../chat/threads'
 import { readRef } from '../payments/rules'
+import { noShowObjectBy } from './ending-rules'
 import { currentBookingOf, deriveJobState, type JobBookingInput, type JobRequestInput, type JobState, type JobViewer } from './job-state'
 
 // Imports no requests/notify module (requests.ts imports this one); the thread rule is chat/threads.ts threadIdsOf.
@@ -64,7 +65,7 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
 
   for (const i of items) {
     const mine = rows.filter((r) => (i.bookingId ? r.id === i.bookingId : r.requestId === i.requestId))
-    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })() }))
+    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })(), noShowObjectBy: noShowObjectBy(r.noShowReportedAt) }))
     const current = currentBookingOf(inputs)
     const unread = (!!i.requestId && !i.bookingId && unreadKey(`r:${i.requestId}`)) || mine.some((r) => unreadKey(r.id))
     out.set(i.key, {
