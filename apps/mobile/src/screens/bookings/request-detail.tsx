@@ -8,7 +8,7 @@ import type { JobStateDto } from '@kando/contract'
 import { acceptQuote, confirmQuote, declineRequest, getBooking, getRequest, listQuotes, withdrawRequest } from '@/api/bookings'
 import { listQuoteDocuments, quotePdf } from '@/api/quotes'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
-import { Actions, Card, FormScreen, SectionTitle } from '@/components/form-ui'
+import { Actions, Card, FormScreen, SectionTitle, SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
@@ -55,6 +55,7 @@ export default function RequestDetail() {
   const pdf = usePdf()
   const accepting = useSubmit()
   const closing = useSubmit()
+  const [editing, setEditing] = useState(false) // the provider's Edit quote shows the form again
   const [askChat, setAskChat] = useState(false) // the customer's Withdraw on a quote offers the chat first
   const scroll = useRef<ComponentRef<typeof KeyboardAwareScrollView>>(null)
   const scrolled = useRef(false)
@@ -89,7 +90,11 @@ export default function RequestDetail() {
     const [ask, yes, call] = isCustomer ? (['request.withdrawConfirm', 'request.withdraw', withdrawRequest] as const) : (['request.declineConfirm', 'request.decline', declineRequest] as const)
     if (await confirmDanger(t(ask), t(yes))) closing.submit(() => call(request.id), retry)
   }
-  const canClose = !onBooking && (has('decline') || has('cancel'))
+  const quoteOut = !isCustomer && !onBooking && state?.key === 'quote_sent' && !!liveQuote && has('send_quote') // the provider's quote is out: Edit quote / Cancel quote instead of the form
+  const cancelQuote = async () => {
+    if (await confirmDanger(t('booking.cancelQuoteConfirm'), t('booking.cancelQuote'))) closing.submit(() => declineRequest(request.id), retry)
+  }
+  const canClose = !onBooking && !quoteOut && (has('decline') || has('cancel'))
   const agreed = !!b && b.status !== 'awaiting-time' // an awaiting-time booking's start is a stand-in: not shown
   const headerJob = {
     jobNumber: request.jobNumber,
@@ -154,7 +159,18 @@ export default function RequestDetail() {
       <ErrorText text={pdf.problem} />
       {isCustomer && has('accept_quote') && <Info text={t('booking.discussChanges')} />}
       <ErrorText text={accepting.problem} />
-      {!isCustomer && has('send_quote') && <SendQuoteForm request={request} onSent={retry} />}
+      {quoteOut && !editing && (
+        <Actions>
+          <SmallButton label={t('booking.editQuote')} onPress={() => setEditing(true)} />
+          <SmallButton label={t('booking.cancelQuote')} onPress={cancelQuote} busy={closing.busy} danger />
+        </Actions>
+      )}
+      {!isCustomer && has('send_quote') && (!quoteOut || editing) && (
+        <>
+          <SendQuoteForm request={request} onSent={() => { setEditing(false); retry() }} />
+          {editing && <LinkText label={t('common.cancel')} onPress={() => setEditing(false)} />}
+        </>
+      )}
       {views.length > 0 && <SectionTitle text={t('booking.bookings')} />}
       {[...views].reverse().map((v) => (
         <View key={v.booking.id} onLayout={(e) => onLayoutOf(v.booking.id)(e.nativeEvent.layout.y)} style={styles.section}>
