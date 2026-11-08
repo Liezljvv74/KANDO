@@ -1,69 +1,20 @@
 import { router, useFocusEffect } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import * as SecureStore from 'expo-secure-store'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { photosApi } from '@/api/my-profile'
-import { Button, ErrorText } from '@/components/auth-ui'
-import { Card } from '@/components/form-ui'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
+import { ErrorText } from '@/components/auth-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
-import { errorText, t, useLang, type Key } from '@/i18n'
+import { t, useLang, type Key } from '@/i18n'
 import { consumeAfterLogin, setAfterLogin } from '@/lib/after-login'
-import { askPhotoSource } from '@/lib/ask-photo-source'
 import { peekPending } from '@/lib/pending-navigation'
-import { pictureNudgeKey } from '@/lib/picture-nudge'
-import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { showProfileTab } from '@/lib/profile-tab'
 import { startOffering } from '@/lib/start-offering'
 import { color, font } from '@/theme'
-
-/** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
-function PictureNudge() {
-  const [show, setShow] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const [key, setKey] = useState('')
-  useEffect(() => {
-    loadMe()
-      .then(async (me) => {
-        setKey(pictureNudgeKey(me.id))
-        setShow(!me.photoUrl && !(await SecureStore.getItemAsync(pictureNudgeKey(me.id))))
-      })
-      .catch(() => {})
-  }, [])
-  const dismiss = () => {
-    setShow(false)
-    SecureStore.setItemAsync(key, '1').catch(() => {})
-  }
-  const add = useCallback(async (source: 'camera' | 'library') => {
-    setProblem(null)
-    try {
-      const file = await pickPhoto(source, true)
-      if (file === 'denied') setProblem(t('myProfile.denied'))
-      else if (file) {
-        await photosApi.add(file, 'profile')
-        setShow(false)
-      }
-    } catch (e) {
-      setProblem(errorText(uploadErrorCode(e)))
-    }
-  }, [])
-  if (!show) return null
-  return (
-    <Card>
-      <Text style={styles.body}>{t('home.pictureNudge')}</Text>
-      <ErrorText text={problem} />
-      <Button label={t('home.pictureAdd')} onPress={() => askPhotoSource(add)} />
-      <Text style={styles.dismiss} accessibilityRole="button" accessibilityLabel={t('home.pictureDismiss')} onPress={dismiss}>
-        {'×'}
-      </Text>
-    </Card>
-  )
-}
 
 /** "Finally\nSomeone who can" -> ["FINALLY", "Someone who can"]: the first word in capitals and mint, the rest in teal. */
 const splitHeadline = (s: string): [string, string] => {
@@ -71,7 +22,7 @@ const splitHeadline = (s: string): [string, string] => {
   return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
 }
 
-/** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in it adds the picture prompt. */
+/** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in the same choices. */
 export default function HomeScreen() {
   useLang()
   const me = useMe()
@@ -131,7 +82,6 @@ export default function HomeScreen() {
           </Text>
           <Stamp label={t('home.stamp')} />
         </View>
-        {signedIn && <PictureNudge />}
         {choices.map(({ title, text, onPress, main, tone }, i) => (
           <Rise key={title} index={i}>
             <Pressable accessibilityRole="button" onPress={onPress} disabled={busy && title === 'welcome.offer'} style={({ pressed }) => pressed && styles.pressed}>
@@ -177,6 +127,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   cardTitle: { fontFamily: font.heading, fontSize: 19, color: color.ink },
   cardText: { fontSize: 15, lineHeight: 21, color: color.inkMuted, marginTop: 4 },
-  body: { fontSize: 15, lineHeight: 22, color: color.ink },
-  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: color.ink },
 })

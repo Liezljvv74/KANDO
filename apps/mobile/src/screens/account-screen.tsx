@@ -24,6 +24,7 @@ import { startOffering } from '@/lib/start-offering'
 import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { IdScanButton } from '@/screens/id-scan-button'
+import { PictureNudge } from '@/screens/picture-nudge'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 
 export default function AccountScreen() {
@@ -128,6 +129,7 @@ export default function AccountScreen() {
           {user && <Text style={styles.email}>{user.email}</Text>}
           <Button label={t('auth.logOut')} onPress={signOut} />
         </View>
+        <PictureNudge />
         <View style={styles.card}>
           <Text style={styles.heading}>{t('account.detailsHeading')}</Text>
           {me && (
