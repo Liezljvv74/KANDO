@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   small: { minHeight: 44, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: color.indigo, justifyContent: 'center' },
   smallLabel: { color: color.indigo, fontWeight: '600', fontSize: 15 },
   smallOff: { opacity: 0.5 },
-  smallGrow: { flex: 1, flexBasis: 0, minHeight: 52, paddingHorizontal: 6, alignItems: 'center' },
+  smallGrow: { flexGrow: 1, flexShrink: 1, flexBasis: '45%', minHeight: 52, paddingHorizontal: 6, alignItems: 'center' },
   smallGrowLabel: { textAlign: 'center', fontSize: 16 },
   icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
