@@ -4,8 +4,9 @@ import type { Booking, BookingView } from '@kando/contract'
 import { fail, notFound } from '../providers/http'
 import { jobStates } from './job-state-lookup'
 import { lockRow, partyOf } from './party'
-import { bookingItem, toBooking, withBookingRefs } from './requests'
+import { bookingItem, toBooking, withBookingRefs, withdrawRequest } from './requests'
 import { canTransition } from './rules'
+import type { AfterCommit } from '../app-request'
 
 type Row = typeof bookings.$inferSelect
 
@@ -27,10 +28,13 @@ export async function getBooking(tx: Tx, userId: string, id: string): Promise<Bo
 }
 
 /** "I no longer need this": the customer, from awaiting-time or awaiting-payment. */
-export async function withdrawBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
+export async function withdrawBooking(tx: Tx, userId: string, bookingId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   if ((await partyOf(tx, userId, bookingId)).role !== 'customer') fail(403, { error: 'wrong-side' })
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
+  // A quote-born root booking: the trigger gave the quote back, so the job closes with it (the customer's "Withdraw request"; the provider is told).
+  // An additional task only ends its own booking.
+  if (row!.requestId && row!.quoteId && !row!.parentBookingId) await withdrawRequest(tx, userId, row!.requestId, now, afterCommit)
   return (await withBookingRefs(tx, [view(row!, userId, now)], userId))[0]!
 }

@@ -615,7 +615,7 @@ export const en: Record<AppKey, string> = {
   'error.booking.unknown-service': 'This service no longer exists. Go back to the search and choose another one.',
   'booking.descriptionMissing': 'Please describe briefly what needs to be done.',
   'booking.invalidAmountFormat': 'Please enter the amount with digits only and at most two decimals, without thousands separators (e.g. 1250.50).',
-  'booking.confirmWithdraw': 'Withdraw for sure? You will no longer need this.',
+  'booking.confirmWithdraw': 'Withdraw for sure? The job will be closed and the provider told.',
   'chat.contactBlocked': "Contact details can't be shared here. Please keep the conversation in the app: payment protection, reviews and our help with disputes only apply to what happens in the app.",
   'chat.blocked': 'You cannot exchange messages in this conversation any more. If you blocked the other person, use "Unblock" to write again; otherwise write to {contact}.',
   'chat.sendLimit': 'You are sending messages very quickly. Please wait a few minutes, then try again.',

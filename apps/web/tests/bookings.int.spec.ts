@@ -91,18 +91,30 @@ it('the provider never sees the address of a booking that never had a payment de
   expect((await seen(U.cust, withdrawn.id))!.address).toMatchObject({ postcode: '10115' })
 })
 
-it('the customer withdraws an awaiting-payment booking: its request and quote are open again and the provider can send a revised quote', async () => {
+it('the customer withdraws a quote-born booking: the whole job is closed (booking and request withdrawn, quote not open), the provider is told once, the job is Past', async () => {
   const b = await made()
   const [requestId, quoteId] = [b.requestId!, b.quoteId!]
   expect([await statusOf('requests', requestId), await statusOf('quotes', quoteId)]).toEqual(['booked', 'accepted'])
   await pool.query('DELETE FROM notifications WHERE user_id = ANY($1)', [[U.cust, U.owner]])
   expect((await withdrawing(b.id, U.cust)).status).toBe(200)
-  expect([await statusOf('requests', requestId), await statusOf('quotes', quoteId)]).toEqual(['quoted', 'sent'])
-  expect([...(await noticesOf(b.id)), ...(await noticesOf(b.id, U.owner))]).toEqual([]) // the customer acted: nobody is told
-  const revised = await call(quotes.POST, U.owner, 'POST', { amount: 90, scope: 'Fence, smaller' }, { id: requestId })
-  expect(revised.status).toBe(201)
-  expect(QuoteSchema.parse(await revised.json())).toMatchObject({ version: 2, status: 'sent' })
-  expect(await statusOf('quotes', quoteId)).toBe('superseded')
+  expect(await statusOf('requests', requestId)).toBe('withdrawn')
+  expect(await statusOf('quotes', quoteId)).toBe('declined')
+  expect((await row(b.id)).status).toBe('withdrawn')
+  expect(await noticesOf(b.id)).toEqual([])
+  const told = (await pool.query("SELECT kind FROM notifications WHERE user_id = $1 AND payload->>'requestId' = $2", [U.owner, requestId])).rows
+  expect(told).toEqual([{ kind: 'request-withdrawn' }])
+  expect((await seen(U.cust, b.id))!.jobState).toMatchObject({ key: 'declined_expired', section: 'past' })
+  expect((await withdrawing(b.id, U.cust)).status).toBe(409)
+})
+
+it('withdrawing an additional task leaves the root job alone', async () => {
+  const root = await made()
+  await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [root.id])
+  const kid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, parent_booking_id, pay_by, accepted_at) SELECT customer_id, provider_id, service_id, 'direct', 'awaiting-payment', start_at, 60, 5, id, now() + interval '1 day', now() FROM bookings WHERE id = $1 RETURNING id", [root.id])).rows[0].id
+  expect((await withdrawing(kid, U.cust)).status).toBe(200)
+  expect((await row(kid)).status).toBe('withdrawn')
+  expect((await row(root.id)).status).toBe('completed')
+  expect(await statusOf('requests', root.requestId!)).toBe('booked')
 })
 
 it('GET /bookings/{id} answers each party with viewer and threadId, a stranger 404, and writes nothing', async () => {

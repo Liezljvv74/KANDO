@@ -614,7 +614,7 @@ export const de = {
   'error.booking.unknown-service': 'Diese Leistung gibt es nicht mehr. Geh zurück zur Suche und wähle eine andere.',
   'booking.descriptionMissing': 'Bitte beschreibe kurz, was gemacht werden soll.',
   'booking.invalidAmountFormat': 'Bitte den Betrag nur mit Ziffern und höchstens zwei Nachkommastellen angeben, ohne Tausendertrennzeichen (z. B. 1250,50).',
-  'booking.confirmWithdraw': 'Wirklich zurückziehen? Du brauchst das dann nicht mehr.',
+  'booking.confirmWithdraw': 'Wirklich zurückziehen? Der Auftrag wird beendet und der Anbieter benachrichtigt.',
   'chat.contactBlocked': "Kontaktdaten können hier nicht geteilt werden. Bitte bleib in der App: Zahlungsschutz, Bewertungen und unsere Hilfe bei Streitfällen gelten nur für das, was in der App passiert.",
   'chat.blocked': 'In dieser Unterhaltung kannst du keine Nachrichten mehr austauschen. Wenn du die andere Person blockiert hast, wähle „Blockierung aufheben“, um wieder zu schreiben; sonst schreib an {contact}.',
   'chat.sendLimit': 'Du sendest sehr schnell Nachrichten. Bitte warte ein paar Minuten und versuche es dann noch einmal.',
