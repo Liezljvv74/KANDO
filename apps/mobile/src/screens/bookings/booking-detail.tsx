@@ -65,7 +65,7 @@ export function BookingSection({ view, showTitle }: { view: BookingView; showTit
   return (
     <>
       <Card>
-        {!!b.taskNumber && <Text style={styles.small}>{`${t(b.parentBookingId ? 'booking.additionalTask' : 'booking.bookings')} ${b.taskNumber}`}</Text>}
+        {!!b.taskNumber && <Text style={styles.small}>{`${t(b.parentBookingId ? 'booking.additionalTask' : 'booking.booking')} ${b.taskNumber}`}</Text>}
         {!!view.quoteNumber && <Text style={styles.small}>{`${t('quote.label')} ${view.quoteNumber}`}</Text>}
         {showTitle && <Text style={styles.small}>{bookingTitle(view).title}</Text>}
         {/* the start time stored for an awaiting-time booking is only a stand-in: never shown */}
@@ -170,7 +170,7 @@ export default function BookingDetail() {
   useEffect(() => {
     if (requestId) goReplace(`/bookings/request/${requestId}`, { booking: id })
   }, [requestId, id])
-  const title = t('booking.bookings')
+  const title = t('booking.booking')
   if (!done || !data || requestId)
     return (
       <FormScreen title={title}>

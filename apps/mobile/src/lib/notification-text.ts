@@ -1,75 +1,5 @@
 import { REQUEST_SCREEN_KINDS, type NoticeJob, type Notification } from '@kando/contract'
 
-import { t, type Key } from '@/i18n'
-
-// The in-app payload carries ids only (and the customers-waiting count), so the ending texts name their periods
-// (7 days, 48 hours, 12 months, 30 days) in the catalogue; change them there together with the domain rules.
-const KEY: Record<Notification['kind'], Key> = {
-  'profile-live': 'notification.profileLive',
-  'request-received': 'notification.requestReceived',
-  'quote-received': 'notification.quoteReceived',
-  'booking-accepted': 'notification.bookingAccepted',
-  'booking-expired': 'notification.bookingExpired',
-  'payment-reminder': 'notification.paymentReminder',
-  'quote-expiring': 'notification.quoteExpiring',
-  'request-expired': 'notification.requestExpired',
-  'requests-ignored': 'notification.requestsIgnored',
-  'message-received': 'notification.messageReceived',
-  'booking-paid': 'notification.bookingPaid',
-  'payment-received': 'notification.paymentReceived',
-  'payment-late-refunded': 'notification.paymentLateRefunded',
-  'payout-setup-complete': 'notification.payoutSetupComplete',
-  'customers-waiting': 'notification.customersWaiting',
-  'provider-available': 'notification.providerAvailable',
-  'refund-issued': 'notification.refundIssued',
-  'job-finished': 'notification.jobFinished',
-  'confirm-reminder': 'notification.confirmReminder',
-  'payment-released': 'notification.paymentReleased',
-  'was-job-done': 'notification.wasJobDone',
-  'booking-cancelled': 'notification.bookingCancelled',
-  'no-show-reported': 'notification.noShowReported',
-  'dispute-opened': 'notification.disputeOpened',
-  'dispute-decided': 'notification.disputeDecided',
-  'job-stopped': 'notification.jobStopped',
-  'stop-amount-stated': 'notification.stopAmountStated',
-  'additional-task-requested': 'notification.additionalTaskRequested',
-  'review-requested': 'notification.reviewRequested',
-  'review-visible': 'notification.reviewVisible',
-  'provider-warning': 'notification.providerWarning',
-  'invoice-ready': 'notification.invoiceReady',
-  'commission-invoice-ready': 'notification.commissionInvoiceReady',
-  'request-withdrawn': 'notification.requestWithdrawn',
-  'request-declined': 'notification.requestDeclined',
-  'request-reopened': 'notification.requestReopened',
-  'request-updated': 'notification.requestUpdated',
-  'time-proposed': 'notification.timeProposed',
-  'time-to-confirm': 'notification.timeToConfirm',
-  'quote-confirmed': 'notification.quoteConfirmed',
-}
-
-/** The message text of a notification, or null for a kind this app version does not know (a newer server): such a message is skipped, never a crash. */
-export function notificationText(kind: string, payload: object = {}, job?: Pick<NoticeJob, 'number' | 'title'> | null): string | null {
-  const text = baseText(kind, payload)
-  return text && job ? t('notice.withJob', { job: `#${job.number} ${job.title}`, text }) : text
-}
-
-function baseText(kind: string, payload: object): string | null {
-  const count = 'count' in payload && typeof payload.count === 'number' ? payload.count : 0 // customers-waiting: how many, never who
-  if (kind === 'customers-waiting' && count > 0) return count === 1 ? t('notification.customersWaitingOne') : t('notification.customersWaitingMany', { count })
-  return kind in KEY ? t(KEY[kind as Notification['kind']]) : null
-}
-
-export const MAX_BANNERS = 3
-
-/** The open (not dismissed) messages, newest first: the first `max` to show and how many more are waiting. */
-export function splitBanners(list: Notification[], max = MAX_BANNERS): { shown: Notification[]; more: number } {
-  const open = list.filter((n) => !n.dismissedAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  return { shown: open.slice(0, max), more: Math.max(0, open.length - max) }
-}
-
-/** The profile link of a "profile is live" message to share; other kinds (booking ids, a chat link) have none. */
-export const notificationUrl = (n: Pick<Notification, 'kind' | 'payload'>): string | null => (n.kind === 'profile-live' && 'url' in n.payload && typeof n.payload.url === 'string' ? n.payload.url : null)
-
 /** The thread a "new message" notice opens: the payload's threadId, else the id in its own `skilled://threads/<id>` link; null for any other kind or link. */
 export const notificationThreadId = (n: Pick<Notification, 'kind' | 'payload'>): string | null => {
   if (n.kind !== 'message-received' || !('url' in n.payload)) return null
@@ -106,12 +36,6 @@ export const notificationTarget = (n: Pick<Notification, 'kind' | 'payload'> & {
     return { path: what === 'booking' ? `/bookings/${id}` : `/bookings/request/${id}` }
   }
   return n.kind === 'requests-ignored' || n.kind === 'provider-warning' ? { path: '/bookings' } : null
-}
-
-/** A banner's Open target: none when it would open the page the banner already sits on (`here`), e.g. "payouts set up" on My business. */
-export const bannerTarget = (n: Parameters<typeof notificationTarget>[0], here?: string) => {
-  const target = notificationTarget(n)
-  return target && target.path !== here ? target : null
 }
 
 /** A notice about a booking or request (shown on My bookings): it has an id to open, or is one of the list-level kinds. */

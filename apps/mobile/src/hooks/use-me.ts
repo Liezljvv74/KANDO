@@ -65,11 +65,6 @@ export async function markNotificationsSeen(only: (n: Notification) => boolean =
   if (me && saved.length) set({ ...me, notifications: me.notifications.map((n) => (saved.some((u) => u.id === n.id) ? { ...n, seenAt: now } : n)) })
 }
 
-export async function dismissNotification(id: string) {
-  await notificationsApi.mark(id, { dismissed: true })
-  if (me) set({ ...me, notifications: me.notifications.map((n) => (n.id === id ? { ...n, dismissedAt: new Date().toISOString() } : n)) })
-}
-
 let firstLoad: Promise<Me> | null = null
 /** Loads `/me` unless it is held or already on its way: any number of screens mounting together make one request. */
 export function ensureMe() {
