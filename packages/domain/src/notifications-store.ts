@@ -3,6 +3,7 @@ import { notifications, type Tx } from '@kando/db'
 import type { Notification } from '@kando/contract'
 import { jobsForNotices } from './bookings/notice-job'
 import { isUuid } from './admin/common'
+import { ownThread } from './chat/threads'
 import type { Exec } from './providers/eligibility'
 
 export type NotificationKind = Notification['kind']
@@ -32,8 +33,9 @@ export async function listNotifications(tx: Tx, userId: string): Promise<Notific
   }))
 }
 
-/** Marks the caller's unseen "new message" notices of one chat seen (all of them, not only the newest 20 that /me lists). */
+/** Marks the caller's unseen "new message" notices of one chat seen (all of them, not only the newest 20 that /me lists); 404 unless a party. */
 export async function markThreadNoticesSeen(tx: Tx, userId: string, threadId: string): Promise<void> {
+  await ownThread(tx, threadId)
   await tx
     .update(notifications)
     .set({ seenAt: new Date() })

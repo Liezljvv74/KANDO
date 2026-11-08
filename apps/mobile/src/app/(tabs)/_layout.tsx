@@ -34,7 +34,7 @@ export default function TabsLayout() {
   const badge = tabBadge(useSyncExternalStore(jobCounts.subscribe, jobCounts.get))
   const signedIn = !!me
   const provider = !!me?.isProvider
-  const notices = me?.notifications.length ?? 0
+  const notices = me?.notifications[0]?.id // the newest notice (the list is newest first and capped at 20: its length stops changing)
   useFocusEffect(
     useCallback(() => {
       if (!signedIn) return jobCounts.clear()

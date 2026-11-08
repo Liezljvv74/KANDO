@@ -9,7 +9,9 @@ export const getThread = (id: string) => api<Thread>(`${BASE}/threads/${encodeUR
 export const listMessages = async (threadId: string, after?: string) =>
   (await api<{ docs: Message[] }>(`${BASE}/threads/${threadId}/messages${after ? `?after=${encodeURIComponent(after)}` : ''}`)).docs
 export const sendMessage = (threadId: string, body: string) => api<Message>(`${BASE}/threads/${threadId}/messages`, { method: 'POST', body: { body } })
-export const sendPhoto = (threadId: string, file: PickedFile) => upload<Message>(`${BASE}/threads/${threadId}/photos`, file, {})
+/** The chat was read: the caller's "new message" notices of it turn seen on the server (all of them, not only /me's newest 20). */
+export const markThreadSeen = (threadId: string) => api<null>(`${BASE}/threads/${encodeURIComponent(threadId)}/seen`, { method: 'POST' })
+export const sendPhoto =(threadId: string, file: PickedFile) => upload<Message>(`${BASE}/threads/${threadId}/photos`, file, {})
 export const reportMessage = (id: string, reason: string) => api<null>(`${BASE}/messages/${id}/report`, { method: 'POST', body: { reason } })
 export const listBlocks = async () => (await api<{ docs: BlockedUser[] }>(`${BASE}/blocks`)).docs
 export const blockUser = (threadId: string) => api<null>(`${BASE}/blocks`, { method: 'POST', body: { threadId } })

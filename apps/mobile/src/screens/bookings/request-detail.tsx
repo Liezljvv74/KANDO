@@ -11,12 +11,13 @@ import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
-import { useMe } from '@/hooks/use-me'
+import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang, type Key } from '@/i18n'
 import { font } from '@/theme'
 import { requestStateCtx, stateText } from '@/lib/job-state-text'
 import { formatWhen } from '@/lib/booking-time'
+import { isJobPageNotice } from '@/lib/correspondence'
 import { go } from '@/lib/go'
 import { confirmDanger } from '@/lib/confirm'
 import { placeText } from '@/lib/place'
@@ -41,7 +42,13 @@ export default function RequestDetail() {
   const me = useMe()
   const fetch = useCallback(async () => {
     const [request, quotes, docs] = await Promise.all([getRequest(id), listQuotes(id), listQuoteDocuments(id).catch(() => [])])
-    const views = await Promise.all((request.bookingIds ?? []).map((b) => getBooking(b)))
+    const bookingIds = request.bookingIds ?? []
+    // a booking that cannot be read (e.g. a 404) drops only its own section: the page still shows
+    const views = (await Promise.all(bookingIds.map((b) => getBooking(b).catch(() => null)))).filter((v) => v !== null)
+    // opening the job page reads its quote and booking notices: they turn seen (the chat's own notices are marked by the chat)
+    loadMe()
+      .then(() => markNotificationsSeen((n) => isJobPageNotice(n, id, bookingIds)))
+      .catch(() => {})
     return { request, quotes, views, docOf: new Map(docs.map((d) => [d.quoteId, d.id])) }
   }, [id])
   const { data, error, retry } = useLoad(fetch)

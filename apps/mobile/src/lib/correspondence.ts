@@ -12,3 +12,15 @@ export function categoryOf(n: Pick<Notification, 'kind' | 'payload'>): Category 
   if (QUOTE_KINDS.includes(n.kind)) return 'quotes'
   return isBookingNotice(n) ? 'bookings' : null
 }
+
+/**
+ * A quote or booking notice that the job page of request `requestId` (with its bookings `bookingIds`) shows: the page it opens
+ * (`job.requestId`), or the request or a booking it names. Opening that page marks them seen (else they never are, and the daily
+ * clean-up keeps an unseen notice). Chat notices are not: the chat marks its own.
+ */
+export function isJobPageNotice(n: Pick<Notification, 'kind' | 'payload' | 'job'>, requestId: string, bookingIds: readonly string[]): boolean {
+  const c = categoryOf(n)
+  if (c !== 'quotes' && c !== 'bookings') return false
+  const p = n.payload as { requestId?: string; bookingId?: string }
+  return n.job?.requestId === requestId || p.requestId === requestId || (!!p.bookingId && bookingIds.includes(p.bookingId))
+}

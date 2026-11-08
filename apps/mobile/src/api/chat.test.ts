@@ -1,5 +1,5 @@
 import { api, upload } from '@/api/client'
-import { blockUser, getThread, listBlocks, listMessages, reportMessage, sendMessage, sendPhoto, unblockUser } from './chat'
+import { blockUser, getThread, listBlocks, listMessages, markThreadSeen, reportMessage, sendMessage, sendPhoto, unblockUser } from './chat'
 
 jest.mock('@/api/client', () => ({ api: jest.fn(), upload: jest.fn() }))
 
@@ -19,6 +19,8 @@ test('threads and messages use their routes, methods and query', async () => {
   expect(last()).toEqual([`/app-api/v1/threads/t1/messages?after=${encodeURIComponent(cursor)}`])
   await sendMessage('t1', 'Hello')
   expect(last()).toEqual(['/app-api/v1/threads/t1/messages', { method: 'POST', body: { body: 'Hello' } }])
+  await markThreadSeen('t 1') // the poll is read-only: notices turn seen by their own POST
+  expect(last()).toEqual(['/app-api/v1/threads/t%201/seen', { method: 'POST' }])
 })
 
 test('a photo goes to the thread photo route as the file part', async () => {
