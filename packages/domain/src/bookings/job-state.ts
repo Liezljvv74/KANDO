@@ -57,7 +57,7 @@ export function currentBookingOf<B extends { id: string; status: string; created
  * `finished` with a null confirmBy falls into the payout stage (finish.ts always sets confirmBy).
  * `time_to_agree` (awaiting-time with a time proposed by one side): spec 4.4 has no row for it, the owner will be told.
  * Buttons beyond the spec table (task 4.2: the phone renders buttons from here only, so every flow it had keeps a button):
- * `withdraw` (customer leaves an unpaid booking), `enter_time`, `stop`, `state_stop_amount`, `answer_stop`, `object_no_show`, and
+ * `withdraw` (customer leaves an unpaid booking), `enter_time`, `stop`, `state_stop_amount`, `answer_stop`, `object_no_show`, `accept_no_show`, and
  * `add_task` on a root booking for both sides (the provider's label is "Scope/quote review") from paid until finished, as before (not on delayed or payout_account_missing: the spec table rules there).
  */
 type Out = { key: JobStateKey; section: JobSection; tone: JobTone; buttons: JobButton[]; paidOutAt?: Date; startAt?: Date }
@@ -151,7 +151,7 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
       return customer ? out(key, 'needs_you', 'warn', ['pay', 'withdraw']) : out(key, 'active', 'info', [])
     }
     case 'confirmed': {
-      if (b.noShow) return b.noShow === viewer && !!b.noShowObjectBy && now < b.noShowObjectBy ? plus(problem, ['object_no_show']) : problem
+      if (b.noShow) return b.noShow === viewer && !!b.noShowObjectBy && now < b.noShowObjectBy ? plus(problem, ['object_no_show', 'accept_no_show']) : problem
       if (b.startAt > now) {
         if (customer) return out('paid_upcoming', 'active', 'ok', [...task, 'open_chat', 'cancel'])
         return out('before_start_time', 'active', 'info', ['finish', ...task, 'open_chat', 'cancel'], { startAt: b.startAt })

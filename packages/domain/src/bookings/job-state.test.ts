@@ -121,7 +121,7 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('the reported side may object until the deadline', () => {
     const b = { status: 'confirmed', noShow: 'provider', noShowObjectBy: at(10) }
-    expect(state('provider', b).buttons).toEqual(['open_chat', 'contact_support', 'object_no_show'])
+    expect(state('provider', b).buttons).toEqual(['open_chat', 'contact_support', 'object_no_show', 'accept_no_show'])
     expect(state('customer', b).buttons).toEqual(['open_chat', 'contact_support'])
     expect(state('provider', { ...b, noShowObjectBy: at(-1) }).buttons).toEqual(['open_chat', 'contact_support'])
   })
