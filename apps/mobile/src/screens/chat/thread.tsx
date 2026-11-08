@@ -12,11 +12,13 @@ import { ErrorText, LinkText } from '@/components/auth-ui'
 import { SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { loadMe, markNotificationsSeen } from '@/hooks/use-me'
 import { useThreadMessages } from '@/hooks/use-thread-messages'
 import { errorText, t, useLang } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { confirmDanger } from '@/lib/confirm'
 import { goBack } from '@/lib/go'
+import { notificationThreadId } from '@/lib/notification-text'
 import { nearBottom } from '@/lib/scroll'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
@@ -30,6 +32,10 @@ export default function ThreadScreen() {
   const { messages, loaded, send, sendPhoto, refreshLinks, error } = useThreadMessages(id)
   const load = useCallback(async () => {
     const [thread, blocks] = await Promise.all([getThread(id), listBlocks()])
+    // opening the chat reads its messages: its "new message" notices turn seen, so the job's unread mark and the Jobs counter clear
+    loadMe()
+      .then(() => markNotificationsSeen((n) => notificationThreadId(n) === id))
+      .catch(() => {})
     return { thread, blocks }
   }, [id])
   const { data, error: loadError, retry } = useLoad(load)

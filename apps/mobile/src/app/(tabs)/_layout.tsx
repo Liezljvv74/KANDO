@@ -1,11 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { router, Tabs } from 'expo-router'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AppState, type ColorValue } from 'react-native'
 
+import { getJobs } from '@/api/jobs'
 import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
-import { categoryOf, unseenCounts } from '@/lib/correspondence'
+import { categoryOf } from '@/lib/correspondence'
+import { counterOf, tabBadge } from '@/lib/jobs'
 import { consumePending, readyToNavigate, urlOf, usePending } from '@/lib/pending-navigation'
 import { showProfileTab } from '@/lib/profile-tab'
 
@@ -26,18 +28,28 @@ export default function TabsLayout() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
     return () => sub.remove()
   }, [])
-  // The number of requests, bookings, quotes and messages the person has not looked at yet (opening each list marks its notices seen).
-  const unseen = unseenCounts(me?.notifications).total
+  // The Jobs badge: the customer and the provider counter added (jobs that need me or have unread messages, each once per side).
+  // Read again whenever `me` changes: a new notice, a message marked seen, the app back in front.
+  const [badge, setBadge] = useState(0)
+  const signedIn = !!me
+  const provider = !!me?.isProvider
+  useEffect(() => {
+    if (!signedIn) return setBadge(0)
+    let live = true
+    Promise.all([getJobs('customer'), provider ? getJobs('provider') : undefined])
+      .then(([c, p]) => live && setBadge(tabBadge({ customer: counterOf(c.counts), provider: counterOf(p?.counts) })))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [me, signedIn, provider])
   // Provider notices (payouts, documents, invoices ...) show as a dot on My business, where opening the page marks them seen.
   const businessDot = unseenOf(me?.notifications).some((n) => !n.dismissedAt && !categoryOf(n))
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
       <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ tabBarIcon: icon('search-outline'), title: t('tab.search') }} />
-      <Tabs.Screen
-        name="correspondence"
-        options={{ title: t('tab.correspondence'), tabBarBadge: unseen > 0 ? unseen : undefined, tabBarIcon: icon('mail-outline') }}
-      />
+      <Tabs.Screen name="jobs" options={{ title: t('tab.jobs'), tabBarBadge: badge > 0 ? badge : undefined, tabBarIcon: icon('clipboard-outline') }} />
       <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, href: showProfileTab(me) ? undefined : null }} />
       <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
     </Tabs>

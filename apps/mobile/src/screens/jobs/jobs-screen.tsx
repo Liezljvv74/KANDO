@@ -1,0 +1,162 @@
+import { useCallback, useState } from 'react'
+import { Pressable, StyleSheet, Text } from 'react-native'
+
+import type { JobRow } from '@kando/contract'
+
+import type { Role } from '@/api/bookings'
+import { getJobs } from '@/api/jobs'
+import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
+import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
+import { ErrorRetry, Loading } from '@/components/state-view'
+import { useLoad } from '@/hooks/use-load'
+import { useMe } from '@/hooks/use-me'
+import { useMore } from '@/hooks/use-more'
+import { getLang, t, useLang, type Key } from '@/i18n'
+import { go } from '@/lib/go'
+import { headerDate } from '@/lib/job-header'
+import { counterOf, sectionsToLoad, type JobSection } from '@/lib/jobs'
+import { stateText } from '@/lib/job-state-text'
+
+const open = (row: JobRow) => go(`/bookings/request/${row.id}`) // the job page
+/** The small tag on a search result: the section the job sits in. */
+const TAG: Record<JobSection, Key> = { needs_you: 'jobs.needsYou', active: 'jobs.tag.active', past: 'jobs.tag.past' }
+
+/** One job: title, number, other party and date, and what the job's state says for my side. A search result carries its section. */
+function JobCard({ row, role, tag }: { row: JobRow; role: Role; tag?: boolean }) {
+  const state = stateText(row.jobState, role, { number: row.number })?.title
+  return (
+    <Pressable accessibilityRole="button" onPress={() => open(row)}>
+      <Card list>
+        <Text style={styles.text} numberOfLines={2}>
+          {row.title}
+        </Text>
+        <Text style={styles.small}>{[`#${row.number}`, row.otherParty, headerDate(row.date, getLang())].filter(Boolean).join(' · ')}</Text>
+        <Text style={styles.small}>{[state, tag && t(TAG[row.jobState.section])].filter(Boolean).join(' · ')}</Text>
+        {row.unread > 0 && <Text style={styles.unread}>{t('jobs.unread')}</Text>}
+      </Card>
+    </Pressable>
+  )
+}
+
+/** A past job on one line: title, date, outcome. */
+const PastLine = ({ row, role }: { row: JobRow; role: Role }) => (
+  <Pressable accessibilityRole="button" onPress={() => open(row)} style={styles.pastLine}>
+    <Text style={styles.small} numberOfLines={1}>
+      {[row.title, headerDate(row.date, getLang()), stateText(row.jobState, role)?.title].filter(Boolean).join(' · ')}
+    </Text>
+  </Pressable>
+)
+
+/** "Show more" and its error under a paged list. */
+const More = ({ list }: { list: { next: string | null; showMore: () => void; busy: boolean; problem: string | null } }) => (
+  <>
+    {list.next && <Button label={t('list.showMore')} onPress={list.showMore} busy={list.busy} />}
+    <ErrorText text={list.problem} />
+  </>
+)
+
+/** The Jobs tab: what needs me, what is running, what is over (folded), for one side at a time; search over all three. */
+export default function JobsScreen() {
+  useLang()
+  const me = useMe()
+  const both = !!me?.isProvider
+  const [role, setRole] = useState<Role>('customer')
+  const [pastOpen, setPastOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [query, setQuery] = useState('')
+
+  const fetch = useCallback(async () => {
+    const sections = sectionsToLoad(pastOpen)
+    // the other side's counter comes from its own first page (a person with both roles only)
+    const [other, ...pages] = await Promise.all([both ? getJobs(role === 'customer' ? 'provider' : 'customer') : undefined, ...sections.map((section) => getJobs(role, { section }))])
+    const by = Object.fromEntries(sections.map((s, i) => [s, pages[i]])) as Partial<Record<JobSection, NonNullable<typeof other>>>
+    return { role, by, other: counterOf(other?.counts) }
+  }, [role, pastOpen, both])
+  const { data, error, retry } = useLoad(fetch)
+  const searchFetch = useCallback(async () => (query ? { role, page: await getJobs(role, { q: query }) } : undefined), [role, query])
+  const search = useLoad(searchFetch)
+
+  // Old data of the other side stays in `data` while the new one loads: show it only for the chosen side.
+  const current = data?.role === role ? data : undefined
+  const more = (section: JobSection) => (c: string) => getJobs(role, { section, cursor: c })
+  const needs = useMore<JobRow>(current?.by.needs_you, more('needs_you'))
+  const active = useMore<JobRow>(current?.by.active, more('active'))
+  const past = useMore<JobRow>(current?.by.past, more('past'))
+  const found = search.data?.role === role ? search.data.page : undefined
+  const results = useMore<JobRow>(found, (c) => getJobs(role, { q: query, cursor: c }))
+
+  const counts = current?.by.needs_you?.counts
+  const mine = counterOf(counts)
+  const label = (side: Role) => {
+    const n = side === role ? mine : (current?.other ?? 0)
+    const text = t(side === 'customer' ? 'booking.asCustomer' : 'booking.asProvider')
+    return current && n > 0 ? `${text} (${n})` : text
+  }
+
+  return (
+    <FormScreen title={t('tab.jobs')} back={false}>
+      <LinkText label={t('jobs.invoices')} onPress={() => go('/invoices')} />
+      {both && (
+        <>
+          <Button label={label('customer')} onPress={() => setRole('customer')} disabled={role === 'customer'} />
+          <Button label={label('provider')} onPress={() => setRole('provider')} disabled={role === 'provider'} />
+        </>
+      )}
+      <Field
+        label={t('jobs.search')}
+        placeholder={t('jobs.searchHint')}
+        value={typed}
+        maxLength={100}
+        returnKeyType="search"
+        onChangeText={(v) => {
+          setTyped(v)
+          if (!v.trim()) setQuery('')
+        }}
+        onSubmitEditing={() => setQuery(typed.trim())}
+      />
+      {query ? (
+        found ? (
+          <>
+            {results.docs.map((r) => (
+              <JobCard key={r.id} row={r} role={role} tag />
+            ))}
+            {results.docs.length === 0 && <Text style={styles.small}>{t('common.noMatches')}</Text>}
+            <More list={results} />
+          </>
+        ) : search.error ? (
+          <ErrorRetry code={search.error} onRetry={search.retry} />
+        ) : (
+          <Loading />
+        )
+      ) : !current ? (
+        error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />
+      ) : (
+        <>
+          <SectionTitle text={t('jobs.needsYou')} />
+          {needs.docs.map((r) => (
+            <JobCard key={r.id} row={r} role={role} />
+          ))}
+          {needs.docs.length === 0 && <Text style={styles.small}>{t('jobs.needsYouNone')}</Text>}
+          <More list={needs} />
+          {active.docs.length > 0 && <SectionTitle text={t('jobs.active')} />}
+          {active.docs.map((r) => (
+            <JobCard key={r.id} row={r} role={role} />
+          ))}
+          <More list={active} />
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: pastOpen }} onPress={() => setPastOpen((o) => !o)}>
+            <SectionTitle text={`${t('jobs.past', { n: counts?.past ?? past.docs.length })} ${pastOpen ? '▾' : '▸'}`} />
+          </Pressable>
+          {pastOpen && past.docs.map((r) => <PastLine key={r.id} row={r} role={role} />)}
+          {pastOpen && <More list={past} />}
+        </>
+      )}
+    </FormScreen>
+  )
+}
+
+const styles = StyleSheet.create({
+  text: { fontSize: 16, color: '#1D1C4A' },
+  small: { fontSize: 14, color: '#4F4E7D' },
+  unread: { fontSize: 14, fontWeight: '700', color: '#34328A' },
+  pastLine: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#CFE6DC' },
+})

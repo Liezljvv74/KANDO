@@ -1,6 +1,6 @@
 import type { Notification } from '@kando/contract'
 
-import { categoryOf, unseenCounts } from './correspondence'
+import { categoryOf } from './correspondence'
 
 const n = (kind: string, over: Partial<Notification> = {}) => ({ id: kind, kind, payload: { bookingId: 'b', quoteId: 'q' }, createdAt: 'x', seenAt: null, dismissedAt: null, ...over }) as Notification
 
@@ -10,9 +10,5 @@ describe('correspondence', () => {
     expect(categoryOf(n('quote-received'))).toBe('quotes')
     expect(categoryOf(n('booking-accepted'))).toBe('bookings')
     expect(categoryOf(n('profile-live', { payload: { url: 'https://x.test/p' } }))).toBeNull()
-  })
-  it('counts only what is unseen and not dismissed', () => {
-    const list = [n('quote-received'), n('booking-accepted'), n('booking-paid', { seenAt: 'now' }), n('quote-expiring', { dismissedAt: 'now' })]
-    expect(unseenCounts(list)).toEqual({ bookings: 1, quotes: 1, messages: 0, total: 2 })
   })
 })
