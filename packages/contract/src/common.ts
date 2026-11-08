@@ -35,9 +35,5 @@ export const CursorSchema = z
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === c.slice(0, 10) // 2026-02-30 rolls over: refused
   }, 'Invalid time')
 
-/** GET /bookings and /requests: `?role=&cursor=`. */
-export const ListQuerySchema = z.object({ role: z.enum(['customer', 'provider']).default('customer'), cursor: CursorSchema.optional() })
-export type ListQuery = z.infer<typeof ListQuerySchema>
-
 /** A page of a list; `next` is the cursor of the following page, null on the last. */
 export type Page<T> = { docs: T[]; next: string | null }

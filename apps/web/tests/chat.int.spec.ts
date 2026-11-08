@@ -3,7 +3,7 @@ import sharp from 'sharp'
 import { sql } from 'drizzle-orm'
 import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { sendMessage } from '@kando/domain'
+import { getThread, sendMessage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
 import { requestTime, call, cleanupUsers, EMAIL, makeAwaitingPayment, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized, threadOfRequest } from './helpers'
 
@@ -59,7 +59,7 @@ it('creating a request opens a thread; both parties read it', async () => {
   expect(mine.id).toBe(theirs.id)
   expect(mine).toMatchObject({ bookingId: null, blocked: false })
   expect(mine.otherName).not.toBe('')
-  await expect(threadOf(U.third, r.id)).rejects.toBeTruthy() // a stranger gets 404
+  await expect(threadOf(U.third, r.id)).rejects.toMatchObject({ status: 404 }) // a stranger reads neither the request nor its thread
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE request_id = $1', [r.id])).rows[0].n).toBe(1)
 })
 
@@ -257,6 +257,12 @@ it('a message from a slow transaction is stamped when inserted, so the other sid
   go()
   await a
   expect((await list(t.id, U.cust, cursor)).docs.map((m) => m.body)).toEqual(['from A'])
+})
+
+it('getThread answers a stranger 404, also when the thread exists', async () => {
+  const r = await newRequest('Stranger thread')
+  const id = (await threadOf(U.cust, r.id)).id
+  await expect(asUser(U.third, (tx) => getThread(tx, U.third, id))).rejects.toMatchObject({ status: 404 })
 })
 
 it('GET /threads/{id} answers a party, a stranger 404', async () => {
