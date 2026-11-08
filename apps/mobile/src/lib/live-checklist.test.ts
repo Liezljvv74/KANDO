@@ -62,3 +62,21 @@ test('an old server without underCheck behaves as before; an unknown requirement
   expect(checklistItems({ missing: ['name'] }).map((r) => r.state)).toEqual(['open'])
   expect(checklistItems({ missing: [], underCheck: ['future-doc'] })).toEqual([])
 })
+
+test('a rejected required document is a "needs action" row that opens it, and the list is not all set', () => {
+  const docs = [
+    { requirement: 'id-document', optional: false, state: 'rejected' as const },
+    { requirement: 'trade-registration', optional: true, state: 'rejected' as const }, // optional: not a row
+    { requirement: 'future-doc', optional: false, state: 'rejected' as const }, // unknown to this app: skipped
+  ]
+  const rows = checklistItems({ missing: ['skills'] }, docs)
+  expect(rows.map((r) => [r.item, r.state, r.path])).toEqual([['skills', 'open', '/my-profile/about?field=skills'], ['id-document', 'rejected', '/my-profile/document/id-document']])
+  expect(openItems(rows)).toHaveLength(1) // the Live count stays the server's missing list
+  expect(allSet({ missing: [] }, [], docs)).toBe(false)
+  expect(allSet({ missing: [] }, [], [{ requirement: 'id-document', optional: false, state: 'approved' }])).toBe(true)
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    expect(t('setup.docRejected')).not.toBe('setup.docRejected')
+    expect(t(rows[1]!.label)).not.toBe(rows[1]!.label)
+  }
+})

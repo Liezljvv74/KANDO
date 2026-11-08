@@ -588,6 +588,7 @@ export const en: Record<AppKey, string> = {
   'setup.checklistMany': '{n} things to do first',
   'setup.awaitingApproval': 'Awaiting approval',
   'setup.weAreChecking': 'We are checking it',
+  'setup.docRejected': 'Needs action: not accepted, please upload it again',
   'setup.allSet': 'You are all set',
   'setup.bookableNote': 'You can go live without these.',
   'setup.bookableHeading': 'Before customers can book you',

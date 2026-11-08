@@ -9,11 +9,11 @@ import { ErrorText } from '@/components/auth-ui'
 import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { useQuoteSteps } from '@/hooks/use-me'
-import { canShare } from '@/lib/documents'
+import { canShare, type DocumentRow } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
 import { liveLocked } from '@/lib/compulsory'
 import { go } from '@/lib/go'
-import { allSet, checklistHeading, checklistItems, openItems } from '@/lib/live-checklist'
+import { allSet, checklistHeading, checklistItems, openItems, rejectedItems } from '@/lib/live-checklist'
 import { paymentsProblem } from '@/lib/payments-off'
 import { doQuoteStep } from '@/lib/do-quote-step'
 import { isLive } from '@/lib/profile-form'
@@ -23,9 +23,9 @@ import { GateRow, QuoteGate } from '@/screens/bookings/quote-gate'
 
 /**
  * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
- * `missing` list of the latest profile response. `onChanged` reloads the profile afterwards.
+ * `missing` list of the latest profile response; `docRows` adds a "needs action" row per rejected required document. `onChanged` reloads the profile afterwards.
  */
-export function PublishBar({ profile, services, onChanged, onSaved, onTaxId }: { profile: MyProfile; services: OwnService[]; onChanged: () => void; onSaved: (p: MyProfile) => void; onTaxId?: () => void }) {
+export function PublishBar({ profile, services, docRows, onChanged, onSaved, onTaxId }: { profile: MyProfile; services: OwnService[]; docRows: DocumentRow[]; onChanged: () => void; onSaved: (p: MyProfile) => void; onTaxId?: () => void }) {
   const { categories } = useCategories()
   const { steps } = useQuoteSteps()
   const [busy, setBusy] = useState(false)
@@ -78,8 +78,9 @@ export function PublishBar({ profile, services, onChanged, onSaved, onTaxId }: {
     }
     stepping.current = false
   }
-  const rows = checklistItems(profile)
+  const rows = checklistItems(profile, docRows)
   const items = openItems(rows)
+  const rejected = rejectedItems(rows)
   const checking = rows.filter((r) => r.state === 'checking')
   return (
     <>
@@ -94,6 +95,9 @@ export function PublishBar({ profile, services, onChanged, onSaved, onTaxId }: {
           ))}
         </>
       )}
+      {rejected.map((r) => (
+        <GateRow key={r.item} title={r.label} hint="setup.docRejected" onDo={() => go(r.path)} />
+      ))}
       {checking.map((r) => (
         <View key={r.item} style={styles.checking}>
           <Text style={styles.name}>{t(r.label)}</Text>
@@ -101,7 +105,7 @@ export function PublishBar({ profile, services, onChanged, onSaved, onTaxId }: {
           <Text style={styles.hint}>{t('setup.weAreChecking')}</Text>
         </View>
       ))}
-      {allSet(profile, steps) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
+      {allSet(profile, steps, docRows) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
       {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
       {justPublished && live && isLive(profile) && (

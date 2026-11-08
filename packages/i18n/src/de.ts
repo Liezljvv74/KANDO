@@ -587,6 +587,7 @@ export const de = {
   'setup.checklistMany': '{n} Sachen zuerst erledigen',
   'setup.awaitingApproval': 'Wartet auf Freigabe',
   'setup.weAreChecking': 'Wir prüfen es',
+  'setup.docRejected': 'Handlungsbedarf: nicht akzeptiert, bitte lade es erneut hoch',
   'setup.allSet': 'Alles erledigt',
   'setup.bookableNote': 'Ohne diese kannst du trotzdem online gehen.',
   'setup.bookableHeading': 'Bevor Kunden dich buchen können',
