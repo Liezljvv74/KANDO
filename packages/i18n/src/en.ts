@@ -457,6 +457,8 @@ export const en: Record<AppKey, string> = {
   'booking.requests': 'Requests',
   'booking.bookings': 'Bookings',
   'booking.booking': 'Booking',
+  'booking.awaitingPaymentHeading': 'Booking awaiting payment',
+  'booking.confirmedHeading': 'Booking confirmed',
   'booking.none': 'Nothing here yet.',
   'booking.description': 'What needs to be done?',
   'booking.requestHelp': 'Describe the job and say when and where. The provider answers with a quote, with or without a final date and time. A quote is valid for 7 days.',

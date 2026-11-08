@@ -116,8 +116,9 @@ export default function RequestDetail() {
     scroll.current?.scrollTo({ y, animated: true })
   }
   const quoteReady = isCustomer && !onBooking && state?.key === 'quote_sent' && has('accept_quote') // the customer's quote waits: a plain heading, the quote card below says the rest
-  // a booking is listed once it is paid: not while it waits for the time or the payment
-  const listed = views.filter((v) => v.booking.status !== 'awaiting-time' && v.booking.status !== 'awaiting-payment')
+  // one booking: the heading says where it stands (not paid yet / paid); several: "Bookings"
+  const only = views.length === 1 ? views[0]!.booking.status : null
+  const bookingsHeading: Key = only === null ? 'booking.bookings' : only === 'awaiting-time' || only === 'awaiting-payment' ? 'booking.awaitingPaymentHeading' : ['expired', 'declined', 'withdrawn'].includes(only) ? 'booking.booking' : 'booking.confirmedHeading'
   const place = placeText(request.onSite, request.address)
   const common = state && <JobCommonButtons state={state} threadId={request.threadId} unread={chatSeen ? 0 : request.unread} onChatOpened={() => setChatSeen(true)} job={{ number: request.jobNumber, title: request.title }} />
   // the customer's request and quote stage: Withdraw (left) and Open chat (right) close the page; every other job keeps them under the status card
@@ -193,8 +194,8 @@ export default function RequestDetail() {
           {editing && <LinkText label={t('common.cancel')} onPress={() => setEditing(false)} />}
         </>
       )}
-      {listed.length > 0 && <SectionTitle text={t(listed.length === 1 ? 'booking.booking' : 'booking.bookings')} />}
-      {[...listed].reverse().map((v) => (
+      {views.length > 0 && <SectionTitle text={t(bookingsHeading)} />}
+      {[...views].reverse().map((v) => (
         <View key={v.booking.id} onLayout={(e) => onLayoutOf(v.booking.id)(e.nativeEvent.layout.y)} style={styles.section}>
           <BookingSection view={v} showTitle={v.booking.id !== b?.id} />
         </View>

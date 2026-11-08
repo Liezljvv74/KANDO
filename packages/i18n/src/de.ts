@@ -456,6 +456,8 @@ export const de = {
   'booking.requests': 'Anfragen',
   'booking.bookings': 'Buchungen',
   'booking.booking': 'Buchung',
+  'booking.awaitingPaymentHeading': 'Buchung wartet auf Zahlung',
+  'booking.confirmedHeading': 'Buchung bestätigt',
   'booking.none': 'Noch nichts vorhanden.',
   'booking.description': 'Was soll gemacht werden?',
   'booking.requestHelp': 'Beschreibe den Auftrag und sage, wann und wo. Der Anbieter antwortet mit einem Angebot, mit oder ohne endgültiges Datum und Uhrzeit. Ein Angebot gilt 7 Tage.',
