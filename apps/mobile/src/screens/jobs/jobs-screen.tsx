@@ -106,12 +106,12 @@ export default function JobsScreen() {
     <FormScreen title={t('tab.jobs')} back={false}>
       {both && (
         <View style={styles.switch}>
-          <View style={styles.half}>
-            <Button label={label('customer')} onPress={() => setRole('customer')} disabled={role === 'customer'} selected={role === 'customer'} />
-          </View>
-          <View style={styles.half}>
-            <Button label={label('provider')} onPress={() => setRole('provider')} disabled={role === 'provider'} selected={role === 'provider'} />
-          </View>
+          {(['customer', 'provider'] as const).map((side) => (
+            // the chosen side is filled and bold; the other is an outline that switches to it (a tap on the chosen one does nothing)
+            <Pressable key={side} accessibilityRole="button" accessibilityState={{ selected: role === side }} onPress={() => setRole(side)} style={[styles.side, role === side ? styles.sideOn : styles.sideOff]}>
+              <Text style={[styles.sideText, role === side && styles.sideTextOn]}>{label(side)}</Text>
+            </Pressable>
+          ))}
         </View>
       )}
       <Field
@@ -171,7 +171,11 @@ export default function JobsScreen() {
 
 const styles = StyleSheet.create({
   switch: { flexDirection: 'row', gap: 8 },
-  half: { flex: 1 },
+  side: { flex: 1, minHeight: 48, borderRadius: 4, borderWidth: 2, borderColor: '#34328A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  sideOn: { backgroundColor: '#19C3B8' },
+  sideOff: { backgroundColor: '#fff' },
+  sideText: { fontSize: 16, fontWeight: '600', color: '#34328A', textAlign: 'center' },
+  sideTextOn: { fontWeight: '800', color: '#1D1C4A' },
   text: { fontSize: 16, color: '#1D1C4A' },
   small: { fontSize: 14, color: '#4F4E7D' },
   unread: { fontSize: 14, fontWeight: '700', color: '#34328A' },
