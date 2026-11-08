@@ -1,3 +1,4 @@
+import { de, en } from '@kando/i18n'
 import type { Booking } from '@kando/contract'
 
 import { actionLabel, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
@@ -70,7 +71,7 @@ test('stopped: the provider states the amount, then the customer answers', () =>
 })
 
 test('the payment stages have no text of their own here: the server state names them', () => {
-  expect(bookingStatusText(b({ status: 'finished', confirmBy: '2027-01-12T11:00:00.000Z' }), 'customer')).toBe('bookingStatus.finished')
+  for (const status of ['awaiting-payment', 'finished'] as const) expect(bookingStatusText(b({ status, confirmBy: '2027-01-12T11:00:00.000Z' }), 'customer')).toBe(`bookingStatus.${status}`) // both keys exist in German and English
 })
 
 test('the stop answer says what goes to the provider and what comes back, from the stated amount in whole cents', () => {
@@ -144,4 +145,9 @@ test('the exact 24 h mark is free, one minute inside is late (same numbers as th
   const mark = new Date('2027-01-04T12:00:00.000Z')
   expect(cancelStatement(booking, 'customer', mark)).toBe('booking.cancelFree booking.cancelChildren')
   expect(cancelStatement(booking, 'customer', new Date(mark.getTime() + 60_000))).toContain('booking.cancelLate 50')
+})
+
+test('every booking status a fallback can name has a text in German and English', () => {
+  for (const dict of [de, en] as Record<string, string>[])
+    for (const status of ['awaiting-time', 'awaiting-payment', 'confirmed', 'declined', 'expired', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded']) expect(dict[`bookingStatus.${status}`]).toBeTruthy()
 })

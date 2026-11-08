@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
@@ -15,6 +15,7 @@ import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/correspondence'
 import { canShare, documentRows } from '@/lib/documents'
+import { createSaveGuard, freshOr } from '@/lib/save-guard'
 import { InvoicesCard } from '../invoices/invoices-card'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
@@ -43,16 +44,25 @@ export default function SetupScreen() {
     ),
   )
 
+  // A reload that started before a save (the app back in front, a retry) must not bring back the profile the save replaced.
+  const saves = useRef(createSaveGuard<MyProfile>()).current
   const loadAll = useCallback(async () => {
-    const profile = (await getMyProfile()) ?? (await ensureDraft())
+    const fresh = saves.start()
+    const loaded = (await getMyProfile()) ?? (await ensureDraft())
     const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
     // Opening the page marks the notifications seen; a /me failure must not hold the page back.
     loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
-    return { profile, services, references, photos, verifications }
-  }, [])
+    return { profile: freshOr(loaded, fresh(), saves.latest()), services, references, photos, verifications }
+  }, [saves])
   const { done, data, error, retry, update } = useLoad(loadAll)
   // An invoicing save or a checklist step answers with the profile: it replaces the held one, the lists are not reloaded.
-  const onSaved = useCallback((profile: MyProfile) => update((d) => ({ ...d, profile })), [update])
+  const onSaved = useCallback(
+    (profile: MyProfile) => {
+      saves.saved(profile)
+      update((d) => ({ ...d, profile }))
+    },
+    [saves, update],
+  )
   const { categories } = useCategories()
   const me = useMe()
   const [taxAsked, setTaxAsked] = useState(0) // the tax number step opens the field in the payout card

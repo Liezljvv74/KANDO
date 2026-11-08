@@ -307,7 +307,7 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   const row = await ownRequest(tx, userId, id)
   const base = toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))
   // one lookup gives the state, the chat (an additional task talks in its booking's thread), this request's bookings (oldest first) and the current one
-  const states = await jobStates(tx, userId, [requestItem(base, userId)])
+  const states = await jobStates(tx, userId, [requestItem(base, userId)], now)
   const s = states.get(row.id)!
   const otherParty = (await jobsForNotices(tx, userId, [{ requestId: row.id }]))[0]?.otherParty
   const job = { bookingIds: s.bookingIds, currentBookingId: s.currentBookingId, ...(otherParty !== undefined && { otherParty }) }

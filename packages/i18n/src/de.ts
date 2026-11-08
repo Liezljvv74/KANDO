@@ -484,6 +484,7 @@ export const de = {
   'requestStatus.withdrawn': 'Zurückgezogen',
   'requestStatus.declined': 'Abgelehnt',
   'bookingStatus.awaiting-time': 'Wartet auf die Terminabsprache',
+  'bookingStatus.awaiting-payment': 'Wartet auf die Zahlung',
   'bookingStatus.confirmed': 'Bezahlt und bestätigt',
   'bookingStatus.declined': 'Abgelehnt',
   'bookingStatus.expired': 'Abgelaufen',

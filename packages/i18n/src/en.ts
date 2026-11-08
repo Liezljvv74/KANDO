@@ -485,6 +485,7 @@ export const en: Record<AppKey, string> = {
   'requestStatus.withdrawn': 'Withdrawn',
   'requestStatus.declined': 'Declined',
   'bookingStatus.awaiting-time': 'Waiting for the date and time to be agreed',
+  'bookingStatus.awaiting-payment': 'Waiting for the payment',
   'bookingStatus.confirmed': 'Paid and confirmed',
   'bookingStatus.declined': 'Declined',
   'bookingStatus.expired': 'Expired',
