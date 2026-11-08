@@ -32,7 +32,14 @@ function JobCard({ row, role, tag }: { row: JobRow; role: Role; tag?: boolean })
         </Text>
         <Text style={styles.small}>{[`#${row.number}`, row.otherParty, headerDate(row.date, getLang())].filter(Boolean).join(' · ')}</Text>
         <Text style={styles.small}>{[state, tag && t(TAG[row.jobState.section])].filter(Boolean).join(' · ')}</Text>
-        {row.unread > 0 && <Text style={styles.unread}>{t('jobs.unread')}</Text>}
+        {row.unread > 0 &&
+          (row.threadId ? (
+            <Pressable accessibilityRole="button" onPress={() => go(`/threads/${row.threadId}`)}>
+              <Text style={styles.unread}>{t('jobs.unread')}</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.unread}>{t('jobs.unread')}</Text>
+          ))}
       </Card>
     </Pressable>
   )

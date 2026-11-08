@@ -97,16 +97,16 @@ export default function HomeScreen() {
     setProblem(await startOffering())
     setBusy(false)
   }
-  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean }[] = signedIn
+  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean; tone?: 'indigo' | 'teal' }[] = signedIn
     ? [
         { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.navigate('/search'), main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn') },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer, tone: 'indigo' },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn'), tone: 'teal' },
       ]
     : [
         { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { void setAfterLogin('/search'); router.push('/sign-up') }, main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') } },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') } },
+        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') }, tone: 'indigo' },
+        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') }, tone: 'teal' },
       ]
 
   return (
@@ -132,10 +132,10 @@ export default function HomeScreen() {
           <Stamp label={t('home.stamp')} />
         </View>
         {signedIn && <PictureNudge />}
-        {choices.map(({ title, text, onPress, main }, i) => (
+        {choices.map(({ title, text, onPress, main, tone }, i) => (
           <Rise key={title} index={i}>
             <Pressable accessibilityRole="button" onPress={onPress} disabled={busy && title === 'welcome.offer'} style={({ pressed }) => pressed && styles.pressed}>
-              <Tag style={main ? styles.main : undefined}>
+              <Tag style={main ? styles.main : tone ? styles[tone] : undefined}>
                 <View style={styles.row}>
                   <Text style={styles.cardTitle}>{t(title)}</Text>
                   <Text style={styles.cardTitle}>→</Text>
@@ -170,6 +170,9 @@ const styles = StyleSheet.create({
   headline: { fontFamily: font.display, fontSize: 40, lineHeight: 43, color: color.bg },
   headlineRest: { color: color.teal },
   main: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: color.bg },
+  // each choice its own colour, all with a solid line: need help (clear), offer (light indigo), learn more (light teal)
+  indigo: { borderStyle: 'solid', borderColor: color.indigo, backgroundColor: '#E1E0F5' },
+  teal: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: '#D3F3F0' },
   pressed: { opacity: 0.75 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   cardTitle: { fontFamily: font.heading, fontSize: 19, color: color.ink },
