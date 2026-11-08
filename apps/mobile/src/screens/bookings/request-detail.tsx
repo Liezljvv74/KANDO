@@ -52,7 +52,7 @@ export default function RequestDetail() {
       .catch(() => {})
     return { request, quotes, views, docOf: new Map(docs.map((d) => [d.quoteId, d.id])) }
   }, [id])
-  const { data, error, retry } = useLoad(fetch)
+  const { data, error, retry } = useLoad(fetch, { pollMs: 20_000 }) // a message or payment that arrives while the page is open shows without leaving it
   const pdf = usePdf()
   const accepting = useSubmit()
   const closing = useSubmit()
