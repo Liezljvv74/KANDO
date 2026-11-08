@@ -10,7 +10,7 @@ import { signOutGeneration } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { clampYear, exportYears, invoiceEntries } from '@/lib/invoices'
-import { canDownload, downloadText } from '@/lib/save-file'
+import { downloadText } from '@/lib/save-file'
 import { font } from '@/theme'
 
 /** Account tab: invoices and receipts for everyone; commission invoices and the yearly CSV export (share sheet) for providers. */
@@ -19,7 +19,7 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
   const show = invoiceEntries(me)
   const [year, setYear] = useState(() => clampYear(new Date().getFullYear()))
   const [busy, setBusy] = useState(false)
-  const [choosing, setChoosing] = useState(false) // web: Export asks "download or share" before it runs
+  const [choosing, setChoosing] = useState(false) // Export asks "download or share" before it runs
   const [error, setError] = useState<string | null>(null)
 
   // Same handling as the account data export: shared as text, nothing shown when the account changed meanwhile.
@@ -32,7 +32,7 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
     try {
       const csv = await exportInvoices(clampYear(year))
       if (account !== signOutGeneration()) return setBusy(false)
-      if (download) downloadText(`invoices-${clampYear(year)}.csv`, csv)
+      if (download) await downloadText(`invoices-${clampYear(year)}.csv`, csv)
       else await Share.share({ message: csv })
     } catch (e) {
       const code = e instanceof ApiError ? e.code : ''
@@ -51,8 +51,8 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
           <Text style={styles.text}>{t('invoice.exportHint')}</Text>
           <Select label={t('invoice.year')} options={exportYears().map((y) => ({ value: y, label: String(y) }))} value={year} onChange={setYear} />
           <ErrorText text={error} />
-          <Button label={t('invoice.exportButton', { year })} onPress={() => (canDownload ? setChoosing((c) => !c) : share())} busy={busy} />
-          {canDownload && choosing && (
+          <Button label={t('invoice.exportButton', { year })} onPress={() => setChoosing((c) => !c)} busy={busy} />
+          {choosing && (
             <Actions>
               <SmallButton label={t('invoice.exportDownload')} onPress={() => share(true)} disabled={busy} solid grow />
               <SmallButton label={t('invoice.exportShare')} onPress={() => share()} disabled={busy} grow />
