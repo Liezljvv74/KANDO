@@ -16,9 +16,12 @@ import { showProfileTab } from '@/lib/profile-tab'
 const HIDDEN = ['bookings', 'invoices', 'learn', 'provider/[slug]', 'quotes/index', 'threads'] as const
 const LIT: Record<string, string> = { bookings: 'jobs', invoices: 'jobs', threads: 'jobs', 'quotes/index': 'jobs', 'provider/[slug]': 'search', learn: 'index' }
 const bar = (props: BottomTabBarProps) => {
-  const lit = LIT[props.state.routes[props.state.index]?.name ?? '']
-  const index = lit ? props.state.routes.findIndex((r) => r.name === lit) : -1
-  return <BottomTabBar {...props} state={index < 0 ? props.state : { ...props.state, index }} />
+  // the screens without a button are left out of what the bar draws (else they take empty slots and squeeze the real tabs)
+  const lit = LIT[props.state.routes[props.state.index]?.name ?? ''] ?? props.state.routes[props.state.index]?.name
+  const routes = props.state.routes.filter((r) => !(HIDDEN as readonly string[]).includes(r.name))
+  const index = Math.max(0, routes.findIndex((r) => r.name === lit))
+  const descriptors = Object.fromEntries(routes.map((r) => [r.key, props.descriptors[r.key]!]))
+  return <BottomTabBar {...props} state={{ ...props.state, routes, index }} descriptors={descriptors} />
 }
 
 const icon = (name: React.ComponentProps<typeof Ionicons>['name']) => ({ color, size }: { color: ColorValue; size: number }) => <Ionicons name={name} size={size} color={color as string} />
