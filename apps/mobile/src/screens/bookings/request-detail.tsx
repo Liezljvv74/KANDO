@@ -109,6 +109,7 @@ export default function RequestDetail() {
     scrolled.current = true
     scroll.current?.scrollTo({ y, animated: true })
   }
+  const quoteReady = isCustomer && !onBooking && state?.key === 'quote_sent' && has('accept_quote') // the customer's quote waits: a plain heading, the quote card below says the rest
   const place = placeText(request.onSite, request.address)
   const common = state && <JobCommonButtons state={state} threadId={request.threadId} job={{ number: request.jobNumber, title: request.title }} />
   // the customer's request and quote stage: Withdraw (left) and Open chat (right) close the page; every other job keeps them under the status card
@@ -130,6 +131,11 @@ export default function RequestDetail() {
   return (
     <FormScreen title={request.title ?? t('job.fallbackTitle')} scrollRef={scroll}>
       <JobHeader job={headerJob} viewer={viewer} />
+      {quoteReady ? (
+        <Text style={styles.status} accessibilityRole="header">
+          {t('job.quoteReady')}
+        </Text>
+      ) : (
       <Card>
         {head ? (
           <>
@@ -144,6 +150,7 @@ export default function RequestDetail() {
         )}
         {onBooking && current && <BookingStatusLines view={current} />}
       </Card>
+      )}
       {onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} /> : !atBottom && <Actions>{common}</Actions>}
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       {!atBottom && closeButtons}
@@ -155,7 +162,7 @@ export default function RequestDetail() {
         {!!request.note && <Text style={styles.small}>{request.note}</Text>}
         {extra && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
       </Card>
-      <SectionTitle text={t('booking.quotes')} />
+      <SectionTitle text={t(quotes.length === 1 ? 'booking.quote' : 'booking.quotes')} />
       {quotes.length === 0 && <Text style={styles.small}>{t('booking.noQuotes')}</Text>}
       {quotes.map((q) => {
         const doc = docOf.get(q.id)

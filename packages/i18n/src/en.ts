@@ -523,6 +523,8 @@ export const en: Record<AppKey, string> = {
   'booking.agreeTitle': 'Agreed time',
   'booking.timeNotAgreed': 'The date and time are not agreed yet. Talk in the chat, then enter the time you agreed.',
   'booking.quotes': 'Quotes',
+  'booking.quote': 'Quote',
+  'job.quoteReady': 'Your quote is ready',
   'quote.label': 'Quote',
   'quote.pdf': 'Quote (PDF)',
   'quote.received': 'My received quotes',

@@ -522,6 +522,8 @@ export const de = {
   'booking.agreeTitle': 'Vereinbarter Termin',
   'booking.timeNotAgreed': 'Datum und Uhrzeit sind noch nicht vereinbart. Sprecht im Chat und tragt dann den vereinbarten Termin ein.',
   'booking.quotes': 'Angebote',
+  'booking.quote': 'Angebot',
+  'job.quoteReady': 'Dein Angebot liegt vor',
   'quote.label': 'Angebot',
   'quote.pdf': 'Angebot (PDF)',
   'quote.received': 'Meine erhaltenen Angebote',
