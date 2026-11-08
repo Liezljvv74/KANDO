@@ -56,7 +56,7 @@ The Correspondence tab becomes **Jobs**. The existing request/booking list scree
 - **Search** looks in all three sections at once: job number, other person's name, title. Results carry a small tag (Active, Past). No filter chips. **(owner)**
 - **Provider only:** a money strip on top (received this month, on its way, on hold; all net of commission; tapping an amount shows the jobs behind it) and an "Invoices ›" link in the header to receipts and the monthly commission invoices, which belong to a month, not to one job.
 - Rows show the title, job number, other person, date and a plain status chip. In the rare case that a provider's readiness was lost after a request was made, the row says what is missing ("New request. Set up payouts to send a quote.").
-- The server extends `GET /requests` (it already has role and paging) with additive job fields: job number, title, other party, section, status key, money, unread. Paging is per section.
+- **As built (PR 4):** a new `GET /jobs?role=&section=&q=&cursor=` returns the rows (job number, title, other party, date, job state, unread) and the counts (needs you, unread, past). Only the Past section and search are paged; Needs you and Active return the whole open set. The old list endpoints `GET /requests`, `GET /bookings` and `GET /threads` were removed because nothing used them any more (owner decision, 8 November 2026); `POST /requests` and the single-item routes stay. The money fields are added in PR 5.
 
 ### 4.3 The job page (extends the request detail screen)
 
