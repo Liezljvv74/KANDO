@@ -30,7 +30,7 @@ test('Customer label for the provider and Provider label for the customer', () =
 
 test('a request without an agreed time shows dashes', () => {
   const cells = headerCells({ jobNumber: 1041, startAt: null, durationMin: null, onSite: null, address: null }, 'customer', 'en')
-  expect(cells.map((c) => c.value)).toEqual(['1041', '–', '–', '–', '–', '–'])
+  expect(cells.map((c) => c.value)).toEqual(['1041', '-', '-', '-', '-', '-'])
 })
 
 test('remote work says so instead of a place', () => {

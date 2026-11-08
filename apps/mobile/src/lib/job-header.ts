@@ -10,7 +10,7 @@ export type HeaderJob = {
   address: { postcode: string; city?: string } | null
 }
 
-const DASH = '–'
+const DASH = '-'
 
 /** `Sat 14 Nov '26`; German numeric `25.11.'26`. Local time of the phone. */
 export function headerDate(iso: string, lang: Lang): string {
@@ -29,7 +29,7 @@ const headerTime = (iso: string) => {
 
 /**
  * The six header cells in spec order (4.3): Job #, the OTHER party's role (the provider sees "Customer"), Date, Time, Duration,
- * Location (postcode and city, "Remote" for remote work). A value that is not known yet shows "–".
+ * Location (postcode and city, "Remote" for remote work). A value that is not known yet shows "-".
  */
 export function headerCells(job: HeaderJob, viewer: 'customer' | 'provider', lang: Lang): Array<{ label: string; value: string }> {
   const at = job.startAt
