@@ -2,7 +2,7 @@ import type { Invoice } from '@kando/contract'
 
 import { ApiError } from '@/api/client'
 import { pushRoute } from '@/lib/push'
-import { clampYear, exportYears, invoiceEntries, invoiceForBooking, openPdf, YEAR_MIN } from './invoices'
+import { clampYear, docLine, exportYears, invoiceEntries, invoiceForBooking, newestFirst, openPdf, YEAR_MIN } from './invoices'
 
 jest.mock('@/api/client', () => ({ ...jest.requireActual('@/api/client'), api: jest.fn() }))
 jest.mock('@/api/push', () => ({}))
@@ -72,4 +72,9 @@ test('push links land on a route that exists: invoice-ready on the booking, invo
   expect(pushRoute('skilled://invoices/commission')).toBe('/invoices/commission')
   expect(exists('invoices/commission')).toBe(true)
   expect(exists('invoices')).toBe(true)
+})
+
+test('the fold lists both kinds newest first, and the one line drops empty parts', () => {
+  expect(newestFirst([{ issuedAt: '2026-01-01' }, { issuedAt: '2026-03-01' }], [{ issuedAt: '2026-02-01' }]).map((d) => d.issuedAt)).toEqual(['2026-03-01', '2026-02-01', '2026-01-01'])
+  expect(docLine(['R-1', undefined, '1 Jan', '10,00 €'])).toBe('R-1 · 1 Jan · 10,00 €')
 })

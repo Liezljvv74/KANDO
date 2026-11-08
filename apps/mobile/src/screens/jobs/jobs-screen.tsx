@@ -5,7 +5,7 @@ import type { JobRow } from '@kando/contract'
 
 import type { Role } from '@/api/bookings'
 import { getJobs, jobCounts } from '@/api/jobs'
-import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
+import { Button, ErrorText, Field } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
@@ -16,6 +16,7 @@ import { go } from '@/lib/go'
 import { headerDate } from '@/lib/job-header'
 import { pastPage, type JobSection } from '@/lib/jobs'
 import { stateText } from '@/lib/job-state-text'
+import { InvoicesFold } from '@/screens/jobs/invoices-fold'
 
 const open = (row: JobRow) => go(`/bookings/request/${row.id}`) // the job page
 /** The small tag on a search result: the section the job sits in. */
@@ -163,8 +164,8 @@ export default function JobsScreen() {
           {pastOpen && <More list={past} />}
         </>
       )}
-      {/* For everyone, not only providers: customers' receipts live there too (and providers who stopped offering keep theirs). */}
-      <LinkText label={t('jobs.invoices')} onPress={() => go('/invoices')} />
+      {/* For everyone: customers' receipts live here too (and providers who stopped offering keep theirs). */}
+      <InvoicesFold provider={both} />
     </FormScreen>
   )
 }
