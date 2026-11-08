@@ -48,12 +48,14 @@ export const SmallButton = ({
   accessibilityLabel,
   disabled,
   busy,
+  danger,
 }: {
   label: string
   onPress: () => void
   accessibilityLabel?: string
   disabled?: boolean
   busy?: boolean
+  danger?: boolean
 }) => (
   <Pressable
     onPress={onPress}
@@ -61,9 +63,9 @@ export const SmallButton = ({
     accessibilityRole="button"
     accessibilityLabel={accessibilityLabel ?? label}
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
-    style={({ pressed }) => [styles.small, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
+    style={({ pressed }) => [styles.small, danger && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={color.indigo} /> : <Text style={styles.smallLabel}>{label}</Text>}
+    {busy ? <ActivityIndicator color={danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, danger && { color: color.danger }]}>{label}</Text>}
   </Pressable>
 )
 

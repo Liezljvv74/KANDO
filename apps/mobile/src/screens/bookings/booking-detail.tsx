@@ -1,12 +1,12 @@
 import { useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
 import type { BookingView, JobStateDto } from '@kando/contract'
 
 import { confirmAgreedTime, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
-import { Card, FormScreen } from '@/components/form-ui'
+import { Actions, Card, FormScreen, SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { useSubmit } from '@/hooks/use-submit'
@@ -86,7 +86,7 @@ export function BookingSection({ view, showTitle }: { view: BookingView; showTit
  * The job's buttons that act on its current booking, from the server's `buttons` only (no rule of its own): pay, set up payouts and
  * the booking steps with their forms. "Job finished" before the start time shows greyed (the status card's line names the time).
  */
-export function BookingActions({ view, state, onChanged }: { view: BookingView; state: JobStateDto; onChanged: () => void }) {
+export function BookingActions({ view, state, onChanged, extra }: { view: BookingView; state: JobStateDto; onChanged: () => void; extra?: ReactNode }) {
   const { booking: b, viewer } = view
   const { busy, problem, submit } = useSubmit()
   const [sheet, setSheet] = useState<Sheet | null>(null)
@@ -122,9 +122,13 @@ export function BookingActions({ view, state, onChanged }: { view: BookingView; 
       {state.buttons.includes('set_up_payouts') && <Button label={t('payouts.setUp')} onPress={() => submit(() => doQuoteStep('payout'), onChanged)} busy={busy} />}
       {!!notice && <Info text={notice} />}
       <ErrorText text={problem} />
-      {actions.map((a) => (
-        <Button key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} />
-      ))}
+      {/* small buttons side by side: the booking's steps first, then the additional task / scope review with the chat and the like */}
+      {[actions.filter((a) => a !== 'additionalTask'), [...actions.filter((a) => a === 'additionalTask')]].map((row, i) => {
+        const list = row.map((a) => (
+          <SmallButton key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} />
+        ))
+        return i === 0 ? (list.length > 0 && <Actions key="steps">{list}</Actions>) : <Actions key="more">{list}{extra}</Actions>
+      })}
       {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
       {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
       {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
@@ -146,8 +150,8 @@ export function JobCommonButtons({ state, threadId, job }: { state: JobStateDto;
   return (
     <>
       {(has('open_chat') || has('ask_question')) && <OpenChat find={async () => threadId ?? null} />}
-      {has('contact_support') && <Button label={t('job.button.contactSupport')} onPress={() => openSupport(job)} />}
-      {has('ask_someone_else') && <Button label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} />}
+      {has('contact_support') && <SmallButton label={t('job.button.contactSupport')} onPress={() => openSupport(job)} />}
+      {has('ask_someone_else') && <SmallButton label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} />}
     </>
   )
 }
@@ -185,8 +189,9 @@ export default function BookingDetail() {
         {!!head.body && <Text style={styles.text}>{head.body}</Text>}
         <BookingStatusLines view={data} />
       </Card>
-      {b.jobState && <BookingActions view={data} state={b.jobState} onChanged={retry} />}
-      {b.jobState && <JobCommonButtons state={b.jobState} threadId={data.threadId} job={{ number: b.jobNumber, title: b.title }} />}
+      {b.jobState && (
+        <BookingActions view={data} state={b.jobState} onChanged={retry} extra={<JobCommonButtons state={b.jobState} threadId={data.threadId} job={{ number: b.jobNumber, title: b.title }} />} />
+      )}
       <BookingSection view={data} />
     </FormScreen>
   )

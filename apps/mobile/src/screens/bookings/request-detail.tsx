@@ -8,7 +8,7 @@ import type { JobStateDto } from '@kando/contract'
 import { acceptQuote, confirmQuote, declineRequest, getBooking, getRequest, listQuotes, withdrawRequest } from '@/api/bookings'
 import { listQuoteDocuments, quotePdf } from '@/api/quotes'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
-import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
+import { Actions, Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
@@ -122,8 +122,10 @@ export default function RequestDetail() {
         )}
         {onBooking && current && <BookingStatusLines view={current} />}
       </Card>
-      {onBooking && current && state && <BookingActions view={current} state={state} onChanged={retry} />}
-      {state && <JobCommonButtons state={state} threadId={request.threadId} job={{ number: request.jobNumber, title: request.title }} />}
+      {(() => {
+        const common = state && <JobCommonButtons state={state} threadId={request.threadId} job={{ number: request.jobNumber, title: request.title }} />
+        return onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} /> : <Actions>{common}</Actions>
+      })()}
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       <ErrorText text={closing.problem} />
       {canClose && !askChat && <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />}
