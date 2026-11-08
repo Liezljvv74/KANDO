@@ -122,28 +122,26 @@ export default function AccountScreen() {
           <Text style={styles.title}>{t('tab.account')}</Text>
           {user && <Text style={styles.email}>{user.email}</Text>}
           <Button label={t('auth.logOut')} onPress={signOut} />
-          <LanguageSwitch />
         </View>
         <View style={styles.card}>
           <Text style={styles.heading}>{t('account.exportHeading')}</Text>
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
+              <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
+              <ErrorText text={error} />
               <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
               <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy && !scanning} />
               <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy && !scanning} />
               <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
               <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy || scanning} />
+              <LanguageSwitch />
               <Button label={t('common.save')} onPress={save} busy={busy} disabled={scanning} />
               {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
             </>
           )}
           {!me && loadError !== null && <ErrorRetry code={loadError} onRetry={load} />}
           <AccountDataSection part="export" />
-        </View>
-        <View style={styles.card}>
-          <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
-          <ErrorText text={error} />
         </View>
         <PushSwitches />
         <AccountDataSection part="delete" />
