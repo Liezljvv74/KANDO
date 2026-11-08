@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { bookings, db, ledgerEntries, providers, stripeEvents, type Tx } from '@kando/db'
+import { bookings, db, ledgerEntries, providers, stripeEvents, users, type Tx } from '@kando/db'
 import { lockProviderSlots, slotIsHeld } from '../bookings/busy'
 import { parentBlocksPayment } from '../bookings/additional'
 import { openSystemDispute } from '../bookings/disputes'
@@ -45,6 +45,8 @@ export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Pro
     if (e.type === 'checkout-paid') return paid(tx, e, now, after)
     // a dispute or a failed refund: staff act by hand (one open flag per booking and kind)
     const bookingId = e.type === 'refund-failed' && e.bookingId ? e.bookingId : await bookingOfPayment(tx, e.paymentRef)
+    // a payment or refund of another environment sharing this Stripe account (its booking is not ours, nor in the ledger): not ours to flag
+    if (!bookingId || !(await bookingKnown(tx, bookingId))) return console.warn(`[payments] ${e.type} ignored: not a booking of this environment`)
     const customerId = bookingId ? (await tx.select({ c: bookings.customerId }).from(bookings).where(eq(bookings.id, bookingId)))[0]?.c : undefined
     const note = e.type === 'charge-disputed' ? `dispute on payment ${e.paymentRef}` : `refund ${e.refundId} of payment ${e.paymentRef} failed`
     await flagForStaff(tx, { kind: e.type === 'charge-disputed' ? 'chargeback' : 'refund-failed', refId: bookingId ?? e.paymentRef, ...(customerId && { userId: customerId }), note })
@@ -55,6 +57,24 @@ export async function handleGatewayEvent(e: GatewayEvent, now = new Date()): Pro
   for (const fn of after) await fn().catch((err) => console.error(`[payments] message after ${e.type} failed ${describeError(err)}`))
 }
 
+/** A booking of this database, or one that was deleted with an account (its ledger rows stay). */
+async function bookingKnown(tx: Tx, bookingId: string): Promise<boolean> {
+  if ((await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, bookingId)).limit(1)).length) return true
+  return (await tx.select({ id: ledgerEntries.id }).from(ledgerEntries).where(eq(ledgerEntries.bookingId, bookingId)).limit(1)).length > 0
+}
+
+/**
+ * The Stripe test account is shared with other deployed sites whose payments reach this webhook too. A paid event whose booking is
+ * not here, has no ledger rows, and whose customer and provider are both unknown belongs to another environment: it is ignored
+ * (no refund, no ledger rows). If only the customer's or the provider's account was deleted, the other still exists and the
+ * payment is refunded as before. ponytail: a booking whose customer AND provider were both deleted before it was paid is ignored too.
+ */
+async function foreignPayment(tx: Tx, e: Paid): Promise<boolean> {
+  if (await bookingKnown(tx, e.bookingId)) return false
+  if ((await tx.select({ id: users.id }).from(users).where(eq(users.id, e.customerId)).limit(1)).length) return false
+  return !(await tx.select({ id: providers.id }).from(providers).where(eq(providers.id, e.providerId)).limit(1)).length
+}
+
 /** The booking a payment belongs to, from its charge row (kept even when the booking was deleted). */
 async function bookingOfPayment(tx: Tx, paymentRef: string): Promise<string | undefined> {
   return (await tx.select({ id: ledgerEntries.bookingId }).from(ledgerEntries).where(and(eq(ledgerEntries.kind, 'charge'), eq(ledgerEntries.gatewayRef, paymentRef))))[0]?.id
@@ -63,6 +83,7 @@ async function bookingOfPayment(tx: Tx, paymentRef: string): Promise<string | un
 async function paid(tx: Tx, e: Paid, now: Date, after: After): Promise<void> {
   await lockProviderSlots(tx, e.providerId)
   const [b] = await tx.select().from(bookings).where(eq(bookings.id, e.bookingId)).for('update')
+  if (!b && (await foreignPayment(tx, e))) return console.warn('[payments] checkout-paid ignored: not a booking of this environment')
   if (b?.paymentRef === e.paymentRef) return // this payment is already the booking's (another event for it)
   const charge = { bookingId: e.bookingId, providerId: b?.providerId ?? e.providerId, amount: e.amountCents / 100, currency: e.currency }
   const confirmable =
