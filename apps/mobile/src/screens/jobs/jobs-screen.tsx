@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 
 import type { JobRow } from '@kando/contract'
 
 import type { Role } from '@/api/bookings'
-import { getJobs } from '@/api/jobs'
+import { getJobs, jobCounts } from '@/api/jobs'
 import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -14,7 +14,7 @@ import { useMore } from '@/hooks/use-more'
 import { getLang, t, useLang, type Key } from '@/i18n'
 import { go } from '@/lib/go'
 import { headerDate } from '@/lib/job-header'
-import { counterOf, sectionsToLoad, type JobSection } from '@/lib/jobs'
+import { pastPage, type JobSection } from '@/lib/jobs'
 import { stateText } from '@/lib/job-state-text'
 
 const open = (row: JobRow) => go(`/bookings/request/${row.id}`) // the job page
@@ -65,41 +65,44 @@ export default function JobsScreen() {
   const [typed, setTyped] = useState('')
   const [query, setQuery] = useState('')
 
+  // "Needs you" of both sides comes from the shared counts load (it also feeds the tab badge and the switch counters); the tabs
+  // layout refreshing at the same moment joins the same call. Per focus: one call per side plus "Active jobs" (and "Past" if open).
   const fetch = useCallback(async () => {
-    const sections = sectionsToLoad(pastOpen)
-    // the other side's counter comes from its own first page (a person with both roles only)
-    const [other, ...pages] = await Promise.all([both ? getJobs(role === 'customer' ? 'provider' : 'customer') : undefined, ...sections.map((section) => getJobs(role, { section }))])
-    const by = Object.fromEntries(sections.map((s, i) => [s, pages[i]])) as Partial<Record<JobSection, NonNullable<typeof other>>>
-    return { role, by, other: counterOf(other?.counts) }
-  }, [role, pastOpen, both])
+    const [pages, active] = await Promise.all([jobCounts.load(both ? ['customer', 'provider'] : ['customer']), getJobs(role, { section: 'active' })])
+    // a flight that started before the provider role was known has no provider page: fetch it alone
+    return { role, needs: pages[role] ?? (await getJobs(role, { section: 'needs_you' })), active }
+  }, [role, both])
   const { data, error, retry } = useLoad(fetch)
-  const searchFetch = useCallback(async () => (query ? { role, page: await getJobs(role, { q: query }) } : undefined), [role, query])
+  // Past has its own load: opening or closing it never reloads the other sections.
+  const pastFetch = useCallback(async () => ({ role, page: await pastPage(pastOpen, () => getJobs(role, { section: 'past' })) }), [role, pastOpen])
+  const pastLoad = useLoad(pastFetch)
+  const searchFetch = useCallback(async () => (query ? { role, query, page: await getJobs(role, { q: query }) } : undefined), [role, query])
   const search = useLoad(searchFetch)
 
-  // Old data of the other side stays in `data` while the new one loads: show it only for the chosen side.
+  // Old data (the other side, the previous search) stays in the loads while the new one runs: show it only when it matches.
   const current = data?.role === role ? data : undefined
   const more = (section: JobSection) => (c: string) => getJobs(role, { section, cursor: c })
-  const needs = useMore<JobRow>(current?.by.needs_you, more('needs_you'))
-  const active = useMore<JobRow>(current?.by.active, more('active'))
-  const past = useMore<JobRow>(current?.by.past, more('past'))
-  const found = search.data?.role === role ? search.data.page : undefined
+  const needs = useMore<JobRow>(current?.needs, more('needs_you'))
+  const active = useMore<JobRow>(current?.active, more('active'))
+  const past = useMore<JobRow>(pastLoad.data?.role === role ? pastLoad.data.page : undefined, more('past'))
+  const found = search.data?.role === role && search.data.query === query ? search.data.page : undefined
   const results = useMore<JobRow>(found, (c) => getJobs(role, { q: query, cursor: c }))
 
-  const counts = current?.by.needs_you?.counts
-  const mine = counterOf(counts)
+  const counters = useSyncExternalStore(jobCounts.subscribe, jobCounts.get)
+  const pastCount = current?.needs.counts.past
   const label = (side: Role) => {
-    const n = side === role ? mine : (current?.other ?? 0)
     const text = t(side === 'customer' ? 'booking.asCustomer' : 'booking.asProvider')
-    return current && n > 0 ? `${text} (${n})` : text
+    return counters[side] > 0 ? `${text} (${counters[side]})` : text
   }
 
   return (
     <FormScreen title={t('tab.jobs')} back={false}>
+      {/* For everyone, not only providers: customers' receipts live there too (and providers who stopped offering keep theirs). */}
       <LinkText label={t('jobs.invoices')} onPress={() => go('/invoices')} />
       {both && (
         <>
-          <Button label={label('customer')} onPress={() => setRole('customer')} disabled={role === 'customer'} />
-          <Button label={label('provider')} onPress={() => setRole('provider')} disabled={role === 'provider'} />
+          <Button label={label('customer')} onPress={() => setRole('customer')} disabled={role === 'customer'} selected={role === 'customer'} />
+          <Button label={label('provider')} onPress={() => setRole('provider')} disabled={role === 'provider'} selected={role === 'provider'} />
         </>
       )}
       <Field
@@ -144,9 +147,10 @@ export default function JobsScreen() {
           ))}
           <More list={active} />
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: pastOpen }} onPress={() => setPastOpen((o) => !o)}>
-            <SectionTitle text={`${t('jobs.past', { n: counts?.past ?? past.docs.length })} ${pastOpen ? '▾' : '▸'}`} />
+            <SectionTitle text={`${t('jobs.past', { n: pastCount ?? past.docs.length })} ${pastOpen ? '▾' : '▸'}`} />
           </Pressable>
           {pastOpen && past.docs.map((r) => <PastLine key={r.id} row={r} role={role} />)}
+          {pastOpen && pastLoad.error && <ErrorRetry code={pastLoad.error} onRetry={pastLoad.retry} />}
           {pastOpen && <More list={past} />}
         </>
       )}
