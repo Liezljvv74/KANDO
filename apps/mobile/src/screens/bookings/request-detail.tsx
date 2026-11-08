@@ -100,7 +100,8 @@ export default function RequestDetail() {
   const cancelQuote = async () => {
     if (await confirmDanger(t('booking.cancelQuoteConfirm'), t('booking.cancelQuote'))) closing.submit(() => declineRequest(request.id), retry)
   }
-  const canClose = !onBooking && !quoteOut && (has('decline') || has('cancel'))
+  // a lapsed request asks "I don't need this anymore" (the same withdraw call): no second Withdraw button beside it
+  const canClose = !onBooking && !quoteOut && !(isCustomer && request.lapsed) && (has('decline') || has('cancel'))
   const agreed = !!b && b.status !== 'awaiting-time' // an awaiting-time booking's start is a stand-in: not shown
   const headerJob = {
     jobNumber: request.jobNumber,
