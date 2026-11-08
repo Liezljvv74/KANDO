@@ -667,7 +667,6 @@ export const en: Record<AppKey, string> = {
   'booking.acceptNoShow': 'Accept',
   'booking.acceptNoShowAskCustomer': 'Accept the report? You confirm that you did not turn up. The booking ends now and the provider receives the full price minus the commission. This cannot be undone.',
   'booking.acceptNoShowAskProvider': 'Accept the report? You confirm that you did not turn up. The booking ends now, the customer gets the full price back, and the report counts on your record. This cannot be undone.',
-  'booking.acceptNoShowYes': 'Accept',
   'booking.stateStopAmount': 'State what was earned',
   'booking.answerStop': 'Answer the stated amount',
   'booking.cancelFree': 'Cancelling now is free. You get the full price back; this can take a few days.',

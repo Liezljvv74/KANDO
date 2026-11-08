@@ -666,7 +666,6 @@ export const de = {
   'booking.acceptNoShow': 'Akzeptieren',
   'booking.acceptNoShowAskCustomer': 'Die Meldung akzeptieren? Du bestätigst damit, dass du nicht erschienen bist. Die Buchung endet sofort, der Anbieter bekommt den vollen Preis abzüglich Provision. Das lässt sich nicht rückgängig machen.',
   'booking.acceptNoShowAskProvider': 'Die Meldung akzeptieren? Du bestätigst damit, dass du nicht erschienen bist. Die Buchung endet sofort, der Kunde bekommt den vollen Preis zurück, und die Meldung zählt auf deinem Konto. Das lässt sich nicht rückgängig machen.',
-  'booking.acceptNoShowYes': 'Akzeptieren',
   'booking.stateStopAmount': 'Verdienten Betrag angeben',
   'booking.answerStop': 'Auf den angegebenen Betrag antworten',
   'booking.cancelFree': 'Stornieren ist jetzt kostenlos. Du bekommst den vollen Preis zurück; das kann ein paar Tage dauern.',

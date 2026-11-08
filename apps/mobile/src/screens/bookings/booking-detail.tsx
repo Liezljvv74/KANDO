@@ -100,7 +100,7 @@ export function BookingActions({ view, state, onChanged, extra }: { view: Bookin
     withdraw: ['booking.confirmWithdraw', 'booking.withdraw', () => withdrawBooking(b.id)],
     confirm: ['booking.confirmAsk', 'booking.confirmYes', () => confirmJob(b.id)],
     stop: ['booking.stopAsk', 'booking.stopYes', () => stopJob(b.id)],
-    acceptNoShow: [viewer === 'customer' ? 'booking.acceptNoShowAskCustomer' : 'booking.acceptNoShowAskProvider', 'booking.acceptNoShowYes', () => acceptNoShow(b.id)],
+    acceptNoShow: [viewer === 'customer' ? 'booking.acceptNoShowAskCustomer' : 'booking.acceptNoShowAskProvider', 'booking.acceptNoShow', () => acceptNoShow(b.id)],
     reportNoShow: [viewer === 'customer' ? 'booking.noShowAskCustomer' : 'booking.noShowAskProvider', 'booking.noShowYes', () => reportNoShow(b.id)],
   }
   async function act(action: BookingAction) {
