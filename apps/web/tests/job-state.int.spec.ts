@@ -61,8 +61,8 @@ async function paidBooking(o: { startAt?: Date; status?: string } = {}): Promise
 it('GET a booking returns jobState for the caller, and the old fields unchanged', async () => {
   const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(20) })
   const cust = await view(U.cust, b.id)
-  expect(cust.booking.jobState).toMatchObject({ key: 'payment_due', section: 'needs_you', buttons: ['pay', 'withdraw'], countsForMe: true })
-  expect(await stateOf(U.owner, b.id)).toMatchObject({ key: 'payment_due', section: 'active', buttons: [] })
+  expect(cust.booking.jobState).toMatchObject({ key: 'payment_due', section: 'needs_you', buttons: ['pay', 'open_chat', 'withdraw'], countsForMe: true })
+  expect(await stateOf(U.owner, b.id)).toMatchObject({ key: 'payment_due', section: 'active', buttons: ['open_chat'] })
   expect(cust.booking).toMatchObject({ status: 'awaiting-payment', payBy: expect.any(String), amount: 100, currency: 'EUR' })
   expect(cust.booking).not.toHaveProperty('commissionRate')
   expect(cust.booking).not.toHaveProperty('checkoutRef')
@@ -74,8 +74,8 @@ it('a checkout reference older than the patience reads checkout_not_completed; o
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString() })
   expect((await stateOf(U.cust, b.id)).key).toBe('payment_due')
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString(), startedAt: new Date(Date.now() - 11 * 60_000).toISOString() })
-  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay', 'withdraw'] })
-  expect((await stateOf(U.owner, b.id)).buttons).toEqual([])
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay', 'open_chat', 'withdraw'] })
+  expect((await stateOf(U.owner, b.id)).buttons).toEqual(['open_chat'])
 })
 
 it('a repeated pay tap reuses the session and restarts the wait: payment_due, not checkout_not_completed; an expired session still is', async () => {
@@ -88,7 +88,7 @@ it('a repeated pay tap reuses the session and restarts the wait: payment_due, no
   const ref = JSON.parse((await pool.query('SELECT checkout_ref FROM bookings WHERE id = $1', [b.id])).rows[0].checkout_ref)
   expect(ref).toMatchObject({ sessionId: expect.any(String), url: first.url, expiresAt: expect.any(String) })
   expect(Date.now() - Date.parse(ref.startedAt)).toBeLessThan(60_000)
-  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay', 'withdraw'] })
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay', 'open_chat', 'withdraw'] })
   await pool.query('UPDATE bookings SET checkout_ref = $2 WHERE id = $1', [b.id, JSON.stringify({ ...ref, expiresAt: new Date(Date.now() - 1000).toISOString() })])
   expect((await stateOf(U.cust, b.id)).key).toBe('checkout_not_completed')
 })

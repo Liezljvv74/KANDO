@@ -54,13 +54,13 @@ describe('booking states, both viewers, exact buttons', () => {
   it('awaiting time past answerBy: declined_expired', () => expect(state('customer', { status: 'awaiting-time', answerBy: at(-1) }).key).toBe('declined_expired'))
   it('payment due', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30) }
-    expect(pick(state('customer', b))).toEqual(['payment_due', 'needs_you', ['pay', 'withdraw']])
-    expect(pick(state('provider', b))).toEqual(['payment_due', 'active', []])
+    expect(pick(state('customer', b))).toEqual(['payment_due', 'needs_you', ['pay', 'open_chat', 'withdraw']])
+    expect(pick(state('provider', b))).toEqual(['payment_due', 'active', ['open_chat']])
   })
   it('a fresh or unknown-age checkout is still payment due', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1' }
     expect(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS) }).key).toBe('payment_due')
-    expect(pick(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - 60_000) }))).toEqual(['payment_due', 'needs_you', ['pay', 'withdraw']])
+    expect(pick(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - 60_000) }))).toEqual(['payment_due', 'needs_you', ['pay', 'open_chat', 'withdraw']])
     expect(state('customer', b).key).toBe('payment_due')
   })
   it('checkout expiry: expired is not completed; unexpired follows the patience; no timestamp is payment due', () => {
@@ -75,8 +75,8 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('checkout not completed', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1', checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS - 1) }
-    expect(pick(state('customer', b))).toEqual(['checkout_not_completed', 'needs_you', ['pay', 'withdraw']])
-    expect(pick(state('provider', b))).toEqual(['checkout_not_completed', 'active', []])
+    expect(pick(state('customer', b))).toEqual(['checkout_not_completed', 'needs_you', ['pay', 'open_chat', 'withdraw']])
+    expect(pick(state('provider', b))).toEqual(['checkout_not_completed', 'active', ['open_chat']])
   })
   it('paid, upcoming: customer paid_upcoming, provider before_start_time with the start time and finish', () => {
     const b = { status: 'confirmed', startAt: at(5) }
@@ -112,7 +112,7 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('payout account missing: only the spec table buttons (no add_task)', () => {
     const b = { status: 'finished', confirmBy: at(-1) }
-    expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', []])
+    expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', ['open_chat']])
     expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', ['set_up_payouts']])
   })
   it('problem reported (disputed, no-show, stopped without an amount)', () => {

@@ -134,7 +134,7 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
   const paidOut = b.releasedAt ?? undefined
   const payoutStage = () => {
     if (i.delayedFlag) return delayed
-    if (!i.providerPayoutReady) return customer ? out('payout_account_missing', 'active', 'info', []) : out('payout_account_missing', 'needs_you', 'warn', ['set_up_payouts'])
+    if (!i.providerPayoutReady) return customer ? out('payout_account_missing', 'active', 'info', chat) : out('payout_account_missing', 'needs_you', 'warn', ['set_up_payouts'])
     return out('payout_on_its_way', 'active', 'ok', chat)
   }
   const waiting = () => (customer ? out('work_done_waiting', 'needs_you', 'warn', ['confirm', 'report_problem', ...chat]) : out('work_done_waiting', 'active', 'info', chat))
@@ -152,7 +152,7 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
       const old = !!b.checkoutStartedAt && now.getTime() - b.checkoutStartedAt.getTime() > CHECKOUT_PATIENCE_MS
       const stale = !!b.checkoutRef && (expired || old)
       const key = stale ? 'checkout_not_completed' : 'payment_due'
-      return customer ? out(key, 'needs_you', 'warn', ['pay', 'withdraw']) : out(key, 'active', 'info', [])
+      return customer ? out(key, 'needs_you', 'warn', ['pay', ...chat, 'withdraw']) : out(key, 'active', 'info', [...chat]) // the two can still talk while the payment is open
     }
     case 'confirmed': {
       if (b.noShow) return b.noShow === viewer && !!b.noShowObjectBy && now < b.noShowObjectBy ? plus(problem, ['object_no_show', 'accept_no_show']) : problem
