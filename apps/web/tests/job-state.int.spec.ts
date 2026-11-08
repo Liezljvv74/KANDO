@@ -157,6 +157,17 @@ it('an open release-failed flag is delayed for both sides; once resolved it is n
   expect((await stateOf(U.cust, b)).key).toBe('payout_on_its_way')
 })
 
+it('a disputed booking: an open money flag counts only once the dispute is decided (its money step keeps failing: delayed)', async () => {
+  const b = await paidBooking({ status: 'disputed' })
+  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now() + interval '14 days')", [b])
+  await flag('payment-unprocessed', b, 'release failed: earlier')
+  for (const uid of [U.cust, U.owner]) expect((await stateOf(uid, b)).key).toBe('problem_reported') // undecided: the dispute is the problem
+  await pool.query("UPDATE disputes SET decision = 'full-payout', provider_share = 100, decision_reason = 'x', decided_by = 'staff', decided_at = now() WHERE booking_id = $1", [b])
+  for (const uid of [U.cust, U.owner]) expect(await stateOf(uid, b)).toMatchObject({ key: 'delayed', section: 'active', buttons: ['contact_support'] })
+  await pool.query('UPDATE staff_flags SET resolved_at = now() WHERE ref_id = $1', [b])
+  expect((await stateOf(U.cust, b)).key).toBe('problem_reported')
+})
+
 it('a refund-failed flag on a cancelled booking is delayed for both sides', async () => {
   const b = await paidBooking({ status: 'cancelled' })
   expect((await stateOf(U.cust, b)).key).toBe('cancelled')

@@ -158,10 +158,17 @@ describe('booking states, both viewers, exact buttons', () => {
     for (const status of ['declined', 'expired', 'withdrawn']) for (const v of ['customer', 'provider'] as const) expect(pick(state(v, { status }, { request: { status: 'booked', answerBy: at(1) } }))).toEqual(['declined_expired', 'past', v === 'customer' ? ['ask_someone_else'] : []])
   })
   it('a problem sits in active whatever else is open (flag, unready payout, unread-style states)', () => {
+    for (const v of ['customer', 'provider'] as const)
+      for (const b of [{ status: 'stopped' }, { status: 'confirmed', noShow: 'provider', startAt: at(-1) }]) {
+        const s = state(v, b, { delayedFlag: true, ready: false })
+        expect(s.key).toBe('problem_reported')
+        expect(s.section).toBe('active')
+      }
+  })
+  it('a decided dispute whose money step keeps failing (open flag) is delayed (spec 4.4); without the flag it stays problem_reported', () => {
     for (const v of ['customer', 'provider'] as const) {
-      const s = state(v, { status: 'disputed', confirmBy: at(-1) }, { delayedFlag: true, ready: false })
-      expect(s.key).toBe('problem_reported')
-      expect(s.section).toBe('active')
+      expect(pick(state(v, { status: 'disputed', confirmBy: at(-1) }, { delayedFlag: true, ready: false }))).toEqual(['delayed', 'active', ['contact_support']])
+      expect(state(v, { status: 'disputed' }).key).toBe('problem_reported')
     }
   })
   it('a live booking beats a newer cancelled one in the derived state', () => {

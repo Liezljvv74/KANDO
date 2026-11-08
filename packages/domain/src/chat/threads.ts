@@ -42,20 +42,24 @@ export type ThreadLookup = { key: string; bookingId: string | null; requestId: s
 
 /**
  * THE rule for which thread a booking (or request) talks in, read-only (none is created): its own, else its request's, else its
- * parent booking's, up to 8 levels. Batched: one query per level for all entries. key > thread id (null: none yet).
- * `exec` is the caller's request transaction (RLS) or the owner connection.
+ * parent booking's, up to 8 levels. Batched: one query per level for all entries. key > thread (null: none yet), with, in the
+ * same query, whether `unreadFor` has an unseen, undismissed `message-received` notice for it (the chat has no read marker of its
+ * own; without `unreadFor`, false). `exec` is the caller's request transaction (RLS) or the owner connection.
  */
-export async function threadIdsOf(exec: Exec, entries: ThreadLookup[]): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>()
+export async function threadsOf(exec: Exec, entries: ThreadLookup[], unreadFor?: string): Promise<Map<string, { id: string; unread: boolean } | null>> {
+  const out = new Map<string, { id: string; unread: boolean } | null>()
+  const unread = unreadFor
+    ? sql<boolean>`EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = ${unreadFor} AND n.kind = 'message-received' AND n.payload->>'threadId' = threads.id::text AND n.seen_at IS NULL AND n.dismissed_at IS NULL)` // raw names: drizzle may leave a column of the selected table unqualified
+    : sql<boolean>`false`
   let todo = entries
   for (let i = 0; i < 8 && todo.length; i++) {
     const bIds = todo.flatMap((e) => e.bookingId ?? [])
     const rIds = todo.flatMap((e) => e.requestId ?? [])
-    const found = bIds.length || rIds.length ? await exec.select({ id: threads.id, bookingId: threads.bookingId, requestId: threads.requestId }).from(threads).where(or(bIds.length ? inArray(threads.bookingId, bIds) : undefined, rIds.length ? inArray(threads.requestId, rIds) : undefined)) : []
+    const found = bIds.length || rIds.length ? await exec.select({ id: threads.id, bookingId: threads.bookingId, requestId: threads.requestId, unread }).from(threads).where(or(bIds.length ? inArray(threads.bookingId, bIds) : undefined, rIds.length ? inArray(threads.requestId, rIds) : undefined)) : []
     const up: ThreadLookup[] = []
     for (const e of todo) {
       const own = found.find((t) => (e.bookingId && t.bookingId === e.bookingId) || (e.requestId && t.requestId === e.requestId))
-      if (own) out.set(e.key, own.id)
+      if (own) out.set(e.key, { id: own.id, unread: !!own.unread })
       else if (e.parentBookingId) up.push(e)
       else out.set(e.key, null)
     }
@@ -71,11 +75,6 @@ export async function threadIdsOf(exec: Exec, entries: ThreadLookup[]): Promise<
   }
   for (const e of todo) out.set(e.key, null)
   return out
-}
-
-/** The thread a booking talks in (see threadIdsOf). */
-export async function threadIdOf(exec: Exec, b: { id: string; requestId: string | null; parentBookingId: string | null }): Promise<string | null> {
-  return (await threadIdsOf(exec, [{ key: b.id, bookingId: b.id, requestId: b.requestId, parentBookingId: b.parentBookingId }])).get(b.id) ?? null
 }
 
 /** Who may read a thread: its customer or the provider's owner. Anyone else (and a bad id) gets 404. */

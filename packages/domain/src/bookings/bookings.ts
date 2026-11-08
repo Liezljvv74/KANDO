@@ -4,10 +4,10 @@ import { LIST_PAGE, type Booking, type BookingView, type Page } from '@kando/con
 import { NO_ID } from '../admin/common'
 import { fail, notFound } from '../providers/http'
 import { ownProvider } from '../providers/profile'
-import { threadIdOf } from '../chat/threads'
 import { olderThan, pageOf, stampOf } from '../paging'
+import { jobStates } from './job-state-lookup'
 import { lockRow, partyOf } from './party'
-import { toBooking, withBookingRefs } from './requests'
+import { bookingItem, toBooking, withBookingRefs } from './requests'
 import { canTransition } from './rules'
 
 type Row = typeof bookings.$inferSelect
@@ -32,7 +32,10 @@ export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'p
     .limit(LIST_PAGE + 1)
   const { rows, next } = pageOf(found)
   const kids = rows.length ? await tx.select().from(bookings).where(and(mine, inArray(bookings.parentBookingId, rows.map((r) => r.id)))).orderBy(asc(bookings.createdAt), asc(bookings.id)) : []
-  return { docs: await withBookingRefs(tx, rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), userId, true), next }
+  const docs = rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))])
+  // the rows just read are handed in: the state lookup does not read them again
+  const states = await jobStates(tx, userId, docs.map((d) => bookingItem(d, userId)), undefined, [...rows.map((r) => r.b), ...kids])
+  return { docs: await withBookingRefs(tx, docs, userId, states), next }
 }
 
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */
@@ -40,7 +43,10 @@ export async function getBooking(tx: Tx, userId: string, id: string): Promise<Bo
   const { role } = await partyOf(tx, userId, id) // 404 for anyone else
   // joined with the quote's document number, so the provider sees exactly which quote was accepted (both parties may read the document)
   const found = (await tx.select({ b: bookings, quoteNumber: quoteDocuments.number }).from(bookings).leftJoin(quoteDocuments, eq(quoteDocuments.quoteId, bookings.quoteId)).where(eq(bookings.id, id)))[0] ?? notFound()
-  return { booking: (await withBookingRefs(tx, [view(found.b, userId)], userId, true))[0]!, viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
+  const dto = view(found.b, userId)
+  // one lookup (the row handed in) gives the state and the chat
+  const states = await jobStates(tx, userId, [bookingItem(dto, userId)], undefined, [found.b])
+  return { booking: (await withBookingRefs(tx, [dto], userId, states))[0]!, viewer: role as BookingView['viewer'], threadId: states.get(dto.id)?.threadId ?? null, quoteNumber: found.quoteNumber }
 }
 
 /** "I no longer need this": the customer, from awaiting-time or awaiting-payment. */

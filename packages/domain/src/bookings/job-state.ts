@@ -75,7 +75,8 @@ export type JobState = Out & { countsForMe: boolean }
  * - confirmed + noShow reported, `disputed`, and `stopped` without an agreed amount (no confirmBy) are `problem_reported`; `stopped` with confirmBy is paid like `finished`.
  * - confirmed past start with askedDoneAt: the customer gets `work_done_waiting` (confirm or report); the provider still gets `start_time_passed`.
  * - the payout stage is finished past confirmBy, or completed/stopped-agreed without releasedAt; `delayedFlag` beats it, and beats `cancelled`/`refunded` (failed refund),
- *   but never a released booking (stale flag) and never `problem_reported` (the dispute is still open).
+ *   but never a released booking (stale flag) and never a no-show or an unagreed stop (`problem_reported`). A `disputed` booking with the flag is
+ *   `delayed`: spec 4.4, "a dispute decision's money step keeps failing" (the lookup does not count a flag while the dispute is undecided).
  */
 export function deriveJobState(i: {
   viewer: JobViewer
@@ -154,7 +155,7 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
       if (!b.confirmBy) return plus(problem, customer ? [...(b.stopStatedAt ? ['answer_stop' as const] : []), 'report_problem'] : [...(b.stopStatedAt ? [] : ['state_stop_amount' as const]), 'report_problem'])
       return b.confirmBy > now ? waiting() : payoutStage()
     case 'disputed':
-      return problem
+      return i.delayedFlag ? delayed : problem
     case 'completed':
       return paidOut ? out('completed', 'past', 'ok', ['review', 'receipt'], { paidOutAt: paidOut }) : payoutStage()
     case 'cancelled':
