@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CHECKOUT_PATIENCE_MS, currentBookingOf, deriveJobState, type JobBookingInput, type JobButton, type JobViewer } from './job-state'
+import { CHECKOUT_PATIENCE_MS, currentBookingOf, deriveJobState, leadState, type JobBookingInput, type JobButton, type JobViewer } from './job-state'
 
 const at = (h: number) => new Date(Date.UTC(2026, 10, 10, 12 + h)) // hours from now
 const now = at(0)
@@ -110,10 +110,10 @@ describe('booking states, both viewers, exact buttons', () => {
     for (const b of [{ status: 'finished', confirmBy: at(-1) }, { status: 'completed' }])
       for (const v of ['customer', 'provider'] as const) expect(pick(state(v, b))).toEqual(['payout_on_its_way', 'active', b.status === 'finished' ? ['open_chat', 'add_task'] : chat])
   })
-  it('payout account missing', () => {
+  it('payout account missing: only the spec table buttons (no add_task)', () => {
     const b = { status: 'finished', confirmBy: at(-1) }
-    expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', ['add_task']])
-    expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', ['set_up_payouts', 'add_task']])
+    expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', []])
+    expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', ['set_up_payouts']])
   })
   it('problem reported (disputed, no-show, stopped without an amount)', () => {
     for (const b of [{ status: 'disputed' }, { status: 'confirmed', noShow: 'provider' }])
@@ -137,9 +137,9 @@ describe('booking states, both viewers, exact buttons', () => {
     expect(state('customer', { status: 'stopped', confirmBy: at(10) }).key).toBe('work_done_waiting')
     expect(state('customer', { status: 'stopped', confirmBy: at(-1) }).key).toBe('payout_on_its_way')
   })
-  it('delayed beats payout_on_its_way and payout_account_missing for both viewers', () => {
+  it('delayed beats payout_on_its_way and payout_account_missing for both viewers, with Contact support only (spec 4.4)', () => {
     for (const b of [{ status: 'finished', confirmBy: at(-1) }, { status: 'completed' }])
-      for (const v of ['customer', 'provider'] as const) for (const ready of [true, false]) expect(pick(state(v, b, { delayedFlag: true, ready }))).toEqual(['delayed', 'active', b.status === 'finished' ? ['contact_support', 'add_task'] : ['contact_support']])
+      for (const v of ['customer', 'provider'] as const) for (const ready of [true, false]) expect(pick(state(v, b, { delayedFlag: true, ready }))).toEqual(['delayed', 'active', ['contact_support']])
     expect(state('customer', { status: 'finished', confirmBy: at(-1) }, { delayedFlag: true }).tone).toBe('bad')
   })
   it('completed: past, with the payout date', () => {
@@ -202,5 +202,29 @@ describe('unread messages (spec 8b point 5)', () => {
   it('a request without a booking also follows the rule', () => {
     const s = state('customer', null, { request: reqOpen, unread: true })
     expect([s.key, s.section, s.countsForMe]).toEqual(['request_sent', 'needs_you', true])
+  })
+})
+
+describe('leadState (a job with additional tasks, one list row)', () => {
+  const st = (key: string, section: 'needs_you' | 'active' | 'past', countsForMe = section === 'needs_you') => ({ key, section, countsForMe }) as unknown as ReturnType<typeof deriveJobState>
+  it('a task that needs the viewer leads a running or settled root', () => {
+    const task = st('request_sent', 'needs_you')
+    expect(leadState(st('payout_on_its_way', 'active'), [task])).toBe(task)
+    expect(leadState(st('completed', 'past'), [st('declined_expired', 'past'), task])).toBe(task)
+  })
+  it('a live task keeps a settled root out of Past', () => {
+    const task = st('payment_due', 'active')
+    expect(leadState(st('completed', 'past'), [task])).toBe(task)
+  })
+  it('the root wins a tie, and over settled tasks', () => {
+    const root = st('start_time_passed', 'needs_you')
+    expect(leadState(root, [st('payment_due', 'needs_you')])).toBe(root)
+    const done = st('completed', 'past')
+    expect(leadState(done, [st('cancelled', 'past')])).toBe(done)
+    expect(leadState(done, [])).toBe(done)
+  })
+  it('an unread problem (counts, stays active) beats a running task', () => {
+    const root = st('problem_reported', 'active', true)
+    expect(leadState(root, [st('payment_due', 'needs_you')])).toBe(root)
   })
 })

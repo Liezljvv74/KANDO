@@ -58,7 +58,7 @@ export function currentBookingOf<B extends { id: string; status: string; created
  * `time_to_agree` (awaiting-time with a time proposed by one side): spec 4.4 has no row for it, the owner will be told.
  * Buttons beyond the spec table (task 4.2: the phone renders buttons from here only, so every flow it had keeps a button):
  * `withdraw` (customer leaves an unpaid booking), `enter_time`, `stop`, `state_stop_amount`, `answer_stop`, `object_no_show`, and
- * `add_task` on a root booking for both sides (the provider's label is "Scope/quote review") from paid until finished, as before.
+ * `add_task` on a root booking for both sides (the provider's label is "Scope/quote review") from paid until finished, as before (not on delayed or payout_account_missing: the spec table rules there).
  */
 type Out = { key: JobStateKey; section: JobSection; tone: JobTone; buttons: JobButton[]; paidOutAt?: Date; startAt?: Date }
 /** `countsForMe`: the job adds to the viewer's "Needs you" counter (section needs_you, or a problem/delayed job with an unread message). */
@@ -92,6 +92,16 @@ export function deriveJobState(i: {
   const stays = s.key === 'problem_reported' || s.key === 'delayed'
   const section = i.unread && !stays ? 'needs_you' : s.section
   return { ...s, section, countsForMe: section === 'needs_you' || !!i.unread }
+}
+
+/**
+ * The state a Jobs-list row shows for a job with additional tasks (spec 4.3: a task is part of its job, not a row of its own):
+ * the most urgent of the root's and the tasks' states. Needs the viewer (countsForMe) beats running, running beats past; the root
+ * wins a tie. So a task that needs the viewer puts the job under Needs you (counted once), and a live task keeps it out of Past.
+ */
+export function leadState<S extends JobState>(root: S, tasks: S[]): S {
+  const rank = (s: S) => (s.countsForMe ? 0 : s.section !== 'past' ? 1 : 2)
+  return tasks.reduce((lead, t) => (rank(t) < rank(lead) ? t : lead), root)
 }
 
 function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
@@ -149,8 +159,11 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
       if (customer) return plus(b.askedDoneAt ? waiting() : out('start_time_passed', 'active', 'info', [...chat, 'no_show']), [...task, 'stop', ...(b.askedDoneAt ? ['no_show' as const] : [])])
       return out('start_time_passed', 'needs_you', 'warn', ['finish', ...task, ...chat, 'stop', 'no_show'])
     }
-    case 'finished':
-      return plus(b.confirmBy && b.confirmBy > now ? waiting() : payoutStage(), task)
+    case 'finished': {
+      // spec 4.4: Delayed has only Contact support, Payout account missing only Set up payouts: no add_task there
+      const s = b.confirmBy && b.confirmBy > now ? waiting() : payoutStage()
+      return s.key === 'delayed' || s.key === 'payout_account_missing' ? s : plus(s, task)
+    }
     case 'stopped':
       if (!b.confirmBy) return plus(problem, customer ? [...(b.stopStatedAt ? ['answer_stop' as const] : []), 'report_problem'] : [...(b.stopStatedAt ? [] : ['state_stop_amount' as const]), 'report_problem'])
       return b.confirmBy > now ? waiting() : payoutStage()

@@ -105,6 +105,8 @@ export const RequestSchema = z.object({
   otherParty: z.string().optional(),
   bookingIds: z.array(z.string()).optional(),
   currentBookingId: z.string().nullish(),
+  /** On GET /requests/:id of a root job only: its additional tasks (each a request of its own, oldest first) with their state. */
+  tasks: z.array(z.object({ id: z.string(), jobState: JobStateSchema.optional() })).optional(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
@@ -186,6 +188,8 @@ export const QuoteListItemSchema = z.object({
 })
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })
+/** GET /quotes: `requestId` keeps only that request's quote documents (the job page); left out, all of the caller's. */
+export const QuotesQuerySchema = z.object({ requestId: z.string().uuid().optional() })
 export const QuotePdfSchema = z.object({ url: z.string() })
 
 /** A date and time one side entered for an awaiting-time booking, for the other side to confirm (until answerBy). */

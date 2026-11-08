@@ -21,7 +21,7 @@ import { noShowObjectBy } from './ending-rules'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
 import { taskNumber } from './job-ref'
-import { rootJobs, rootRequestId, rootsOf, taskPositions } from './job-lookup'
+import { rootJobs, rootRequestId, rootsOf, taskPositions, taskRequestsOf } from './job-lookup'
 import { jobStates, toJobStateDto, type JobStateItem, type JobStateOf } from './job-state-lookup'
 import { jobsForNotices } from './notice-job'
 
@@ -307,10 +307,13 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   const row = await ownRequest(tx, userId, id)
   const base = toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))
   // one lookup gives the state, the chat (an additional task talks in its booking's thread), this request's bookings (oldest first) and the current one
-  const states = await jobStates(tx, userId, [requestItem(base, userId)], now)
+  // a root job's additional tasks (spec 4.3: a section of the job page, each linking to its own request page), in the same lookup
+  const tasks = row.parentBookingId ? [] : (await taskRequestsOf(tx, [row.id])).map((t) => toRequest(t.r, now))
+  const states = await jobStates(tx, userId, [base, ...tasks].map((r) => requestItem(r, userId)), now)
   const s = states.get(row.id)!
   const otherParty = (await jobsForNotices(tx, userId, [{ requestId: row.id }]))[0]?.otherParty
-  const job = { bookingIds: s.bookingIds, currentBookingId: s.currentBookingId, ...(otherParty !== undefined && { otherParty }) }
+  const taskItems = tasks.map((t) => { const ts = states.get(t.id); return { id: t.id, ...(ts && { jobState: toJobStateDto(ts) }) } })
+  const job = { bookingIds: s.bookingIds, currentBookingId: s.currentBookingId, ...(otherParty !== undefined && { otherParty }), ...(!row.parentBookingId && { tasks: taskItems }) }
   const dto = { ...(await withRequestRefs(tx, [base], userId, states))[0]!, threadId: s.threadId, ...job }
   return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }

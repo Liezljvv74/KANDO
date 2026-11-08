@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { and, inArray } from 'drizzle-orm'
 import { db, pool, requests } from '@kando/db'
 import { JobsPageSchema, LIST_PAGE, RequestSchema, type JobsPage } from '@kando/contract'
@@ -8,6 +9,8 @@ import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits,
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const jobs = await import('../app/app-api/v1/jobs/route')
 const requestsRoute = await import('../app/app-api/v1/requests/route')
+const requestRoute = await import('../app/app-api/v1/requests/[id]/route')
+const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 
 const U = { owner: 'jb-owner', owner2: 'jb-owner2', stranger: 'jb-stranger', c1: 'jb-c1', c2: 'jb-c2', c3: 'jb-c3', c4: 'jb-c4', c5: 'jb-c5', c6: 'jb-c6' }
 const DAY = 86_400_000
@@ -202,6 +205,81 @@ it('a person who is both sides gets separate counts per role', async () => {
   expect(asProvider.counts).toMatchObject({ needsYou: 2, unread: 1 }) // c2's request to answer, c3's job with the unread message (the customers' own notices are not the owner's)
   expect(asProvider.items.every((i) => i.jobState.countsForMe)).toBe(true)
   expect((await list(U.owner)).counts).toEqual({ needsYou: 1, unread: 0, past: 0 }) // the customer side is untouched
+})
+
+it('an additional task is part of its job: it leads the row while it needs someone, keeps the job out of Past, and is listed on the job page for the parties only', async () => {
+  const { pid, sid } = await ownProviderFor('jb-towner', 'Task Owner')
+  await seedUser('jb-t1', null, 'Tara Task')
+  const root = await seedJob({ customer: 'jb-t1', pid, sid, status: 'booked', bookings: [{ status: 'completed', released: true }] }) // paid out: past
+  const rootBooking = (await pool.query('SELECT id FROM bookings WHERE request_id = $1', [root])).rows[0].id
+  const task = (
+    await pool.query(
+      `INSERT INTO requests (customer_id, provider_id, service_id, category_id, parent_booking_id, description, status, answer_by)
+       VALUES ($1, $2, $3, (SELECT category_id FROM services WHERE id = $3), $4, 'Noch das Tor', 'open', now() + interval '72 hours') RETURNING id`,
+      ['jb-t1', pid, sid, rootBooking],
+    )
+  ).rows[0].id as string
+  const where = async (uid: string, role: string) => {
+    for (const section of ['needs_you', 'active', 'past']) {
+      const p = await list(uid, { role, section })
+      const row = p.items.find((i) => i.id === root)
+      if (row) return { section, key: row.jobState.key, counts: p.counts, rows: p.items.filter((i) => i.id === root).length }
+    }
+    return null
+  }
+
+  // the task's new request needs the provider: the job is under Needs you once, counted once, not in Past
+  expect(await where('jb-towner', 'provider')).toEqual({ section: 'needs_you', key: 'request_sent', counts: { needsYou: 1, unread: 0, past: 0 }, rows: 1 })
+  expect(ids(await list('jb-towner', { role: 'provider', section: 'past' }))).toEqual([])
+  expect(await where('jb-t1', 'customer')).toMatchObject({ section: 'active', key: 'request_sent', counts: { past: 0 } })
+
+  // quoted and accepted, awaiting payment: the customer must pay (Needs you); the provider waits (Active); still not Past
+  const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 40, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [task, pid])).rows[0].id
+  await pool.query("UPDATE requests SET status = 'booked' WHERE id = $1", [task])
+  const taskBooking = (
+    await pool.query(
+      `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, parent_booking_id, source, status, start_at, duration_min, pay_by, accepted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'quote', 'awaiting-payment', now() - interval '3 days', 60, now() + interval '24 hours', now()) RETURNING id`,
+      ['jb-t1', pid, sid, quote, task, rootBooking],
+    )
+  ).rows[0].id
+  expect(await where('jb-t1', 'customer')).toMatchObject({ section: 'needs_you', key: 'payment_due', counts: { needsYou: 1, past: 0 }, rows: 1 })
+  expect(await where('jb-towner', 'provider')).toMatchObject({ section: 'active', key: 'payment_due', counts: { needsYou: 0, past: 0 } })
+
+  // the job page lists the task (with its own state) to both parties; the task's own page has no task list; a stranger gets 404
+  const page = (uid: string, id: string) => call(requestRoute.GET, uid, 'GET', undefined, { id })
+  for (const uid of ['jb-t1', 'jb-towner']) {
+    const r = RequestSchema.parse(await (await page(uid, root)).json())
+    expect(r.tasks).toEqual([{ id: task, jobState: expect.objectContaining({ key: 'payment_due' }) }])
+    expect(r.bookingIds).toEqual([rootBooking]) // the task's booking is on the task's page
+    expect(RequestSchema.parse(await (await page(uid, task)).json()).tasks).toBeUndefined()
+  }
+  expect((await page(U.stranger, root)).status).toBe(404)
+
+  // the task cancelled: nothing live is left, the job is Past again (the SQL rule, no drift)
+  await pool.query("UPDATE bookings SET status = 'cancelled' WHERE id = $1", [taskBooking])
+  expect(await where('jb-t1', 'customer')).toMatchObject({ section: 'past', key: 'completed', counts: { needsYou: 0, past: 1 } })
+  expect(await where('jb-towner', 'provider')).toMatchObject({ section: 'past', key: 'completed', counts: { needsYou: 0, past: 1 } })
+})
+
+it('reading the chat clears its message notices on the server, also those beyond the newest 20 that /me lists', async () => {
+  const { pid, sid } = await ownProviderFor('jb-mowner', 'Chat Owner')
+  await seedUser('jb-m1', null, 'Mia Chat')
+  const job = await seedJob({ customer: 'jb-m1', pid, sid, status: 'open' })
+  const thread = (await pool.query('INSERT INTO threads (request_id, customer_id, provider_id) VALUES ($1, $2, $3) RETURNING id', [job, 'jb-m1', pid])).rows[0].id
+  await pool.query("INSERT INTO notifications (user_id, kind, payload, created_at) SELECT 'jb-m1', 'message-received', $1, now() - (i || ' minutes')::interval FROM generate_series(1, 25) AS i", [JSON.stringify({ threadId: thread })])
+  await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ('jb-m1', 'message-received', $1)", [JSON.stringify({ threadId: randomUUID() })]) // another chat's: untouched
+  const unseen = async () => (await pool.query("SELECT payload->>'threadId' AS t FROM notifications WHERE user_id = 'jb-m1' AND seen_at IS NULL")).rows.map((r: { t: string }) => r.t)
+  expect((await list('jb-m1', { section: 'needs_you' })).items.find((i) => i.id === job)?.unread).toBe(1)
+  // a stranger's read is a 404 and changes nothing
+  expect((await call(messagesRoute.GET, U.stranger, 'GET', undefined, { id: thread })).status).toBe(404)
+  expect(await unseen()).toHaveLength(26)
+  expect((await call(messagesRoute.GET, 'jb-m1', 'GET', undefined, { id: thread })).status).toBe(200)
+  expect(await unseen()).toHaveLength(1)
+  expect(await unseen()).not.toContain(thread)
+  const after = await list('jb-m1', { section: 'active' })
+  expect(after.items.find((i) => i.id === job)?.unread).toBe(0)
+  expect(after.counts.unread).toBe(0)
 })
 
 it('RLS: another user\'s jobs never appear', async () => {

@@ -17,6 +17,7 @@ import { t, useLang, type Key } from '@/i18n'
 import { font } from '@/theme'
 import { requestStateCtx, stateText } from '@/lib/job-state-text'
 import { formatWhen } from '@/lib/booking-time'
+import { go } from '@/lib/go'
 import { confirmDanger } from '@/lib/confirm'
 import { placeText } from '@/lib/place'
 import { OpenChat } from '@/screens/chat/open-chat'
@@ -39,10 +40,9 @@ export default function RequestDetail() {
   const { id, booking: focus } = useLocalSearchParams<{ id: string; booking?: string }>()
   const me = useMe()
   const fetch = useCallback(async () => {
-    // ponytail: the caller's whole quote-document list, filtered here; add a requestId filter to GET /quotes if the list grows large
-    const [request, quotes, docs] = await Promise.all([getRequest(id), listQuotes(id), listQuoteDocuments().catch(() => [])])
+    const [request, quotes, docs] = await Promise.all([getRequest(id), listQuotes(id), listQuoteDocuments(id).catch(() => [])])
     const views = await Promise.all((request.bookingIds ?? []).map((b) => getBooking(b)))
-    return { request, quotes, views, docOf: new Map(docs.filter((d) => d.requestId === id).map((d) => [d.quoteId, d.id])) }
+    return { request, quotes, views, docOf: new Map(docs.map((d) => [d.quoteId, d.id])) }
   }, [id])
   const { data, error, retry } = useLoad(fetch)
   const pdf = usePdf()
@@ -151,6 +151,11 @@ export default function RequestDetail() {
         <View key={v.booking.id} onLayout={(e) => onLayoutOf(v.booking.id)(e.nativeEvent.layout.y)} style={styles.section}>
           <BookingSection view={v} showTitle={v.booking.id !== b?.id} />
         </View>
+      ))}
+      {!!request.tasks?.length && <SectionTitle text={t('job.section.tasks')} />}
+      {request.tasks?.map((task, n) => (
+        // spec 4.3: each additional task is part of the job; its own page has its quote, payment and buttons
+        <LinkText key={task.id} label={t('job.taskLink', { n: n + 1, status: stateText(task.jobState, viewer)?.title ?? t('booking.additionalTask') })} onPress={() => go(`/bookings/request/${task.id}`)} />
       ))}
     </FormScreen>
   )

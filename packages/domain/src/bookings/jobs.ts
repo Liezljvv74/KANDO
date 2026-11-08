@@ -1,12 +1,12 @@
 import { and, desc, eq, inArray, isNull, not, notInArray, or, sql } from 'drizzle-orm'
-import { db, notifications, requests, staffFlags, threads, type Tx } from '@kando/db'
+import { bookings, db, notifications, requests, staffFlags, threads, type Tx } from '@kando/db'
 import { LIST_PAGE, type JobRow, type JobsPage } from '@kando/contract'
 import { isUuid, NO_ID } from '../admin/common'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { ownProvider } from '../providers/profile'
-import { rootsOf } from './job-lookup'
+import { rootsOf, taskRequestsOf } from './job-lookup'
 import { taskNumber } from './job-ref'
-import type { JobSection } from './job-state'
+import { leadState, type JobSection } from './job-state'
 import { jobStates, MONEY_FLAGS, toJobStateDto } from './job-state-lookup'
 import { jobsForNotices } from './notice-job'
 import { lapsedRoots, toRequest } from './requests'
@@ -54,9 +54,12 @@ export const settled = (now: Date) => {
 
 /**
  * Root request ids that must be derived in code even if `settled` says past: the caller's unread message notices (one lookup:
- * notice > thread > root request) and bookings with an open money flag (a failed refund reads "delayed", Active). Supersets are fine.
+ * notice > thread > root request), bookings with an open money flag (a failed refund reads "delayed", Active) and jobs with a live
+ * additional task (its state may lead the row, leadState). Supersets are fine.
  */
-async function alwaysDerived(tx: Tx, userId: string): Promise<string[]> {
+async function alwaysDerived(tx: Tx, userId: string, now: Date): Promise<string[]> {
+  // a job whose additional task is still live (the task request itself not settled, by the same rule): the task's state may lead
+  const liveTasks = await tx.select({ root: bookings.requestId }).from(requests).innerJoin(bookings, eq(bookings.id, requests.parentBookingId)).where(not(settled(now)))
   const notes = await tx
     .select({ t: sql<string>`${notifications.payload}->>'threadId'` })
     .from(notifications)
@@ -69,7 +72,7 @@ async function alwaysDerived(tx: Tx, userId: string): Promise<string[]> {
   // the flags table is staff-only: read on the owner pool, only ids, then narrowed to the caller's own bookings by rootsOf on `tx`
   const flagged = (await db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), isNull(staffFlags.resolvedAt)))).flatMap((f) => (isUuid(f.ref) ? [f.ref] : []))
   const roots = await rootsOf(tx, [...ths.flatMap((t) => t.bookingId ?? []), ...reqs.flatMap((r) => r.parent ?? []), ...flagged])
-  return [...new Set([...reqs.filter((r) => !r.parent).map((r) => r.id), ...[...roots.values()].flatMap((r) => r.requestId ?? [])])]
+  return [...new Set([...reqs.filter((r) => !r.parent).map((r) => r.id), ...[...roots.values()].flatMap((r) => r.requestId ?? []), ...liveTasks.flatMap((t) => t.root ?? [])])]
 }
 
 /** The list rows of the given root requests, as `role` sees them (state, number, title, other party, date, unread). */
@@ -78,13 +81,15 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
   if (!found.length) return out
   const ids = found.map((f) => f.id)
   const lapsed = await lapsedRoots(tx, ids, now)
-  const dtos = found.map((f) => toRequest(f.r, now, lapsed.get(f.id)))
-  const states = await jobStates(tx, userId, dtos.map((r) => ({ key: r.id, viewer: role, providerId: r.providerId, requestId: r.id, parentBookingId: null, request: { status: r.status, answerBy: new Date(r.answerBy) } })), now)
+  const tasks = await taskRequestsOf(tx, ids)
+  const dtos = [...found.map((f) => toRequest(f.r, now, lapsed.get(f.id))), ...tasks.map((t) => toRequest(t.r, now))]
+  const states = await jobStates(tx, userId, dtos.map((r) => ({ key: r.id, viewer: role, providerId: r.providerId, requestId: r.id, parentBookingId: r.parentBookingId, request: { status: r.status, answerBy: new Date(r.answerBy) } })), now)
   const refs = await jobsForNotices(tx, userId, ids.map((requestId) => ({ requestId })))
   found.forEach(({ r, ts }, i) => {
-    const s = states.get(r.id)
+    const root = states.get(r.id)
     const j = refs[i]
-    if (!s || !j) return
+    if (!root || !j) return
+    const s = leadState(root, tasks.flatMap((t) => (t.root === r.id ? states.get(t.r.id) ?? [] : [])))
     out.set(r.id, { id: r.id, number: j.number, title: j.title, otherParty: j.otherParty, date: new Date(ts).toISOString(), jobState: toJobStateDto(s), unread: s.unread ? 1 : 0 })
   })
   return out
@@ -99,7 +104,7 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
 export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = new Date()): Promise<JobsPage> {
   const mine = q.role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   const jobsOf = and(mine, isNull(requests.parentBookingId)) // an additional task is part of its job, not a row
-  const derived = await alwaysDerived(tx, userId)
+  const derived = await alwaysDerived(tx, userId, now)
   const open = await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
   const openRows = await rowsOf(tx, userId, q.role, open, now)
   const openList = open.flatMap((f) => openRows.get(f.id) ?? [])
