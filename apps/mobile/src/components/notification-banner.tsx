@@ -31,9 +31,9 @@ export function NotificationBanner({ notification, canShare, onDismiss, here }: 
   )
 }
 
-/** The newest few open messages with "+N more" for the rest; shared by the setup, account, home and bookings pages (`only` narrows the list; `here` is the page's own path, never offered as Open). */
-export function NotificationBanners({ me, canShare = false, only, here }: { me: Me | null; canShare?: boolean; only?: (n: Notification) => boolean; here?: string }) {
-  const { shown, more } = splitBanners(only ? (me?.notifications ?? []).filter(only) : (me?.notifications ?? []))
+/** The newest few open messages with "+N more" for the rest; used by the setup page (`here` is the page's own path, never offered as Open). */
+export function NotificationBanners({ me, canShare = false, here }: { me: Me | null; canShare?: boolean; here?: string }) {
+  const { shown, more } = splitBanners(me?.notifications ?? [])
   return (
     <>
       {shown.map((n) => <NotificationBanner key={n.id} notification={n} canShare={canShare} here={here} onDismiss={() => dismissNotification(n.id).catch(() => {})} />)}

@@ -9,7 +9,6 @@ import { photosApi } from '@/api/my-profile'
 import { Button, ErrorText } from '@/components/auth-ui'
 import { Card } from '@/components/form-ui'
 import { LanguageSwitch } from '@/components/language-switch'
-import { NotificationBanners } from '@/components/notification-banner'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
@@ -72,7 +71,7 @@ const splitHeadline = (s: string): [string, string] => {
   return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
 }
 
-/** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in it adds the notifications and the picture prompt. */
+/** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in it adds the picture prompt. */
 export default function HomeScreen() {
   useLang()
   const me = useMe()
@@ -132,7 +131,6 @@ export default function HomeScreen() {
           </Text>
           <Stamp label={t('home.stamp')} />
         </View>
-        {signedIn && <NotificationBanners me={me} />}
         {signedIn && <PictureNudge />}
         {choices.map(({ title, text, onPress, main }, i) => (
           <Rise key={title} index={i}>
