@@ -61,3 +61,19 @@ test('unseenOf keeps only notifications without a seenAt and copes with no list'
   expect(unseenOf([{ seenAt: 'x' }])).toEqual([])
   expect(unseenOf(undefined)).toEqual([])
 })
+
+test('a first load in flight at sign-out is not handed to the next account: ensureMe starts a fresh one', async () => {
+  clearMe()
+  const resolvers: ((m: unknown) => void)[] = []
+  jest.mocked(getMe).mockReset().mockImplementation(() => new Promise((r) => resolvers.push(r)) as never)
+  const old = ensureMe()
+  clearMe()
+  const next = ensureMe()
+  expect(next).not.toBe(old)
+  expect(getMe).toHaveBeenCalledTimes(2)
+  resolvers[0]!({ id: 'old', notifications: [] })
+  resolvers[1]!({ id: 'new', notifications: [] })
+  expect((await next).id).toBe('new')
+  await old
+  expect(currentMe()?.id).toBe('new')
+})

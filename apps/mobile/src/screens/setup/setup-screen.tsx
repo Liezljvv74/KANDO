@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
@@ -15,7 +15,6 @@ import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/correspondence'
 import { canShare, documentRows } from '@/lib/documents'
-import { createStaleGuard } from '@/lib/stale-guard'
 import { InvoicesCard } from '../invoices/invoices-card'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
@@ -44,16 +43,13 @@ export default function SetupScreen() {
     ),
   )
 
-  // Every load and every save stamps itself; an answer older than one already applied never replaces the held profile.
-  const stamp = useRef(createStaleGuard()).current
   const loadAll = useCallback(async () => {
-    const fresh = stamp()
     const profile = (await getMyProfile()) ?? (await ensureDraft())
     const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
     // Opening the page marks the notifications seen; a /me failure must not hold the page back.
     loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
-    return { profile, services, references, photos, verifications, fresh }
-  }, [stamp])
+    return { profile, services, references, photos, verifications }
+  }, [])
   const { done, data, error, retry, update } = useLoad(loadAll)
   // An invoicing save or a checklist step answers with the profile: it replaces the held one, the lists are not reloaded.
   const onSaved = useCallback((profile: MyProfile) => update((d) => ({ ...d, profile })), [update])
@@ -68,7 +64,7 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
-      <PublishBar profile={profile} services={services} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
+      <PublishBar profile={profile} services={services} docRows={docRows} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
       <NotificationBanners me={me} canShare={canShare(services)} here="/my-profile" />
       <Card>
         <View style={styles.row}>

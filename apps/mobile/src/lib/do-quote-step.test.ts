@@ -4,13 +4,14 @@ const mockSave = jest.fn()
 const mockLists = jest.fn()
 const mockLoadMe = jest.fn()
 const mockNote = jest.fn()
+let mockGeneration = 0
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({})) }))
 jest.mock('@/api/payments', () => ({ payoutStatus: (...a: unknown[]) => mockStatus(...a), startPayoutSetup: (...a: unknown[]) => mockSetup(...a) }))
 jest.mock('@/api/my-profile', () => {
   const list = (...a: unknown[]) => mockLists(...a)
   return { saveMyProfile: (...a: unknown[]) => mockSave(...a), getMyProfile: list, servicesApi: { list }, referencesApi: { list }, photosApi: { list }, documentsApi: { list } }
 })
-jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...a), noteQuoteSteps: (...a: unknown[]) => mockNote(...a) }))
+jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...a), noteQuoteSteps: (...a: unknown[]) => mockNote(...a), signOutGeneration: () => mockGeneration }))
 jest.mock('@/lib/go', () => ({ go: jest.fn() }))
 
 import { doQuoteStep, payoutOpened } from './do-quote-step'
@@ -52,4 +53,12 @@ test('a link that is not https is never opened', async () => {
   mockSetup.mockResolvedValue({ url: 'http://evil.test' })
   await expect(doQuoteStep('payout')).rejects.toThrow('bad link')
   expect(mockStatus).not.toHaveBeenCalled()
+})
+
+test('a sign-out forgets that the Stripe page was opened (the next account starts fresh)', async () => {
+  mockStatus.mockResolvedValue({ ready: false })
+  await doQuoteStep('payout')
+  expect(payoutOpened()).toBe(true)
+  mockGeneration++ // clearMe at sign-out
+  expect(payoutOpened()).toBe(false)
 })

@@ -47,6 +47,7 @@ setOnTermsRequired(() => {
 export function clearMe() {
   generation++
   aside = false
+  firstLoad = null // a load still on its way belongs to the old account: the next ensureMe starts a fresh one
   clearPending()
   set(null)
 }
@@ -73,7 +74,11 @@ let firstLoad: Promise<Me> | null = null
 /** Loads `/me` unless it is held or already on its way: any number of screens mounting together make one request. */
 export function ensureMe() {
   if (me) return Promise.resolve(me)
-  return (firstLoad ??= loadMe().finally(() => (firstLoad = null)))
+  if (firstLoad) return firstLoad
+  const p: Promise<Me> = loadMe().finally(() => {
+    if (firstLoad === p) firstLoad = null // a sign-out may have started a newer one meanwhile
+  })
+  return (firstLoad = p)
 }
 
 /** A save answered with the provider's profile: its fresh quote steps replace the held ones without a request. */

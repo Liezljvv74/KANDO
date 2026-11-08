@@ -4,13 +4,13 @@ import type { MyProfile } from '@kando/contract'
 
 import { saveMyProfile } from '@/api/my-profile'
 import { payoutStatus, startPayoutSetup } from '@/api/payments'
-import { loadMe, noteQuoteSteps } from '@/hooks/use-me'
+import { loadMe, noteQuoteSteps, signOutGeneration } from '@/hooks/use-me'
 import { go } from '@/lib/go'
 import { isHttps } from '@/lib/safe-url'
 
-let opened = false
+let openedIn: number | null = null // the sign-out generation it was opened in: a sign-out resets it
 /** Whether this person opened the Stripe page in this app session (from the payout card or a checklist row): the payout card then says "waiting". */
-export const payoutOpened = () => opened
+export const payoutOpened = () => openedIn === signOutGeneration()
 
 /**
  * The one Stripe round trip: opens the set-up page, then on return asks the payout status once (so `payouts_ready_at` is fresh
@@ -20,7 +20,7 @@ export const payoutOpened = () => opened
 export async function openPayoutSetup() {
   const { url } = await startPayoutSetup()
   if (!isHttps(url)) throw new Error('bad link')
-  opened = true
+  openedIn = signOutGeneration()
   await WebBrowser.openBrowserAsync(url)
   const status = await payoutStatus().catch(() => null)
   if (status?.ready) await loadMe().catch(() => {})
