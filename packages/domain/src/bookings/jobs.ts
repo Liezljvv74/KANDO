@@ -5,6 +5,7 @@ import { isUuid, NO_ID } from '../admin/common'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { ownProvider } from '../providers/profile'
 import { rootsOf, taskRequestsOf } from './job-lookup'
+import { REVIEW_VISIBLE_DAYS } from './ending-rules'
 import { taskNumber } from './job-ref'
 import { leadState, type JobSection } from './job-state'
 import { jobStates, MONEY_FLAGS, toJobStateDto } from './job-state-lookup'
@@ -35,7 +36,7 @@ const afterCursor = (cursor?: string) => (x: { ts: string; id: string }) => {
 
 /**
  * A job whose state is settled for good, decided in SQL so the Past section pages in the database (spec 4.2, plan 6b(a)). It
- * mirrors deriveJobState's past outcomes from the stored columns: no booking of the request is live (every one dead, or completed
+ * mirrors deriveJobState's past outcomes (a completed root job the customer has not rated within REVIEW_VISIBLE_DAYS is not settled: Needs you for the customer; unsettled for the provider too, a superset the code then derives to past) from the stored columns: no booking of the request is live (every one dead, or completed
  * with the money released), and the request ran out (expired, withdrawn, declined; open past its answer date; quoted with every
  * sent quote expired) or its newest booking is completed, cancelled or refunded. It is a SUBSET of the past: what it misses is in
  * the open set below, derived in code, and merged into the Past page. Money flags and unread messages (read elsewhere) are taken
@@ -44,7 +45,8 @@ const afterCursor = (cursor?: string) => (x: { ts: string; id: string }) => {
 export const settled = (now: Date) => {
   const at = now.toISOString()
   // one bracket and COALESCE: NOT(...) must negate all of it, and a NULL (no booking) must read false, never drop the row from both lists
-  return sql`COALESCE(NOT EXISTS (SELECT 1 FROM bookings b WHERE b.request_id = ${requests.id} AND (b.status NOT IN ('expired', 'declined', 'withdrawn', 'cancelled', 'refunded', 'completed') OR (b.status = 'completed' AND b.released_at IS NULL)))
+  return sql`COALESCE(NOT EXISTS (SELECT 1 FROM bookings b WHERE b.request_id = ${requests.id} AND (b.status NOT IN ('expired', 'declined', 'withdrawn', 'cancelled', 'refunded', 'completed') OR (b.status = 'completed' AND b.released_at IS NULL)
+      OR (b.status = 'completed' AND b.parent_booking_id IS NULL AND b.completed_at + make_interval(days => ${REVIEW_VISIBLE_DAYS}) > ${at}::timestamptz AND NOT EXISTS (SELECT 1 FROM reviews rv WHERE rv.booking_id = b.id AND rv.author_role = 'customer'))))
     AND (${requests.status} IN ('expired', 'withdrawn', 'declined')
       OR (${requests.status} = 'open' AND ${requests.answerBy} <= ${at}::timestamptz)
       OR (${requests.status} = 'quoted' AND EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ${requests.id} AND q.status = 'sent')

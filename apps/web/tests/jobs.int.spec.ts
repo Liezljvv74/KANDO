@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
-import { and, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db, pool, requests } from '@kando/db'
 import { JobsPageSchema, LIST_PAGE, RequestSchema, type JobsPage } from '@kando/contract'
 import { settled } from '@kando/domain'
@@ -68,7 +68,7 @@ async function ownProviderFor(uid: string, name: string): Promise<{ pid: string;
   return { pid, sid: (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pid])).rows[0].id }
 }
 
-type SeedBooking = { status: string; released?: boolean; minutesLater?: number }
+type SeedBooking = { status: string; released?: boolean; minutesLater?: number; completedDaysAgo?: number }
 /**
  * A job written straight into the tables (fast fixtures): a request with the given stored status, optionally a sent quote and
  * bookings (paid rows where the status needs it; `minutesLater` orders them). `daysAgo` sets the wished time and the bookings' start.
@@ -88,9 +88,9 @@ async function seedJob(o: { customer: string; pid: string; sid: string; status: 
     for (const b of o.bookings) {
       const paid = ['completed', 'cancelled', 'refunded'].includes(b.status)
       await pool.query(
-        `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate, released_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, 'quote', $6, $7, 60, ${paid ? "now(), 'pi_jb_' || gen_random_uuid(), 0.12" : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
-        [o.customer, o.pid, o.sid, quote, id, b.status, start, String(b.minutesLater ?? 0)],
+        `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate, released_at, completed_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'quote', $6, $7, 60, ${paid ? "now(), 'pi_jb_' || gen_random_uuid(), 0.12" : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, ${b.completedDaysAgo != null ? "now() - ($9 || ' days')::interval" : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
+        [o.customer, o.pid, o.sid, quote, id, b.status, start, String(b.minutesLater ?? 0), ...(b.completedDaysAgo != null ? [String(b.completedDaysAgo)] : [])],
       )
     }
   }
@@ -401,4 +401,43 @@ it('Past and a search walk across pages: latest job date first, no duplicates, n
     expect(items.find((i) => i.id === fromOpen)?.jobState.key).toBe('completed')
     expect(last.counts.past).toBe(all.length)
   }
+})
+
+it('a completed job the customer has not rated stays under Needs you until the review is written or the 7 days pass; the provider sees it in Past at once', async () => {
+  const { pid, sid } = await ownProviderFor('jb-rowner', 'Rating Owner')
+  await seedUser('jb-r1', null, 'Rita Rating')
+  const id = await seedJob({ customer: 'jb-r1', pid, sid, status: 'booked', bookings: [{ status: 'completed', released: true, completedDaysAgo: 1 }] })
+  const bookingId = (await pool.query('SELECT id FROM bookings WHERE request_id = $1', [id])).rows[0].id as string
+  const settledNow = async () => (await db.select({ id: requests.id }).from(requests).where(and(eq(requests.id, id), settled(new Date())))).length === 1
+  const as = async (uid: string, role?: string) => {
+    const all = await list(uid, role ? { role } : {})
+    const past = await list(uid, { ...(role && { role }), section: 'past' })
+    return { row: [...all.items, ...past.items].find((i) => i.id === id)?.jobState, inPast: ids(past).includes(id), counts: all.counts }
+  }
+
+  // unrated, inside the window: customer needs you (counted), not in Past, not settled; provider: past
+  let c = await as('jb-r1')
+  expect(c.row).toMatchObject({ key: 'completed', section: 'needs_you' })
+  expect(c.inPast).toBe(false)
+  expect(c.counts).toMatchObject({ needsYou: 1, past: 0 })
+  expect(await settledNow()).toBe(false)
+  const p = await as('jb-rowner', 'provider')
+  expect(p.row).toMatchObject({ key: 'completed', section: 'past' })
+  expect(p.inPast).toBe(true)
+
+  // the customer writes the review: Past
+  await pool.query("INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars) VALUES ($1, 'jb-r1', 'jb-rowner', 'customer', 5)", [bookingId])
+  c = await as('jb-r1')
+  expect(c.row).toMatchObject({ key: 'completed', section: 'past' })
+  expect(c.inPast).toBe(true)
+  expect(c.counts).toMatchObject({ needsYou: 0, past: 1 })
+  expect(await settledNow()).toBe(true)
+
+  // no review, but the 7 days are over: Past
+  await pool.query('DELETE FROM reviews WHERE booking_id = $1', [bookingId])
+  await pool.query("UPDATE bookings SET completed_at = now() - interval '8 days' WHERE id = $1", [bookingId])
+  c = await as('jb-r1')
+  expect(c.row).toMatchObject({ section: 'past' })
+  expect(c.inPast).toBe(true)
+  expect(await settledNow()).toBe(true)
 })

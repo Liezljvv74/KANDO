@@ -1,5 +1,6 @@
 import type { JOB_BUTTONS, JOB_STATE_KEYS } from '@kando/contract'
 import { bookingShownStatus } from './rules'
+import { REVIEW_VISIBLE_DAYS } from './ending-rules'
 
 /** Pure rules for the one job state (spec 4.4, section rules 8b point 5). No database: the server feeds it rows, the phone only renders the key. */
 
@@ -37,6 +38,9 @@ export type JobBookingInput = {
   parentBookingId?: string | null
   noShowObjectBy?: Date | null
   stopStatedAt?: Date | null
+  /** completed: when it was completed, and whether the customer already reviewed the provider (the customer's rating window, REVIEW_VISIBLE_DAYS). */
+  completedAt?: Date | null
+  reviewedByCustomer?: boolean
 }
 
 /** A checkout younger than this may still be in the customer's hands: not yet "did not go through" (the old CONFIRMING_MS of the phone). */
@@ -170,6 +174,8 @@ function baseState(i: Parameters<typeof deriveJobState>[0]): Out {
     case 'disputed':
       return i.delayedFlag ? delayed : problem
     case 'completed':
+      // the customer's rating is still open (root job, not reviewed, window not over): the job stays under Needs you; `settled` in jobs.ts mirrors this
+      if (paidOut && customer && !b.parentBookingId && !b.reviewedByCustomer && !!b.completedAt && now.getTime() < b.completedAt.getTime() + REVIEW_VISIBLE_DAYS * 86_400_000) return out('completed', 'needs_you', 'warn', ['review', 'receipt'], { paidOutAt: paidOut })
       return paidOut ? out('completed', 'past', 'ok', ['review', 'receipt'], { paidOutAt: paidOut }) : payoutStage()
     case 'cancelled':
     case 'refunded':
