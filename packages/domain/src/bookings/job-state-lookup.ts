@@ -12,7 +12,7 @@ type Db = Tx | typeof db
 export type JobStateItem = { key: string; viewer: JobViewer; providerId: string; requestId: string | null; bookingId?: string; /** a request item: the booking an additional task adds to (its chat is that booking's) */ parentBookingId?: string | null; request: JobRequestInput }
 
 /** An open money flag of the booking: a failed release, settle or refund (kinds written by attemptMoney and the webhook). The text is never read. */
-const MONEY_FLAGS = ['payment-unprocessed', 'refund-failed']
+export const MONEY_FLAGS = ['payment-unprocessed', 'refund-failed']
 
 /**
  * The derived job state for each item, in a fixed number of queries (no N+1). The request item sees all bookings of its request, a
@@ -21,8 +21,8 @@ const MONEY_FLAGS = ['payment-unprocessed', 'refund-failed']
  * Unread: the viewer has a `message-received` notice for the job's thread that is neither seen nor dismissed (the chat has no
  * read marker of its own; ponytail: the notice is throttled per thread, so it flags "something new", not a count).
  */
-export async function jobStates(x: Db, userId: string, items: JobStateItem[], now = new Date()): Promise<Map<string, JobState>> {
-  const out = new Map<string, JobState>()
+export async function jobStates(x: Db, userId: string, items: JobStateItem[], now = new Date()): Promise<Map<string, JobState & { unread: boolean }>> {
+  const out = new Map<string, JobState & { unread: boolean }>()
   if (!items.length) return out
   const byRequest = [...new Set(items.filter((i) => !i.bookingId && i.requestId).map((i) => i.requestId!))]
   const byId = [...new Set(items.flatMap((i) => i.bookingId ?? []))]
@@ -66,21 +66,22 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
     const mine = rows.filter((r) => (i.bookingId ? r.id === i.bookingId : r.requestId === i.requestId))
     const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })() }))
     const current = currentBookingOf(inputs)
-    out.set(
-      i.key,
-      deriveJobState({
+    const unread = (!!i.requestId && !i.bookingId && unreadKey(`r:${i.requestId}`)) || mine.some((r) => unreadKey(r.id))
+    out.set(i.key, {
+      unread,
+      ...deriveJobState({
         viewer: i.viewer,
         request: { ...i.request, quoteValidUntil: i.requestId ? validUntil.get(i.requestId) ?? null : null },
         bookings: inputs,
         delayedFlag: !!current && flagged.has(current.id),
         providerPayoutReady: ready.has(i.providerId),
-        unread: (!!i.requestId && !i.bookingId && unreadKey(`r:${i.requestId}`)) || mine.some((r) => unreadKey(r.id)),
+        unread,
         now,
       }),
-    )
+    })
   }
   return out
 }
 
 /** The state as the API sends it (dates as ISO text). */
-export const toJobStateDto = ({ paidOutAt, startAt, ...s }: JobState): JobStateDto => ({ ...s, ...(paidOutAt && { paidOutAt: paidOutAt.toISOString() }), ...(startAt && { startAt: startAt.toISOString() }) })
+export const toJobStateDto = ({ paidOutAt, startAt, unread: _unread, ...s }: JobState & { unread?: boolean }): JobStateDto => ({ ...s, ...(paidOutAt && { paidOutAt: paidOutAt.toISOString() }), ...(startAt && { startAt: startAt.toISOString() }) })

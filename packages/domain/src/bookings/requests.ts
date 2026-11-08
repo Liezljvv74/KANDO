@@ -84,7 +84,7 @@ type Lapse = { quoteId: string | null; reason: LapseReason; open: boolean }
  * the job reads open again (no write). One query for all the requests; only the latest root booking of a request counts, so a job
  * booked again after a lapse is not lapsed.
  */
-async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, Lapse>> {
+export async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, Lapse>> {
   const out = new Map<string, Lapse>()
   if (!requestIds.length) return out
   const roots = await tx
