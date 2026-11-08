@@ -6,6 +6,7 @@ import type { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import type { JobStateDto } from '@kando/contract'
 
 import { acceptQuote, confirmQuote, declineRequest, getBooking, getRequest, listQuotes, withdrawRequest } from '@/api/bookings'
+import { listQuoteDocuments, quotePdf } from '@/api/quotes'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Card, FormScreen, SectionTitle } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -24,6 +25,7 @@ import { JobHeader } from '@/screens/bookings/job-header'
 import { LapsedAsk } from '@/screens/bookings/lapse-banner'
 import { QuoteCard } from '@/screens/bookings/quote-card'
 import { SendQuoteForm } from '@/screens/bookings/send-quote-form'
+import { usePdf } from '@/screens/invoices/invoice-list'
 
 /** The states a request has before (or again without) a live booking: their buttons act on the request, not on a booking. */
 const REQUEST_KEYS: readonly string[] = ['request_sent', 'quote_sent', 'declined_expired']
@@ -37,11 +39,13 @@ export default function RequestDetail() {
   const { id, booking: focus } = useLocalSearchParams<{ id: string; booking?: string }>()
   const me = useMe()
   const fetch = useCallback(async () => {
-    const [request, quotes] = await Promise.all([getRequest(id), listQuotes(id)])
+    // ponytail: the caller's whole quote-document list, filtered here; add a requestId filter to GET /quotes if the list grows large
+    const [request, quotes, docs] = await Promise.all([getRequest(id), listQuotes(id), listQuoteDocuments().catch(() => [])])
     const views = await Promise.all((request.bookingIds ?? []).map((b) => getBooking(b)))
-    return { request, quotes, views }
+    return { request, quotes, views, docOf: new Map(docs.filter((d) => d.requestId === id).map((d) => [d.quoteId, d.id])) }
   }, [id])
   const { data, error, retry } = useLoad(fetch)
+  const pdf = usePdf()
   const accepting = useSubmit()
   const closing = useSubmit()
   const [askChat, setAskChat] = useState(false) // the customer's Withdraw on a quote offers the chat first
@@ -59,7 +63,7 @@ export default function RequestDetail() {
         <Loading />
       </FormScreen>
     )
-  const { request, quotes, views } = data
+  const { request, quotes, views, docOf } = data
   const isCustomer = request.customerId === me.id
   const viewer = isCustomer ? 'customer' : 'provider'
   const state = request.jobState
@@ -134,9 +138,11 @@ export default function RequestDetail() {
       </Card>
       <SectionTitle text={t('booking.quotes')} />
       {quotes.length === 0 && <Text style={styles.small}>{t('booking.noQuotes')}</Text>}
-      {quotes.map((q) => (
-        <QuoteCard key={q.id} quote={q} onConfirm={isCustomer && has('accept_quote') ? () => confirm(q.id) : undefined} busy={accepting.busy} />
-      ))}
+      {quotes.map((q) => {
+        const doc = docOf.get(q.id)
+        return <QuoteCard key={q.id} quote={q} onConfirm={isCustomer && has('accept_quote') ? () => confirm(q.id) : undefined} busy={accepting.busy} onPdf={doc ? () => pdf.open(doc, () => quotePdf(doc)) : undefined} />
+      })}
+      <ErrorText text={pdf.problem} />
       {isCustomer && has('accept_quote') && <Info text={t('booking.discussChanges')} />}
       <ErrorText text={accepting.problem} />
       {!isCustomer && has('send_quote') && <SendQuoteForm request={request} onSent={retry} />}
