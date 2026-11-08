@@ -166,6 +166,8 @@ it('a provider without set-up cannot send a quote (409); with set-up they can', 
 it('/me carries the quote steps for a provider only, and they follow the set-up', async () => {
   const p = await provider()
   const steps = async (uid: string) => (await (await call(meRoute.GET, uid)).json()).quoteSteps
+  expect(await steps(p.uid)).toBeUndefined() // a profile without the provider flag (stopped offering): no steps, the read is skipped
+  await pool.query('UPDATE users SET is_provider = true WHERE id = $1', [p.uid])
   expect(await steps(p.uid)).toEqual(['payout'])
   await ready(p.id)
   expect(await steps(p.uid)).toEqual([])

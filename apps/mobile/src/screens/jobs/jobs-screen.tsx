@@ -69,7 +69,7 @@ export default function JobsScreen() {
   // layout refreshing at the same moment joins the same call. Per focus: one call per side plus "Active jobs" (and "Past" if open).
   const fetch = useCallback(async () => {
     const [pages, active] = await Promise.all([jobCounts.load(both ? ['customer', 'provider'] : ['customer']), getJobs(role, { section: 'active' })])
-    // a flight that started before the provider role was known has no provider page: fetch it alone
+    // the load is keyed by the sides asked for, so the role is there; only a role no longer offered (provider, not a provider now) is fetched alone
     return { role, needs: pages[role] ?? (await getJobs(role, { section: 'needs_you' })), active }
   }, [role, both])
   const { data, error, retry } = useLoad(fetch)

@@ -46,3 +46,37 @@ test('callers in the same moment share one fetch per side', async () => {
   await store.load(['customer']) // after the flight lands, a new load fetches again
   expect(fetchSide).toHaveBeenCalledTimes(3)
 })
+
+/** A fetch per side that waits until `land` resolves it. */
+function held() {
+  const waiting: { side: 'customer' | 'provider'; done: (p: ReturnType<typeof page>) => void }[] = []
+  const fetchSide = (side: 'customer' | 'provider') => new Promise<ReturnType<typeof page>>((done) => waiting.push({ side, done }))
+  const land = (needsYou: number) => waiting.splice(0).forEach((w) => w.done(page(needsYou)))
+  return { fetchSide, land }
+}
+
+test('asking for both sides during a customer-only flight gets the provider page too', async () => {
+  const h = held()
+  const store = countsStore(h.fetchSide)
+  const customerOnly = store.load(['customer'])
+  const both = store.load(['customer', 'provider'])
+  h.land(4)
+  expect((await both).provider).toEqual(page(4))
+  expect((await customerOnly).provider).toBeUndefined()
+  expect(store.get()).toEqual({ customer: 4, provider: 4 }) // the newest load wrote, the older one did not reset provider to 0
+})
+
+test('a load that lands after a sign-out writes nothing, and the next load starts fresh', async () => {
+  const h = held()
+  const store = countsStore(h.fetchSide)
+  const old = store.load(['customer', 'provider'])
+  store.clear()
+  h.land(7)
+  await old
+  expect(store.get()).toEqual({ customer: 0, provider: 0 })
+  const next = store.load(['customer', 'provider']) // not the old account's flight
+  expect(next).not.toBe(old)
+  h.land(1)
+  await next
+  expect(store.get()).toEqual({ customer: 1, provider: 1 })
+})

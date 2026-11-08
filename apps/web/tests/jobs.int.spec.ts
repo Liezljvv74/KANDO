@@ -7,10 +7,17 @@ import { settled } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
+// A rule override for the drift test only: while on, a lapsed job (declined_expired, which the settled rule calls past) derives to Needs you.
+const drift = vi.hoisted(() => ({ on: false }))
+vi.mock('../../../packages/domain/src/bookings/job-state', async (real) => {
+  const m = await real<typeof import('../../../packages/domain/src/bookings/job-state')>()
+  return { ...m, leadState: (...a: Parameters<typeof m.leadState>) => { const s = m.leadState(...a); return drift.on && s.key === 'declined_expired' ? { ...s, section: 'needs_you', countsForMe: true } : s } }
+})
 const jobs = await import('../app/app-api/v1/jobs/route')
 const requestsRoute = await import('../app/app-api/v1/requests/route')
 const requestRoute = await import('../app/app-api/v1/requests/[id]/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
+const seenRoute = await import('../app/app-api/v1/threads/[id]/seen/route')
 
 const U = { owner: 'jb-owner', owner2: 'jb-owner2', stranger: 'jb-stranger', c1: 'jb-c1', c2: 'jb-c2', c3: 'jb-c3', c4: 'jb-c4', c5: 'jb-c5', c6: 'jb-c6' }
 const DAY = 86_400_000
@@ -262,7 +269,7 @@ it('an additional task is part of its job: it leads the row while it needs someo
   expect(await where('jb-towner', 'provider')).toMatchObject({ section: 'past', key: 'completed', counts: { needsYou: 0, past: 1 } })
 })
 
-it('reading the chat clears its message notices on the server, also those beyond the newest 20 that /me lists', async () => {
+it('opening the chat (POST seen) clears its message notices on the server, also those beyond the newest 20 that /me lists; the poll (GET) changes nothing', async () => {
   const { pid, sid } = await ownProviderFor('jb-mowner', 'Chat Owner')
   await seedUser('jb-m1', null, 'Mia Chat')
   const job = await seedJob({ customer: 'jb-m1', pid, sid, status: 'open' })
@@ -271,15 +278,41 @@ it('reading the chat clears its message notices on the server, also those beyond
   await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ('jb-m1', 'message-received', $1)", [JSON.stringify({ threadId: randomUUID() })]) // another chat's: untouched
   const unseen = async () => (await pool.query("SELECT payload->>'threadId' AS t FROM notifications WHERE user_id = 'jb-m1' AND seen_at IS NULL")).rows.map((r: { t: string }) => r.t)
   expect((await list('jb-m1', { section: 'needs_you' })).items.find((i) => i.id === job)?.unread).toBe(1)
-  // a stranger's read is a 404 and changes nothing
-  expect((await call(messagesRoute.GET, U.stranger, 'GET', undefined, { id: thread })).status).toBe(404)
-  expect(await unseen()).toHaveLength(26)
+  // a stranger's mark is a 404 and changes nothing; the party's read (the poll) is read-only
+  expect((await call(seenRoute.POST, U.stranger, 'POST', undefined, { id: thread })).status).toBe(404)
   expect((await call(messagesRoute.GET, 'jb-m1', 'GET', undefined, { id: thread })).status).toBe(200)
+  expect(await unseen()).toHaveLength(26)
+  expect((await call(seenRoute.POST, 'jb-m1', 'POST', undefined, { id: thread })).status).toBe(204)
   expect(await unseen()).toHaveLength(1)
   expect(await unseen()).not.toContain(thread)
   const after = await list('jb-m1', { section: 'active' })
   expect(after.items.find((i) => i.id === job)?.unread).toBe(0)
   expect(after.counts.unread).toBe(0)
+})
+
+it('a job the settled rule calls past but the state does not (drift) shows in its own section, and the counters agree', async () => {
+  const { pid, sid } = await ownProviderFor('jb-downer', 'Drift Owner')
+  await seedUser('jb-d1', null, 'Dana Drift')
+  const lapsed = await seedJob({ customer: 'jb-d1', pid, sid, status: 'withdrawn' })
+  const other = await seedJob({ customer: 'jb-d1', pid, sid, status: 'declined', daysAgo: 5 })
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  drift.on = true
+  try {
+    const past = await list('jb-d1', { section: 'past' })
+    expect(past.items).toEqual([]) // the drifted rows are not in Past ...
+    expect(past.counts).toMatchObject({ needsYou: 2, past: 0 }) // ... nor counted there
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('settled rule drifted'))
+    const needs = await list('jb-d1', { section: 'needs_you' }) // ... but where their state says, also on later loads
+    expect(ids(needs).sort()).toEqual([lapsed, other].sort())
+    expect(needs.counts).toMatchObject({ needsYou: 2, past: 0 })
+  } finally {
+    drift.on = false
+    spy.mockRestore()
+  }
+  // the rule back in line: the remembered rows are derived in code and land in Past again
+  const back = await list('jb-d1', { section: 'past' })
+  expect(ids(back).sort()).toEqual([lapsed, other].sort())
+  expect(back.counts).toMatchObject({ needsYou: 0, past: 2 })
 })
 
 it('RLS: another user\'s jobs never appear', async () => {

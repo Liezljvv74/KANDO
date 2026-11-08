@@ -112,8 +112,8 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
 export async function getMe(tx: Tx, userId: string): Promise<Me> {
   const row = (await tx.select().from(users).where(eq(users.id, userId)))[0]!
   const pic = (await tx.select({ key: photos.key }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
-  // only the columns quoteSteps reads
-  const [provider] = await tx.select({ payoutsReadyAt: providers.payoutsReadyAt, invoiceConsentAt: providers.invoiceConsentAt, legalStatus: providers.legalStatus, vatId: providers.vatId, taxNumber: providers.taxNumber }).from(providers).where(eq(providers.ownerId, userId))
+  // a provider only (a customer skips the read); only the columns quoteSteps reads
+  const [provider] = !row.isProvider ? [] : await tx.select({ payoutsReadyAt: providers.payoutsReadyAt, invoiceConsentAt: providers.invoiceConsentAt, legalStatus: providers.legalStatus, vatId: providers.vatId, taxNumber: providers.taxNumber }).from(providers).where(eq(providers.ownerId, userId))
   return toMe(row, pic?.key ?? null, await listNotifications(tx, userId), provider ? quoteSteps(provider) : undefined)
 }
 
