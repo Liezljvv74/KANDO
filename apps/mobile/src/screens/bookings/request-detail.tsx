@@ -110,6 +110,23 @@ export default function RequestDetail() {
     scroll.current?.scrollTo({ y, animated: true })
   }
   const place = placeText(request.onSite, request.address)
+  const common = state && <JobCommonButtons state={state} threadId={request.threadId} job={{ number: request.jobNumber, title: request.title }} />
+  // the customer's request and quote stage: Withdraw (left) and Open chat (right) close the page; every other job keeps them under the status card
+  const atBottom = isCustomer && canClose && !onBooking
+  const closeButtons = (
+    <>
+      <ErrorText text={closing.problem} />
+      {canClose && !askChat && (atBottom ? <Actions><SmallButton label={t('request.withdraw')} onPress={close} busy={closing.busy} danger />{common}</Actions> : <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />)}
+      {canClose && askChat && (
+        <Card>
+          <Text style={styles.text}>{t('booking.talkFirst')}</Text>
+          {!!request.threadId && <OpenChat find={async () => request.threadId ?? null} />}
+          <Button label={t('booking.declineAnyway')} onPress={() => closing.submit(() => withdrawRequest(request.id), retry)} busy={closing.busy} danger />
+          <LinkText label={t('common.cancel')} onPress={() => setAskChat(false)} />
+        </Card>
+      )}
+    </>
+  )
   return (
     <FormScreen title={request.title ?? t('job.fallbackTitle')} scrollRef={scroll}>
       <JobHeader job={headerJob} viewer={viewer} />
@@ -127,21 +144,9 @@ export default function RequestDetail() {
         )}
         {onBooking && current && <BookingStatusLines view={current} />}
       </Card>
-      {(() => {
-        const common = state && <JobCommonButtons state={state} threadId={request.threadId} job={{ number: request.jobNumber, title: request.title }} />
-        return onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} /> : <Actions>{common}</Actions>
-      })()}
+      {onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} /> : !atBottom && <Actions>{common}</Actions>}
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
-      <ErrorText text={closing.problem} />
-      {canClose && !askChat && <Button label={t(isCustomer ? 'request.withdraw' : 'request.decline')} onPress={close} busy={closing.busy} danger />}
-      {canClose && askChat && (
-        <Card>
-          <Text style={styles.text}>{t('booking.talkFirst')}</Text>
-          {!!request.threadId && <OpenChat find={async () => request.threadId ?? null} />}
-          <Button label={t('booking.declineAnyway')} onPress={() => closing.submit(() => withdrawRequest(request.id), retry)} busy={closing.busy} danger />
-          <LinkText label={t('common.cancel')} onPress={() => setAskChat(false)} />
-        </Card>
-      )}
+      {!atBottom && closeButtons}
       <SectionTitle text={t(extra ? 'booking.additionalTaskRequest' : 'job.section.request')} />
       <Card>
         <Text style={styles.text}>{request.description}</Text>
@@ -182,6 +187,7 @@ export default function RequestDetail() {
         // spec 4.3: each additional task is part of the job; its own page has its quote, payment and buttons
         <LinkText key={task.id} label={t('job.taskLink', { n: n + 1, status: stateText(task.jobState, viewer)?.title ?? t('booking.additionalTask') })} onPress={() => go(`/bookings/request/${task.id}`)} />
       ))}
+      {atBottom && closeButtons}
     </FormScreen>
   )
 }
