@@ -63,7 +63,7 @@ test('push links land on a route that exists: invoice-ready on the booking, invo
   const fs = require('fs')
   const path = require('path')
   /* eslint-enable @typescript-eslint/no-require-imports */
-  const app = path.join(process.cwd(), 'src', 'app')
+  const app = path.join(process.cwd(), 'src', 'app', '(tabs)')
   const exists = (route: string) => [`${route}.tsx`, `${route}/index.tsx`].some((f) => fs.existsSync(path.join(app, f)))
   expect(pushRoute('skilled://bookings/0b6e2c1a-root')).toBe('/bookings/0b6e2c1a-root') // invoice-ready sends the root booking
   expect(exists('bookings/[id]')).toBe(true)

@@ -52,12 +52,6 @@ export default function RootLayout() {
         {/* SDK 58 sends a closed guard to "/" by default, which only exists while logged in: logout showed "Unmatched Route". */}
         <Stack.Protected guard={!!user} redirectTo="/welcome">
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="provider/[slug]" />
-          <Stack.Screen name="learn" />
-          <Stack.Screen name="my-profile" />
-          <Stack.Screen name="bookings" />
-          <Stack.Screen name="threads" />
-          <Stack.Screen name="invoices" />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="(auth)" />
