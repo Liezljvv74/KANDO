@@ -1,4 +1,4 @@
-import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE } from '@kando/contract'
+import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, NO_SHOW_OBJECTION_HOURS } from '@kando/contract'
 import { TIME_ZONE } from '@kando/i18n'
 
 export const DISPUTE_DECISION_WORKING_DAYS = 14
@@ -9,6 +9,9 @@ export const CONFIRM_REMINDER_DAYS = [1, 3, 6] as const
 export const ASK_DONE_HOURS = 24
 export const NO_ACTION_STAFF_DAYS = 7
 export const ADDITIONAL_PAY_HOURS = 48
+
+/** Until when the reported side may object to a no-show report (the one rule: cancel, the DTO and the job state). */
+export const noShowObjectBy = (reportedAt: Date | null | undefined): Date | null => (reportedAt ? new Date(reportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR) : null)
 
 const MIN = 60_000
 

@@ -7,7 +7,6 @@ import type {
   BusyTime,
   Dispute,
   FinishInput,
-  Page,
   Quote,
   QuoteInput,
   RequestInput,
@@ -19,10 +18,8 @@ import { api } from '@/api/client'
 const json = (method: string, body?: unknown) => ({ method, body })
 const BASE = '/app-api/v1'
 export type Role = 'customer' | 'provider'
-const list = (path: string, role: Role, cursor?: string) => `${BASE}/${path}?role=${role}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
 
 export const createRequest = (body: RequestInput) => api<BookingRequest>(`${BASE}/requests`, json('POST', body))
-export const listRequests = (role: Role, cursor?: string) => api<Page<BookingRequest>>(list('requests', role, cursor))
 export const getRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${id}`)
 export const withdrawRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${encodeURIComponent(id)}/withdraw`, json('POST'))
 export const declineRequest = (id: string) => api<BookingRequest>(`${BASE}/requests/${encodeURIComponent(id)}/decline`, json('POST'))
@@ -35,7 +32,6 @@ export const confirmQuote = (quoteId: string) => api<Booking>(`${BASE}/quotes/${
 /** An awaiting-time booking: one side enters the date and time, the other confirms it. */
 export const enterAgreedTime = (id: string, body: AgreedTimeInput) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time`, json('POST', body))
 export const confirmAgreedTime = (id: string) => api<Booking>(`${BASE}/bookings/${encodeURIComponent(id)}/time/confirm`, json('POST'))
-export const listBookings = (role: Role, cursor?: string) => api<Page<Booking>>(list('bookings', role, cursor))
 export const getBooking = (id: string) => api<BookingView>(`${BASE}/bookings/${encodeURIComponent(id)}`)
 export const withdrawBooking = (id: string) => api<Booking>(`${BASE}/bookings/${id}/withdraw`, json('POST'))
 export const getBusyTimes = async (slug: string, from: Date, to: Date) =>
@@ -49,6 +45,7 @@ export const confirmJob = (id: string) => api<Booking>(bk(id, '/confirm'), json(
 export const cancelBooking = (id: string) => api<Booking>(bk(id, '/cancel'), json('POST'))
 export const reportNoShow = (id: string) => api<Booking>(bk(id, '/no-show'), json('POST'))
 export const objectNoShow = (id: string, description: string) => api<Booking>(bk(id, '/no-show/object'), json('POST', { description }))
+export const acceptNoShow = (id: string) => api<Booking>(bk(id, '/no-show/accept'), json('POST'))
 export const openDispute = (id: string, description: string) => api<Dispute>(bk(id, '/dispute'), json('POST', { description }))
 export const getDispute = (id: string) => api<Dispute>(bk(id, '/dispute'))
 export const stopJob = (id: string) => api<Booking>(bk(id, '/stop'), json('POST'))

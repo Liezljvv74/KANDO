@@ -1,8 +1,9 @@
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { notifications, type Tx } from '@kando/db'
 import type { Notification } from '@kando/contract'
 import { jobsForNotices } from './bookings/notice-job'
 import { isUuid } from './admin/common'
+import { ownThread } from './chat/threads'
 import type { Exec } from './providers/eligibility'
 
 export type NotificationKind = Notification['kind']
@@ -30,6 +31,15 @@ export async function listNotifications(tx: Tx, userId: string): Promise<Notific
     dismissedAt: r.dismissedAt?.toISOString() ?? null,
     job: jobs[i] ?? null,
   }))
+}
+
+/** Marks the caller's unseen "new message" notices of one chat seen (all of them, not only the newest 20 that /me lists); 404 unless a party. */
+export async function markThreadNoticesSeen(tx: Tx, userId: string, threadId: string): Promise<void> {
+  await ownThread(tx, threadId)
+  await tx
+    .update(notifications)
+    .set({ seenAt: new Date() })
+    .where(and(eq(notifications.userId, userId), eq(notifications.kind, 'message-received'), isNull(notifications.seenAt), sql`${notifications.payload}->>'threadId' = ${threadId}`))
 }
 
 /** Marks one of the caller's messages seen and/or dismissed; false when it is not theirs (RLS hides it). */

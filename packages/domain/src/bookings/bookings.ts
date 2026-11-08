@@ -1,14 +1,12 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
-import { bookings, quoteDocuments, type Tx } from '@kando/db'
-import { LIST_PAGE, type Booking, type BookingView, type Page } from '@kando/contract'
-import { NO_ID } from '../admin/common'
+import { eq } from 'drizzle-orm'
+import { bookings, quoteDocuments, requests, type Tx } from '@kando/db'
+import type { Booking, BookingView } from '@kando/contract'
 import { fail, notFound } from '../providers/http'
-import { ownProvider } from '../providers/profile'
-import { threadIdOf } from '../chat/threads'
-import { olderThan, pageOf, stampOf } from '../paging'
+import { jobStates } from './job-state-lookup'
 import { lockRow, partyOf } from './party'
-import { toBooking, withBookingRefs } from './requests'
+import { bookingItem, toBooking, withBookingRefs, withdrawRequest } from './requests'
 import { canTransition } from './rules'
+import type { AfterCommit } from '../app-request'
 
 type Row = typeof bookings.$inferSelect
 
@@ -18,36 +16,29 @@ export const view = (b: Row, userId: string, now = new Date()): Booking => {
   return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
 }
 
-/**
- * The caller's bookings as customer or as provider owner, a page of root bookings newest first by (created_at, id); each root
- * is followed by its additional tasks (oldest first), so a task is always on its root's page.
- */
-export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string): Promise<Page<Booking>> {
-  const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const found = await tx
-    .select({ b: bookings, ts: stampOf(bookings.createdAt), id: bookings.id })
-    .from(bookings)
-    .where(and(mine, isNull(bookings.parentBookingId), olderThan(bookings.createdAt, bookings.id, cursor)))
-    .orderBy(desc(bookings.createdAt), desc(bookings.id))
-    .limit(LIST_PAGE + 1)
-  const { rows, next } = pageOf(found)
-  const kids = rows.length ? await tx.select().from(bookings).where(and(mine, inArray(bookings.parentBookingId, rows.map((r) => r.id)))).orderBy(asc(bookings.createdAt), asc(bookings.id)) : []
-  return { docs: await withBookingRefs(tx, rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))]), userId), next }
-}
-
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */
 export async function getBooking(tx: Tx, userId: string, id: string): Promise<BookingView> {
   const { role } = await partyOf(tx, userId, id) // 404 for anyone else
   // joined with the quote's document number, so the provider sees exactly which quote was accepted (both parties may read the document)
   const found = (await tx.select({ b: bookings, quoteNumber: quoteDocuments.number }).from(bookings).leftJoin(quoteDocuments, eq(quoteDocuments.quoteId, bookings.quoteId)).where(eq(bookings.id, id)))[0] ?? notFound()
-  return { booking: (await withBookingRefs(tx, [view(found.b, userId)], userId))[0]!, viewer: role as BookingView['viewer'], threadId: await threadIdOf(tx, found.b), quoteNumber: found.quoteNumber }
+  const dto = view(found.b, userId)
+  // one lookup (the row handed in) gives the state and the chat
+  const states = await jobStates(tx, userId, [bookingItem(dto, userId)], undefined, [found.b])
+  return { booking: (await withBookingRefs(tx, [dto], userId, states))[0]!, viewer: role as BookingView['viewer'], threadId: states.get(dto.id)?.threadId ?? null, quoteNumber: found.quoteNumber }
 }
 
 /** "I no longer need this": the customer, from awaiting-time or awaiting-payment. */
-export async function withdrawBooking(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
+export async function withdrawBooking(tx: Tx, userId: string, bookingId: string, now = new Date(), afterCommit: AfterCommit = () => {}): Promise<Booking> {
   if ((await partyOf(tx, userId, bookingId)).role !== 'customer') fail(403, { error: 'wrong-side' })
   const b = await lockRow(tx, bookingId)
   if (!canTransition(b.status as Booking['status'], 'withdrawn')) fail(409, { error: 'not-open' })
   const [row] = await tx.update(bookings).set({ status: 'withdrawn', updatedAt: now }).where(eq(bookings.id, b.id)).returning()
+  // A quote-born root booking: the trigger gave the quote back, so the job closes with it (the customer's "Withdraw request"; the provider is told).
+  // An additional task only ends its own booking.
+  // Only while the request is open again: a quote past its expiry leaves it expired (trigger), and closing that would refuse and undo this withdraw.
+  if (row!.requestId && row!.quoteId && !row!.parentBookingId) {
+    const [req] = await tx.select({ status: requests.status }).from(requests).where(eq(requests.id, row!.requestId))
+    if (req && ['open', 'quoted'].includes(req.status)) await withdrawRequest(tx, userId, row!.requestId, now, afterCommit)
+  }
   return (await withBookingRefs(tx, [view(row!, userId, now)], userId))[0]!
 }

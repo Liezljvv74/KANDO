@@ -97,6 +97,7 @@ it('the customer gets a pay link; the provider and a third user get 404', async 
   expect(args!.successUrl).toMatch(/\/payment-done$/)
   expect(String(args!.successUrl)).not.toContain(b.id) // nothing of the booking in the return address
   expect((await row(b.id)).checkout_ref).toContain('cs_fake_1') // stored on the owner connection (staff-only column)
+  expect(Number.isNaN(Date.parse(JSON.parse((await row(b.id)).checkout_ref).startedAt))).toBe(false) // when the session was made (job state: checkout_not_completed)
 })
 
 it('pay link, paid event, then the booking reads confirmed', async () => {
@@ -361,6 +362,19 @@ it('a payment for a booking deleted with the account is refunded with the ledger
   await pool.query('DELETE FROM bookings WHERE id = $1', [other.id])
   expect((await deliver(paid(other.id, { customerId: U.cust2 }))).status).toBe(200)
   expect((await pool.query("SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = 'payment-late-refunded'", [U.cust2])).rows[0].n).toBe(1)
+})
+
+it('a payment of another environment on the shared Stripe account is ignored: no refund, no ledger rows, no flag', async () => {
+  const foreign = paid(randomUUID(), { customerId: randomUUID(), providerId: randomUUID() }) as Extract<GatewayEvent, { type: 'checkout-paid' }>
+  expect((await deliver(foreign)).status).toBe(200)
+  expect(callsOf('refund')).toEqual([])
+  expect(await ledger(foreign.bookingId)).toEqual([])
+  expect(await flags('payment-unprocessed', foreign.bookingId)).toEqual([])
+  // its dispute and failed refund are not ours either
+  expect((await deliver({ id: `evt_${randomUUID()}`, type: 'charge-disputed', paymentRef: foreign.paymentRef })).status).toBe(200)
+  expect((await deliver({ id: `evt_${randomUUID()}`, type: 'refund-failed', paymentRef: foreign.paymentRef, refundId: 're_x', bookingId: foreign.bookingId })).status).toBe(200)
+  expect(await flags('chargeback', foreign.bookingId)).toEqual([])
+  expect(await flags('refund-failed', foreign.bookingId)).toEqual([])
 })
 
 it('a duplicate payment after confirmation is refunded', async () => {

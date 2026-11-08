@@ -8,7 +8,6 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const startRoute = await import('../app/app-api/v1/bookings/[id]/additional-task/route')
 const quoteRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
-const listRoute = await import('../app/app-api/v1/bookings/route')
 const bookingRoute = await import('../app/app-api/v1/bookings/[id]/route')
 const requestRoute = await import('../app/app-api/v1/requests/[id]/route')
 
@@ -82,11 +81,9 @@ it('an additional task shows the root number, #N-2 and #N-3 (a withdrawn one sti
   await pool.query("UPDATE requests SET status = 'booked' WHERE id = $1", [one.request.id])
   const two = await child(root.id)
   expect(two.booking).toMatchObject({ jobNumber: n, taskNumber: `#${n}-3` })
-  const list = (await (await call(listRoute.GET, U.cust)).json()).docs.map((d: unknown) => BookingSchema.parse(d))
-  const by = (id: string) => list.find((b: { id: string }) => b.id === id)
-  expect(by(root.id)?.taskNumber).toBe(`#${n}`)
-  expect(by(one.booking.id)?.taskNumber).toBe(`#${n}-2`)
-  expect(by(two.booking.id)?.taskNumber).toBe(`#${n}-3`)
+  expect((await getBooking(root.id)).taskNumber).toBe(`#${n}`)
+  expect((await getBooking(one.booking.id)).taskNumber).toBe(`#${n}-2`)
+  expect((await getBooking(two.booking.id)).taskNumber).toBe(`#${n}-3`)
   expect((await getBooking(two.booking.id, U.owner)).taskNumber).toBe(`#${n}-3`) // alone, and as the provider
 })
 
@@ -102,9 +99,24 @@ it('jobsForNotices: an additional task resolves to the root job; the other party
   expect(asCust.slice(0, 3).map((j) => [j?.id, j?.number, j?.title])).toEqual(Array(3).fill([root.requestId, n, 'Jr Owner service'])) // the additional task shows the ROOT job
   expect(asCust[0]!.otherParty).toBe((await pool.query('SELECT public_name FROM providers WHERE id = $1', [providerId])).rows[0].public_name)
   expect(asCust.slice(3)).toEqual([null, null])
+  // the page that shows each ref: the task's own request (for its booking and its request), the root booking's request
+  expect(asCust.slice(0, 3).map((j) => j?.requestId)).toEqual([request.id, request.id, root.requestId])
   const asOwner = await jobsForNotices(db as never, U.owner, refs)
   expect(asOwner[0]!.otherParty).toBe('Clara K.')
   expect(asOwner[2]!.number).toBe(n)
+})
+
+it('GET /requests/:id carries the job page fields: the other party for each side, the bookings oldest first and the current one', async () => {
+  await pool.query("UPDATE users SET first_name = 'Clara', last_name = 'Kunde' WHERE id = $1", [U.cust])
+  const root = await paidJob(U.owner, providerId)
+  const asCust = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: root.requestId! })).json())
+  expect(asCust).toMatchObject({ bookingIds: [root.id], currentBookingId: root.id, otherParty: (await pool.query('SELECT public_name FROM providers WHERE id = $1', [providerId])).rows[0].public_name })
+  const asOwner = RequestSchema.parse(await (await call(requestRoute.GET, U.owner, 'GET', undefined, { id: root.requestId! })).json())
+  expect(asOwner).toMatchObject({ otherParty: 'Clara K.', currentBookingId: root.id })
+  // an older dead booking stays listed; the live one is current
+  const old = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, amount, currency, on_site, created_at) SELECT customer_id, provider_id, service_id, quote_id, request_id, source, 'expired', start_at, duration_min, amount, currency, on_site, created_at - interval '1 day' FROM bookings WHERE id = $1 RETURNING id", [root.id])).rows[0].id
+  const again = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: root.requestId! })).json())
+  expect(again).toMatchObject({ bookingIds: [old, root.id], currentBookingId: root.id })
 })
 
 it('an additional task whose root booking has no request shows no job refs (not its own unused number)', async () => {

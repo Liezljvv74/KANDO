@@ -48,6 +48,26 @@ export const RequestInputSchema = z
   .refine((v) => (v.startAt === undefined) === (v.durationMin === undefined) && (v.startAt === undefined) === (v.onSite === undefined), { message: 'Start, duration and place go together', path: ['startAt'] })
   .refine(onSiteNeedsAddress, { message: 'Address required when on site', path: ['address'] })
 
+/**
+ * The one derived job state (rules in packages/domain bookings/job-state.ts): the server decides, the app renders. The viewer is the caller.
+ * Always sent, optional so an older server still parses; the old payment and status fields stay as they were.
+ */
+export const JOB_STATE_KEYS = ['request_sent', 'quote_sent', 'payment_due', 'checkout_not_completed', 'paid_upcoming', 'before_start_time', 'start_time_passed', 'work_done_waiting', 'payout_on_its_way', 'payout_account_missing', 'problem_reported', 'delayed', 'completed', 'cancelled', 'declined_expired', 'time_to_agree'] as const
+export const JOB_BUTTONS = ['accept_quote', 'ask_question', 'send_quote', 'decline', 'pay', 'cancel', 'finish', 'confirm', 'report_problem', 'contact_support', 'open_chat', 'agree_time', 'set_up_payouts', 'add_task', 'review', 'receipt', 'no_show', 'ask_someone_else', 'withdraw', 'enter_time', 'stop', 'state_stop_amount', 'answer_stop', 'object_no_show', 'accept_no_show'] as const
+export const JobStateSchema = z.object({
+  key: z.enum(JOB_STATE_KEYS),
+  section: z.enum(['needs_you', 'active', 'past']),
+  tone: z.enum(['info', 'ok', 'warn', 'bad']),
+  buttons: z.array(z.enum(JOB_BUTTONS)),
+  /** True when the job adds to the viewer's "Needs you" counter. */
+  countsForMe: z.boolean(),
+  /** completed: when the payout was made. */
+  paidOutAt: IsoSchema.optional(),
+  /** before_start_time: when "Job finished" opens. */
+  startAt: IsoSchema.optional(),
+})
+export type JobStateDto = z.infer<typeof JobStateSchema>
+
 export const RequestSchema = z.object({
   id: z.string(),
   customerId: z.string(),
@@ -80,6 +100,15 @@ export const RequestSchema = z.object({
   customerRating: RatingSchema.nullish(),
   /** On GET /requests/:id only: the request's chat (an additional task's is its booking's). */
   threadId: z.string().nullish(),
+  /** On GET /requests/:id only: 1 when the job's chat has an unread message for the viewer (same rule as the Jobs list). */
+  unread: z.number().int().min(0).optional(),
+  jobState: JobStateSchema.optional(),
+  /** On GET /requests/:id only (the job page): the other party's name, the request's bookings (oldest first) and the current one. */
+  otherParty: z.string().optional(),
+  bookingIds: z.array(z.string()).optional(),
+  currentBookingId: z.string().nullish(),
+  /** On GET /requests/:id of a root job only: its additional tasks (each a request of its own, oldest first) with their state. */
+  tasks: z.array(z.object({ id: z.string(), jobState: JobStateSchema.optional() })).optional(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>
@@ -161,6 +190,8 @@ export const QuoteListItemSchema = z.object({
 })
 export type QuoteListItem = z.infer<typeof QuoteListItemSchema>
 export const QuoteListSchema = z.object({ docs: z.array(QuoteListItemSchema) })
+/** GET /quotes: `requestId` keeps only that request's quote documents (the job page); left out, all of the caller's. */
+export const QuotesQuerySchema = z.object({ requestId: z.string().uuid().optional() })
 export const QuotePdfSchema = z.object({ url: z.string() })
 
 /** A date and time one side entered for an awaiting-time booking, for the other side to confirm (until answerBy). */
@@ -223,6 +254,7 @@ export const BookingSchema = z.object({
   jobNumber: z.number().int().optional(),
   title: z.string().optional(),
   taskNumber: z.string().optional(),
+  jobState: JobStateSchema.optional(),
 })
 export type Booking = z.infer<typeof BookingSchema>
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
-import { cancelBooking, clearOutbox, confirmJob, finishJob, getPublicProfile, objectNoShow, reportNoShow, runDueTimers, slotIsHeld } from '@kando/domain'
+import { acceptNoShow, cancelBooking, clearOutbox, confirmJob, finishJob, getPublicProfile, objectNoShow, reportNoShow, runDueTimers, slotIsHeld } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
@@ -96,6 +96,7 @@ const refusal = (p: Promise<unknown>) =>
   )
 const cancel = (userId: string, id: string, now: Date) => asUser(userId, (tx) => cancelBooking(tx, userId, id, now))
 const report = (userId: string, id: string, now: Date) => asUser(userId, (tx) => reportNoShow(tx, userId, id, now))
+const accept = (userId: string, id: string, now: Date) => asUser(userId, (tx) => acceptNoShow(tx, userId, id, now))
 const object = (userId: string, id: string, now: Date, description = 'Ich war um 10 Uhr da und habe geklingelt.') => asUser(userId, (tx) => objectNoShow(tx, userId, id, { description }, now))
 
 it('customer cancels 25 hours before: full refund, no commission', async () => {
@@ -117,6 +118,31 @@ it('customer cancels 25 hours before: full refund, no commission', async () => {
   expect((await cancel(U.cust, id, new Date(now.getTime() + MIN))).status).toBe('cancelled')
   expect(g.attempts.refund).toBe(1)
   expect(await notes(id)).toHaveLength(1)
+})
+
+it('a cancel whose refund Stripe already issued under another key is not flagged and ends refunded, once', async () => {
+  const now = new Date()
+  const { id } = await paidBooking({ startAt: new Date(now.getTime() + 30 * HOUR) })
+  const ref = (await pool.query('SELECT payment_ref FROM bookings WHERE id = $1', [id])).rows[0].payment_ref as string
+  g.priorRefunds.set(ref, { refundId: 're_staff_earlier', cents: 10_000 })
+  expect((await cancel(U.cust, id, now)).status).toBe('cancelled')
+  expect((await cancel(U.cust, id, new Date(now.getTime() + MIN))).status).toBe('cancelled')
+  expect((await pool.query('SELECT kind, amount, gateway_ref FROM ledger_entries WHERE booking_id = $1 AND kind = $2', [id, 'refund'])).rows).toEqual([{ kind: 'refund', amount: '100.00', gateway_ref: 're_staff_earlier' }])
+  expect((await pool.query("SELECT 1 FROM staff_flags WHERE ref_id = $1 AND kind IN ('payment-unprocessed', 'refund-failed')", [id])).rows).toHaveLength(0)
+  expect((await row(id)).released_at).not.toBeNull()
+})
+
+it('a charge refunded for MORE than the plan is flagged and nothing is transferred or released', async () => {
+  const now = new Date()
+  const { id } = await paidBooking({ startAt: new Date(now.getTime() + 20 * HOUR) }) // late: the plan refunds 50.00
+  const ref = (await pool.query('SELECT payment_ref FROM bookings WHERE id = $1', [id])).rows[0].payment_ref as string
+  g.priorRefunds.set(ref, { refundId: 're_dashboard_full', cents: 10_000 })
+  expect((await cancel(U.cust, id, now)).status).toBe('cancelled')
+  expect(callsOf('transfer')).toHaveLength(0)
+  expect(await ledger(id)).toEqual([])
+  expect((await row(id)).released_at).toBeNull()
+  expect((await pool.query("SELECT 1 FROM staff_flags WHERE ref_id = $1 AND kind = 'payment-unprocessed'", [id])).rows).toHaveLength(1)
+  await pool.query('UPDATE bookings SET released_at = now() WHERE id = $1', [id]) // keeps the timer sweeps of later tests off this stuck booking
 })
 
 it('customer cancels 23 hours before: provider share 50%, commission on that 50% only', async () => {
@@ -409,4 +435,78 @@ it('a cancelled booking frees its slot and is excluded from timers', async () =>
   const r = await runDueTimers(db, new Date(startAt.getTime() + 10 * DAY))
   expect(r).toMatchObject({ askedDone: 0, sentToStaff: 0, noShowsResolved: 0, cancelsSettled: 0 })
   expect(await row(id)).toMatchObject({ status: 'cancelled', asked_done_at: null })
+})
+
+// last: the provider no-show rule counts every provider no-show reported after `now` minus 12 months, so these sit years after the others
+it('the reported customer accepts: ends at once, the provider is paid, the reporter told, a second tap changes nothing', async () => {
+  const T = new Date('2035-01-07T08:00:00Z')
+  const { id } = await paidBooking({ startAt: T })
+  const at = new Date(T.getTime() + HOUR)
+  await report(U.owner, id, at)
+  expect(await refusal(accept(U.owner, id, at))).toEqual({ status: 403, body: { error: 'wrong-side' } }) // the reporter
+  expect(await refusal(accept(U.cust, randomUUID(), at))).toMatchObject({ status: 404 })
+  const now = new Date(at.getTime() + HOUR) // well inside the 48 hours
+  expect(await accept(U.cust, id, now)).toMatchObject({ status: 'cancelled', noShow: 'customer' })
+  expect(await row(id)).toMatchObject({ status: 'cancelled', no_show: 'customer' })
+  expect(await ledger(id)).toEqual([
+    { kind: 'commission', amount: '12.00' },
+    { kind: 'transfer', amount: '88.00' },
+  ])
+  await balanced(id)
+  expect((await notes(id)).filter((n) => n.kind === 'booking-cancelled')).toEqual([{ user_id: U.owner, kind: 'booking-cancelled' }])
+  expect((await accept(U.cust, id, now)).status).toBe('cancelled')
+  expect(g.attempts.transfer).toBe(1)
+  expect((await notes(id)).filter((n) => n.kind === 'booking-cancelled')).toHaveLength(1)
+  expect((await runDueTimers(db, new Date(at.getTime() + 50 * HOUR))).noShowsResolved).toBe(0)
+})
+
+it('the reported provider accepts: full refund, first one warns, the second flags staff; an objection blocks accepting', async () => {
+  const warnings = async () => (await pool.query("SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = 'provider-warning'", [U.owner])).rows[0].n
+  const flags = async () => (await pool.query("SELECT ref_id FROM staff_flags WHERE kind = 'provider-no-shows' AND resolved_at IS NULL")).rows
+  const T = new Date('2036-03-03T08:00:00Z')
+  const first = await paidBooking({ startAt: T })
+  await report(U.cust, first.id, new Date(T.getTime() + HOUR))
+  expect(await refusal(accept(U.cust, first.id, T))).toEqual({ status: 403, body: { error: 'wrong-side' } })
+  expect((await accept(U.owner, first.id, new Date(T.getTime() + 2 * HOUR))).status).toBe('cancelled')
+  expect(await ledger(first.id)).toEqual([{ kind: 'refund', amount: '100.00' }])
+  await balanced(first.id)
+  expect((await notes(first.id)).filter((n) => n.kind === 'booking-cancelled')).toEqual([{ user_id: U.cust, kind: 'booking-cancelled' }])
+  expect(await warnings()).toBe(1)
+  expect(await flags()).toEqual([])
+  await accept(U.owner, first.id, new Date(T.getTime() + 3 * HOUR))
+  expect(await warnings()).toBe(1)
+
+  const second = await paidBooking({ startAt: new Date(T.getTime() + 30 * DAY) })
+  await report(U.cust, second.id, new Date(T.getTime() + 30 * DAY + HOUR))
+  await accept(U.owner, second.id, new Date(T.getTime() + 30 * DAY + 2 * HOUR))
+  expect(await flags()).toEqual([{ ref_id: providerId }])
+  expect(await warnings()).toBe(1)
+
+  // after an objection (disputed): 409
+  const obj = await paidBooking({ startAt: new Date(T.getTime() + 60 * DAY) })
+  const at = new Date(obj.startAt.getTime() + HOUR)
+  await report(U.cust, obj.id, at)
+  await object(U.owner, obj.id, at)
+  expect(await refusal(accept(U.owner, obj.id, at))).toEqual({ status: 409, body: { error: 'not-open' } })
+  expect((await row(obj.id)).status).toBe('disputed')
+})
+
+it('accepting a root report ends its paid additional task with it; the task itself cannot be accepted alone', async () => {
+  const T = new Date('2037-05-04T08:00:00Z')
+  const { id, startAt } = await paidBooking({ startAt: T })
+  const unpaid = await child(id, startAt, 30, false)
+  const paid = await child(id, startAt, 40, true)
+  const at = new Date(T.getTime() + HOUR)
+  await report(U.owner, id, at)
+  expect(await refusal(accept(U.cust, paid, at))).toEqual({ status: 409, body: { error: 'not-open' } }) // no report of its own
+  await accept(U.cust, id, new Date(at.getTime() + HOUR))
+  expect((await row(unpaid)).status).toBe('withdrawn')
+  expect(await row(paid)).toMatchObject({ status: 'cancelled', no_show: 'customer' })
+  expect(await ledger(paid)).toEqual([
+    { kind: 'commission', amount: '4.80' },
+    { kind: 'transfer', amount: '35.20' },
+  ])
+  await balanced(paid)
+  expect((await row(id)).released_at).not.toBeNull()
+  expect((await runDueTimers(db, new Date(at.getTime() + 50 * HOUR))).cancelsSettled).toBe(0)
 })

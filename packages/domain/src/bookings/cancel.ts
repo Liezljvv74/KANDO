@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { bookings, db, disputes, providers, type Tx } from '@kando/db'
-import { HOUR, NO_SHOW_OBJECTION_HOURS, type Booking, type NoShowObjection } from '@kando/contract'
+import { NO_SHOW_OBJECTION_HOURS, type Booking, type NoShowObjection } from '@kando/contract'
 import { assertNoContactDetails, flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
 import type { Exec } from '../providers/eligibility'
@@ -9,7 +9,7 @@ import { toCents } from '../payments/rules'
 import { settle } from '../payments/settle'
 import { lockFamily, parentNoShow } from './additional'
 import { openDisputeCore, tellDisputeOpened } from './disputes'
-import { customerCancelShare, isLate } from './ending-rules'
+import { customerCancelShare, isLate, noShowObjectBy } from './ending-rules'
 import { attemptMoney, reload } from './finish'
 import { notifyBookingEvent } from './notify'
 import { lockRow, partyOf } from './party'
@@ -18,7 +18,7 @@ type Row = typeof bookings.$inferSelect
 type Side = 'customer' | 'provider'
 const otherSide = (s: Side): Side => (s === 'customer' ? 'provider' : 'customer')
 export const ownerOf = async (providerId: string) => (await db.select({ id: providers.ownerId }).from(providers).where(eq(providers.id, providerId)))[0]?.id
-const objectBy = (b: Row) => new Date(b.noShowReportedAt!.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)
+const objectBy = (b: Row) => noShowObjectBy(b.noShowReportedAt)!
 
 /**
  * What the customer paid, in cents, with this settlement's own refund still counted as paid (settle does the same): the
@@ -185,10 +185,10 @@ export async function objectNoShow(tx: Tx, userId: string, bookingId: string, in
  * unless they carry their own; the timer's settle loop moves the money); unpaid ones are withdrawn. An additional task
  * covered by its root's report is never resolved on its own. False when there was nothing to do.
  */
-export async function resolveNoShow(exec: Exec, bookingId: string, now: Date): Promise<boolean> {
+export async function resolveNoShow(exec: Exec, bookingId: string, now: Date, early = false): Promise<boolean> {
   const r = await exec.transaction(async (o) => {
     const [b, kids] = await lockFamily(o, bookingId)
-    if (b.status !== 'confirmed' || !b.noShow || !b.noShowReportedAt || objectBy(b) > now || (await parentNoShow(o, b))) return null
+    if (b.status !== 'confirmed' || !b.noShow || !b.noShowReportedAt || (!early && objectBy(b) > now) || (await parentNoShow(o, b))) return null
     const [row] = await o.update(bookings).set({ status: 'cancelled', cancelledAt: now, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
     for (const k of kids) {
       if (k.status === 'confirmed')
@@ -202,6 +202,37 @@ export async function resolveNoShow(exec: Exec, bookingId: string, now: Date): P
   const owner = r.warn ? await ownerOf(r.row.providerId) : undefined
   if (owner) await notifyBookingEvent('provider-warning', owner, { bookingId: r.row.id })
   return true
+}
+
+/**
+ * The reported side accepts the report: it stands now instead of after the 48 hours (resolveNoShow, early). Same checks as
+ * objectNoShow (the reporter: 403; no open report, or covered by the root's: 409 not-open). Step 1 checks and ends the
+ * booking (and its additional tasks); the returned step 2 settles each cancelled booking (customer no-show: provider paid
+ * minus commission; provider no-show: full refund), the route runs it after the request transaction. It never throws for
+ * the money (the timer retries). Allowed after the deadline too (the timer would resolve it the same way). A second tap
+ * returns the cancelled booking unchanged.
+ */
+export async function beginAcceptNoShow(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<() => Promise<Booking>> {
+  const side = (await partyOf(tx, userId, bookingId)).role
+  const b = await db.transaction((o) => lockRow(o, bookingId))
+  if (!b.noShow) fail(409, { error: 'not-open' })
+  if (b.noShow !== side) fail(403, { error: 'wrong-side' })
+  const standing = b.status === 'cancelled'
+  if (!standing) {
+    if (b.status !== 'confirmed' || (await parentNoShow(db, b))) fail(409, { error: 'not-open' })
+    if (!(await resolveNoShow(db, bookingId, now, true))) fail(409, { error: 'not-open' }) // an objection or staff won the race
+  }
+  return async () => {
+    if (!standing) {
+      const done = await db.select({ id: bookings.id, customerId: bookings.customerId }).from(bookings).where(and(eq(bookings.status, 'cancelled'), sql`(${bookings.id} = ${bookingId} OR ${bookings.parentBookingId} = ${bookingId})`))
+      for (const k of done) await trySettleCancelled(k.id, k.customerId, now)
+    }
+    return reload(bookingId, userId)
+  }
+}
+
+export async function acceptNoShow(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
+  return (await beginAcceptNoShow(tx, userId, bookingId, now))()
 }
 
 /**

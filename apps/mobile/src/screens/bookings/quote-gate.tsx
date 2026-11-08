@@ -22,18 +22,16 @@ export function QuoteGate({ steps, onDo, heading, note }: { heading?: string; no
   )
 }
 
-/** One row: a name, an optional hint, and "Do it ›". Shared by the quote gate and the Live checklist. */
+/** One row: a name, an optional hint, and "Do it ›"; the whole row is the button. Shared by the quote gate and the Live checklist. */
 export function GateRow({ title, hint, onDo }: { title: Key; hint?: Key; onDo: () => void }) {
   return (
-    <View style={styles.row}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t(title)}: ${t('quoteGate.doIt')}`} accessibilityHint={hint ? t(hint) : undefined} onPress={onDo} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <View style={styles.text}>
         <Text style={styles.name}>{t(title)}</Text>
         {!!hint && <Text style={styles.hint}>{t(hint)}</Text>}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${t(title)}: ${t('quoteGate.doIt')}`} onPress={onDo} style={styles.doIt}>
-        <Text style={styles.doItText}>{t('quoteGate.doIt')}</Text>
-      </Pressable>
-    </View>
+      <Text style={styles.doItText}>{t('quoteGate.doIt')}</Text>
+    </Pressable>
   )
 }
 
@@ -43,6 +41,6 @@ const styles = StyleSheet.create({
   text: { flex: 1 },
   name: { fontSize: 16, color: '#1D1C4A' },
   hint: { fontSize: 14, color: '#4F4E7D' },
-  doIt: { minHeight: 44, justifyContent: 'center' },
+  pressed: { opacity: 0.6 },
   doItText: { fontSize: 15, fontWeight: '600', color: '#34328A' },
 })

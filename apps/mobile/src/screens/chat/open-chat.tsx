@@ -7,7 +7,7 @@ import { errorText, t } from '@/i18n'
 import { go } from '@/lib/go'
 
 /** "Open chat": `find` gives the thread id (or null when there is none), then the conversation opens. */
-export function OpenChat({ find }: { find: () => Promise<string | null> }) {
+export function OpenChat({ find, grow, unread, onOpened }: { find: () => Promise<string | null>; grow?: boolean; unread?: number; onOpened?: () => void }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const working = useRef(false)
@@ -18,7 +18,10 @@ export function OpenChat({ find }: { find: () => Promise<string | null> }) {
     setProblem(null)
     try {
       const id = await find()
-      if (id) go(`/threads/${id}`)
+      if (id) {
+        onOpened?.() // the chat marks its messages read: the count goes at once
+        go(`/threads/${id}`)
+      }
       else setProblem(errorText('Not found'))
     } catch (e) {
       setProblem(errorText(e instanceof ApiError ? e.code : 'network'))
@@ -28,7 +31,7 @@ export function OpenChat({ find }: { find: () => Promise<string | null> }) {
   }
   return (
     <>
-      <SmallButton label={t('chat.open')} onPress={open} busy={busy} />
+      <SmallButton label={t('chat.open')} badge={unread && unread > 0 ? `(${unread})` : undefined} onPress={open} busy={busy} grow={grow} />
       <ErrorText text={problem} />
     </>
   )

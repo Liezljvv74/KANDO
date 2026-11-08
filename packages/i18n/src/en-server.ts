@@ -28,7 +28,7 @@ export const en: Record<ServerKey, string> = {
     'A customer sent you a request with a date, time and place. Please answer within 3 days: send a quote (with or without a final date and time), or decline. Requests that stay unanswered expire and make you look unavailable.',
   'email.quoteReceived.subject': 'You have received a quote',
   'email.quoteReceived.body':
-    'A provider sent you a quote (or a revised quote) for your request. Please look at it in the app and confirm it to book. It is valid for 7 days, until {date}. If it has no date and time yet, you agree them after you confirm; payment is asked once both sides have confirmed the date and time.',
+    'A provider sent you a quote (or a revised quote) for your request. Please look at it in the app and accept it to book. It is valid for 7 days, until {date}. If it has no date and time yet, you agree them after you accept; payment is asked once both sides have confirmed the date and time.',
   'email.bookingAccepted.subject': 'Payment due for your booking',
   'email.bookingAccepted.body':
     'The date and time are confirmed by both sides. Payment is due by {date}. Open the app to pay; you will see the pay link there as soon as payment is available.',

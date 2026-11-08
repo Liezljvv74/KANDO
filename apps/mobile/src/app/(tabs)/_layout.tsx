@@ -1,13 +1,38 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { router, Tabs } from 'expo-router'
-import { useEffect } from 'react'
+import { router, Tabs, useFocusEffect } from 'expo-router'
+import { BottomTabBar, type BottomTabBarProps } from 'expo-router/js-tabs'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { AppState, type ColorValue } from 'react-native'
 
+import { jobCounts } from '@/api/jobs'
 import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
-import { categoryOf, unseenCounts } from '@/lib/correspondence'
+import { categoryOf } from '@/lib/correspondence'
+import { tabBadge } from '@/lib/jobs'
 import { consumePending, readyToNavigate, urlOf, usePending } from '@/lib/pending-navigation'
 import { showProfileTab } from '@/lib/profile-tab'
+
+/** Screens kept inside the tab bar (the bar stays on every signed-in screen): tabs without a button, each lighting the tab it belongs to. */
+const HIDDEN = ['bookings', 'invoices', 'learn', 'provider/[slug]', 'quotes/index', 'threads'] as const
+const LIT: Record<string, string> = { bookings: 'jobs', invoices: 'jobs', threads: 'jobs', 'quotes/index': 'jobs', 'provider/[slug]': 'search', learn: 'index' }
+const bar = (props: BottomTabBarProps) => {
+  // the screens without a button are left out of what the bar draws (else they take empty slots and squeeze the real tabs)
+  const here = props.state.routes[props.state.index]?.name ?? ''
+  const lit = LIT[here] ?? here
+  const routes = props.state.routes.filter((r) => !props.descriptors[r.key]?.options.tabBarButton) // a screen with no button is not drawn
+  const index = Math.max(0, routes.findIndex((r) => r.name === lit))
+  const descriptors = Object.fromEntries(routes.map((r) => [r.key, props.descriptors[r.key]!]))
+  // On a hidden screen the bar lights the tab it belongs to, which the bar then takes for "already open": a tap on it must still go there.
+  const emitter = {
+    ...props.emitter,
+    emit: ((event: { type: string; target?: string }) => {
+      const result = (props.emitter.emit as (e: unknown) => unknown)(event)
+      if (event.type === 'tabPress' && LIT[here] && event.target === routes[index]?.key) props.navigateToTab(event.target)
+      return result
+    }) as typeof props.emitter.emit,
+  }
+  return <BottomTabBar {...props} emitter={emitter} state={{ ...props.state, routes, index }} descriptors={descriptors} />
+}
 
 const icon = (name: React.ComponentProps<typeof Ionicons>['name']) => ({ color, size }: { color: ColorValue; size: number }) => <Ionicons name={name} size={size} color={color as string} />
 
@@ -26,20 +51,34 @@ export default function TabsLayout() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
     return () => sub.remove()
   }, [])
-  // The number of requests, bookings, quotes and messages the person has not looked at yet (opening each list marks its notices seen).
-  const unseen = unseenCounts(me?.notifications).total
+  // The Jobs badge: the customer and the provider counter added (jobs that need me or have unread messages, each once per side), from
+  // the shared counts the Jobs screen also writes. Read again when the tabs come back into view (after acting on a job page or
+  // reading a chat), when the app returns to the front, and when a new notice arrives; the Jobs screen's own load joins the same call.
+  const badge = tabBadge(useSyncExternalStore(jobCounts.subscribe, jobCounts.get))
+  const signedIn = !!me
+  const provider = !!me?.isProvider
+  const notices = me?.notifications[0]?.id // the newest notice (the list is newest first and capped at 20: its length stops changing)
+  useFocusEffect(
+    useCallback(() => {
+      if (!signedIn) return jobCounts.clear()
+      const refresh = () => jobCounts.load(provider ? ['customer', 'provider'] : ['customer']).catch(() => {})
+      refresh()
+      const sub = AppState.addEventListener('change', (s) => s === 'active' && refresh())
+      return () => sub.remove()
+    }, [signedIn, provider, notices]),
+  )
   // Provider notices (payouts, documents, invoices ...) show as a dot on My business, where opening the page marks them seen.
   const businessDot = unseenOf(me?.notifications).some((n) => !n.dismissedAt && !categoryOf(n))
   return (
-    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
+    <Tabs backBehavior="history" tabBar={bar} screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
       <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ tabBarIcon: icon('search-outline'), title: t('tab.search') }} />
-      <Tabs.Screen
-        name="correspondence"
-        options={{ title: t('tab.correspondence'), tabBarBadge: unseen > 0 ? unseen : undefined, tabBarIcon: icon('mail-outline') }}
-      />
-      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, href: showProfileTab(me) ? undefined : null }} />
+      <Tabs.Screen name="jobs" options={{ title: t('tab.jobs'), tabBarBadge: badge > 0 ? badge : undefined, tabBarIcon: icon('clipboard-outline') }} />
+      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, ...(showProfileTab(me) ? {} : { tabBarButton: () => null }) }} /> // not `href: null`: that redirects away, also while the profile is still loading on a reload
       <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
+      {HIDDEN.map((name) => (
+        <Tabs.Screen key={name} name={name} options={{ tabBarButton: () => null }} /> // no button, but still reachable (`href: null` hides AND redirects away in this Expo Router)
+      ))}
     </Tabs>
   )
 }

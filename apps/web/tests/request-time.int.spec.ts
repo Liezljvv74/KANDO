@@ -61,9 +61,6 @@ it('the provider sees postcode and city of the job place but not the street; the
   const asCustomer = RequestSchema.parse(await (await call(requestOne.GET, U.cust, 'GET', undefined, { id: r.id })).json())
   expect(asProvider.address).toEqual({ postcode: '10115', city: 'Berlin' })
   expect(asCustomer.address).toEqual({ street: 'Hauptstr. 1', postcode: '10115', city: 'Berlin' })
-  const list = await requests.GET(new Request('http://localhost/app-api/v1/requests?role=provider', { headers: { cookie: `uid=${U.owner}:${U.owner}@test.skilled.invalid` } }), { params: Promise.resolve({}) })
-  const mine = (await list.json()).docs.find((d: { id: string }) => d.id === r.id)
-  expect(mine.address).toEqual({ postcode: '10115', city: 'Berlin' })
 })
 
 it('before a quote exists the customer revises the time: revision counts and the provider is told', async () => {

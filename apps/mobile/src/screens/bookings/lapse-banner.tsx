@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
 import type { QuoteListItem } from '@kando/contract'
@@ -40,7 +41,7 @@ export function LapseBanner({ q, onBookAgain, onClosed, busy }: { q: QuoteListIt
 
 /** The question on a screen that has no quote list of its own (the request, an expired booking): finds the request's lapsed quote and shows its banner. */
 export function LapsedAsk({ requestId, onClosed }: { requestId: string; onClosed: () => void }) {
-  const { data } = useLoad(listQuoteDocuments)
+  const { data } = useLoad(useCallback(() => listQuoteDocuments(requestId), [requestId]))
   const q = data && lapsedQuoteOf(data, requestId)
   return q ? <LapseBanner q={q} onClosed={onClosed} /> : null
 }

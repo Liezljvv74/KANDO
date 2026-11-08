@@ -1,6 +1,6 @@
 import { assertNoContactDetailsIn } from './chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
-import { db, isPostcode, photos, users, type Tx } from '@kando/db'
+import { db, isPostcode, photos, providers, users, type Tx } from '@kando/db'
 import { TERMS_VERSION, type Me, type MePatch } from '@kando/contract'
 import { termsStale } from './terms'
 export { termsCurrent, termsStale } from './terms'
@@ -8,7 +8,7 @@ import { fail } from './providers/http'
 import { ownProvider, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
-import { paymentsEnabled } from './payments/rules'
+import { paymentsEnabled, quoteSteps, type QuoteStep } from './payments/rules'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
 export type SessionUser = { id: string; email: string; language: Lang; isProvider: boolean; suspendedUntil: Date | null; termsStale: boolean }
@@ -92,7 +92,7 @@ export const addressOf = (row: typeof users.$inferSelect): Me['address'] =>
     ? { street: row.addressStreet, postcode: row.addressPostcode, city: row.addressCity, country: row.addressCountry }
     : null
 
-const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notifications: Me['notifications']): Me => ({
+const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notifications: Me['notifications'], steps?: QuoteStep[]): Me => ({
   id: row.id,
   email: row.email,
   firstName: row.firstName,
@@ -104,14 +104,17 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   birthDate: row.birthDate,
   termsRequired: termsStale(row),
   paymentsEnabled: paymentsEnabled(),
+  ...(steps && { quoteSteps: steps }),
   notifications,
 })
 
-/** The signed-in person: names, language, picture (their profile photo) and private address. */
+/** The signed-in person: names, language, picture (their profile photo) and private address; a provider also gets the steps still needed before quoting. */
 export async function getMe(tx: Tx, userId: string): Promise<Me> {
   const row = (await tx.select().from(users).where(eq(users.id, userId)))[0]!
   const pic = (await tx.select({ key: photos.key }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
-  return toMe(row, pic?.key ?? null, await listNotifications(tx, userId))
+  // a provider only (a customer skips the read); only the columns quoteSteps reads
+  const [provider] = !row.isProvider ? [] : await tx.select({ payoutsReadyAt: providers.payoutsReadyAt, invoiceConsentAt: providers.invoiceConsentAt, legalStatus: providers.legalStatus, vatId: providers.vatId, taxNumber: providers.taxNumber }).from(providers).where(eq(providers.ownerId, userId))
+  return toMe(row, pic?.key ?? null, await listNotifications(tx, userId), provider ? quoteSteps(provider) : undefined)
 }
 
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */

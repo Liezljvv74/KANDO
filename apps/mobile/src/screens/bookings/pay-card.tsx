@@ -1,108 +1,94 @@
 import * as WebBrowser from 'expo-web-browser'
 import { useEffect, useRef, useState } from 'react'
-import { AppState, Platform, StyleSheet, Text } from 'react-native'
+import { AppState, Modal, Platform, StyleSheet, Text, View } from 'react-native'
 
 import type { Booking } from '@kando/contract'
 
 import { payBooking } from '@/api/payments'
-import { ErrorText } from '@/components/auth-ui'
+import { Button, ErrorText, LinkText } from '@/components/auth-ui'
 import { Card, SmallButton } from '@/components/form-ui'
 import { errorText, t } from '@/i18n'
+import { formatPrice } from '@/lib/format'
 import type { Viewer } from '@/lib/booking-status'
-import { formatWhen } from '@/lib/booking-time'
-import { payCard } from '@/lib/pay-state'
 import { useMe } from '@/hooks/use-me'
 import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { isHttps } from '@/lib/safe-url'
-import { font } from '@/theme'
-
-type Session = { openedAt: number | null; gaveUp: boolean }
-/** Per booking, for this session only: when the pay link was last returned from, and whether the customer said they did not finish. */
-const sessions = new Map<string, Session>()
 
 /**
- * The pay area of a booking. "Pay now" opens the Stripe page in the in-app browser. The booking only becomes confirmed when the
- * webhook arrives, so after a return it shows "being confirmed" (not Pay now again). iOS resolves `openBrowserAsync` when the
- * browser closes; Android right when it opens, so there the return is the app coming back to the front (the screen reloads then too).
+ * The pay area of a booking. "Pay now" opens the Stripe page in the in-app browser; the server's state (jobState) decides what
+ * shows: Pay now, or Pay again when the checkout did not go through (the card text is the state card above). iOS resolves
+ * `openBrowserAsync` when the browser closes; Android right when it opens, so there the return is the app coming back to the
+ * front: either way the booking reloads.
  */
-export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; viewer: Viewer; onRefresh: () => void }) {
-  const me = useMe()
-  const [, rerender] = useState(0)
+/** The one pay route (Stripe page in the in-app browser, then a reload): the Pay now button and the pop-up after accepting a quote both use it. */
+function usePay(booking: Booking, onRefresh: () => void) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const waiting = useRef(false)
-  const id = booking.id
-  const mark = (s: Session) => {
-    sessions.set(id, s)
-    rerender((n) => n + 1)
-  }
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
       if (s !== 'active' || !waiting.current) return
       waiting.current = false
-      sessions.set(id, { openedAt: Date.now(), gaveUp: false })
-      rerender((n) => n + 1)
+      onRefresh()
     })
     return () => sub.remove()
-  }, [id])
+  }, [onRefresh])
 
   async function pay() {
     setBusy(true)
     setProblem(null)
     try {
-      const { url } = await payBooking(id)
+      const { url } = await payBooking(booking.id)
       if (!isHttps(url)) throw new Error('bad link')
-      sessions.set(id, { openedAt: null, gaveUp: false })
       waiting.current = true
       await WebBrowser.openBrowserAsync(url)
-      if (Platform.OS === 'ios') {
-        waiting.current = false
-        mark({ openedAt: Date.now(), gaveUp: false })
-      }
+      if (Platform.OS === 'ios') waiting.current = false
       onRefresh()
     } catch (e) {
       setProblem(paymentsProblem(e))
     }
     setBusy(false)
   }
+  return { busy, problem, pay }
+}
 
-  const s = sessions.get(id)
-  const kind = payCard(booking, viewer, s?.openedAt ?? null, s?.gaveUp ?? false)
-  if (kind === 'none') return null
-  if (kind === 'paid')
-    return (
-      <Card done>
-        <Text style={styles.paid}>{t('booking.paid')}</Text>
-      </Card>
-    )
-  if (kind === 'expired')
-    return (
-      <Card>
-        <Text style={styles.text}>{t('booking.payExpired')}</Text>
-      </Card>
-    )
-  if (kind === 'confirming')
-    return (
-      <Card>
-        <Text style={styles.text}>{t('booking.confirming')}</Text>
-        <SmallButton label={t('booking.refresh')} onPress={onRefresh} />
-        <SmallButton label={t('booking.notFinished')} onPress={() => mark({ openedAt: s?.openedAt ?? null, gaveUp: true })} />
-      </Card>
-    )
+export function PayPanel({ booking, viewer, onRefresh }: { booking: Booking; viewer: Viewer; onRefresh: () => void }) {
+  const me = useMe()
+  const { busy, problem, pay } = usePay(booking, onRefresh)
+
+  const key = booking.jobState?.key
+  if (viewer !== 'customer' || (key !== 'payment_due' && key !== 'checkout_not_completed')) return null
   return (
     <Card>
-      {!!booking.payBy && <Text style={styles.text}>{t('bookingStatus.payBy', { date: formatWhen(booking.payBy) })}</Text>}
-      {paymentsOff(me) ? (
-        <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text>
-      ) : (
-        <SmallButton label={t(kind === 'payAgain' ? 'booking.payAgain' : 'booking.payNow')} onPress={pay} busy={busy} />
-      )}
+      {paymentsOff(me) ? <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text> : <SmallButton label={t(key === 'checkout_not_completed' ? 'booking.payAgain' : 'booking.payNow')} onPress={pay} busy={busy} />}
       <ErrorText text={problem} />
     </Card>
   )
 }
 
+/** Shown right after the customer accepts a quote whose booking waits for payment; "Not now" leaves it (Pay now stays on the job page). */
+export function PayPrompt({ booking, onClose, onRefresh }: { booking: Booking; onClose: () => void; onRefresh: () => void }) {
+  const me = useMe()
+  const { busy, problem, pay } = usePay(booking, () => {
+    onClose()
+    onRefresh()
+  })
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose} accessibilityViewIsModal>
+      <View style={styles.backdrop}>
+        <View style={styles.box}>
+          <Text style={styles.text}>{t('booking.payPromptNote')}</Text>
+          {paymentsOff(me) ? <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text> : <Button label={t('booking.payAmount', { amount: formatPrice({ priceType: 'fixed', price: booking.amount, currency: booking.currency }) })} onPress={pay} busy={busy} />}
+          <ErrorText text={problem} />
+          <LinkText label={t('booking.payNotNow')} onPress={onClose} />
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
 const styles = StyleSheet.create({
   text: { fontSize: 16, color: '#1D1C4A' },
-  paid: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(29,28,74,0.5)', justifyContent: 'center', padding: 24 },
+  box: { backgroundColor: '#fff', borderRadius: 8, padding: 20, gap: 14 },
 })

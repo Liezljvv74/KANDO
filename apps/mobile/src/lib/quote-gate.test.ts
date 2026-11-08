@@ -6,6 +6,9 @@ describe('quote gate', () => {
     expect(quoteBlocked([])).toBe(false)
     expect(quoteBlocked(['consent'])).toBe(true)
   })
+  it('quoteBlocked is false for an unknown-only step', () => {
+    expect(quoteBlocked(['future' as never])).toBe(false)
+  })
   it('uses the singular heading for one step', () => {
     expect(gateHeading(1)).toBe('quoteGate.headingOne')
     expect(gateHeading(2)).toBe('quoteGate.headingMany')

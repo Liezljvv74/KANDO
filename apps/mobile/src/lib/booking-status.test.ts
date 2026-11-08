@@ -1,6 +1,7 @@
+import { de, en } from '@kando/i18n'
 import type { Booking } from '@kando/contract'
 
-import { actionLabel, bookingActions, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
+import { actionLabel, BUTTON_ACTION, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -26,90 +27,30 @@ const b = (over: Partial<Booking>) =>
     ...over,
   }) as Booking
 
-const before = new Date('2027-01-04T09:00:00.000Z') // a day before the start
-const after = new Date('2027-01-05T11:00:00.000Z') // after the start
 const DAY = 86_400_000
 
-const pending = (by: 'customer' | 'provider') => ({ by, startAt: '2027-01-06T09:00:00.000Z', durationMin: 60, onSite: true, answerBy: '2027-01-08T09:00:00.000Z' })
 
-test('awaiting the agreed time: either side enters one, only the other side confirms it, only the customer can walk away', () => {
-  expect(bookingActions(b({ status: 'awaiting-time' }), 'customer')).toEqual(['enterTime', 'withdraw'])
-  expect(bookingActions(b({ status: 'awaiting-time' }), 'provider')).toEqual(['enterTime'])
-  expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('provider') }), 'customer')).toEqual(['confirmTime', 'enterTime', 'withdraw'])
-  expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('provider') }), 'provider')).toEqual(['enterTime'])
-  expect(bookingActions(b({ status: 'awaiting-time', pendingTime: pending('customer') }), 'provider')).toEqual(['confirmTime', 'enterTime'])
-})
-
-test('awaiting payment names the pay-by date for the customer and allows withdrawing', () => {
-  const paid = b({ status: 'awaiting-payment', payBy: '2027-01-05' })
-  expect(bookingStatusText(paid, 'customer')).toBe('bookingStatus.payBy 2027-01-05')
-  expect(bookingStatusText(paid, 'provider')).toBe('bookingStatus.waitPayment 2027-01-05')
-  expect(bookingActions(paid, 'customer')).toEqual(['withdraw'])
-  expect(bookingActions(paid, 'provider')).toEqual([])
-})
-
-test('closed bookings have a status text and no actions', () => {
+test('closed bookings have a status text', () => {
   for (const status of ['declined', 'expired', 'withdrawn'] as const) {
     expect(bookingStatusText(b({ status }), 'customer')).toBe(`bookingStatus.${status}`)
-    expect(bookingActions(b({ status }), 'customer')).toEqual([])
   }
 })
 
-test('a confirmed (paid) booking: before the start either side may add a task or cancel; nothing else', () => {
+test('a confirmed (paid) booking reads confirmed before the start', () => {
   for (const viewer of ['customer', 'provider'] as const) {
-    expect(bookingStatusText(b({ status: 'confirmed', payBy: '2027-01-05' }), viewer, before)).toBe('bookingStatus.confirmed')
-    expect(bookingActions(b({ status: 'confirmed' }), viewer, before)).toEqual(['additionalTask', 'cancel'])
+    expect(bookingStatusText(b({ status: 'confirmed', payBy: '2027-01-05' }), viewer)).toBe('bookingStatus.confirmed')
   }
-  // an additional task is itself never extended
-  expect(bookingActions(b({ status: 'confirmed', parentBookingId: 'p1' }), 'customer', before)).toEqual(['cancel'])
 })
 
-test('after the start: the provider finishes, either side may stop or report a no-show; cancelling is gone', () => {
-  expect(bookingActions(b({ status: 'confirmed' }), 'provider', after)).toEqual(['finish', 'additionalTask', 'stop', 'reportNoShow'])
-  expect(bookingActions(b({ status: 'confirmed' }), 'customer', after)).toEqual(['additionalTask', 'stop', 'reportNoShow'])
-  expect(bookingActions(b({ status: 'confirmed' }), 'provider', new Date('2027-01-05T09:00:00.000Z'))).toContain('finish') // from the start on
-})
-
-test('once asked "Was the job done?" the customer can confirm or report a problem', () => {
+test('once asked "Was the job done?" the customer reads so', () => {
   const asked = b({ status: 'confirmed', askedDoneAt: '2027-01-06T10:00:00.000Z' })
-  expect(bookingActions(asked, 'customer', after)).toEqual(['confirm', 'dispute', 'additionalTask', 'stop', 'reportNoShow'])
-  expect(bookingStatusText(asked, 'customer', after)).toBe('bookingStatus.askedDone')
-  expect(bookingActions(asked, 'provider', after)).toEqual(['finish', 'additionalTask', 'stop', 'reportNoShow'])
+  expect(bookingStatusText(asked, 'customer')).toBe('bookingStatus.askedDone')
 })
 
-test('a reported no-show: only the reported side may object, within its 48 hours', () => {
+test('a reported no-show names the objection deadline for each side', () => {
   const reported = b({ status: 'confirmed', noShow: 'provider', noShowReportedAt: '2027-01-05T10:00:00.000Z', noShowObjectBy: '2027-01-07T10:00:00.000Z' })
-  expect(bookingActions(reported, 'provider', after)).toEqual(['objectNoShow'])
-  expect(bookingStatusText(reported, 'provider', after)).toBe('bookingStatus.noShowAgainstYou 2027-01-07T10:00:00.000Z')
-  expect(bookingActions(reported, 'customer', after)).toEqual([])
-  expect(bookingStatusText(reported, 'customer', after)).toBe('bookingStatus.noShowReported 2027-01-07T10:00:00.000Z')
-  expect(bookingActions(reported, 'provider', new Date('2027-01-07T10:00:00.000Z'))).toEqual([])
-})
-
-test('finished: the customer sees the payment date and can confirm or report a problem until then; afterwards the payment is pending', () => {
-  const finished = b({ status: 'finished', confirmBy: '2027-01-12T11:00:00.000Z' })
-  expect(bookingStatusText(finished, 'customer', after)).toBe('bookingStatus.finishedCustomer 2027-01-12T11:00:00.000Z')
-  expect(bookingStatusText(finished, 'provider', after)).toBe('bookingStatus.finishedProvider 2027-01-12T11:00:00.000Z')
-  expect(bookingActions(finished, 'customer', after)).toEqual(['confirm', 'dispute', 'additionalTask'])
-  expect(bookingActions(finished, 'provider', after)).toEqual(['dispute', 'additionalTask'])
-  const due = new Date('2027-01-12T11:00:00.000Z')
-  for (const viewer of ['customer', 'provider'] as const) expect(bookingStatusText(finished, viewer, due)).toBe('bookingStatus.paymentPending')
-  expect(bookingActions(finished, 'customer', due)).toEqual(['additionalTask'])
-})
-
-test('the provider may dispute a finished booking before confirmBy, not after', () => {
-  const finished = b({ status: 'finished', confirmBy: '2027-01-12T11:00:00.000Z' })
-  expect(bookingActions(finished, 'provider', after)).toContain('dispute')
-  expect(bookingActions(finished, 'provider', new Date('2027-01-12T11:00:00.000Z'))).not.toContain('dispute')
-})
-
-test('either side may dispute a stopped booking until an amount is agreed', () => {
-  const stopped = b({ status: 'stopped' })
-  for (const viewer of ['customer', 'provider'] as const) {
-    expect(bookingActions(stopped, viewer, after)).toContain('dispute')
-    expect(bookingActions({ ...stopped, stopAmount: 40, stopStatedAt: '2027-01-05T12:00:00.000Z' }, viewer, after)).toContain('dispute')
-    expect(bookingActions({ ...stopped, confirmBy: '2027-01-05T13:00:00.000Z' }, viewer, after)).not.toContain('dispute')
-  }
+  expect(bookingStatusText(reported, 'provider')).toBe('bookingStatus.noShowAgainstYou 2027-01-07T10:00:00.000Z')
+  expect(bookingStatusText(reported, 'customer')).toBe('bookingStatus.noShowReported 2027-01-07T10:00:00.000Z')
 })
 
 test('the 7-day countdown counts whole days left, never below 0', () => {
@@ -120,22 +61,17 @@ test('the 7-day countdown counts whole days left, never below 0', () => {
   expect(daysLeft('2027-01-01T00:00:00.000Z', now)).toBe(0)
 })
 
-test('stopped: the provider states the amount, then the customer answers; agreed means the payment is being made', () => {
+test('stopped: the provider states the amount, then the customer answers', () => {
   const stopped = b({ status: 'stopped', stoppedBy: 'customer' })
-  expect(bookingActions(stopped, 'provider', after)).toEqual(['stateStopAmount', 'dispute'])
-  expect(bookingActions(stopped, 'customer', after)).toEqual(['dispute'])
-  expect(bookingStatusText(stopped, 'customer', after)).toBe('bookingStatus.stoppedWaitAmount')
-  expect(bookingStatusText(stopped, 'provider', after)).toBe('bookingStatus.stoppedStateAmount')
+  expect(bookingStatusText(stopped, 'customer')).toBe('bookingStatus.stoppedWaitAmount')
+  expect(bookingStatusText(stopped, 'provider')).toBe('bookingStatus.stoppedStateAmount')
   const stated = b({ status: 'stopped', stopAmount: 40, stopStatedAt: '2027-01-05T12:00:00.000Z' })
-  expect(bookingActions(stated, 'customer', after)).toEqual(['answerStop', 'dispute'])
-  expect(bookingActions(stated, 'provider', after)).toEqual(['dispute'])
-  expect(bookingStatusText(stated, 'customer', after)).toBe('bookingStatus.stopAnswerBy EUR 40.00 2027-01-12T12:00:00.000Z')
-  expect(bookingStatusText(stated, 'provider', after)).toBe('bookingStatus.stopWaitAnswer EUR 40.00')
-  const agreed = { ...stated, confirmBy: '2027-01-05T13:00:00.000Z' }
-  for (const viewer of ['customer', 'provider'] as const) {
-    expect(bookingActions(agreed, viewer, after)).toEqual([])
-    expect(bookingStatusText(agreed, viewer, after)).toBe('bookingStatus.paymentPending')
-  }
+  expect(bookingStatusText(stated, 'customer')).toBe('bookingStatus.stopAnswerBy EUR 40.00 2027-01-12T12:00:00.000Z')
+  expect(bookingStatusText(stated, 'provider')).toBe('bookingStatus.stopWaitAnswer EUR 40.00')
+})
+
+test('the payment stages have no text of their own here: the server state names them', () => {
+  for (const status of ['awaiting-payment', 'finished'] as const) expect(bookingStatusText(b({ status, confirmBy: '2027-01-12T11:00:00.000Z' }), 'customer')).toBe(`bookingStatus.${status}`) // both keys exist in German and English
 })
 
 test('the stop answer says what goes to the provider and what comes back, from the stated amount in whole cents', () => {
@@ -184,13 +120,12 @@ test('the endings say in plain words what happened, for each side', () => {
     [{}, 'bookingStatus.cancelled', 'bookingStatus.cancelled'],
   ]
   for (const [over, customer, provider] of cases) {
-    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'customer', after)).toBe(customer)
-    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'provider', after)).toBe(provider)
+    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'customer')).toBe(customer)
+    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'provider')).toBe(provider)
   }
   for (const status of ['completed', 'disputed', 'refunded'] as const)
     for (const viewer of ['customer', 'provider'] as const) {
-      expect(bookingStatusText(b({ status }), viewer, after)).toBe(`bookingStatus.${status}`)
-      expect(bookingActions(b({ status }), viewer, after)).toEqual([])
+      expect(bookingStatusText(b({ status }), viewer)).toBe(`bookingStatus.${status}`)
     }
 })
 
@@ -198,6 +133,9 @@ test('the customer asks for an "Additional task", the provider for a "Scope/quot
   expect(actionLabel('additionalTask', 'customer')).toBe('booking.additionalTask')
   expect(actionLabel('additionalTask', 'provider')).toBe('booking.scopeReview')
   expect(actionLabel('finish', 'provider')).toBe('booking.finish')
+  expect(actionLabel('objectNoShow', 'customer')).toBe('booking.objectNoShowShort') // short, so both fit side by side
+  expect(actionLabel('acceptNoShow', 'customer')).toBe('booking.acceptNoShow')
+  expect(BUTTON_ACTION.accept_no_show).toBe('acceptNoShow')
 })
 
 test('late fee is rounded from cents: 33.33 -> 16.67', () => {
@@ -210,4 +148,9 @@ test('the exact 24 h mark is free, one minute inside is late (same numbers as th
   const mark = new Date('2027-01-04T12:00:00.000Z')
   expect(cancelStatement(booking, 'customer', mark)).toBe('booking.cancelFree booking.cancelChildren')
   expect(cancelStatement(booking, 'customer', new Date(mark.getTime() + 60_000))).toContain('booking.cancelLate 50')
+})
+
+test('every booking status a fallback can name has a text in German and English', () => {
+  for (const dict of [de, en] as Record<string, string>[])
+    for (const status of ['awaiting-time', 'awaiting-payment', 'confirmed', 'declined', 'expired', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded']) expect(dict[`bookingStatus.${status}`]).toBeTruthy()
 })

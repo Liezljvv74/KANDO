@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
@@ -23,18 +24,19 @@ const MAX_STRENGTHS_TEXT = 1000
 
 const loadProfile = async () => (await getMyProfile()) ?? (await ensureDraft())
 
-/** The "About you" screen: every field saves on its own. */
+/** The "About you" screen: every field saves on its own. `?field=` (from a Live checklist row) puts the cursor in that field. */
 export default function AboutScreen() {
   useLang()
+  const { field } = useLocalSearchParams<{ field?: string }>()
   const { data, error, retry } = useLoad(loadProfile)
-  return <FormScreen title={t('setup.aboutYou')}>{data ? <AboutForm initial={data} /> : error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
+  return <FormScreen title={t('setup.aboutYou')}>{data ? <AboutForm initial={data} focus={field} /> : error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
 }
 
 /**
  * One field = one useFieldSave = one request; a typed value is never taken from a response, so a slow save cannot revert
  * what the user typed since. `initial` is read once: the form is mounted after the first load and keeps its own values.
  */
-function AboutForm({ initial }: { initial: MyProfile }) {
+function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
   const [code, setCode] = useState<Record<string, string>>({})
   // Binds a field to the profile: `toBody` makes the one-field PUT body, null skips the request.
   function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null) {
@@ -123,9 +125,9 @@ function AboutForm({ initial }: { initial: MyProfile }) {
       {problem('providerType', type)}
       {type.value === 'business' && (
         <>
-          <Field {...compulsory('businessName')} value={businessName.value} onChangeText={businessName.setValue} onBlur={businessName.flush} maxLength={120} />
+          <Field {...compulsory('businessName')} autoFocus={focus === 'businessName'} value={businessName.value} onChangeText={businessName.setValue} onBlur={businessName.flush} maxLength={120} />
           {problem('businessName', businessName)}
-          <Field {...compulsory('impressum')} value={impressum.value} onChangeText={impressum.setValue} onBlur={impressum.flush} multiline maxLength={1000} style={styles.multi} />
+          <Field {...compulsory('impressum')} autoFocus={focus === 'impressum'} value={impressum.value} onChangeText={impressum.setValue} onBlur={impressum.flush} multiline maxLength={1000} style={styles.multi} />
           {problem('impressum', impressum)}
         </>
       )}
@@ -133,6 +135,7 @@ function AboutForm({ initial }: { initial: MyProfile }) {
       {problem('bio', bio)}
       <TagInput
         {...compulsory('strengths')}
+        autoFocus={focus === 'strengths'}
         items={strengths.value}
         onItems={(v) => {
           // Stop adding once the joined text would pass the server's limit (removing is always fine).
@@ -152,6 +155,7 @@ function AboutForm({ initial }: { initial: MyProfile }) {
       {problem('strengths', strengths)}
       <TagInput
         {...compulsory('skills')}
+        autoFocus={focus === 'skills'}
         items={skills.value}
         onItems={(v) => {
           skills.setValue(v)
@@ -168,6 +172,7 @@ function AboutForm({ initial }: { initial: MyProfile }) {
       {problem('experience', experience)}
       <Field
         {...compulsory('postcode')}
+        autoFocus={focus === 'postcode'}
         value={postcode.value}
         onChangeText={postcode.setValue}
         onBlur={postcode.flush}
@@ -176,6 +181,7 @@ function AboutForm({ initial }: { initial: MyProfile }) {
       {unknownPostcode ? null : problem('basePostcode', postcode)}
       <Field
         {...compulsory('radius')}
+        autoFocus={focus === 'radius'}
         value={radius.value}
         onChangeText={radius.setValue}
         onBlur={radius.flush}

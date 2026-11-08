@@ -1,15 +1,14 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
-import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
+import { DAY, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
-import { threadForRequest, threadIdOf } from '../chat/threads'
-import { olderThan, pageOf, stampOf } from '../paging'
+import { threadForRequest } from '../chat/threads'
 import { notifyBookingEvent } from './notify'
 import { timeIsAcceptable } from './busy'
-import { isUuid, NO_ID } from '../admin/common'
+import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
@@ -17,10 +16,13 @@ import { issueQuoteDocument } from '../quotes/issue'
 import { canTransact } from '../payments/rules'
 import { assertFuture, bookingShownStatus, lapseReason, MAX_OPEN_REQUESTS_PER_PAIR, MAX_REQUESTS_PER_DAY, QUOTE_VALID_DAYS, REQUEST_ANSWER_DAYS } from './rules'
 import { acceptAdditional } from './additional'
+import { noShowObjectBy } from './ending-rules'
 import { expireLapsedRoot } from './timers'
 import { ratingsOf } from '../reviews'
 import { taskNumber } from './job-ref'
-import { rootJobs, rootsOf, taskPositions } from './job-lookup'
+import { rootJobs, rootRequestId, rootsOf, taskPositions, taskRequestsOf } from './job-lookup'
+import { jobStates, toJobStateDto, type JobStateItem, type JobStateOf } from './job-state-lookup'
+import { jobsForNotices } from './notice-job'
 
 type Db = Tx | typeof db
 
@@ -83,7 +85,7 @@ type Lapse = { quoteId: string | null; reason: LapseReason; open: boolean }
  * the job reads open again (no write). One query for all the requests; only the latest root booking of a request counts, so a job
  * booked again after a lapse is not lapsed.
  */
-async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, Lapse>> {
+export async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map<string, Lapse>> {
   const out = new Map<string, Lapse>()
   if (!requestIds.length) return out
   const roots = await tx
@@ -102,19 +104,30 @@ async function lapsedRoots(tx: Tx, requestIds: string[], now: Date): Promise<Map
   return out
 }
 
-/** Adds the root job's number and title to request DTOs (an additional task's request shows its job's). */
-export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string): Promise<T[]> {
+/** The job-state lookup item of a request DTO (key: its id) or a booking DTO (key: its id), as `userId` sees it. */
+const requestItem = (r: BookingRequest, userId: string): JobStateItem => ({ key: r.id, viewer: r.customerId === userId ? 'customer' : 'provider', providerId: r.providerId, requestId: r.id, parentBookingId: r.parentBookingId, request: { status: r.status, answerBy: new Date(r.answerBy) } })
+export const bookingItem = (b: Booking, userId: string): JobStateItem => ({ key: b.id, viewer: b.customerId === userId ? 'customer' : 'provider', providerId: b.providerId, requestId: b.requestId, bookingId: b.id, request: { status: 'booked', answerBy: null } })
+
+/**
+ * Adds the root job's number and title to request DTOs (an additional task's request shows its job's). `withState`: true adds
+ * the derived job state (reads only, the phone reloads after an action); a map hands in states the caller already looked up.
+ */
+export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string, withState: boolean | Map<string, JobStateOf> = false): Promise<T[]> {
   const parents = [...new Set(list.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : [])))]
   const roots = await rootsOf(x, parents)
   // a task whose root booking has no request (booked direct) has no job to show: no refs, never its own unused number
-  const rootOf = (r: T) => (r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id)
+  const rootOf = (r: T) => rootRequestId(r, roots)
   const jobs = await rootJobs(x, [...new Set(list.flatMap((r) => rootOf(r) ?? []))], userId)
+  // the derived job state, as seen by the caller
+  const states = withState instanceof Map ? withState : userId && withState ? await jobStates(x, userId, list.map((r) => requestItem(r, userId))) : undefined
   return list.map((r) => {
     const root = rootOf(r)
     const j = root ? jobs.get(root) : undefined
-    if (j) return { ...r, jobNumber: j.jobNumber, title: j.title }
-    if (r.parentBookingId) { const { jobNumber: _own, title: _t, ...rest } = r; return rest as T } // a task with no root request: not its own unused number
-    return r
+    const s = states?.get(r.id)
+    const withState = s ? { ...r, jobState: toJobStateDto(s) } : r
+    if (j) return { ...withState, jobNumber: j.jobNumber, title: j.title }
+    if (r.parentBookingId) { const { jobNumber: _own, title: _t, ...rest } = withState; return rest as T } // a task with no root request: not its own unused number
+    return withState
   })
 }
 
@@ -123,8 +136,11 @@ export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[]
  * below it (by parent_booking_id); the root booking is `#1040`, its tasks are `#1040-2`, `#1040-3` in the order they were created
  * (created_at, id), every status counted (bookings are never deleted, so a position never changes), whichever batch shows them.
  */
-export async function withBookingRefs(x: Db, list: Booking[], userId?: string): Promise<Booking[]> {
-  if (!list.some((b) => b.requestId)) return list
+export async function withBookingRefs(x: Db, list: Booking[], userId?: string, withState: boolean | Map<string, JobStateOf> = false): Promise<Booking[]> {
+  // the derived job state of each booking itself, as seen by the caller (`withState` as in withRequestRefs)
+  const states = withState instanceof Map ? withState : userId && withState && list.length ? await jobStates(x, userId, list.map((b) => bookingItem(b, userId))) : undefined
+  const stated = (b: Booking): Booking => { const s = states?.get(b.id); return s ? { ...b, jobState: toJobStateDto(s) } : b }
+  if (!list.some((b) => b.requestId)) return list.map(stated)
   const roots = await rootsOf(x, list.filter((b) => b.requestId).map((b) => b.id))
   const rootReqs = [...new Set([...roots.values()].flatMap((r) => r.requestId ?? []))]
   const jobs = await rootJobs(x, rootReqs, userId)
@@ -132,7 +148,7 @@ export async function withBookingRefs(x: Db, list: Booking[], userId?: string): 
   return list.map((b) => {
     const rr = roots.get(b.id)?.requestId
     const j = rr ? jobs.get(rr) : undefined
-    return j ? { ...b, jobNumber: j.jobNumber, title: j.title, taskNumber: taskNumber(j.jobNumber, position.get(b.id) ?? 1) } : b
+    return j ? { ...stated(b), jobNumber: j.jobNumber, title: j.title, taskNumber: taskNumber(j.jobNumber, position.get(b.id) ?? 1) } : stated(b)
   })
 }
 
@@ -170,7 +186,7 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   lateCancel: b.lateCancel,
   noShow: b.noShow as Booking['noShow'],
   noShowReportedAt: b.noShowReportedAt ? iso(b.noShowReportedAt) : null,
-  noShowObjectBy: b.noShowReportedAt ? iso(new Date(b.noShowReportedAt.getTime() + NO_SHOW_OBJECTION_HOURS * HOUR)) : null,
+  noShowObjectBy: b.noShowReportedAt ? iso(noShowObjectBy(b.noShowReportedAt)!) : null,
   stoppedAt: b.stoppedAt ? iso(b.stoppedAt) : null,
   stoppedBy: b.stoppedBy as Booking['stoppedBy'],
   stopAmount: b.stopAmount === null ? null : Number(b.stopAmount),
@@ -256,21 +272,6 @@ const hideStreet = (r: BookingRequest): BookingRequest => {
   return { ...r, address: place }
 }
 
-/** The caller's requests, a page newest first by (created_at, id): those they sent (customer) or those addressed to their provider profile. */
-export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string, now = new Date()): Promise<Page<BookingRequest>> {
-  const mine = role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const found = await tx
-    .select({ r: requests, ts: stampOf(requests.createdAt), id: requests.id })
-    .from(requests)
-    .where(and(mine, olderThan(requests.createdAt, requests.id, cursor)))
-    .orderBy(desc(requests.createdAt), desc(requests.id))
-    .limit(LIST_PAGE + 1)
-  const { rows, next } = pageOf(found)
-  const lapsed = await lapsedRoots(tx, rows.map(({ r }) => r.id), now)
-  const list = await withRequestRefs(tx, rows.map(({ r }) => toRequest(r, now, lapsed.get(r.id))), userId)
-  return { docs: role === 'provider' ? await withCustomerRatings(tx, list.map(hideStreet)) : list, next }
-}
-
 /** The provider's view adds what providers' shown reviews say about each customer. */
 async function withCustomerRatings(tx: Tx, list: BookingRequest[]): Promise<BookingRequest[]> {
   const ratings = await ratingsOf(tx, [...new Set(list.map((r) => r.customerId))], 'provider')
@@ -288,10 +289,16 @@ async function ownRequest(tx: Tx, userId: string, id: string) {
 /** One request with its chat, for one of its parties. Reads only: no thread is created. */
 export async function getRequest(tx: Tx, userId: string, id: string, now = new Date()): Promise<BookingRequest> {
   const row = await ownRequest(tx, userId, id)
-  // an additional task talks in its booking's thread
-  const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
-  const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
-  const dto = { ...(await withRequestRefs(tx, [toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))], userId))[0]!, threadId }
+  const base = toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))
+  // one lookup gives the state, the chat (an additional task talks in its booking's thread), this request's bookings (oldest first) and the current one
+  // a root job's additional tasks (spec 4.3: a section of the job page, each linking to its own request page), in the same lookup
+  const tasks = row.parentBookingId ? [] : (await taskRequestsOf(tx, [row.id])).map((t) => toRequest(t.r, now))
+  const states = await jobStates(tx, userId, [base, ...tasks].map((r) => requestItem(r, userId)), now)
+  const s = states.get(row.id)!
+  const otherParty = (await jobsForNotices(tx, userId, [{ requestId: row.id }]))[0]?.otherParty
+  const taskItems = tasks.map((t) => { const ts = states.get(t.id); return { id: t.id, ...(ts && { jobState: toJobStateDto(ts) }) } })
+  const job = { bookingIds: s.bookingIds, currentBookingId: s.currentBookingId, ...(otherParty !== undefined && { otherParty }), ...(!row.parentBookingId && { tasks: taskItems }) }
+  const dto = { ...(await withRequestRefs(tx, [base], userId, states))[0]!, threadId: s.threadId, unread: s.unread ? 1 : 0, ...job }
   return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }
 

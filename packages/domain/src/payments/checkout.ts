@@ -10,20 +10,10 @@ import type { Exec } from '../providers/eligibility'
 import { fail } from '../providers/http'
 import { isSuspendedNow } from '../providers/profile'
 import { AmountTooSmallError, gateway } from './gateway'
-import { belowMinCharge, checkoutExpiry, MAX_PAY_AHEAD_DAYS, toCents } from './rules'
+import { belowMinCharge, checkoutExpiry, type CheckoutRef, MAX_PAY_AHEAD_DAYS, readRef, toCents } from './rules'
 
 /** A stored session is reused only while it has more than this left: the customer needs time to pay. */
 const REUSE_MIN_MS = 5 * 60_000
-
-/** What bookings.checkout_ref holds (staff-only column, owner connection): the open Checkout session, so a second tap reuses it. */
-type CheckoutRef = { sessionId: string; url: string; expiresAt: string }
-const readRef = (v: string | null): CheckoutRef | null => {
-  try {
-    return v ? (JSON.parse(v) as CheckoutRef) : null
-  } catch {
-    return null // an unreadable ref only means a new session
-  }
-}
 
 /**
  * The Stripe-hosted page where the customer pays the booking's full amount. Customer only (anyone else: 404); the booking
@@ -52,7 +42,12 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
   const [provider] = await db.select({ status: providers.status }).from(providers).where(eq(providers.id, b.providerId))
   if (provider?.status !== 'published' || (await isSuspendedNow(db, b.providerId))) fail(409, { error: 'provider-unavailable' })
   const stored = readRef(b.checkoutRef)
-  if (stored && new Date(stored.expiresAt).getTime() > now.getTime() + REUSE_MIN_MS) return { url: stored.url }
+  if (stored && new Date(stored.expiresAt).getTime() > now.getTime() + REUSE_MIN_MS) {
+    // the wait for "did not go through" counts from the LAST pay tap, not the first
+    const again: CheckoutRef = { ...stored, startedAt: now.toISOString() }
+    await db.update(bookings).set({ checkoutRef: JSON.stringify(again) }).where(and(eq(bookings.id, b.id), eq(bookings.status, 'awaiting-payment')))
+    return { url: stored.url }
+  }
   if (b.parentBookingId ? await parentBlocksPayment(db, b) : await slotIsHeld(db, b.providerId, b.startAt, b.durationMin, b.onSite, now, b.id)) fail(409, { error: b.parentBookingId ? 'not-open' : 'slot-pending' }) // a lapsed hold can overlap until the sweep; an additional task has its parent's time
   const expiresAt = checkoutExpiry(b.payBy, now)
   if (!expiresAt) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' })
@@ -80,7 +75,7 @@ export async function createPayLink(tx: Exec, userId: string, bookingId: string,
     if (e instanceof RangeError) return fail(409, { error: 'PAY_WINDOW_TOO_SHORT' }) // the clock moved past the 31-minute edge
     throw e
   }
-  const ref: CheckoutRef = { sessionId: session.sessionId, url: session.url, expiresAt: expiresAt.toISOString() }
+  const ref: CheckoutRef = { sessionId: session.sessionId, url: session.url, expiresAt: expiresAt.toISOString(), startedAt: now.toISOString() }
   const saved = await db.update(bookings).set({ checkoutRef: JSON.stringify(ref) }).where(and(eq(bookings.id, b.id), eq(bookings.status, 'awaiting-payment'))).returning({ id: bookings.id })
   if (!saved.length) return fail(409, { error: 'not-open' }) // withdrawn or expired meanwhile: a payment through this session is refunded
   return { url: session.url }
