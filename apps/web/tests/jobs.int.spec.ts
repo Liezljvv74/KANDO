@@ -403,7 +403,7 @@ it('Past and a search walk across pages: latest job date first, no duplicates, n
   }
 })
 
-it('a completed job the customer has not rated stays under Needs you until the review is written or the 7 days pass; the provider sees it in Past at once', async () => {
+it('a completed job stays under Needs you for each side until that side has written its review or the 7 days pass', async () => {
   const { pid, sid } = await ownProviderFor('jb-rowner', 'Rating Owner')
   await seedUser('jb-r1', null, 'Rita Rating')
   const id = await seedJob({ customer: 'jb-r1', pid, sid, status: 'booked', bookings: [{ status: 'completed', released: true, completedDaysAgo: 1 }] })
@@ -415,15 +415,16 @@ it('a completed job the customer has not rated stays under Needs you until the r
     return { row: [...all.items, ...past.items].find((i) => i.id === id)?.jobState, inPast: ids(past).includes(id), counts: all.counts }
   }
 
-  // unrated, inside the window: customer needs you (counted), not in Past, not settled; provider: past
+  // unrated, inside the window: both sides need you (counted), not in Past, not settled
   let c = await as('jb-r1')
   expect(c.row).toMatchObject({ key: 'completed', section: 'needs_you' })
   expect(c.inPast).toBe(false)
   expect(c.counts).toMatchObject({ needsYou: 1, past: 0 })
   expect(await settledNow()).toBe(false)
   const p = await as('jb-rowner', 'provider')
-  expect(p.row).toMatchObject({ key: 'completed', section: 'past' })
-  expect(p.inPast).toBe(true)
+  expect(p.row).toMatchObject({ key: 'completed', section: 'needs_you' })
+  expect(p.inPast).toBe(false)
+  expect(p.counts).toMatchObject({ needsYou: 1, past: 0 })
 
   // the customer writes the review: Past
   await pool.query("INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars) VALUES ($1, 'jb-r1', 'jb-rowner', 'customer', 5)", [bookingId])
@@ -431,6 +432,12 @@ it('a completed job the customer has not rated stays under Needs you until the r
   expect(c.row).toMatchObject({ key: 'completed', section: 'past' })
   expect(c.inPast).toBe(true)
   expect(c.counts).toMatchObject({ needsYou: 0, past: 1 })
+  expect(await settledNow()).toBe(false) // the provider has not rated yet
+  expect((await as('jb-rowner', 'provider')).row).toMatchObject({ section: 'needs_you' })
+
+  // the provider writes theirs: Past for both, settled in SQL too
+  await pool.query("INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars) VALUES ($1, 'jb-rowner', 'jb-r1', 'provider', 4)", [bookingId])
+  expect(await as('jb-rowner', 'provider')).toMatchObject({ row: { section: 'past' }, inPast: true, counts: { needsYou: 0, past: 1 } })
   expect(await settledNow()).toBe(true)
 
   // no review, but the 7 days are over: Past
@@ -439,5 +446,6 @@ it('a completed job the customer has not rated stays under Needs you until the r
   c = await as('jb-r1')
   expect(c.row).toMatchObject({ section: 'past' })
   expect(c.inPast).toBe(true)
+  expect((await as('jb-rowner', 'provider')).row).toMatchObject({ section: 'past' })
   expect(await settledNow()).toBe(true)
 })

@@ -48,7 +48,7 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
   const [flags, readyRows, reviewedRows] = await Promise.all([
     bookingIds.length ? db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), inArray(staffFlags.refId, bookingIds), isNull(staffFlags.resolvedAt), undecided)) : [],
     db.select({ id: providers.id }).from(providers).where(and(inArray(providers.id, providerIds), sql`${providers.payoutsReadyAt} IS NOT NULL`)),
-    // the viewer's own reviews (owner pool, for booking ids the caller already may see): the customer's open rating keeps a completed job under Needs you
+    // the viewer's own reviews (owner pool, for booking ids the caller already may see): the customer's open rating keeps a completed job under Needs you (either side)
     bookingIds.length ? db.select({ id: reviews.bookingId }).from(reviews).where(and(inArray(reviews.bookingId, bookingIds), eq(reviews.authorId, userId))) : [],
   ])
   const reviewed = new Set(reviewedRows.map((r) => r.id))
@@ -73,7 +73,7 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
 
   for (const i of items) {
     const mine = rows.filter((r) => (i.bookingId ? r.id === i.bookingId : r.requestId === i.requestId)).sort(oldestFirst)
-    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })(), noShowObjectBy: noShowObjectBy(r.noShowReportedAt), reviewedByCustomer: i.viewer === 'customer' && reviewed.has(r.id) }))
+    const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })(), noShowObjectBy: noShowObjectBy(r.noShowReportedAt), reviewedByViewer: reviewed.has(r.id) }))
     const current = currentBookingOf(inputs)
     const unread = (!!i.requestId && !i.bookingId && unreadKey(`r:${i.requestId}`)) || mine.some((r) => unreadKey(r.id))
     out.set(i.key, {

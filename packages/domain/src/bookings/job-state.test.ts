@@ -144,18 +144,20 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('completed: past, with the payout date', () => {
     for (const v of ['customer', 'provider'] as const) {
-      const s = state(v, { status: 'completed', releasedAt: at(-2) })
+      const s = state(v, { status: 'completed', releasedAt: at(-2), reviewedByViewer: true })
       expect(pick(s)).toEqual(['completed', 'past', ['review', 'receipt']])
       expect(s.paidOutAt).toEqual(at(-2))
     }
   })
-  it('completed and not yet rated by the customer within the window: customer needs you; reviewed, window over, provider, task: past', () => {
+  it('completed and not yet rated by the viewer within the window: needs you (either side); reviewed, window over, task: past', () => {
     const done = { status: 'completed', releasedAt: at(-2), completedAt: at(-48) }
     expect(pick(state('customer', done))).toEqual(['completed', 'needs_you', ['review', 'receipt']])
     expect(state('customer', done).countsForMe).toBe(true)
-    expect(state('customer', { ...done, reviewedByCustomer: true }).section).toBe('past')
+    expect(state('customer', { ...done, reviewedByViewer: true }).section).toBe('past')
+    expect(pick(state('provider', done))).toEqual(['completed', 'needs_you', ['review', 'receipt']])
+    expect(state('provider', { ...done, reviewedByViewer: true }).section).toBe('past')
+    expect(state('provider', { ...done, completedAt: at(-24 * 7 - 1) }).section).toBe('past')
     expect(state('customer', { ...done, completedAt: at(-24 * 7 - 1) }).section).toBe('past')
-    expect(state('provider', done).section).toBe('past')
     expect(state('customer', { ...done, parentBookingId: 'root' }).section).toBe('past')
   })
   it('a stale flag on a released booking does not make it delayed', () => expect(state('customer', { status: 'completed', releasedAt: at(-2) }, { delayedFlag: true }).key).toBe('completed'))
