@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { sql } from 'drizzle-orm'
-import { clearOutbox, clearPushOutbox, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, listRequests, providerRating, runDueTimers, writeReview } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, providerRating, runDueTimers, writeReview } from '@kando/domain'
 import { outboxForTests, pushOutboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
@@ -282,7 +282,7 @@ it('the provider page shows average and count of visible customer reviews only',
   // the provider sees the customer's rating on a request (the provider's visible reviews of them only)
   const req = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Hecke', now() + interval '3 days') RETURNING id", [U.other, ratedProviderId])).rows[0].id
   expect((await asUser(U.rated, (tx) => getRequest(tx, U.rated, req))).customerRating).toEqual({ average: 1, count: 1 })
-  expect((await asUser(U.rated, (tx) => listRequests(tx, U.rated, 'provider'))).docs.find((r) => r.id === req)?.customerRating).toEqual({ average: 1, count: 1 })
+  expect((await asUser(U.rated, (tx) => getRequest(tx, U.rated, req))).customerRating).toEqual({ average: 1, count: 1 })
   expect((await asUser(U.other, (tx) => getRequest(tx, U.other, req))).customerRating).toBeUndefined() // not on the customer's own view
   // the author's export lists what they wrote
   const exported = await asUser(U.other, (tx) => exportMyData(tx, U.other))

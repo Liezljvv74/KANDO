@@ -1,10 +1,7 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { bookings, quoteDocuments, type Tx } from '@kando/db'
-import { LIST_PAGE, type Booking, type BookingView, type Page } from '@kando/contract'
-import { NO_ID } from '../admin/common'
+import type { Booking, BookingView } from '@kando/contract'
 import { fail, notFound } from '../providers/http'
-import { ownProvider } from '../providers/profile'
-import { olderThan, pageOf, stampOf } from '../paging'
 import { jobStates } from './job-state-lookup'
 import { lockRow, partyOf } from './party'
 import { bookingItem, toBooking, withBookingRefs } from './requests'
@@ -16,26 +13,6 @@ type Row = typeof bookings.$inferSelect
 export const view = (b: Row, userId: string, now = new Date()): Booking => {
   const dto = toBooking(b, now)
   return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
-}
-
-/**
- * The caller's bookings as customer or as provider owner, a page of root bookings newest first by (created_at, id); each root
- * is followed by its additional tasks (oldest first), so a task is always on its root's page.
- */
-export async function listBookings(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string): Promise<Page<Booking>> {
-  const mine = role === 'customer' ? eq(bookings.customerId, userId) : eq(bookings.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const found = await tx
-    .select({ b: bookings, ts: stampOf(bookings.createdAt), id: bookings.id })
-    .from(bookings)
-    .where(and(mine, isNull(bookings.parentBookingId), olderThan(bookings.createdAt, bookings.id, cursor)))
-    .orderBy(desc(bookings.createdAt), desc(bookings.id))
-    .limit(LIST_PAGE + 1)
-  const { rows, next } = pageOf(found)
-  const kids = rows.length ? await tx.select().from(bookings).where(and(mine, inArray(bookings.parentBookingId, rows.map((r) => r.id)))).orderBy(asc(bookings.createdAt), asc(bookings.id)) : []
-  const docs = rows.flatMap(({ b }) => [view(b, userId), ...kids.filter((k) => k.parentBookingId === b.id).map((k) => view(k, userId))])
-  // the rows just read are handed in: the state lookup does not read them again
-  const states = await jobStates(tx, userId, docs.map((d) => bookingItem(d, userId)), undefined, [...rows.map((r) => r.b), ...kids])
-  return { docs: await withBookingRefs(tx, docs, userId, states), next }
 }
 
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */

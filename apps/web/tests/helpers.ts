@@ -260,3 +260,10 @@ export async function relaxLimits(uid: string): Promise<void> {
   await pool.query("UPDATE requests SET status = CASE WHEN status IN ('open','quoted') THEN 'withdrawn' ELSE status END, created_at = created_at - interval '2 days' WHERE customer_id = $1 AND created_at > now() - interval '1 day'", [uid])
   await pool.query("UPDATE bookings SET created_at = created_at - interval '2 days' WHERE customer_id = $1 AND source = 'direct' AND created_at > now() - interval '1 day'", [uid])
 }
+
+/** The chat of a request, as one of its parties sees it (the thread opens with the request). */
+export const threadOfRequest = async (uid: string, requestId: string) => {
+  const { asUser } = await import('@kando/db')
+  const { getRequest, getThread } = await import('@kando/domain')
+  return asUser(uid, async (tx) => getThread(tx, uid, (await getRequest(tx, uid, requestId)).threadId!))
+}

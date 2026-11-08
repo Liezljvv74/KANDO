@@ -5,10 +5,9 @@ import { asUser, pool } from '@kando/db'
 import { BookingSchema, MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/contract'
 import { sendMessage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, EMAIL, makeAwaitingPayment, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, makeAwaitingPayment, memoryStorage, seedBase, seedProvider, relaxLimits, seedUser, sized, threadOfRequest } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
-const threadsRoute = await import('../app/app-api/v1/threads/route')
 const threadOne = await import('../app/app-api/v1/threads/[id]/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 const photosRoute = await import('../app/app-api/v1/threads/[id]/photos/route')
@@ -38,8 +37,7 @@ const newRequest = async (description = 'Fix the fence') => {
   return RequestSchema.parse(await (await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description, ...requestTime() })).json())
 }
 const threadOf = async (as: string, requestId: string) => {
-  const docs = ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs)
-  return docs.find((t) => t.requestId === requestId)!
+  return ThreadSchema.parse(await threadOfRequest(as, requestId))
 }
 const send = (thread: string, as: string, body: unknown) => call(messagesRoute.POST, as, 'POST', body, { id: thread })
 const list = async (thread: string, as: string, after?: string) => {
@@ -54,14 +52,14 @@ const photoRequest = async (thread: string, as: string) => {
   return photosRoute.POST(await sized(new Request('http://localhost/app-api/v1/x', { method: 'POST', headers: { origin: 'http://localhost', cookie: `uid=${as}:${EMAIL(as)}` }, body: form })), { params: Promise.resolve({ id: thread }) })
 }
 
-it('creating a request opens a thread; both parties list it', async () => {
+it('creating a request opens a thread; both parties read it', async () => {
   const r = await newRequest()
   const mine = await threadOf(U.cust, r.id)
   const theirs = await threadOf(U.owner, r.id)
   expect(mine.id).toBe(theirs.id)
   expect(mine).toMatchObject({ bookingId: null, blocked: false })
   expect(mine.otherName).not.toBe('')
-  expect(await threadOf(U.third, r.id)).toBeUndefined()
+  await expect(threadOf(U.third, r.id)).rejects.toBeTruthy() // a stranger gets 404
   expect((await pool.query('SELECT count(*)::int AS n FROM threads WHERE request_id = $1', [r.id])).rows[0].n).toBe(1)
 })
 

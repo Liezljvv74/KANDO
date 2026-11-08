@@ -1,12 +1,12 @@
 import { desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requests, threads, users, type Tx } from '@kando/db'
-import { LIST_PAGE, type Page, type Thread } from '@kando/contract'
+import type { Thread } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
 import { notFound } from '../providers/http'
 import { rootJobs, rootsOf } from '../bookings/job-lookup'
 import { publicNameFor } from '../providers/public-name'
-import { olderThan, pageOf, stampOf } from '../paging'
+import { stampOf } from '../paging'
 
 
 /**
@@ -136,12 +136,6 @@ async function threadRows(tx: Tx, userId: string, where: SQL | undefined, limit:
     }
   }
   return rows.map((r) => ({ ...r, thread: toThread(r) }))
-}
-
-/** The caller's threads, a page most recently active first (the cursor is the last activity time and the id). */
-export async function listThreads(tx: Tx, userId: string, cursor?: string): Promise<Page<Thread>> {
-  const { rows, next } = pageOf(await threadRows(tx, userId, olderThan(activity, threads.id, cursor), LIST_PAGE + 1))
-  return { docs: rows.map((r) => r.thread), next }
 }
 
 /** One thread, for one of its parties; 404 for anyone else. */

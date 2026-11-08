@@ -11,7 +11,6 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const startRoute = await import('../app/app-api/v1/bookings/[id]/additional-task/route')
 const quoteRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
-const listRoute = await import('../app/app-api/v1/bookings/route')
 
 const U = { cust: 'at-cust', owner: 'at-owner', third: 'at-third' }
 const MIN = 60_000
@@ -149,10 +148,8 @@ it('accepting its quote creates an awaiting-payment child with the parent\'s tim
   expect(again.status).toBe(409)
   expect(await again.json()).toEqual({ error: 'quote-not-open' })
   expect((await pool.query('SELECT count(*)::int n FROM bookings WHERE quote_id = $1', [q.id])).rows[0].n).toBe(1)
-  // listed under its parent
-  const list = (await (await call(listRoute.GET, U.cust)).json()).docs as { id: string }[]
-  const at = list.findIndex((x) => x.id === root.id)
-  expect(list[at + 1]!.id).toBe(b.id)
+  // it belongs to its parent
+  expect((await pool.query('SELECT parent_booking_id FROM bookings WHERE id = $1', [b.id])).rows[0].parent_booking_id).toBe(root.id)
 })
 
 it('a parent that stopped being open gives a clean 409 on accept', async () => {

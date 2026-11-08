@@ -1,10 +1,9 @@
-import type { BlockedUser, Message, Page, Thread } from '@kando/contract'
+import type { BlockedUser, Message, Thread } from '@kando/contract'
 
 import { api, upload, type PickedFile } from '@/api/client'
 
 const BASE = '/app-api/v1'
 
-export const listThreads = (cursor?: string) => api<Page<Thread>>(`${BASE}/threads${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`)
 export const getThread = (id: string) => api<Thread>(`${BASE}/threads/${encodeURIComponent(id)}`)
 /** `after`: the opaque cursor of the last message already shown. */
 export const listMessages = async (threadId: string, after?: string) =>

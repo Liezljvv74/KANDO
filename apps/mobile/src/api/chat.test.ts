@@ -1,5 +1,5 @@
 import { api, upload } from '@/api/client'
-import { blockUser, getThread, listBlocks, listMessages, listThreads, reportMessage, sendMessage, sendPhoto, unblockUser } from './chat'
+import { blockUser, getThread, listBlocks, listMessages, reportMessage, sendMessage, sendPhoto, unblockUser } from './chat'
 
 jest.mock('@/api/client', () => ({ api: jest.fn(), upload: jest.fn() }))
 
@@ -10,10 +10,6 @@ beforeEach(() => {
 const last = () => (api as jest.Mock).mock.calls.at(-1)
 
 test('threads and messages use their routes, methods and query', async () => {
-  await listThreads()
-  expect(last()).toEqual(['/app-api/v1/threads'])
-  await listThreads('c|1')
-  expect(last()).toEqual(['/app-api/v1/threads?cursor=c%7C1'])
   await getThread('t 1')
   expect(last()).toEqual(['/app-api/v1/threads/t%201'])
   await listMessages('t1')
@@ -40,10 +36,4 @@ test('report and block calls use their routes, methods and bodies', async () => 
   expect(last()).toEqual(['/app-api/v1/blocks?threadId=t%201', { method: 'DELETE' }])
   await listBlocks()
   expect(last()).toEqual(['/app-api/v1/blocks'])
-})
-
-test('the thread list returns the page with its next cursor', async () => {
-  const page = { docs: [{ id: 't1' }], next: null }
-  ;(api as jest.Mock).mockResolvedValue(page)
-  expect(await listThreads()).toEqual(page)
 })

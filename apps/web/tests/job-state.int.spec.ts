@@ -9,7 +9,6 @@ import { fakeGateway, type FakeGateway } from './fake-gateway'
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingOne = await import('../app/app-api/v1/bookings/[id]/route')
 const requestOne = await import('../app/app-api/v1/requests/[id]/route')
-const requestList = await import('../app/app-api/v1/requests/route')
 const noShowRoute = await import('../app/app-api/v1/bookings/[id]/no-show/route')
 
 const U = { cust: 'js-cust', owner: 'js-owner' }
@@ -94,13 +93,11 @@ it('a repeated pay tap reuses the session and restarts the wait: payment_due, no
   expect((await stateOf(U.cust, b.id)).key).toBe('checkout_not_completed')
 })
 
-it('GET a request and the request list return jobState for each side', async () => {
+it('GET a request returns jobState for each side', async () => {
   const { request } = await makeQuote({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(22) })
   const one = async (uid: string) => RequestSchema.parse(await (await call(requestOne.GET, uid, 'GET', undefined, { id: request.id })).json())
   expect((await one(U.cust)).jobState).toMatchObject({ key: 'quote_sent', section: 'needs_you', buttons: ['accept_quote', 'ask_question', 'open_chat', 'cancel'] })
   expect((await one(U.owner)).jobState).toMatchObject({ key: 'quote_sent', section: 'active', buttons: ['send_quote', 'decline', 'open_chat'] })
-  const list = (await (await call(requestList.GET, U.cust)).json()) as { docs: { id: string; jobState?: { key: string } }[] }
-  expect(list.docs.find((r) => r.id === request.id)?.jobState?.key).toBe('quote_sent')
 })
 
 it('an unseen message notice makes the job count for the viewer; seen, it does not', async () => {
@@ -135,11 +132,9 @@ it('an unseen notice in the root job chat marks the root request, the root booki
   expect(await counts()).toEqual({ root: false, task: false, request: false, taskRequest: false })
 })
 
-it('jobState is sent on reads and not on a mutation response', async () => {
+it('jobState is sent on a read and not on a mutation response', async () => {
   const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(18) })
   const withdraw = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
-  const list = (await (await call((await import('../app/app-api/v1/bookings/route')).GET, U.cust)).json()) as { docs: { id: string; jobState?: unknown }[] }
-  expect(list.docs.find((x) => x.id === b.id)?.jobState).toBeTruthy()
   expect((await view(U.cust, b.id)).booking.jobState).toBeTruthy()
   const res = (await (await call(withdraw.POST, U.cust, 'POST', undefined, { id: b.id })).json()) as { status: string; jobState?: unknown }
   expect(res.status).toBe('withdrawn')

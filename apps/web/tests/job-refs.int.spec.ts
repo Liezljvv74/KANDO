@@ -8,7 +8,6 @@ vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('
 const startRoute = await import('../app/app-api/v1/bookings/[id]/additional-task/route')
 const quoteRoute = await import('../app/app-api/v1/requests/[id]/quotes/route')
 const acceptRoute = await import('../app/app-api/v1/quotes/[id]/accept/route')
-const listRoute = await import('../app/app-api/v1/bookings/route')
 const bookingRoute = await import('../app/app-api/v1/bookings/[id]/route')
 const requestRoute = await import('../app/app-api/v1/requests/[id]/route')
 
@@ -82,11 +81,9 @@ it('an additional task shows the root number, #N-2 and #N-3 (a withdrawn one sti
   await pool.query("UPDATE requests SET status = 'booked' WHERE id = $1", [one.request.id])
   const two = await child(root.id)
   expect(two.booking).toMatchObject({ jobNumber: n, taskNumber: `#${n}-3` })
-  const list = (await (await call(listRoute.GET, U.cust)).json()).docs.map((d: unknown) => BookingSchema.parse(d))
-  const by = (id: string) => list.find((b: { id: string }) => b.id === id)
-  expect(by(root.id)?.taskNumber).toBe(`#${n}`)
-  expect(by(one.booking.id)?.taskNumber).toBe(`#${n}-2`)
-  expect(by(two.booking.id)?.taskNumber).toBe(`#${n}-3`)
+  expect((await getBooking(root.id)).taskNumber).toBe(`#${n}`)
+  expect((await getBooking(one.booking.id)).taskNumber).toBe(`#${n}-2`)
+  expect((await getBooking(two.booking.id)).taskNumber).toBe(`#${n}-3`)
   expect((await getBooking(two.booking.id, U.owner)).taskNumber).toBe(`#${n}-3`) // alone, and as the provider
 })
 

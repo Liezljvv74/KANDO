@@ -1,15 +1,14 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
-import { DAY, LIST_PAGE, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
+import { DAY, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
 import { threadForRequest } from '../chat/threads'
-import { olderThan, pageOf, stampOf } from '../paging'
 import { notifyBookingEvent } from './notify'
 import { timeIsAcceptable } from './busy'
-import { isUuid, NO_ID } from '../admin/common'
+import { isUuid } from '../admin/common'
 import { offerableServiceIds } from '../providers/eligibility'
 import { fail, notFound } from '../providers/http'
 import { isSuspendedNow, ownProvider } from '../providers/profile'
@@ -271,21 +270,6 @@ const hideStreet = (r: BookingRequest): BookingRequest => {
   if (!r.address?.street) return r
   const { street: _street, ...place } = r.address
   return { ...r, address: place }
-}
-
-/** The caller's requests, a page newest first by (created_at, id): those they sent (customer) or those addressed to their provider profile. */
-export async function listRequests(tx: Tx, userId: string, role: 'customer' | 'provider', cursor?: string, now = new Date()): Promise<Page<BookingRequest>> {
-  const mine = role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
-  const found = await tx
-    .select({ r: requests, ts: stampOf(requests.createdAt), id: requests.id })
-    .from(requests)
-    .where(and(mine, olderThan(requests.createdAt, requests.id, cursor)))
-    .orderBy(desc(requests.createdAt), desc(requests.id))
-    .limit(LIST_PAGE + 1)
-  const { rows, next } = pageOf(found)
-  const lapsed = await lapsedRoots(tx, rows.map(({ r }) => r.id), now)
-  const list = await withRequestRefs(tx, rows.map(({ r }) => toRequest(r, now, lapsed.get(r.id))), userId, true)
-  return { docs: role === 'provider' ? await withCustomerRatings(tx, list.map(hideStreet)) : list, next }
 }
 
 /** The provider's view adds what providers' shown reviews say about each customer. */
