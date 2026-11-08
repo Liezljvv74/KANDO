@@ -31,20 +31,17 @@ export const daysLeft = (iso: string, now = new Date()): number => Math.max(0, M
 /** What a late customer cancellation costs: half the price in whole cents, half up (the server's Math.round). */
 export const lateFee = (amount: number): number => Math.round(cents(amount) * LATE_CANCEL_SHARE) / 100
 
-/** The status in plain words for the viewer. */
-export function bookingStatusText(b: Booking, viewer: Viewer, now = new Date()): string {
+/**
+ * The status in plain words for the viewer: the detail line under a problem (no-show, stop, dispute) and an awaiting-time
+ * booking's title. The payment stages (pay, waiting, payout) are the server's jobState text only.
+ */
+export function bookingStatusText(b: Booking, viewer: Viewer): string {
   const date = (iso: string | null) => (iso ? formatWhen(iso) : '')
   switch (b.status) {
-    case 'awaiting-payment':
-      return t(viewer === 'customer' ? 'bookingStatus.payBy' : 'bookingStatus.waitPayment', { date: date(b.payBy) })
     case 'confirmed':
       if (b.noShow) return t(b.noShow === viewer ? 'bookingStatus.noShowAgainstYou' : 'bookingStatus.noShowReported', { date: date(b.noShowObjectBy) })
       return t(b.askedDoneAt && viewer === 'customer' ? 'bookingStatus.askedDone' : 'bookingStatus.confirmed')
-    case 'finished':
-      if (!b.confirmBy || ms(b.confirmBy) <= now.getTime()) return t('bookingStatus.paymentPending')
-      return t(viewer === 'customer' ? 'bookingStatus.finishedCustomer' : 'bookingStatus.finishedProvider', { date: date(b.confirmBy) })
     case 'stopped':
-      if (b.confirmBy) return t('bookingStatus.paymentPending') // the customer agreed: the payment is being made
       if (b.stopAmount === null || !b.stopStatedAt) return t(viewer === 'provider' ? 'bookingStatus.stoppedStateAmount' : 'bookingStatus.stoppedWaitAmount')
       if (viewer === 'provider') return t('bookingStatus.stopWaitAnswer', { amount: money(b, cents(b.stopAmount)) })
       return t('bookingStatus.stopAnswerBy', { amount: money(b, cents(b.stopAmount)), date: formatWhen(new Date(ms(b.stopStatedAt) + STOP_ANSWER_DAYS * DAY).toISOString()) })

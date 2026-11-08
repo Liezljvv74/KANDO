@@ -26,15 +26,8 @@ const b = (over: Partial<Booking>) =>
     ...over,
   }) as Booking
 
-const before = new Date('2027-01-04T09:00:00.000Z') // a day before the start
-const after = new Date('2027-01-05T11:00:00.000Z') // after the start
 const DAY = 86_400_000
 
-test('awaiting payment names the pay-by date for each side', () => {
-  const paid = b({ status: 'awaiting-payment', payBy: '2027-01-05' })
-  expect(bookingStatusText(paid, 'customer')).toBe('bookingStatus.payBy 2027-01-05')
-  expect(bookingStatusText(paid, 'provider')).toBe('bookingStatus.waitPayment 2027-01-05')
-})
 
 test('closed bookings have a status text', () => {
   for (const status of ['declined', 'expired', 'withdrawn'] as const) {
@@ -44,27 +37,19 @@ test('closed bookings have a status text', () => {
 
 test('a confirmed (paid) booking reads confirmed before the start', () => {
   for (const viewer of ['customer', 'provider'] as const) {
-    expect(bookingStatusText(b({ status: 'confirmed', payBy: '2027-01-05' }), viewer, before)).toBe('bookingStatus.confirmed')
+    expect(bookingStatusText(b({ status: 'confirmed', payBy: '2027-01-05' }), viewer)).toBe('bookingStatus.confirmed')
   }
 })
 
 test('once asked "Was the job done?" the customer reads so', () => {
   const asked = b({ status: 'confirmed', askedDoneAt: '2027-01-06T10:00:00.000Z' })
-  expect(bookingStatusText(asked, 'customer', after)).toBe('bookingStatus.askedDone')
+  expect(bookingStatusText(asked, 'customer')).toBe('bookingStatus.askedDone')
 })
 
 test('a reported no-show names the objection deadline for each side', () => {
   const reported = b({ status: 'confirmed', noShow: 'provider', noShowReportedAt: '2027-01-05T10:00:00.000Z', noShowObjectBy: '2027-01-07T10:00:00.000Z' })
-  expect(bookingStatusText(reported, 'provider', after)).toBe('bookingStatus.noShowAgainstYou 2027-01-07T10:00:00.000Z')
-  expect(bookingStatusText(reported, 'customer', after)).toBe('bookingStatus.noShowReported 2027-01-07T10:00:00.000Z')
-})
-
-test('finished: the payment date until then, afterwards the payment is pending', () => {
-  const finished = b({ status: 'finished', confirmBy: '2027-01-12T11:00:00.000Z' })
-  expect(bookingStatusText(finished, 'customer', after)).toBe('bookingStatus.finishedCustomer 2027-01-12T11:00:00.000Z')
-  expect(bookingStatusText(finished, 'provider', after)).toBe('bookingStatus.finishedProvider 2027-01-12T11:00:00.000Z')
-  const due = new Date('2027-01-12T11:00:00.000Z')
-  for (const viewer of ['customer', 'provider'] as const) expect(bookingStatusText(finished, viewer, due)).toBe('bookingStatus.paymentPending')
+  expect(bookingStatusText(reported, 'provider')).toBe('bookingStatus.noShowAgainstYou 2027-01-07T10:00:00.000Z')
+  expect(bookingStatusText(reported, 'customer')).toBe('bookingStatus.noShowReported 2027-01-07T10:00:00.000Z')
 })
 
 test('the 7-day countdown counts whole days left, never below 0', () => {
@@ -75,17 +60,17 @@ test('the 7-day countdown counts whole days left, never below 0', () => {
   expect(daysLeft('2027-01-01T00:00:00.000Z', now)).toBe(0)
 })
 
-test('stopped: the provider states the amount, then the customer answers; agreed means the payment is being made', () => {
+test('stopped: the provider states the amount, then the customer answers', () => {
   const stopped = b({ status: 'stopped', stoppedBy: 'customer' })
-  expect(bookingStatusText(stopped, 'customer', after)).toBe('bookingStatus.stoppedWaitAmount')
-  expect(bookingStatusText(stopped, 'provider', after)).toBe('bookingStatus.stoppedStateAmount')
+  expect(bookingStatusText(stopped, 'customer')).toBe('bookingStatus.stoppedWaitAmount')
+  expect(bookingStatusText(stopped, 'provider')).toBe('bookingStatus.stoppedStateAmount')
   const stated = b({ status: 'stopped', stopAmount: 40, stopStatedAt: '2027-01-05T12:00:00.000Z' })
-  expect(bookingStatusText(stated, 'customer', after)).toBe('bookingStatus.stopAnswerBy EUR 40.00 2027-01-12T12:00:00.000Z')
-  expect(bookingStatusText(stated, 'provider', after)).toBe('bookingStatus.stopWaitAnswer EUR 40.00')
-  const agreed = { ...stated, confirmBy: '2027-01-05T13:00:00.000Z' }
-  for (const viewer of ['customer', 'provider'] as const) {
-    expect(bookingStatusText(agreed, viewer, after)).toBe('bookingStatus.paymentPending')
-  }
+  expect(bookingStatusText(stated, 'customer')).toBe('bookingStatus.stopAnswerBy EUR 40.00 2027-01-12T12:00:00.000Z')
+  expect(bookingStatusText(stated, 'provider')).toBe('bookingStatus.stopWaitAnswer EUR 40.00')
+})
+
+test('the payment stages have no text of their own here: the server state names them', () => {
+  expect(bookingStatusText(b({ status: 'finished', confirmBy: '2027-01-12T11:00:00.000Z' }), 'customer')).toBe('bookingStatus.finished')
 })
 
 test('the stop answer says what goes to the provider and what comes back, from the stated amount in whole cents', () => {
@@ -134,12 +119,12 @@ test('the endings say in plain words what happened, for each side', () => {
     [{}, 'bookingStatus.cancelled', 'bookingStatus.cancelled'],
   ]
   for (const [over, customer, provider] of cases) {
-    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'customer', after)).toBe(customer)
-    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'provider', after)).toBe(provider)
+    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'customer')).toBe(customer)
+    expect(bookingStatusText(b({ status: 'cancelled', ...over }), 'provider')).toBe(provider)
   }
   for (const status of ['completed', 'disputed', 'refunded'] as const)
     for (const viewer of ['customer', 'provider'] as const) {
-      expect(bookingStatusText(b({ status }), viewer, after)).toBe(`bookingStatus.${status}`)
+      expect(bookingStatusText(b({ status }), viewer)).toBe(`bookingStatus.${status}`)
     }
 })
 
