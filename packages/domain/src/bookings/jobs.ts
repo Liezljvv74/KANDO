@@ -1,21 +1,30 @@
 import { and, desc, eq, inArray, isNull, not, notInArray, or, sql } from 'drizzle-orm'
-import { bookings, db, notifications, requests, staffFlags, threads, type Tx } from '@kando/db'
+import { db, notifications, requests, staffFlags, threads, type Tx } from '@kando/db'
 import { LIST_PAGE, type JobRow, type JobsPage } from '@kando/contract'
 import { isUuid, NO_ID } from '../admin/common'
 import { olderThan, pageOf, stampOf } from '../paging'
 import { ownProvider } from '../providers/profile'
 import { rootsOf } from './job-lookup'
 import { taskNumber } from './job-ref'
-import { currentBookingOf, type JobSection } from './job-state'
+import type { JobSection } from './job-state'
 import { jobStates, MONEY_FLAGS, toJobStateDto } from './job-state-lookup'
 import { jobsForNotices } from './notice-job'
 import { lapsedRoots, toRequest } from './requests'
 
 export type JobsQueryInput = { role: 'customer' | 'provider'; section: JobSection; search?: string; cursor?: string }
 
+/**
+ * The job's date, the list's order and cursor key: the current booking's start (a live booking first, newest; else the newest:
+ * currentBookingOf in SQL), else the request's wished time, else when it was made. The column names are written out with their
+ * table: inside a select list Drizzle leaves them bare, and a bare "id" in the subquery would be the booking's.
+ * ponytail: an expression, so no index orders it; fine for one person's jobs, a stored date column if lists get long.
+ */
+const jobDate = sql`COALESCE((SELECT b.start_at FROM bookings b WHERE b.request_id = "requests"."id"
+  ORDER BY b.status IN ('expired', 'declined', 'withdrawn', 'cancelled', 'refunded'), b.created_at DESC, b.id DESC LIMIT 1), "requests"."start_at", "requests"."created_at")`
+
 type Found = { r: typeof requests.$inferSelect; ts: string; id: string }
-const columns = { r: requests, ts: stampOf(requests.createdAt), id: requests.id }
-const newestFirst = [desc(requests.createdAt), desc(requests.id)]
+const columns = { r: requests, ts: stampOf(jobDate), id: requests.id }
+const newestFirst = [desc(jobDate), desc(requests.id)]
 const byKeyDesc = (a: { ts: string; id: string }, b: { ts: string; id: string }) => (a.ts !== b.ts ? (a.ts < b.ts ? 1 : -1) : a.id < b.id ? 1 : -1)
 /** The in-code twin of `olderThan`: the row comes after the cursor in a newest-first (ts, id) list. */
 const afterCursor = (cursor?: string) => (x: { ts: string; id: string }) => {
@@ -32,7 +41,7 @@ const afterCursor = (cursor?: string) => (x: { ts: string; id: string }) => {
  * the open set below, derived in code, and merged into the Past page. Money flags and unread messages (read elsewhere) are taken
  * out by the caller.
  */
-const settled = (now: Date) => {
+export const settled = (now: Date) => {
   const at = now.toISOString()
   // one bracket and COALESCE: NOT(...) must negate all of it, and a NULL (no booking) must read false, never drop the row from both lists
   return sql`COALESCE(NOT EXISTS (SELECT 1 FROM bookings b WHERE b.request_id = ${requests.id} AND (b.status NOT IN ('expired', 'declined', 'withdrawn', 'cancelled', 'refunded', 'completed') OR (b.status = 'completed' AND b.released_at IS NULL)))
@@ -56,6 +65,7 @@ async function alwaysDerived(tx: Tx, userId: string): Promise<string[]> {
   const ths = threadIds.length ? await tx.select({ requestId: threads.requestId, bookingId: threads.bookingId }).from(threads).where(inArray(threads.id, threadIds)) : []
   const reqIds = ths.flatMap((t) => t.requestId ?? [])
   const reqs = reqIds.length ? await tx.select({ id: requests.id, parent: requests.parentBookingId }).from(requests).where(inArray(requests.id, reqIds)) : []
+  // ponytail: reads every unresolved money flag (all users); fine while failed money steps are rare, a join on the caller's bookings if not
   // the flags table is staff-only: read on the owner pool, only ids, then narrowed to the caller's own bookings by rootsOf on `tx`
   const flagged = (await db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), isNull(staffFlags.resolvedAt)))).flatMap((f) => (isUuid(f.ref) ? [f.ref] : []))
   const roots = await rootsOf(tx, [...ths.flatMap((t) => t.bookingId ?? []), ...reqs.flatMap((r) => r.parent ?? []), ...flagged])
@@ -71,13 +81,11 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
   const dtos = found.map((f) => toRequest(f.r, now, lapsed.get(f.id)))
   const states = await jobStates(tx, userId, dtos.map((r) => ({ key: r.id, viewer: role, providerId: r.providerId, requestId: r.id, parentBookingId: null, request: { status: r.status, answerBy: new Date(r.answerBy) } })), now)
   const refs = await jobsForNotices(tx, userId, ids.map((requestId) => ({ requestId })))
-  const bks = await tx.select({ id: bookings.id, requestId: bookings.requestId, status: bookings.status, createdAt: bookings.createdAt, startAt: bookings.startAt }).from(bookings).where(inArray(bookings.requestId, ids))
-  found.forEach(({ r }, i) => {
+  found.forEach(({ r, ts }, i) => {
     const s = states.get(r.id)
     const j = refs[i]
     if (!s || !j) return
-    const date = currentBookingOf(bks.filter((b) => b.requestId === r.id))?.startAt ?? r.startAt ?? r.createdAt
-    out.set(r.id, { id: r.id, number: j.number, title: j.title, otherParty: j.otherParty, date: date.toISOString(), jobState: toJobStateDto(s), unread: s.unread ? 1 : 0 })
+    out.set(r.id, { id: r.id, number: j.number, title: j.title, otherParty: j.otherParty, date: new Date(ts).toISOString(), jobState: toJobStateDto(s), unread: s.unread ? 1 : 0 })
   })
   return out
 }
@@ -85,7 +93,7 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
 /**
  * The Jobs list (spec 4.2): the caller's jobs (root requests) in `role`, one section at a time; row security shows only the
  * caller's own. The open jobs (not settled, a small set) are all loaded and their section derived in code, which also gives the
- * counters (per job, each role on its own). Past pages newest first in SQL, merged with open jobs that derive to past. Needs you
+ * counters (per job, each role on its own). Past pages in SQL by job date (latest first), merged with open jobs that derive to past; `counts.past` is its total. Needs you
  * and Active come whole (Active: problems and delays first). A search covers all sections of the role: number, title, other party.
  */
 export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = new Date()): Promise<JobsPage> {
@@ -95,12 +103,18 @@ export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = 
   const open = await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
   const openRows = await rowsOf(tx, userId, q.role, open, now)
   const openList = open.flatMap((f) => openRows.get(f.id) ?? [])
-  const counts = { needsYou: openList.filter((r) => r.jobState.countsForMe).length, unread: openList.filter((r) => r.unread).length }
+  const pastOutside = and(jobsOf, settled(now), derived.length ? notInArray(requests.id, derived) : undefined)
+  const settledCount = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(pastOutside))[0]!.n
+  const counts = {
+    needsYou: openList.filter((r) => r.jobState.countsForMe).length,
+    unread: openList.filter((r) => r.unread).length,
+    past: settledCount + openList.filter((r) => r.jobState.section === 'past').length,
+  }
 
   if (q.search) {
     // ponytail: the search reads every job of the role to match names and titles made on the server; a search index if it gets slow
     const needle = q.search.toLowerCase()
-    const all = await tx.select(columns).from(requests).where(and(jobsOf, olderThan(requests.createdAt, requests.id, q.cursor))).orderBy(...newestFirst)
+    const all = await tx.select(columns).from(requests).where(and(jobsOf, olderThan(jobDate, requests.id, q.cursor))).orderBy(...newestFirst)
     const refs = await jobsForNotices(tx, userId, all.map((f) => ({ requestId: f.id })))
     const hits = all.filter((_, i) => { const j = refs[i]; return !!j && `${taskNumber(j.number, 1)} ${j.title} ${j.otherParty}`.toLowerCase().includes(needle) })
     const { rows, next } = pageOf(hits.slice(0, LIST_PAGE + 1))
@@ -117,11 +131,15 @@ export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = 
   const fromDb = await tx
     .select(columns)
     .from(requests)
-    .where(and(jobsOf, settled(now), derived.length ? notInArray(requests.id, derived) : undefined, olderThan(requests.createdAt, requests.id, q.cursor)))
+    .where(and(pastOutside, olderThan(jobDate, requests.id, q.cursor)))
     .orderBy(...newestFirst)
     .limit(LIST_PAGE + 1)
   const fromOpen = open.filter((f) => openRows.get(f.id)?.jobState.section === 'past').filter(afterCursor(q.cursor))
   const { rows, next } = pageOf([...fromDb, ...fromOpen].sort(byKeyDesc).slice(0, LIST_PAGE + 1))
   const settledRows = await rowsOf(tx, userId, q.role, rows.filter((f) => !openRows.has(f.id)), now)
-  return { items: rows.flatMap((f) => openRows.get(f.id) ?? settledRows.get(f.id) ?? []), ...(next && { next }), counts }
+  // guard: `settled` is a hand-made twin of deriveJobState; a row it calls past that derives otherwise is not shown in the wrong
+  // section, and the drift is logged (ids only) so the rule gets fixed (jobs.int.spec.ts checks every stored combination it covers)
+  const drifted = [...settledRows.values()].filter((r) => r.jobState.section !== 'past')
+  if (drifted.length) console.error(`[jobs] settled rule drifted from deriveJobState: ${drifted.map((r) => `${r.id}=${r.jobState.key}`).join(', ')}`)
+  return { items: rows.flatMap((f) => openRows.get(f.id) ?? settledRows.get(f.id) ?? []).filter((r) => r.jobState.section === 'past'), ...(next && { next }), counts }
 }

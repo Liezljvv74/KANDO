@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
-import { JobsPageSchema, RequestSchema, type JobsPage } from '@kando/contract'
+import { and, inArray } from 'drizzle-orm'
+import { db, pool, requests } from '@kando/db'
+import { JobsPageSchema, LIST_PAGE, RequestSchema, type JobsPage } from '@kando/contract'
+import { settled } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -10,11 +12,11 @@ const requestsRoute = await import('../app/app-api/v1/requests/route')
 const U = { owner: 'jb-owner', owner2: 'jb-owner2', stranger: 'jb-stranger', c1: 'jb-c1', c2: 'jb-c2', c3: 'jb-c3', c4: 'jb-c4', c5: 'jb-c5', c6: 'jb-c6' }
 const DAY = 86_400_000
 const day = (n: number) => new Date(Date.now() + n * DAY).toISOString()
-let providerId: string, provider2: string, serviceId: string
+let providerId: string, provider2: string, serviceId: string, categoryId: string
 
 beforeAll(async () => {
   await cleanupUsers()
-  const { categoryId } = await seedBase()
+  ;({ categoryId } = await seedBase())
   for (const [c, n] of [[U.stranger, 'Stella Fremd'], [U.c1, 'Ada Eins'], [U.c2, 'Bea Zwei'], [U.c3, 'Cem Drei'], [U.c4, 'Carla Vier'], [U.c5, 'Dora Fünf'], [U.c6, 'Emil Sechs'], [U.owner, 'Jobs Owner']] as const) await seedUser(c, null, n)
   providerId = await seedProvider(U.owner, { name: 'Jobs Owner', categoryId, price: 100 })
   provider2 = await seedProvider(U.owner2, { name: 'Other Owner', categoryId, price: 100 })
@@ -49,6 +51,54 @@ const newerExpiredCopy = (bookingId: string) =>
      SELECT customer_id, provider_id, service_id, quote_id, request_id, source, 'expired', start_at, duration_min, now() + interval '1 minute' FROM bookings WHERE id = $1`,
     [bookingId],
   )
+
+/** A provider of its own (owner, name), for a test that must not see the other tests' jobs; returns provider and service id. */
+async function ownProviderFor(uid: string, name: string): Promise<{ pid: string; sid: string }> {
+  const pid = await seedProvider(uid, { name, categoryId, price: 100 })
+  return { pid, sid: (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pid])).rows[0].id }
+}
+
+type SeedBooking = { status: string; released?: boolean; minutesLater?: number }
+/**
+ * A job written straight into the tables (fast fixtures): a request with the given stored status, optionally a sent quote and
+ * bookings (paid rows where the status needs it; `minutesLater` orders them). `daysAgo` sets the wished time and the bookings' start.
+ */
+async function seedJob(o: { customer: string; pid: string; sid: string; status: string; answerPast?: boolean; quote?: 'sent-expired' | 'sent-valid'; bookings?: SeedBooking[]; daysAgo?: number }): Promise<string> {
+  const start = new Date(Date.now() - (o.daysAgo ?? 3) * DAY)
+  const id = (
+    await pool.query(
+      `INSERT INTO requests (customer_id, provider_id, service_id, category_id, description, start_at, duration_min, on_site, status, answer_by)
+       VALUES ($1, $2, $3, (SELECT category_id FROM services WHERE id = $3), 'Seeded job', $4, 60, false, $5, now() + ($6 || ' hours')::interval) RETURNING id`,
+      [o.customer, o.pid, o.sid, start, o.status, o.answerPast ? '-1' : '72'],
+    )
+  ).rows[0].id as string
+  if (o.quote) await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 100, 'Seeded', now() + ($3 || ' hours')::interval, 'sent')", [id, o.pid, o.quote === 'sent-valid' ? '72' : '-1'])
+  if (o.bookings?.length) {
+    const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, version, amount, scope, expires_at, status) VALUES ($1, $2, $3, 100, 'Seeded', now() + interval '7 days', 'accepted') RETURNING id", [id, o.pid, o.quote ? 2 : 1])).rows[0].id
+    for (const b of o.bookings) {
+      const paid = ['completed', 'cancelled', 'refunded'].includes(b.status)
+      await pool.query(
+        `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate, released_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'quote', $6, $7, 60, ${paid ? "now(), 'pi_jb_' || gen_random_uuid(), 0.12" : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
+        [o.customer, o.pid, o.sid, quote, id, b.status, start, String(b.minutesLater ?? 0)],
+      )
+    }
+  }
+  return id
+}
+
+/** Every page of a list, following `next`. */
+async function walk(uid: string, q: Record<string, string>): Promise<{ items: JobsPage['items']; pages: number; last: JobsPage }> {
+  let page = await list(uid, q)
+  const items = [...page.items]
+  let pages = 1
+  while (page.next) {
+    page = await list(uid, { ...q, cursor: page.next })
+    items.push(...page.items)
+    pages++
+  }
+  return { items, pages, last: page }
+}
 
 /** An unseen message notice for `to` (default: the customer) in the job's chat. */
 const unreadNotice = async (customerId: string, requestId: string, to = customerId) => {
@@ -85,7 +135,7 @@ it('needs_you holds only actions that move the job forward', async () => {
   await unreadNotice(U.c2, open)
   const after = await list(U.c2)
   expect(after.items.find((i) => i.id === open)).toMatchObject({ unread: 1, jobState: { section: 'needs_you' } })
-  expect(after.counts).toEqual({ needsYou: 1, unread: 1 })
+  expect(after.counts).toEqual({ needsYou: 1, unread: 1, past: 0 })
 })
 
 it('past holds only settled jobs', async () => {
@@ -107,8 +157,9 @@ it('past holds only settled jobs', async () => {
   for (const i of past.items) expect(i.jobState.section).toBe('past')
   expect(past.items.find((i) => i.id === done.requestId)?.jobState.key).toBe('completed')
   expect(ids(await list(U.owner, { role: 'provider', section: 'active' }))).toContain(unpaid.requestId)
-  // newest first, no job twice
+  // no job twice, and the folded header's count is the whole list
   expect(new Set(ids(past)).size).toBe(past.items.length)
+  expect(past.counts.past).toBe(past.items.length)
 
   // a settled job with an unread message is in needs_you, not past
   await unreadNotice(U.c4, done.requestId!)
@@ -117,19 +168,24 @@ it('past holds only settled jobs', async () => {
 })
 
 it('search matches title, number and other party across sections', async () => {
-  const all = [...(await list(U.owner, { role: 'provider', section: 'needs_you' })).items, ...(await list(U.owner, { role: 'provider', section: 'active' })).items, ...(await list(U.owner, { role: 'provider', section: 'past' })).items]
-  const sections = new Set(all.map((i) => i.jobState.section))
-  expect(sections.size).toBe(3)
+  const { pid, sid } = await ownProviderFor('jb-sowner', 'Sucher Owner')
+  for (const [c, n] of [['jb-s1', 'Sina Eins'], ['jb-s2', 'Timo Zwei'], ['jb-s3', 'Rosa Drei']] as const) await seedUser(c, null, n)
+  const needs = await seedJob({ customer: 'jb-s1', pid, sid, status: 'open' }) // a request to answer
+  const active = await seedJob({ customer: 'jb-s2', pid, sid, status: 'quoted', quote: 'sent-valid' }) // waits for the customer
+  const past = await seedJob({ customer: 'jb-s3', pid, sid, status: 'withdrawn' })
+  const as = (q: Record<string, string>) => list('jb-sowner', { role: 'provider', ...q })
+  expect((await as({ section: 'needs_you' })).items.map((i) => [i.id, i.jobState.section])).toEqual([[needs, 'needs_you']])
+  expect(ids(await as({ section: 'active' }))).toEqual([active])
+  expect(ids(await as({ section: 'past' }))).toEqual([past])
 
-  const byTitle = await list(U.owner, { role: 'provider', section: 'past', q: 'jobs owner SERVICE' })
-  expect(ids(byTitle).sort()).toEqual(ids({ items: all } as JobsPage).sort()) // every section, whatever section was asked
-  const one = all[0]!
-  expect(ids(await list(U.owner, { role: 'provider', q: `#${one.number}` }))).toEqual([one.id])
-  expect(ids(await list(U.owner, { role: 'provider', q: String(one.number) }))).toEqual([one.id])
-  const byName = await list(U.owner, { role: 'provider', q: 'CARLA' })
-  expect(byName.items.length).toBeGreaterThan(0)
-  for (const i of byName.items) expect(i.otherParty).toBe('Carla V.')
-  expect((await list(U.owner, { role: 'provider', q: 'nothing like this' })).items).toEqual([])
+  const byTitle = await as({ section: 'past', q: 'sucher owner SERVICE' }) // every section, whatever section was asked
+  expect(byTitle.items.map((i) => i.jobState.section).sort()).toEqual(['active', 'needs_you', 'past'])
+  const one = byTitle.items.find((i) => i.id === active)!
+  expect(ids(await as({ q: `#${one.number}` }))).toEqual([active])
+  expect(ids(await as({ q: String(one.number) }))).toEqual([active])
+  const byName = await as({ q: 'ROSA' })
+  expect(byName.items.map((i) => [i.id, i.otherParty])).toEqual([[past, 'Rosa D.']])
+  expect((await as({ q: 'nothing like this' })).items).toEqual([])
 })
 
 it('a person who is both sides gets separate counts per role', async () => {
@@ -137,15 +193,15 @@ it('a person who is both sides gets separate counts per role', async () => {
   const { request } = await makeQuote({ customerId: U.owner, ownerId: U.owner2, providerId: provider2, startAt: day(25) })
   const asCustomer = await list(U.owner)
   expect(ids(asCustomer)).toEqual([request.id])
-  expect(asCustomer.counts).toEqual({ needsYou: 1, unread: 0 })
+  expect(asCustomer.counts).toEqual({ needsYou: 1, unread: 0, past: 0 })
   expect(asCustomer.items[0]!.otherParty).toBe('Other Owner')
   const quotedForC3 = (await pool.query("SELECT id FROM requests WHERE customer_id = $1 AND status = 'quoted'", [U.c3])).rows[0].id
   await unreadNotice(U.c3, quotedForC3, U.owner) // a message to the owner as provider
   const asProvider = await list(U.owner, { role: 'provider' })
   expect(ids(asProvider)).not.toContain(request.id)
-  expect(asProvider.counts).toEqual({ needsYou: 2, unread: 1 }) // c2's request to answer, c3's job with the unread message (the customers' own notices are not the owner's)
+  expect(asProvider.counts).toMatchObject({ needsYou: 2, unread: 1 }) // c2's request to answer, c3's job with the unread message (the customers' own notices are not the owner's)
   expect(asProvider.items.every((i) => i.jobState.countsForMe)).toBe(true)
-  expect((await list(U.owner)).counts).toEqual({ needsYou: 1, unread: 0 }) // the customer side is untouched
+  expect((await list(U.owner)).counts).toEqual({ needsYou: 1, unread: 0, past: 0 }) // the customer side is untouched
 })
 
 it('RLS: another user\'s jobs never appear', async () => {
@@ -153,7 +209,7 @@ it('RLS: another user\'s jobs never appear', async () => {
     for (const section of ['needs_you', 'active', 'past']) {
       const p = await list(U.stranger, { role, section })
       expect(p.items).toEqual([])
-      expect(p.counts).toEqual({ needsYou: 0, unread: 0 })
+      expect(p.counts).toEqual({ needsYou: 0, unread: 0, past: 0 })
     }
   expect((await list(U.stranger, { role: 'provider', q: 'Jobs' })).items).toEqual([])
   expect((await list(U.c1, { q: 'Carla' })).items).toEqual([]) // another customer's job is not c1's
@@ -162,4 +218,71 @@ it('RLS: another user\'s jobs never appear', async () => {
 it('a bad section or cursor is a 400', async () => {
   for (const q of ['section=all', 'cursor=nope'])
     expect((await jobs.GET(new Request(`http://localhost/app-api/v1/jobs?${q}`, { headers: { cookie: `uid=${U.c1}:${EMAIL(U.c1)}` } }), { params: Promise.resolve({}) })).status).toBe(400)
+})
+
+it('every stored combination the SQL past rule settles derives to past (the rule and deriveJobState agree)', async () => {
+  const { pid, sid } = await ownProviderFor('jb-kowner', 'Kombi Owner')
+  await seedUser('jb-k1', null, 'Kai Kombi')
+  const job = (status: string, more: Partial<Parameters<typeof seedJob>[0]> = {}) => seedJob({ customer: 'jb-k1', pid, sid, status, ...more })
+  const combos: Record<string, string> = {
+    'request withdrawn': await job('withdrawn'),
+    'request declined': await job('declined'),
+    'request expired': await job('expired'),
+    'open past its answer date': await job('open', { answerPast: true }),
+    'quoted, every sent quote expired': await job('quoted', { quote: 'sent-expired' }),
+    'booked, completed and released': await job('booked', { bookings: [{ status: 'completed', released: true }] }),
+    'booked, cancelled': await job('booked', { bookings: [{ status: 'cancelled' }] }),
+    'booked, refunded': await job('booked', { bookings: [{ status: 'refunded' }] }),
+    'quoted again after a lapsed booking, its quote expired': await job('quoted', { quote: 'sent-expired', bookings: [{ status: 'expired' }] }),
+    'open again past its answer date after a declined booking': await job('open', { answerPast: true, bookings: [{ status: 'declined' }] }),
+    'released job, newest booking cancelled': await job('booked', { bookings: [{ status: 'completed', released: true }, { status: 'cancelled', minutesLater: 1 }] }),
+  }
+  // not settled in SQL (newest row withdrawn, request booked): derived in code, still past
+  const derivedOnly = await job('booked', { bookings: [{ status: 'completed', released: true }, { status: 'withdrawn', minutesLater: 1 }] })
+  const settledNow = async (ids: string[]) => new Set((await db.select({ id: requests.id }).from(requests).where(and(inArray(requests.id, ids), settled(new Date())))).map((r) => r.id))
+  const inSql = await settledNow([...Object.values(combos), derivedOnly])
+  const past = await list('jb-k1', { section: 'past' })
+  for (const [name, id] of Object.entries(combos)) {
+    expect(inSql.has(id), name).toBe(true)
+    expect(past.items.find((i) => i.id === id)?.jobState.section, name).toBe('past')
+  }
+  expect(inSql.has(derivedOnly)).toBe(false)
+  expect(past.items.find((i) => i.id === derivedOnly)?.jobState.key).toBe('completed')
+  expect(past.counts.past).toBe(Object.keys(combos).length + 1)
+  expect(past.items).toHaveLength(Object.keys(combos).length + 1)
+  // and the live ones are never settled: an open request, a valid quote, a confirmed booking, a completed job not paid out
+  const live = [
+    await job('open'),
+    await job('quoted', { quote: 'sent-valid' }),
+    await job('booked', { bookings: [{ status: 'confirmed' }] }),
+    await job('booked', { bookings: [{ status: 'completed', released: false }] }),
+  ]
+  expect((await settledNow(live)).size).toBe(0)
+})
+
+it('Past and a search walk across pages: latest job date first, no duplicates, no gaps, an open-set past job included', async () => {
+  const { pid, sid } = await ownProviderFor('jb-powner', 'Pager Owner')
+  await seedUser('jb-p1', null, 'Paul Pager')
+  const n = LIST_PAGE + 5
+  // n settled jobs, two per job date (ties broken by id), plus one past job that only the derived path finds, dated in the middle
+  const seeded: string[] = (
+    await pool.query(
+      `INSERT INTO requests (customer_id, provider_id, service_id, category_id, description, start_at, duration_min, on_site, status, answer_by)
+       SELECT $1, $2, $3, (SELECT category_id FROM services WHERE id = $3), 'Seeded job', date_trunc('minute', now()) - ((i / 2) || ' days')::interval, 60, false, 'withdrawn', now()
+       FROM generate_series(1, $4::int) AS i RETURNING id`,
+      ['jb-p1', pid, sid, n],
+    )
+  ).rows.map((r: { id: string }) => r.id)
+  const fromOpen = await seedJob({ customer: 'jb-p1', pid, sid, status: 'booked', daysAgo: 10.5, bookings: [{ status: 'completed', released: true }, { status: 'withdrawn', minutesLater: 1 }] })
+  const all = [...seeded, fromOpen]
+
+  for (const q of [{ section: 'past' }, { q: 'pager owner' }] as Record<string, string>[]) {
+    const { items, pages, last } = await walk('jb-p1', q)
+    expect(pages, JSON.stringify(q)).toBe(2)
+    expect(items.map((i) => i.id).sort()).toEqual([...all].sort()) // no gap
+    expect(new Set(items.map((i) => i.id)).size).toBe(items.length) // no duplicate
+    for (let k = 1; k < items.length; k++) expect(Date.parse(items[k - 1]!.date)).toBeGreaterThanOrEqual(Date.parse(items[k]!.date))
+    expect(items.find((i) => i.id === fromOpen)?.jobState.key).toBe('completed')
+    expect(last.counts.past).toBe(all.length)
+  }
 })

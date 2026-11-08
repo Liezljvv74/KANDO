@@ -29,7 +29,7 @@ export const JobRowSchema = z.object({
 })
 export type JobRow = z.infer<typeof JobRowSchema>
 
-/** A page of one section (or of a search); `counts` are jobs, each counted once, for the asked role only. */
+/** A page of one section (or of a search), latest job date first; `counts` are jobs, each counted once, for the asked role only. */
 export const JobsPageSchema = z.object({
   items: z.array(JobRowSchema),
   next: z.string().optional(),
@@ -38,6 +38,8 @@ export const JobsPageSchema = z.object({
     needsYou: z.number().int().min(0),
     /** Jobs with an unread message. */
     unread: z.number().int().min(0),
+    /** All past jobs of the role ("Past jobs (n)"); optional so an older server still parses. */
+    past: z.number().int().min(0).optional(),
   }),
 })
 export type JobsPage = z.infer<typeof JobsPageSchema>

@@ -15,4 +15,5 @@ it('a jobs page parses with and without a next cursor', () => {
   const row = { id: 'r', number: 1044, title: 'Fotos', otherParty: 'Anna K.', date: '2026-11-08T10:00:00.000Z', unread: 1, jobState: { key: 'request_sent', section: 'needs_you', tone: 'warn', buttons: ['send_quote'], countsForMe: true } }
   expect(JobsPageSchema.parse({ items: [row], counts: { needsYou: 1, unread: 1 } }).items[0]!.number).toBe(1044)
   expect(JobsPageSchema.parse({ items: [], next: 'c', counts: { needsYou: 0, unread: 0 } }).next).toBe('c')
+  expect(JobsPageSchema.parse({ items: [], counts: { needsYou: 0, unread: 0, past: 12 } }).counts.past).toBe(12)
 })
