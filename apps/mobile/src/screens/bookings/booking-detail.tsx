@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { StyleSheet, Text } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import type { Booking, BookingView, JobStateDto } from '@kando/contract'
 
@@ -86,7 +86,7 @@ export function BookingSection({ view, showTitle }: { view: BookingView; showTit
  * The job's buttons that act on its current booking, from the server's `buttons` only (no rule of its own): pay, set up payouts and
  * the booking steps with their forms. "Job finished" before the start time shows greyed (the status card's line names the time).
  */
-export function BookingActions({ view, state, onChanged, extra, onPayDue }: { view: BookingView; state: JobStateDto; onChanged: () => void; extra?: ReactNode; onPayDue?: (b: Booking) => void }) {
+export function BookingActions({ view, state, onChanged, extra, onPayDue, onSheetShown }: { view: BookingView; state: JobStateDto; onChanged: () => void; extra?: ReactNode; onPayDue?: (b: Booking) => void; onSheetShown?: (y: number) => void }) {
   const { booking: b, viewer } = view
   const { busy, problem, submit } = useSubmit()
   const [sheet, setSheet] = useState<Sheet | null>(null)
@@ -134,17 +134,22 @@ export function BookingActions({ view, state, onChanged, extra, onPayDue }: { vi
         ))}
         {extra}
       </Actions>
-      {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
-      {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
-      {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
-      {sheet === 'dispute' && descriptionSheet('booking.disputeField', 'booking.disputeHint', 'booking.disputeSend', (text) => openDispute(b.id, text))}
-      {sheet === 'objectNoShow' && descriptionSheet('booking.objectField', 'booking.objectHint', 'booking.objectSend', (text) => objectNoShow(b.id, text))}
-      {sheet === 'additionalTask' &&
-        descriptionSheet('booking.additionalTaskField', 'additionalTask.explainer', 'booking.additionalTaskSend', (text) => startAdditionalTask(b.id, text), () => {
-          setSheet(null)
-          setNotice(t('booking.additionalTaskSent'))
-        })}
-      {sheet !== null && <LinkText label={t('common.close')} onPress={() => setSheet(null)} />}
+      {sheet !== null && (
+        // the form opens under the buttons: the page scrolls to it (it can lie below the screen's edge)
+        <View style={styles.sheet} onLayout={(e) => onSheetShown?.(e.nativeEvent.layout.y)}>
+        {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
+        {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
+        {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
+        {sheet === 'dispute' && descriptionSheet('booking.disputeField', 'booking.disputeHint', 'booking.disputeSend', (text) => openDispute(b.id, text))}
+        {sheet === 'objectNoShow' && descriptionSheet('booking.objectField', 'booking.objectHint', 'booking.objectSend', (text) => objectNoShow(b.id, text))}
+        {sheet === 'additionalTask' &&
+          descriptionSheet('booking.additionalTaskField', 'additionalTask.explainer', 'booking.additionalTaskSend', (text) => startAdditionalTask(b.id, text), () => {
+            setSheet(null)
+            setNotice(t('booking.additionalTaskSent'))
+          })}
+        {sheet !== null && <LinkText label={t('common.close')} onPress={() => setSheet(null)} />}
+        </View>
+      )}
     </>
   )
 }
@@ -206,4 +211,5 @@ const styles = StyleSheet.create({
   status: { fontSize: 18, fontFamily: font.heading, color: '#34328A' },
   text: { fontSize: 16, color: '#1D1C4A' },
   small: { fontSize: 14, color: '#4F4E7D' },
+  sheet: { gap: 8 },
 })

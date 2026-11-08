@@ -163,7 +163,7 @@ export default function RequestDetail() {
         {onBooking && current && <BookingStatusLines view={current} />}
       </Card>
       )}
-      {onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} onPayDue={setPayFor} /> : !atBottom && <Actions>{common}</Actions>}
+      {onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} onPayDue={setPayFor} onSheetShown={(y) => scroll.current?.scrollTo({ y: Math.max(0, y - 80), animated: true })} /> : !atBottom && <Actions>{common}</Actions>}
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       {!atBottom && closeButtons}
       <SectionTitle text={t(extra ? 'booking.additionalTaskRequest' : 'job.section.request')} />
