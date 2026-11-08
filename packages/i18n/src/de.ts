@@ -243,7 +243,7 @@ export const de = {
   'tab.home': 'Start',
   'home.cta': 'Jetzt Hilfe finden',
   'home.becomeProvider': 'Anbieter werden',
-  'home.headline': 'Endlich jemand, der’s KANN',
+  'home.headline': 'Endlich jemand, der’s kann',
   'home.heroHeadline': 'Endlich\njemand, der’s KANN',
   'home.stamp': 'Geprüft',
   'home.intro': 'Finde Helfer in deiner Nähe - oder neue Kunden für dein Können.',
@@ -302,7 +302,7 @@ export const de = {
   'payouts.doneTitle': 'Fast geschafft',
   'payouts.doneBody': 'Wenn du die Einrichtung abgeschlossen hast, zeigt die App es gleich an. Ist die Seite abgelaufen oder hast du abgebrochen, öffne die App und tippe noch einmal auf „Auszahlung einrichten“.',
   'payouts.back': 'Zurück zur App',
-  'home.metaTitle': '{brand} - Endlich jemand, der’s KANN',
+  'home.metaTitle': '{brand} - Endlich jemand, der’s kann',
   'home.metaDescription':
     'Finde Helfer in deiner Nähe - oder neue Kunden für dein Können. Keine Leadgebühren. Bezahlung in der App kommt bald.',
   'home.soon': 'Bald verfügbar',
