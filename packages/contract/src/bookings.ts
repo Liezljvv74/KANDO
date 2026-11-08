@@ -53,7 +53,7 @@ export const RequestInputSchema = z
  * Always sent, optional so an older server still parses; the old payment and status fields stay as they were.
  */
 export const JOB_STATE_KEYS = ['request_sent', 'quote_sent', 'payment_due', 'checkout_not_completed', 'paid_upcoming', 'before_start_time', 'start_time_passed', 'work_done_waiting', 'payout_on_its_way', 'payout_account_missing', 'problem_reported', 'delayed', 'completed', 'cancelled', 'declined_expired', 'time_to_agree'] as const
-export const JOB_BUTTONS = ['accept_quote', 'ask_question', 'send_quote', 'decline', 'pay', 'cancel', 'finish', 'confirm', 'report_problem', 'contact_support', 'open_chat', 'agree_time', 'set_up_payouts', 'add_task', 'review', 'receipt', 'no_show', 'ask_someone_else'] as const
+export const JOB_BUTTONS = ['accept_quote', 'ask_question', 'send_quote', 'decline', 'pay', 'cancel', 'finish', 'confirm', 'report_problem', 'contact_support', 'open_chat', 'agree_time', 'set_up_payouts', 'add_task', 'review', 'receipt', 'no_show', 'ask_someone_else', 'withdraw', 'enter_time', 'stop', 'state_stop_amount', 'answer_stop', 'object_no_show'] as const
 export const JobStateSchema = z.object({
   key: z.enum(JOB_STATE_KEYS),
   section: z.enum(['needs_you', 'active', 'past']),
@@ -101,6 +101,10 @@ export const RequestSchema = z.object({
   /** On GET /requests/:id only: the request's chat (an additional task's is its booking's). */
   threadId: z.string().nullish(),
   jobState: JobStateSchema.optional(),
+  /** On GET /requests/:id only (the job page): the other party's name, the request's bookings (oldest first) and the current one. */
+  otherParty: z.string().optional(),
+  bookingIds: z.array(z.string()).optional(),
+  currentBookingId: z.string().nullish(),
 })
 export type BookingRequest = z.infer<typeof RequestSchema>
 export type RequestInput = z.infer<typeof RequestInputSchema>

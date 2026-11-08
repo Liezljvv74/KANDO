@@ -61,7 +61,7 @@ async function paidBooking(o: { startAt?: Date; status?: string } = {}): Promise
 it('GET a booking returns jobState for the caller, and the old fields unchanged', async () => {
   const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(20) })
   const cust = await view(U.cust, b.id)
-  expect(cust.booking.jobState).toMatchObject({ key: 'payment_due', section: 'needs_you', buttons: ['pay'], countsForMe: true })
+  expect(cust.booking.jobState).toMatchObject({ key: 'payment_due', section: 'needs_you', buttons: ['pay', 'withdraw'], countsForMe: true })
   expect(await stateOf(U.owner, b.id)).toMatchObject({ key: 'payment_due', section: 'active', buttons: [] })
   expect(cust.booking).toMatchObject({ status: 'awaiting-payment', payBy: expect.any(String), amount: 100, currency: 'EUR' })
   expect(cust.booking).not.toHaveProperty('commissionRate')
@@ -74,7 +74,7 @@ it('a checkout reference older than the patience reads checkout_not_completed; o
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString() })
   expect((await stateOf(U.cust, b.id)).key).toBe('payment_due')
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString(), startedAt: new Date(Date.now() - 11 * 60_000).toISOString() })
-  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay'] })
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay', 'withdraw'] })
   expect((await stateOf(U.owner, b.id)).buttons).toEqual([])
 })
 
@@ -88,7 +88,7 @@ it('a repeated pay tap reuses the session and restarts the wait: payment_due, no
   const ref = JSON.parse((await pool.query('SELECT checkout_ref FROM bookings WHERE id = $1', [b.id])).rows[0].checkout_ref)
   expect(ref).toMatchObject({ sessionId: expect.any(String), url: first.url, expiresAt: expect.any(String) })
   expect(Date.now() - Date.parse(ref.startedAt)).toBeLessThan(60_000)
-  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay'] })
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay', 'withdraw'] })
   await pool.query('UPDATE bookings SET checkout_ref = $2 WHERE id = $1', [b.id, JSON.stringify({ ...ref, expiresAt: new Date(Date.now() - 1000).toISOString() })])
   expect((await stateOf(U.cust, b.id)).key).toBe('checkout_not_completed')
 })
@@ -96,8 +96,8 @@ it('a repeated pay tap reuses the session and restarts the wait: payment_due, no
 it('GET a request and the request list return jobState for each side', async () => {
   const { request } = await makeQuote({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(22) })
   const one = async (uid: string) => RequestSchema.parse(await (await call(requestOne.GET, uid, 'GET', undefined, { id: request.id })).json())
-  expect((await one(U.cust)).jobState).toMatchObject({ key: 'quote_sent', section: 'needs_you', buttons: ['accept_quote', 'ask_question', 'open_chat'] })
-  expect((await one(U.owner)).jobState).toMatchObject({ key: 'quote_sent', section: 'active', buttons: ['open_chat'] })
+  expect((await one(U.cust)).jobState).toMatchObject({ key: 'quote_sent', section: 'needs_you', buttons: ['accept_quote', 'ask_question', 'open_chat', 'cancel'] })
+  expect((await one(U.owner)).jobState).toMatchObject({ key: 'quote_sent', section: 'active', buttons: ['send_quote', 'decline', 'open_chat'] })
   const list = (await (await call(requestList.GET, U.cust)).json()) as { docs: { id: string; jobState?: { key: string } }[] }
   expect(list.docs.find((r) => r.id === request.id)?.jobState?.key).toBe('quote_sent')
 })

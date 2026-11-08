@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
 import { DAY, HOUR, LIST_PAGE, NO_SHOW_OBJECTION_HOURS, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Page, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
@@ -22,6 +22,8 @@ import { ratingsOf } from '../reviews'
 import { taskNumber } from './job-ref'
 import { rootJobs, rootsOf, taskPositions } from './job-lookup'
 import { jobStates, toJobStateDto } from './job-state-lookup'
+import { currentBookingOf } from './job-state'
+import { jobsForNotices } from './notice-job'
 
 type Db = Tx | typeof db
 
@@ -299,7 +301,11 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   // an additional task talks in its booking's thread
   const parent = row.parentBookingId ? (await tx.select().from(bookings).where(eq(bookings.id, row.parentBookingId)))[0] : undefined
   const threadId = parent ? await threadIdOf(tx, parent) : await threadIdOf(tx, { id: NO_ID, requestId: row.id, parentBookingId: null })
-  const dto = { ...(await withRequestRefs(tx, [toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))], userId, true))[0]!, threadId }
+  // the job page: the other party, this request's bookings (oldest first) and the current one (the rule the job state uses)
+  const own = await tx.select({ id: bookings.id, status: bookings.status, createdAt: bookings.createdAt }).from(bookings).where(eq(bookings.requestId, row.id)).orderBy(asc(bookings.createdAt), asc(bookings.id))
+  const otherParty = (await jobsForNotices(tx, userId, [{ requestId: row.id }]))[0]?.otherParty
+  const job = { bookingIds: own.map((b) => b.id), currentBookingId: currentBookingOf(own)?.id ?? null, ...(otherParty !== undefined && { otherParty }) }
+  const dto = { ...(await withRequestRefs(tx, [toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))], userId, true))[0]!, threadId, ...job }
   return row.customerId === userId ? dto : (await withCustomerRatings(tx, [hideStreet(dto)]))[0]!
 }
 

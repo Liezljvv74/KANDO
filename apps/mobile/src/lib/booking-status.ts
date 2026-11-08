@@ -1,10 +1,11 @@
-import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type Booking } from '@kando/contract'
+import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type Booking, type JobStateDto } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 
 export type Viewer = 'customer' | 'provider'
+type JobButton = JobStateDto['buttons'][number]
 export type BookingAction =
   | 'withdraw'
   | 'enterTime'
@@ -64,35 +65,24 @@ function cancelledKey(b: Booking, viewer: Viewer): Key {
   return 'bookingStatus.cancelled' // ended by our team
 }
 
-/** The buttons to offer now. The server re-checks every one; a button shown a moment too long gets its plain error text. */
-export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): BookingAction[] {
-  const customer = viewer === 'customer'
-  const withdraw: BookingAction[] = customer ? ['withdraw'] : []
-  const extra: BookingAction[] = b.parentBookingId === null && !b.noShow ? ['additionalTask'] : []
-  switch (b.status) {
-    case 'awaiting-time': {
-      // either side enters the agreed time; the other confirms it (never your own entry). Only the customer can walk away: the provider uses the chat or lets it lapse.
-      const theirs = !!b.pendingTime && b.pendingTime.by !== viewer
-      return [...(theirs ? ['confirmTime' as const] : []), 'enterTime', ...withdraw]
-    }
-    case 'awaiting-payment':
-      return withdraw
-    case 'confirmed': {
-      if (b.noShow) return b.noShow === viewer && now.getTime() < ms(b.noShowObjectBy) ? ['objectNoShow'] : []
-      if (now.getTime() < ms(b.startAt)) return [...extra, 'cancel']
-      const asked: BookingAction[] = customer && b.askedDoneAt ? ['confirm', 'dispute'] : []
-      return [...(customer ? asked : ['finish' as const]), ...extra, 'stop', 'reportNoShow']
-    }
-    case 'finished':
-      if (!b.confirmBy || now.getTime() >= ms(b.confirmBy)) return extra
-      return customer ? ['confirm', 'dispute', ...extra] : ['dispute', ...extra]
-    case 'stopped': // either side may report a problem until an amount is agreed (confirmBy set)
-      if (b.confirmBy) return []
-      if (!b.stopStatedAt) return customer ? ['dispute'] : ['stateStopAmount', 'dispute']
-      return customer ? ['answerStop', 'dispute'] : ['dispute']
-    default:
-      return []
-  }
+/**
+ * The booking step behind each of the server's job buttons (jobState.buttons decides which show; the server re-checks every step).
+ * `cancel` is the booking's own; on a request without a booking the job page withdraws the request instead.
+ */
+export const BUTTON_ACTION: Partial<Record<JobButton, BookingAction>> = {
+  withdraw: 'withdraw',
+  enter_time: 'enterTime',
+  agree_time: 'confirmTime',
+  finish: 'finish',
+  confirm: 'confirm',
+  report_problem: 'dispute',
+  add_task: 'additionalTask',
+  cancel: 'cancel',
+  stop: 'stop',
+  no_show: 'reportNoShow',
+  object_no_show: 'objectNoShow',
+  state_stop_amount: 'stateStopAmount',
+  answer_stop: 'answerStop',
 }
 
 /** The button text: the customer asks for an "Additional task", the provider for a "Scope/quote review" (the same flow). */

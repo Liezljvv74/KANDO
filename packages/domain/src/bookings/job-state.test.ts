@@ -27,8 +27,8 @@ describe('request without a booking', () => {
   })
   it('quoted: quote sent', () => {
     const request = { status: 'quoted', answerBy: at(24), quoteValidUntil: at(48) }
-    expect(pick(state('customer', null, { request }))).toEqual(['quote_sent', 'needs_you', ['accept_quote', 'ask_question', 'open_chat']])
-    expect(pick(state('provider', null, { request }))).toEqual(['quote_sent', 'active', chat])
+    expect(pick(state('customer', null, { request }))).toEqual(['quote_sent', 'needs_you', ['accept_quote', 'ask_question', 'open_chat', 'cancel']])
+    expect(pick(state('provider', null, { request }))).toEqual(['quote_sent', 'active', ['send_quote', 'decline', 'open_chat']])
   })
   it('expired quote, unanswered request past its deadline, withdrawn, declined, expired: past', () => {
     for (const request of [{ status: 'quoted', answerBy: at(24), quoteValidUntil: at(-1) }, { status: 'open', answerBy: at(-1) }, { status: 'withdrawn', answerBy: at(24) }, { status: 'declined', answerBy: at(24) }, { status: 'expired', answerBy: at(24) }])
@@ -42,24 +42,25 @@ describe('request without a booking', () => {
 
 describe('booking states, both viewers, exact buttons', () => {
   it('awaiting time (no agreed time): quote_sent, active, chat only', () => {
-    for (const v of ['customer', 'provider'] as const) expect(pick(state(v, { status: 'awaiting-time', answerBy: at(10) }))).toEqual(['quote_sent', 'active', chat])
+    expect(pick(state('customer', { status: 'awaiting-time', answerBy: at(10) }))).toEqual(['quote_sent', 'active', ['enter_time', 'open_chat', 'withdraw']])
+    expect(pick(state('provider', { status: 'awaiting-time', answerBy: at(10) }))).toEqual(['quote_sent', 'active', ['enter_time', 'open_chat']])
   })
   it('a proposed time waits for the other side', () => {
     const b = { status: 'awaiting-time', answerBy: at(10), timeProposedBy: 'customer' }
-    expect(pick(state('customer', b))).toEqual(['time_to_agree', 'active', chat])
-    expect(pick(state('provider', b))).toEqual(['time_to_agree', 'needs_you', ['agree_time', 'open_chat']])
-    expect(pick(state('customer', { ...b, timeProposedBy: 'provider' }))).toEqual(['time_to_agree', 'needs_you', ['agree_time', 'open_chat']])
+    expect(pick(state('customer', b))).toEqual(['time_to_agree', 'active', ['enter_time', 'open_chat', 'withdraw']])
+    expect(pick(state('provider', b))).toEqual(['time_to_agree', 'needs_you', ['agree_time', 'enter_time', 'open_chat']])
+    expect(pick(state('customer', { ...b, timeProposedBy: 'provider' }))).toEqual(['time_to_agree', 'needs_you', ['agree_time', 'enter_time', 'open_chat', 'withdraw']])
   })
   it('awaiting time past answerBy: declined_expired', () => expect(state('customer', { status: 'awaiting-time', answerBy: at(-1) }).key).toBe('declined_expired'))
   it('payment due', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30) }
-    expect(pick(state('customer', b))).toEqual(['payment_due', 'needs_you', ['pay']])
+    expect(pick(state('customer', b))).toEqual(['payment_due', 'needs_you', ['pay', 'withdraw']])
     expect(pick(state('provider', b))).toEqual(['payment_due', 'active', []])
   })
   it('a fresh or unknown-age checkout is still payment due', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1' }
     expect(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS) }).key).toBe('payment_due')
-    expect(pick(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - 60_000) }))).toEqual(['payment_due', 'needs_you', ['pay']])
+    expect(pick(state('customer', { ...b, checkoutStartedAt: new Date(now.getTime() - 60_000) }))).toEqual(['payment_due', 'needs_you', ['pay', 'withdraw']])
     expect(state('customer', b).key).toBe('payment_due')
   })
   it('checkout expiry: expired is not completed; unexpired follows the patience; no timestamp is payment due', () => {
@@ -74,45 +75,63 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('checkout not completed', () => {
     const b = { status: 'awaiting-payment', payBy: at(10), startAt: at(30), checkoutRef: 'cs_1', checkoutStartedAt: new Date(now.getTime() - CHECKOUT_PATIENCE_MS - 1) }
-    expect(pick(state('customer', b))).toEqual(['checkout_not_completed', 'needs_you', ['pay']])
+    expect(pick(state('customer', b))).toEqual(['checkout_not_completed', 'needs_you', ['pay', 'withdraw']])
     expect(pick(state('provider', b))).toEqual(['checkout_not_completed', 'active', []])
   })
   it('paid, upcoming: customer paid_upcoming, provider before_start_time with the start time and finish', () => {
     const b = { status: 'confirmed', startAt: at(5) }
     expect(pick(state('customer', b))).toEqual(['paid_upcoming', 'active', ['add_task', 'open_chat', 'cancel']])
     const p = state('provider', b)
-    expect(pick(p)).toEqual(['before_start_time', 'active', ['finish', 'open_chat', 'cancel']])
+    expect(pick(p)).toEqual(['before_start_time', 'active', ['finish', 'add_task', 'open_chat', 'cancel']])
     expect(p.startAt).toEqual(at(5))
+  })
+  it('an additional task offers no further task', () => {
+    expect(state('customer', { status: 'confirmed', startAt: at(5), parentBookingId: 'root' }).buttons).toEqual(['open_chat', 'cancel'])
+    expect(state('provider', { status: 'finished', confirmBy: at(48), parentBookingId: 'root' }).buttons).toEqual(chat)
   })
   it('start time passed', () => {
     const b = { status: 'confirmed', startAt: at(-1) }
-    expect(pick(state('customer', b))).toEqual(['start_time_passed', 'active', ['open_chat', 'no_show']])
-    expect(pick(state('provider', b))).toEqual(['start_time_passed', 'needs_you', ['finish', 'open_chat', 'no_show']])
+    expect(pick(state('customer', b))).toEqual(['start_time_passed', 'active', ['open_chat', 'no_show', 'add_task', 'stop']])
+    expect(pick(state('provider', b))).toEqual(['start_time_passed', 'needs_you', ['finish', 'add_task', 'open_chat', 'stop', 'no_show']])
   })
   it('customer asked "was it done" without a finish: customer confirms', () => {
     const b = { status: 'confirmed', startAt: at(-3), askedDoneAt: at(-1) }
-    expect(pick(state('customer', b))).toEqual(['work_done_waiting', 'needs_you', ['confirm', 'report_problem', 'open_chat']])
+    expect(pick(state('customer', b))).toEqual(['work_done_waiting', 'needs_you', ['confirm', 'report_problem', 'open_chat', 'add_task', 'stop', 'no_show']])
     expect(state('provider', b).key).toBe('start_time_passed')
   })
   it('work done, waiting: provider never gets report_problem', () => {
     const b = { status: 'finished', confirmBy: at(48) }
-    expect(pick(state('customer', b))).toEqual(['work_done_waiting', 'needs_you', ['confirm', 'report_problem', 'open_chat']])
+    expect(pick(state('customer', b))).toEqual(['work_done_waiting', 'needs_you', ['confirm', 'report_problem', 'open_chat', 'add_task']])
     const p = state('provider', b)
-    expect(pick(p)).toEqual(['work_done_waiting', 'active', chat])
+    expect(pick(p)).toEqual(['work_done_waiting', 'active', ['open_chat', 'add_task']])
     expect(p.buttons).not.toContain('report_problem')
   })
   it('payout on its way (finished past confirmBy, or completed and not released)', () => {
     for (const b of [{ status: 'finished', confirmBy: at(-1) }, { status: 'completed' }])
-      for (const v of ['customer', 'provider'] as const) expect(pick(state(v, b))).toEqual(['payout_on_its_way', 'active', chat])
+      for (const v of ['customer', 'provider'] as const) expect(pick(state(v, b))).toEqual(['payout_on_its_way', 'active', b.status === 'finished' ? ['open_chat', 'add_task'] : chat])
   })
   it('payout account missing', () => {
     const b = { status: 'finished', confirmBy: at(-1) }
-    expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', []])
-    expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', ['set_up_payouts']])
+    expect(pick(state('customer', b, { ready: false }))).toEqual(['payout_account_missing', 'active', ['add_task']])
+    expect(pick(state('provider', b, { ready: false }))).toEqual(['payout_account_missing', 'needs_you', ['set_up_payouts', 'add_task']])
   })
   it('problem reported (disputed, no-show, stopped without an amount)', () => {
-    for (const b of [{ status: 'disputed' }, { status: 'confirmed', noShow: 'provider' }, { status: 'stopped' }])
+    for (const b of [{ status: 'disputed' }, { status: 'confirmed', noShow: 'provider' }])
       for (const v of ['customer', 'provider'] as const) expect(pick(state(v, b))).toEqual(['problem_reported', 'active', ['open_chat', 'contact_support']])
+  })
+  it('the reported side may object until the deadline', () => {
+    const b = { status: 'confirmed', noShow: 'provider', noShowObjectBy: at(10) }
+    expect(state('provider', b).buttons).toEqual(['open_chat', 'contact_support', 'object_no_show'])
+    expect(state('customer', b).buttons).toEqual(['open_chat', 'contact_support'])
+    expect(state('provider', { ...b, noShowObjectBy: at(-1) }).buttons).toEqual(['open_chat', 'contact_support'])
+  })
+  it('stopped without an agreed amount: the provider states it, the customer answers it, both may report a problem', () => {
+    const base = ['open_chat', 'contact_support']
+    expect(state('provider', { status: 'stopped' }).buttons).toEqual([...base, 'state_stop_amount', 'report_problem'])
+    expect(state('customer', { status: 'stopped' }).buttons).toEqual([...base, 'report_problem'])
+    expect(state('provider', { status: 'stopped', stopStatedAt: at(-1) }).buttons).toEqual([...base, 'report_problem'])
+    expect(state('customer', { status: 'stopped', stopStatedAt: at(-1) }).buttons).toEqual([...base, 'answer_stop', 'report_problem'])
+    for (const v of ['customer', 'provider'] as const) expect(state(v, { status: 'stopped' }).key).toBe('problem_reported')
   })
   it('stopped with an agreed amount is paid like finished', () => {
     expect(state('customer', { status: 'stopped', confirmBy: at(10) }).key).toBe('work_done_waiting')
@@ -120,7 +139,7 @@ describe('booking states, both viewers, exact buttons', () => {
   })
   it('delayed beats payout_on_its_way and payout_account_missing for both viewers', () => {
     for (const b of [{ status: 'finished', confirmBy: at(-1) }, { status: 'completed' }])
-      for (const v of ['customer', 'provider'] as const) for (const ready of [true, false]) expect(pick(state(v, b, { delayedFlag: true, ready }))).toEqual(['delayed', 'active', ['contact_support']])
+      for (const v of ['customer', 'provider'] as const) for (const ready of [true, false]) expect(pick(state(v, b, { delayedFlag: true, ready }))).toEqual(['delayed', 'active', b.status === 'finished' ? ['contact_support', 'add_task'] : ['contact_support']])
     expect(state('customer', { status: 'finished', confirmBy: at(-1) }, { delayedFlag: true }).tone).toBe('bad')
   })
   it('completed: past, with the payout date', () => {

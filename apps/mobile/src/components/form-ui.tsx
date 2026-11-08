@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import type { ComponentRef } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
@@ -8,11 +9,12 @@ import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { t } from '@/i18n'
 import { color, font } from '@/theme'
 
-export function FormScreen({ title, children, back = true }: { title: string; children: React.ReactNode; back?: boolean }) {
+/** `scrollRef`: lets a screen scroll to one of its sections (y from that section's onLayout; sections are direct children). */
+export function FormScreen({ title, children, back = true, scrollRef }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>> }) {
   const router = useRouter()
   return (
     <SafeAreaView style={styles.root}>
-      <KeyboardAwareScrollView contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         <Text style={styles.title}>{title}</Text>
         {children}

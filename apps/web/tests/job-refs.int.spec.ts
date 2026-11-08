@@ -107,6 +107,19 @@ it('jobsForNotices: an additional task resolves to the root job; the other party
   expect(asOwner[2]!.number).toBe(n)
 })
 
+it('GET /requests/:id carries the job page fields: the other party for each side, the bookings oldest first and the current one', async () => {
+  await pool.query("UPDATE users SET first_name = 'Clara', last_name = 'Kunde' WHERE id = $1", [U.cust])
+  const root = await paidJob(U.owner, providerId)
+  const asCust = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: root.requestId! })).json())
+  expect(asCust).toMatchObject({ bookingIds: [root.id], currentBookingId: root.id, otherParty: (await pool.query('SELECT public_name FROM providers WHERE id = $1', [providerId])).rows[0].public_name })
+  const asOwner = RequestSchema.parse(await (await call(requestRoute.GET, U.owner, 'GET', undefined, { id: root.requestId! })).json())
+  expect(asOwner).toMatchObject({ otherParty: 'Clara K.', currentBookingId: root.id })
+  // an older dead booking stays listed; the live one is current
+  const old = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, amount, currency, on_site, created_at) SELECT customer_id, provider_id, service_id, quote_id, request_id, source, 'expired', start_at, duration_min, amount, currency, on_site, created_at - interval '1 day' FROM bookings WHERE id = $1 RETURNING id", [root.id])).rows[0].id
+  const again = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: root.requestId! })).json())
+  expect(again).toMatchObject({ bookingIds: [old, root.id], currentBookingId: root.id })
+})
+
 it('an additional task whose root booking has no request shows no job refs (not its own unused number)', async () => {
   const { jobsForNotices } = await import('@kando/domain')
   const { db } = await import('@kando/db')
