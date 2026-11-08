@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
-import type { BookingView, JobStateDto } from '@kando/contract'
+import type { Booking, BookingView, JobStateDto } from '@kando/contract'
 
 import { confirmAgreedTime, confirmJob, getBooking, acceptNoShow, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
@@ -86,7 +86,7 @@ export function BookingSection({ view, showTitle }: { view: BookingView; showTit
  * The job's buttons that act on its current booking, from the server's `buttons` only (no rule of its own): pay, set up payouts and
  * the booking steps with their forms. "Job finished" before the start time shows greyed (the status card's line names the time).
  */
-export function BookingActions({ view, state, onChanged, extra }: { view: BookingView; state: JobStateDto; onChanged: () => void; extra?: ReactNode }) {
+export function BookingActions({ view, state, onChanged, extra, onPayDue }: { view: BookingView; state: JobStateDto; onChanged: () => void; extra?: ReactNode; onPayDue?: (b: Booking) => void }) {
   const { booking: b, viewer } = view
   const { busy, problem, submit } = useSubmit()
   const [sheet, setSheet] = useState<Sheet | null>(null)
@@ -110,7 +110,11 @@ export function BookingActions({ view, state, onChanged, extra }: { view: Bookin
     const ask = ASK[action]
     if (ask && !(await confirmDanger(t(ask[0]), t(ask[1])))) return
     if (ask) return submit(ask[2], onChanged)
-    if (action === 'confirmTime') return submit(() => confirmAgreedTime(b.id), onChanged)
+    if (action === 'confirmTime')
+      return submit(async () => {
+        const made = await confirmAgreedTime(b.id)
+        if (made.status === 'awaiting-payment') onPayDue?.(made) // the agreed time makes it payable: offer the payment at once, as after accepting a quote
+      }, onChanged)
   }
   const descriptionSheet = (label: Key, hint: Key | undefined, submitLabel: Key, call: (text: string) => Promise<unknown>, after = closeAndReload) => (
     <DescriptionForm label={t(label)} hint={hint && t(hint)} submitLabel={t(submitLabel)} onSubmit={call} onDone={after} />
