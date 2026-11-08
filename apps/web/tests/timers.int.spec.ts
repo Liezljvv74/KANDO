@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
-import { clearOutbox, confirmQuote, createRequest, drainOutbox, getBooking, getRequest, listBookings, listQuotes, listRequests, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
+import { clearOutbox, confirmQuote, createRequest, drainOutbox, getBooking, getRequest, listQuotes, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
 import { requestTime, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 
@@ -164,11 +164,11 @@ it('a lapsed request reads expired in the list and alone, the row is untouched, 
   const mine = await request(prov, past())
   const b = await booking('awaiting-time', { answerBy: past() })
   const b2 = await booking('awaiting-payment', { payBy: new Date(Date.now() - 11 * 60_000).toISOString() }) // after PAY_GRACE_MINUTES
-  expect((await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))).docs.find((r) => r.id === mine)?.status).toBe('expired')
-  expect((await asUser(U.owner, (tx) => listRequests(tx, U.owner, 'provider'))).docs.find((r) => r.id === mine)?.status).toBe('expired')
   expect((await asUser(U.cust, (tx) => getRequest(tx, U.cust, mine))).status).toBe('expired')
-  expect((await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))).docs.find((x) => x.id === b)?.status).toBe('expired')
-  expect((await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))).docs.find((x) => x.id === b2)?.status).toBe('expired')
+  expect((await asUser(U.owner, (tx) => getRequest(tx, U.owner, mine))).status).toBe('expired')
+  expect((await asUser(U.cust, (tx) => getRequest(tx, U.cust, mine))).status).toBe('expired')
+  expect((await asUser(U.cust, (tx) => getBooking(tx, U.cust, b))).booking.status).toBe('expired')
+  expect((await asUser(U.owner, (tx) => getBooking(tx, U.owner, b2))).booking.status).toBe('expired')
   expect((await asUser(U.cust, (tx) => getBooking(tx, U.cust, b))).booking.status).toBe('expired')
   expect([await status('requests', mine), await status('bookings', b), await status('bookings', b2)]).toEqual(['open', 'awaiting-time', 'awaiting-payment']) // shown, not written
   expect(await notes('request-expired')).toHaveLength(0)
@@ -176,18 +176,17 @@ it('a lapsed request reads expired in the list and alone, the row is untouched, 
   expect(again.status).toBe('open')
 })
 
-it('a list read writes nothing', async () => {
+it('a read writes nothing', async () => {
   await clean()
-  await booking('awaiting-payment', { acceptedAt: new Date(Date.now() - 20 * 3_600_000).toISOString(), payBy: new Date(Date.now() + 3_600_000).toISOString() }) // a reminder is due
-  await booking('awaiting-time', { answerBy: new Date(Date.now() - 60_000).toISOString() })
-  for (let i = 0; i < 3; i++) await request(prov, new Date(Date.now() - 60_000 * (i + 1)).toISOString())
+  const b1 = await booking('awaiting-payment', { acceptedAt: new Date(Date.now() - 20 * 3_600_000).toISOString(), payBy: new Date(Date.now() + 3_600_000).toISOString() }) // a reminder is due
+  const b2 = await booking('awaiting-time', { answerBy: new Date(Date.now() - 60_000).toISOString() })
+  const rs: string[] = []
+  for (let i = 0; i < 3; i++) rs.push(await request(prov, new Date(Date.now() - 60_000 * (i + 1)).toISOString()))
   const snapshot = async () => (await pool.query("SELECT (SELECT json_agg(r ORDER BY id) FROM requests r WHERE customer_id LIKE 'tm-%') r, (SELECT json_agg(b ORDER BY id) FROM bookings b WHERE customer_id LIKE 'tm-%') b, (SELECT count(*) FROM notifications WHERE user_id LIKE 'tm-%') n")).rows[0]
   const before = await snapshot()
   clearOutbox()
-  await asUser(U.cust, (tx) => listBookings(tx, U.cust, 'customer'))
-  await asUser(U.owner, (tx) => listBookings(tx, U.owner, 'provider'))
-  await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer'))
-  await asUser(U.owner, (tx) => listRequests(tx, U.owner, 'provider'))
+  for (const id of [b1, b2]) for (const u of [U.cust, U.owner]) await asUser(u, (tx) => getBooking(tx, u, id))
+  for (const id of rs) for (const u of [U.cust, U.owner]) await asUser(u, (tx) => getRequest(tx, u, id))
   expect(await snapshot()).toEqual(before)
   expect(outboxForTests()).toEqual([])
 })
@@ -309,8 +308,8 @@ it('a direct booking and an additional task change no request', async () => {
 const confirm = (q: string) => asUser(U.cust, (tx) => confirmQuote(tx, U.cust, q, {}, new Date(NOW)))
 const shown = async (x: { r: string; q: string }) => [
   (await asUser(U.cust, (tx) => getRequest(tx, U.cust, x.r, new Date(NOW)))).status,
-  (await asUser(U.cust, (tx) => listRequests(tx, U.cust, 'customer', undefined, new Date(NOW)))).docs.find((r) => r.id === x.r)?.status,
-  (await asUser(U.owner, (tx) => listRequests(tx, U.owner, 'provider', undefined, new Date(NOW)))).docs.find((r) => r.id === x.r)?.status,
+  (await asUser(U.cust, (tx) => getRequest(tx, U.cust, x.r, new Date(NOW)))).status,
+  (await asUser(U.owner, (tx) => getRequest(tx, U.owner, x.r, new Date(NOW)))).status,
   (await asUser(U.cust, (tx) => listQuotes(tx, U.cust, x.r, new Date(NOW)))).find((q) => q.id === x.q)?.status,
 ]
 const mailedNull = async (b: string) => (await pool.query("SELECT count(*)::int AS n FROM notifications WHERE payload->>'bookingId' = $1 AND mailed_at IS NULL", [b])).rows[0].n as number

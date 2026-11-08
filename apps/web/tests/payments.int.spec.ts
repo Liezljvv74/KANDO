@@ -364,6 +364,19 @@ it('a payment for a booking deleted with the account is refunded with the ledger
   expect((await pool.query("SELECT count(*)::int n FROM notifications WHERE user_id = $1 AND kind = 'payment-late-refunded'", [U.cust2])).rows[0].n).toBe(1)
 })
 
+it('a payment of another environment on the shared Stripe account is ignored: no refund, no ledger rows, no flag', async () => {
+  const foreign = paid(randomUUID(), { customerId: randomUUID(), providerId: randomUUID() }) as Extract<GatewayEvent, { type: 'checkout-paid' }>
+  expect((await deliver(foreign)).status).toBe(200)
+  expect(callsOf('refund')).toEqual([])
+  expect(await ledger(foreign.bookingId)).toEqual([])
+  expect(await flags('payment-unprocessed', foreign.bookingId)).toEqual([])
+  // its dispute and failed refund are not ours either
+  expect((await deliver({ id: `evt_${randomUUID()}`, type: 'charge-disputed', paymentRef: foreign.paymentRef })).status).toBe(200)
+  expect((await deliver({ id: `evt_${randomUUID()}`, type: 'refund-failed', paymentRef: foreign.paymentRef, refundId: 're_x', bookingId: foreign.bookingId })).status).toBe(200)
+  expect(await flags('chargeback', foreign.bookingId)).toEqual([])
+  expect(await flags('refund-failed', foreign.bookingId)).toEqual([])
+})
+
 it('a duplicate payment after confirmation is refunded', async () => {
   const b = await awaiting()
   const first = paid(b.id) as Extract<GatewayEvent, { type: 'checkout-paid' }>

@@ -103,7 +103,7 @@ const csv = (uid: string, format = 'csv') =>
   exportRoute.GET(new Request(`http://localhost/app-api/v1/me/export?format=${format}`, { headers: { cookie: `uid=${uid}:${EMAIL(uid)}` } }), { params: Promise.resolve({}) })
 
 it('format=csv: BOM, text/csv, one row per field, tricky values survive a round trip, never the other person', async () => {
-  const tricky = 'Müller, "Bau"\nGmbH – Café'
+  const tricky = 'Müller, "Bau"\nGmbH - Café'
   await pool.query("INSERT INTO provider_references (provider_id, client_name, description) SELECT id, $2, 'x' FROM providers WHERE owner_id = $1", ['ex1', tricky])
   const res = await csv('ex1')
   expect(res.status).toBe(200)
@@ -111,7 +111,7 @@ it('format=csv: BOM, text/csv, one row per field, tricky values survive a round 
   const bytes = Buffer.from(await res.arrayBuffer())
   expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]) // the byte order mark (res.text() would drop it)
   const text = bytes.toString('utf8')
-  expect(text).toContain('"Müller, ""Bau""\nGmbH – Café"')
+  expect(text).toContain('"Müller, ""Bau""\nGmbH - Café"')
   const rows = parseCsv(text.slice(1))
   expect(rows[0]).toEqual(['section', 'record', 'field', 'value'])
   expect(rows.every((r) => r.length === 4)).toBe(true)

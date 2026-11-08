@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { MessageSchema, RequestSchema, ThreadSchema } from '@kando/contract'
-import { requestTime, adminCall, call, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, adminCall, call, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser, relaxLimits, threadOfRequest } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await mockAuth()), sessionFromRequest: fakeSession }))
-const threadsRoute = await import('../app/app-api/v1/threads/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 const reportRoute = await import('../app/app-api/v1/messages/[id]/report/route')
 const requests = await import('../app/app-api/v1/requests/route')
@@ -30,7 +29,7 @@ afterAll(cleanupUsers)
 const newThread = async (as = U.cust) => {
   await relaxLimits(as)
   const r = RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence', ...requestTime() })).json())
-  return ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs).find((t) => t.requestId === r.id)!
+  return ThreadSchema.parse(await threadOfRequest(as, r.id))
 }
 const send = (threadId: string, as: string, body: string) => call(messagesRoute.POST, as, 'POST', { body }, { id: threadId })
 const sendOk = async (threadId: string, as: string, body: string) => MessageSchema.parse(await (await send(threadId, as, body)).json())
@@ -148,7 +147,7 @@ it("the reported person's own view of the thread does not show who reported, or 
   await call(reportRoute.POST, U.owner, 'POST', { reason: 'secret-reason' }, { id: m.id })
   const seen = JSON.stringify([
     await (await call(messagesRoute.GET, U.cust, 'GET', undefined, { id: t.id })).json(),
-    await (await call(threadsRoute.GET, U.cust)).json(),
+    await threadOfRequest(U.cust, t.requestId!),
   ])
   for (const s of ['secret-reason', 'message-reported', 'staff_flag', EMAIL(U.owner), U.owner]) expect(seen).not.toContain(s)
 })

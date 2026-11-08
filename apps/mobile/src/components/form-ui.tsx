@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import type { ComponentRef } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
@@ -8,11 +9,12 @@ import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { t } from '@/i18n'
 import { color, font } from '@/theme'
 
-export function FormScreen({ title, children, back = true }: { title: string; children: React.ReactNode; back?: boolean }) {
+/** `scrollRef`: lets a screen scroll to one of its sections (y from that section's onLayout; sections are direct children). */
+export function FormScreen({ title, children, back = true, scrollRef }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>> }) {
   const router = useRouter()
   return (
     <SafeAreaView style={styles.root}>
-      <KeyboardAwareScrollView contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         <Text style={styles.title}>{title}</Text>
         {children}
@@ -30,7 +32,7 @@ export const Card = ({ children, done, list }: { children: React.ReactNode; done
   <View style={[styles.card, list && styles.cardList, done && styles.cardDone]}>{children}</View>
 )
 
-export const SectionTitle = ({ text }: { text: string }) => <Text style={styles.section}>{text}</Text>
+export const SectionTitle = ({ text, tint }: { text: string; tint?: string }) => <Text style={[styles.section, tint ? { color: tint } : null]}>{text}</Text>
 
 export const SwitchRow = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
   <View style={styles.switchRow}>
@@ -46,12 +48,23 @@ export const SmallButton = ({
   accessibilityLabel,
   disabled,
   busy,
+  danger,
+  solid,
+  grow,
+  badge,
 }: {
   label: string
   onPress: () => void
   accessibilityLabel?: string
   disabled?: boolean
   busy?: boolean
+  danger?: boolean
+  /** Filled like the full-width Button (teal, or red with `danger`), only smaller. */
+  solid?: boolean
+  /** Shares a row equally with its neighbours (the label wraps when it must). */
+  grow?: boolean
+  /** Red text after the label, e.g. an unread count "(1)"; the button's line turns red with it. */
+  badge?: string
 }) => (
   <Pressable
     onPress={onPress}
@@ -59,9 +72,9 @@ export const SmallButton = ({
     accessibilityRole="button"
     accessibilityLabel={accessibilityLabel ?? label}
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
-    style={({ pressed }) => [styles.small, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
+    style={({ pressed }) => [styles.small, grow && styles.smallGrow, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, !!badge && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={color.indigo} /> : <Text style={styles.smallLabel}>{label}</Text>}
+    {busy ? <ActivityIndicator color={solid ? (danger ? '#fff' : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? '#fff' : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>}
   </Pressable>
 )
 
@@ -123,6 +136,8 @@ const styles = StyleSheet.create({
   small: { minHeight: 44, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: color.indigo, justifyContent: 'center' },
   smallLabel: { color: color.indigo, fontWeight: '600', fontSize: 15 },
   smallOff: { opacity: 0.5 },
+  smallGrow: { flexGrow: 1, flexShrink: 1, flexBasis: '45%', minHeight: 52, paddingHorizontal: 6, alignItems: 'center' },
+  smallGrowLabel: { textAlign: 'center', fontSize: 16 },
   icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   headerTitle: { flex: 1 },

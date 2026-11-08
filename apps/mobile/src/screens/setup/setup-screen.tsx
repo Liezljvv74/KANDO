@@ -2,18 +2,19 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
+import type { MyProfile } from '@kando/contract'
+
 import { documentsApi, ensureDraft, getMyProfile, photosApi, referencesApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Info } from '@/components/auth-ui'
 import { Card, FormScreen } from '@/components/form-ui'
-import { NotificationBanners } from '@/components/notification-banner'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/correspondence'
-import { canShare, documentRows } from '@/lib/documents'
-import { createStaleGuard } from '@/lib/stale-guard'
+import { documentRows } from '@/lib/documents'
+import { createSaveGuard, freshOr } from '@/lib/save-guard'
 import { InvoicesCard } from '../invoices/invoices-card'
 import { PortfolioCard } from '../my-profile/portfolio-card'
 import { ProfilePhoto } from '../my-profile/photo-card'
@@ -42,17 +43,25 @@ export default function SetupScreen() {
     ),
   )
 
-  // Every load and every save stamps itself; an answer older than one already applied never replaces the held profile.
-  const stamp = useRef(createStaleGuard()).current
+  // A reload that started before a save (the app back in front, a retry) must not bring back the profile the save replaced.
+  const saves = useRef(createSaveGuard<MyProfile>()).current
   const loadAll = useCallback(async () => {
-    const fresh = stamp()
-    const profile = (await getMyProfile()) ?? (await ensureDraft())
+    const fresh = saves.start()
+    const loaded = (await getMyProfile()) ?? (await ensureDraft())
     const [services, references, photos, verifications] = await Promise.all([servicesApi.list(), referencesApi.list(), photosApi.list(), documentsApi.list()])
     // Opening the page marks the notifications seen; a /me failure must not hold the page back.
     loadMe().then(() => markNotificationsSeen((n) => !categoryOf(n))).catch(() => {})
-    return { profile, services, references, photos, verifications, fresh }
-  }, [stamp])
-  const { done, data, error, retry } = useLoad(loadAll)
+    return { profile: freshOr(loaded, fresh(), saves.latest()), services, references, photos, verifications }
+  }, [saves])
+  const { done, data, error, retry, update } = useLoad(loadAll)
+  // An invoicing save or a checklist step answers with the profile: it replaces the held one, the lists are not reloaded.
+  const onSaved = useCallback(
+    (profile: MyProfile) => {
+      saves.saved(profile)
+      update((d) => ({ ...d, profile }))
+    },
+    [saves, update],
+  )
   const { categories } = useCategories()
   const me = useMe()
   const [taxAsked, setTaxAsked] = useState(0) // the tax number step opens the field in the payout card
@@ -64,8 +73,7 @@ export default function SetupScreen() {
 
   return (
     <FormScreen title={title} back={false}>
-      <PublishBar profile={profile} services={services} onChanged={retry} onTaxId={() => setTaxAsked((n) => n + 1)} />
-      <NotificationBanners me={me} canShare={canShare(services)} />
+      <PublishBar profile={profile} services={services} docRows={docRows} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />
@@ -77,7 +85,7 @@ export default function SetupScreen() {
         {profile.suspendedUntil && new Date(profile.suspendedUntil) > new Date() ? <ErrorText text={errorText('Profile suspended')} /> : null}
       </Card>
 
-      <PayoutCard profile={profile} onChanged={retry} taxAsked={taxAsked} />
+      <PayoutCard profile={profile} onSaved={onSaved} taxAsked={taxAsked} />
 
       <ServicesCard services={services} docRows={docRows} />
 

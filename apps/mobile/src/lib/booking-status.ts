@@ -1,14 +1,16 @@
-import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type Booking } from '@kando/contract'
+import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type Booking, type JobStateDto } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
 import { formatPrice } from '@/lib/format'
 
 export type Viewer = 'customer' | 'provider'
+type JobButton = JobStateDto['buttons'][number]
 export type BookingAction =
   | 'withdraw'
   | 'enterTime'
   | 'confirmTime'
+  | 'acceptNoShow'
   | 'finish'
   | 'confirm'
   | 'dispute'
@@ -30,20 +32,17 @@ export const daysLeft = (iso: string, now = new Date()): number => Math.max(0, M
 /** What a late customer cancellation costs: half the price in whole cents, half up (the server's Math.round). */
 export const lateFee = (amount: number): number => Math.round(cents(amount) * LATE_CANCEL_SHARE) / 100
 
-/** The status in plain words for the viewer. */
-export function bookingStatusText(b: Booking, viewer: Viewer, now = new Date()): string {
+/**
+ * The status in plain words for the viewer: the detail line under a problem (no-show, stop, dispute) and an awaiting-time
+ * booking's title. The payment stages (pay, waiting, payout) are the server's jobState text only.
+ */
+export function bookingStatusText(b: Booking, viewer: Viewer): string {
   const date = (iso: string | null) => (iso ? formatWhen(iso) : '')
   switch (b.status) {
-    case 'awaiting-payment':
-      return t(viewer === 'customer' ? 'bookingStatus.payBy' : 'bookingStatus.waitPayment', { date: date(b.payBy) })
     case 'confirmed':
       if (b.noShow) return t(b.noShow === viewer ? 'bookingStatus.noShowAgainstYou' : 'bookingStatus.noShowReported', { date: date(b.noShowObjectBy) })
       return t(b.askedDoneAt && viewer === 'customer' ? 'bookingStatus.askedDone' : 'bookingStatus.confirmed')
-    case 'finished':
-      if (!b.confirmBy || ms(b.confirmBy) <= now.getTime()) return t('bookingStatus.paymentPending')
-      return t(viewer === 'customer' ? 'bookingStatus.finishedCustomer' : 'bookingStatus.finishedProvider', { date: date(b.confirmBy) })
     case 'stopped':
-      if (b.confirmBy) return t('bookingStatus.paymentPending') // the customer agreed: the payment is being made
       if (b.stopAmount === null || !b.stopStatedAt) return t(viewer === 'provider' ? 'bookingStatus.stoppedStateAmount' : 'bookingStatus.stoppedWaitAmount')
       if (viewer === 'provider') return t('bookingStatus.stopWaitAnswer', { amount: money(b, cents(b.stopAmount)) })
       return t('bookingStatus.stopAnswerBy', { amount: money(b, cents(b.stopAmount)), date: formatWhen(new Date(ms(b.stopStatedAt) + STOP_ANSWER_DAYS * DAY).toISOString()) })
@@ -64,39 +63,29 @@ function cancelledKey(b: Booking, viewer: Viewer): Key {
   return 'bookingStatus.cancelled' // ended by our team
 }
 
-/** The buttons to offer now. The server re-checks every one; a button shown a moment too long gets its plain error text. */
-export function bookingActions(b: Booking, viewer: Viewer, now = new Date()): BookingAction[] {
-  const customer = viewer === 'customer'
-  const withdraw: BookingAction[] = customer ? ['withdraw'] : []
-  const extra: BookingAction[] = b.parentBookingId === null && !b.noShow ? ['additionalTask'] : []
-  switch (b.status) {
-    case 'awaiting-time': {
-      // either side enters the agreed time; the other confirms it (never your own entry). Only the customer can walk away: the provider uses the chat or lets it lapse.
-      const theirs = !!b.pendingTime && b.pendingTime.by !== viewer
-      return [...(theirs ? ['confirmTime' as const] : []), 'enterTime', ...withdraw]
-    }
-    case 'awaiting-payment':
-      return withdraw
-    case 'confirmed': {
-      if (b.noShow) return b.noShow === viewer && now.getTime() < ms(b.noShowObjectBy) ? ['objectNoShow'] : []
-      if (now.getTime() < ms(b.startAt)) return [...extra, 'cancel']
-      const asked: BookingAction[] = customer && b.askedDoneAt ? ['confirm', 'dispute'] : []
-      return [...(customer ? asked : ['finish' as const]), ...extra, 'stop', 'reportNoShow']
-    }
-    case 'finished':
-      if (!b.confirmBy || now.getTime() >= ms(b.confirmBy)) return extra
-      return customer ? ['confirm', 'dispute', ...extra] : ['dispute', ...extra]
-    case 'stopped': // either side may report a problem until an amount is agreed (confirmBy set)
-      if (b.confirmBy) return []
-      if (!b.stopStatedAt) return customer ? ['dispute'] : ['stateStopAmount', 'dispute']
-      return customer ? ['answerStop', 'dispute'] : ['dispute']
-    default:
-      return []
-  }
+/**
+ * The booking step behind each of the server's job buttons (jobState.buttons decides which show; the server re-checks every step).
+ * `cancel` is the booking's own; on a request without a booking the job page withdraws the request instead.
+ */
+export const BUTTON_ACTION: Partial<Record<JobButton, BookingAction>> = {
+  withdraw: 'withdraw',
+  enter_time: 'enterTime',
+  agree_time: 'confirmTime',
+  finish: 'finish',
+  confirm: 'confirm',
+  report_problem: 'dispute',
+  add_task: 'additionalTask',
+  cancel: 'cancel',
+  stop: 'stop',
+  no_show: 'reportNoShow',
+  object_no_show: 'objectNoShow',
+  accept_no_show: 'acceptNoShow',
+  state_stop_amount: 'stateStopAmount',
+  answer_stop: 'answerStop',
 }
 
 /** The button text: the customer asks for an "Additional task", the provider for a "Scope/quote review" (the same flow). */
-export const actionLabel = (a: BookingAction, viewer: Viewer): string => t(a === 'additionalTask' && viewer === 'provider' ? 'booking.scopeReview' : (`booking.${a}` as Key))
+export const actionLabel = (a: BookingAction, viewer: Viewer): string => t(a === 'additionalTask' && viewer === 'provider' ? 'booking.scopeReview' : a === 'objectNoShow' ? 'booking.objectNoShowShort' : (`booking.${a}` as Key))
 
 /**
  * What cancelling now means, shown before the person confirms: free until 24 hours before the start, then half the price; a

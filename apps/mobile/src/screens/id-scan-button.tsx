@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 
 import { scanIdCard } from '@/api/client'
-import { Button, ErrorText, Info } from '@/components/auth-ui'
+import { Button, ErrorText } from '@/components/auth-ui'
 import { errorText, t, useLang } from '@/i18n'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
@@ -51,8 +51,8 @@ export function IdScanButton({ onResult, onBusy, disabled }: { onResult: (r: IdS
 
   return (
     <View style={styles.box}>
-      <Info text={t('idScan.note')} />
       <Button label={busy ? t('idScan.working') : t('idScan.button')} onPress={ask} busy={busy} disabled={disabled || busy} />
+      <Text style={styles.note}>{t('idScan.note')}</Text>
       {denied && <DeniedNotice />}
       <ErrorText text={error} />
       {done && <Text style={styles.done}>{t('idScan.check')}</Text>}
@@ -62,5 +62,6 @@ export function IdScanButton({ onResult, onBusy, disabled }: { onResult: (r: IdS
 
 const styles = StyleSheet.create({
   box: { gap: 8 },
+  note: { color: '#4F4E7D', fontSize: 13 },
   done: { color: '#1D1C4A', fontSize: 14, fontWeight: '600' },
 })

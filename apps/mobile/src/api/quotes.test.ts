@@ -10,6 +10,8 @@ test('the list reads /quotes and returns its docs', async () => {
   ;(api as jest.Mock).mockResolvedValueOnce({ docs: [{ id: 'd1' }] })
   expect(await listQuoteDocuments()).toEqual([{ id: 'd1' }])
   expect(last()).toEqual(['/app-api/v1/quotes'])
+  await listQuoteDocuments('r 1')
+  expect(last()).toEqual(['/app-api/v1/quotes?requestId=r%201'])
 })
 
 test('the PDF link is read per document id, the id encoded', async () => {

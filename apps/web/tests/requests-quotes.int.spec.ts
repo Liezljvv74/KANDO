@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { QuoteSchema, RequestSchema } from '@kando/contract'
-import { requestTime, call, cleanupUsers, EMAIL, expireQuotes, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, call, cleanupUsers, expireQuotes, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -35,7 +35,6 @@ const newRequest = async (providerId = pOwner, as = U.cust) => {
 }
 const quote = (reqId: string, as: string, body: object = { amount: 100, scope: 'Fence' }) => call(quotes.POST, as, 'POST', body, { id: reqId })
 const confirming = (quoteId: string, as: string, body: object = {}) => call(confirm.POST, as, 'POST', body, { id: quoteId })
-const ids = (j: { docs: { id: string }[] }) => j.docs.map((d) => d.id)
 
 it('customer creates a request; provider sees it incoming', async () => {
   const res = await call(requests.POST, U.cust, 'POST', { providerId: pOwner, description: 'Fix the fence', ...requestTime() })
@@ -43,13 +42,7 @@ it('customer creates a request; provider sees it incoming', async () => {
   const r = RequestSchema.parse(await res.json())
   expect(r).toMatchObject({ customerId: U.cust, providerId: pOwner, status: 'open' })
   expect(new Date(r.answerBy).getTime() - new Date(r.createdAt).getTime()).toBe(3 * 86_400_000)
-  const asProvider = await requests.GET(
-    new Request('http://localhost/app-api/v1/requests?role=provider', { headers: { cookie: `uid=${U.owner}:${EMAIL(U.owner)}` } }),
-    { params: Promise.resolve({}) },
-  )
-  expect(ids(await asProvider.json())).toContain(r.id)
-  expect(ids(await (await call(requests.GET, U.owner)).json())).not.toContain(r.id) // as a customer the owner has none
-  expect(ids(await (await call(requests.GET, U.cust)).json())).toContain(r.id)
+  for (const uid of [U.owner, U.cust]) expect(RequestSchema.parse(await (await call(requestOne.GET, uid, 'GET', undefined, { id: r.id })).json()).id).toBe(r.id) // both parties read it
   // createRequest runs as the app role, which has no grant on job_number: the database numbers the row
   expect((await pool.query('SELECT job_number FROM requests WHERE id = $1', [r.id])).rows[0].job_number).toBeGreaterThanOrEqual(1000)
 })

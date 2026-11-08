@@ -20,7 +20,9 @@ export function TagInput({
   maxLength,
   addLabel,
   error,
+  autoFocus,
 }: {
+  autoFocus?: boolean
   label: string
   placeholder?: string
   items: string[]
@@ -43,6 +45,7 @@ export function TagInput({
           <Field
             label={`${label} (${items.length}/${max})`}
             placeholder={placeholder}
+            autoFocus={autoFocus}
             value={text}
             onChangeText={onText}
             maxLength={maxLength}

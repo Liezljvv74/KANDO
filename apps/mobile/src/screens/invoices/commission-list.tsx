@@ -8,7 +8,7 @@ import { formatDay } from '@/lib/booking-time'
 import { DocRow, money, usePdf } from '@/screens/invoices/invoice-list'
 
 /** "2026-03" as "March 2026" in the app language. */
-const monthName = (ym: string) => {
+export const monthName = (ym: string) => {
   const [y, m] = ym.split('-').map(Number)
   return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(getLang(), { month: 'long', year: 'numeric', timeZone: 'UTC' })
 }

@@ -1,22 +1,24 @@
 import { useLocalSearchParams } from 'expo-router'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { MAX_MESSAGE_CHARS } from '@kando/contract'
 
-import { blockUser, getThread, listBlocks, unblockUser } from '@/api/chat'
+import { blockUser, getThread, listBlocks, markThreadSeen, unblockUser } from '@/api/chat'
 import { ApiError } from '@/api/client'
 import { ErrorText, LinkText } from '@/components/auth-ui'
 import { SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { loadMe, markNotificationsSeen } from '@/hooks/use-me'
 import { useThreadMessages } from '@/hooks/use-thread-messages'
 import { errorText, t, useLang } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { confirmDanger } from '@/lib/confirm'
 import { goBack } from '@/lib/go'
+import { notificationThreadId } from '@/lib/notification-text'
 import { nearBottom } from '@/lib/scroll'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
@@ -28,8 +30,19 @@ export default function ThreadScreen() {
   useLang()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { messages, loaded, send, sendPhoto, refreshLinks, error } = useThreadMessages(id)
+  // The poll is read-only: the chat's notices turn seen on the server once it has caught up, at each new message of the other
+  // side while it is open, and when it is left (a notice written just after the message it announces is caught then).
+  const lastIncoming = messages.filter((m) => !m.mine).at(-1)?.id
+  useEffect(() => {
+    if (loaded) markThreadSeen(id).catch(() => {})
+  }, [id, loaded, lastIncoming])
+  useEffect(() => () => void markThreadSeen(id).catch(() => {}), [id])
   const load = useCallback(async () => {
     const [thread, blocks] = await Promise.all([getThread(id), listBlocks()])
+    // opening the chat reads its messages: its "new message" notices turn seen, so the job's unread mark and the Jobs counter clear
+    loadMe()
+      .then(() => markNotificationsSeen((n) => notificationThreadId(n) === id))
+      .catch(() => {})
     return { thread, blocks }
   }, [id])
   const { data, error: loadError, retry } = useLoad(load)

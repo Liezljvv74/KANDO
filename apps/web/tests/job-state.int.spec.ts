@@ -9,7 +9,7 @@ import { fakeGateway, type FakeGateway } from './fake-gateway'
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingOne = await import('../app/app-api/v1/bookings/[id]/route')
 const requestOne = await import('../app/app-api/v1/requests/[id]/route')
-const requestList = await import('../app/app-api/v1/requests/route')
+const noShowRoute = await import('../app/app-api/v1/bookings/[id]/no-show/route')
 
 const U = { cust: 'js-cust', owner: 'js-owner' }
 const HOUR = 3_600_000
@@ -61,8 +61,8 @@ async function paidBooking(o: { startAt?: Date; status?: string } = {}): Promise
 it('GET a booking returns jobState for the caller, and the old fields unchanged', async () => {
   const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(20) })
   const cust = await view(U.cust, b.id)
-  expect(cust.booking.jobState).toMatchObject({ key: 'payment_due', section: 'needs_you', buttons: ['pay'], countsForMe: true })
-  expect(await stateOf(U.owner, b.id)).toMatchObject({ key: 'payment_due', section: 'active', buttons: [] })
+  expect(cust.booking.jobState).toMatchObject({ key: 'payment_due', section: 'needs_you', buttons: ['pay', 'open_chat', 'withdraw'], countsForMe: true })
+  expect(await stateOf(U.owner, b.id)).toMatchObject({ key: 'payment_due', section: 'active', buttons: ['open_chat'] })
   expect(cust.booking).toMatchObject({ status: 'awaiting-payment', payBy: expect.any(String), amount: 100, currency: 'EUR' })
   expect(cust.booking).not.toHaveProperty('commissionRate')
   expect(cust.booking).not.toHaveProperty('checkoutRef')
@@ -74,8 +74,8 @@ it('a checkout reference older than the patience reads checkout_not_completed; o
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString() })
   expect((await stateOf(U.cust, b.id)).key).toBe('payment_due')
   await set({ sessionId: 'cs_1', url: 'https://x', expiresAt: new Date(Date.now() + DAY).toISOString(), startedAt: new Date(Date.now() - 11 * 60_000).toISOString() })
-  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay'] })
-  expect((await stateOf(U.owner, b.id)).buttons).toEqual([])
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'checkout_not_completed', buttons: ['pay', 'open_chat', 'withdraw'] })
+  expect((await stateOf(U.owner, b.id)).buttons).toEqual(['open_chat'])
 })
 
 it('a repeated pay tap reuses the session and restarts the wait: payment_due, not checkout_not_completed; an expired session still is', async () => {
@@ -88,18 +88,16 @@ it('a repeated pay tap reuses the session and restarts the wait: payment_due, no
   const ref = JSON.parse((await pool.query('SELECT checkout_ref FROM bookings WHERE id = $1', [b.id])).rows[0].checkout_ref)
   expect(ref).toMatchObject({ sessionId: expect.any(String), url: first.url, expiresAt: expect.any(String) })
   expect(Date.now() - Date.parse(ref.startedAt)).toBeLessThan(60_000)
-  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay'] })
+  expect(await stateOf(U.cust, b.id)).toMatchObject({ key: 'payment_due', buttons: ['pay', 'open_chat', 'withdraw'] })
   await pool.query('UPDATE bookings SET checkout_ref = $2 WHERE id = $1', [b.id, JSON.stringify({ ...ref, expiresAt: new Date(Date.now() - 1000).toISOString() })])
   expect((await stateOf(U.cust, b.id)).key).toBe('checkout_not_completed')
 })
 
-it('GET a request and the request list return jobState for each side', async () => {
+it('GET a request returns jobState for each side', async () => {
   const { request } = await makeQuote({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(22) })
   const one = async (uid: string) => RequestSchema.parse(await (await call(requestOne.GET, uid, 'GET', undefined, { id: request.id })).json())
-  expect((await one(U.cust)).jobState).toMatchObject({ key: 'quote_sent', section: 'needs_you', buttons: ['accept_quote', 'ask_question', 'open_chat'] })
-  expect((await one(U.owner)).jobState).toMatchObject({ key: 'quote_sent', section: 'active', buttons: ['open_chat'] })
-  const list = (await (await call(requestList.GET, U.cust)).json()) as { docs: { id: string; jobState?: { key: string } }[] }
-  expect(list.docs.find((r) => r.id === request.id)?.jobState?.key).toBe('quote_sent')
+  expect((await one(U.cust)).jobState).toMatchObject({ key: 'quote_sent', section: 'needs_you', buttons: ['accept_quote', 'ask_question', 'open_chat', 'cancel'] })
+  expect((await one(U.owner)).jobState).toMatchObject({ key: 'quote_sent', section: 'active', buttons: ['send_quote', 'decline', 'open_chat'] })
 })
 
 it('an unseen message notice makes the job count for the viewer; seen, it does not', async () => {
@@ -134,11 +132,9 @@ it('an unseen notice in the root job chat marks the root request, the root booki
   expect(await counts()).toEqual({ root: false, task: false, request: false, taskRequest: false })
 })
 
-it('jobState is sent on reads and not on a mutation response', async () => {
+it('jobState is sent on a read and not on a mutation response', async () => {
   const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(18) })
   const withdraw = await import('../app/app-api/v1/bookings/[id]/withdraw/route')
-  const list = (await (await call((await import('../app/app-api/v1/bookings/route')).GET, U.cust)).json()) as { docs: { id: string; jobState?: unknown }[] }
-  expect(list.docs.find((x) => x.id === b.id)?.jobState).toBeTruthy()
   expect((await view(U.cust, b.id)).booking.jobState).toBeTruthy()
   const res = (await (await call(withdraw.POST, U.cust, 'POST', undefined, { id: b.id })).json()) as { status: string; jobState?: unknown }
   expect(res.status).toBe('withdrawn')
@@ -154,6 +150,17 @@ it('an open release-failed flag is delayed for both sides; once resolved it is n
   expect(body).not.toContain('NO_PAYOUT_ACCOUNT') // the flag text never leaves the server
   await pool.query("UPDATE staff_flags SET resolved_at = now() WHERE ref_id = $1", [b])
   expect((await stateOf(U.cust, b)).key).toBe('payout_on_its_way')
+})
+
+it('a disputed booking: an open money flag counts only once the dispute is decided (its money step keeps failing: delayed)', async () => {
+  const b = await paidBooking({ status: 'disputed' })
+  await pool.query("INSERT INTO disputes (booking_id, opened_by, reason, description, decide_by) VALUES ($1, 'customer', 'problem', 'x', now() + interval '14 days')", [b])
+  await flag('payment-unprocessed', b, 'release failed: earlier')
+  for (const uid of [U.cust, U.owner]) expect((await stateOf(uid, b)).key).toBe('problem_reported') // undecided: the dispute is the problem
+  await pool.query("UPDATE disputes SET decision = 'full-payout', provider_share = 100, decision_reason = 'x', decided_by = 'staff', decided_at = now() WHERE booking_id = $1", [b])
+  for (const uid of [U.cust, U.owner]) expect(await stateOf(uid, b)).toMatchObject({ key: 'delayed', section: 'active', buttons: ['contact_support'] })
+  await pool.query('UPDATE staff_flags SET resolved_at = now() WHERE ref_id = $1', [b])
+  expect((await stateOf(U.cust, b)).key).toBe('problem_reported')
 })
 
 it('a refund-failed flag on a cancelled booking is delayed for both sides', async () => {
@@ -176,4 +183,13 @@ it('a cancellation whose refund fails is delayed; the retry that succeeds counts
   expect((await runDueTimers(db, new Date(now.getTime() + HOUR))).cancelsSettled).toBeGreaterThanOrEqual(1)
   for (const uid of [U.cust, U.owner]) expect(await stateOf(uid, id)).toMatchObject({ key: 'cancelled', section: 'past', buttons: ['open_chat'] })
   expect((await pool.query("SELECT count(*)::int AS n FROM ledger_entries WHERE booking_id = $1 AND kind = 'refund'", [id])).rows[0].n).toBe(1)
+})
+
+it('a reported no-show: the reported side gets object_no_show (the deadline read from the report), the reporter does not, nor after the deadline', async () => {
+  const id = await paidBooking({ startAt: new Date(Date.now() - 2 * HOUR) })
+  expect((await call(noShowRoute.POST, U.cust, 'POST', undefined, { id })).status).toBe(200) // the customer says the provider did not turn up
+  expect(await stateOf(U.owner, id)).toMatchObject({ key: 'problem_reported', buttons: ['open_chat', 'contact_support', 'object_no_show', 'accept_no_show'] })
+  expect((await stateOf(U.cust, id)).buttons).not.toContain('object_no_show')
+  await pool.query("UPDATE bookings SET no_show_reported_at = now() - interval '49 hours' WHERE id = $1", [id])
+  expect((await stateOf(U.owner, id)).buttons).not.toContain('object_no_show')
 })

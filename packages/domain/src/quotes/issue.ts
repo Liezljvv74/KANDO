@@ -138,8 +138,9 @@ export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boole
  * for an accepted quote the booking made from it (the latest one: a booking that lapsed reopens the quote, which can be accepted again)
  * as `bookingId` and when it was made as `bookedAt`. Reads never write: a quote whose booking has lapsed (bookingShownStatus, the same rule
  * as listQuotes) shows as the trigger bookings_reopen_request will write it, open again (or expired) and with no booking.
+ * `requestId`: only that request's documents (still only the caller's own).
  */
-export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date()): Promise<QuoteListItem[]> {
+export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(), requestId?: string): Promise<QuoteListItem[]> {
   const own = await ownProvider(tx, userId)
   // the latest booking made from an accepted quote, joined per row (LATERAL) so the list stays one query
   const latest = tx
@@ -168,7 +169,7 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
     .innerJoin(requests, eq(requests.id, quotes.requestId))
     .leftJoin(services, eq(services.id, requests.serviceId))
     .leftJoinLateral(latest, sql`true`)
-    .where(sql`${quoteDocuments.customerId} = ${userId} ${own ? sql`OR ${quoteDocuments.providerId} = ${own.id}` : sql``}`)
+    .where(sql`(${quoteDocuments.customerId} = ${userId} ${own ? sql`OR ${quoteDocuments.providerId} = ${own.id}` : sql``}) ${requestId ? sql`AND ${quotes.requestId} = ${requestId}` : sql``}`)
     .orderBy(sql`${quoteDocuments.issuedAt} DESC`, sql`${quoteDocuments.number} DESC`)
   const out: QuoteListItem[] = []
   for (const r of rows) {

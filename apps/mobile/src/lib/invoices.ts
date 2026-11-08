@@ -41,3 +41,12 @@ export async function openPdf(get: () => Promise<PayLink>, open: (url: string) =
   if (!isHttps(link.url)) throw new ApiError(0, 'network')
   await open(link.url)
 }
+
+/** One entry of the Jobs tab's Invoices fold: an invoice, receipt or commission invoice, reduced to what the list shows. */
+export type DocEntry = { id: string; commission: boolean; issuedAt: string }
+
+/** Both lists in one, newest first (ISO dates sort as text). */
+export const newestFirst = <D extends { issuedAt: string }>(a: D[], b: D[]): D[] => [...a, ...b].sort((x, y) => (x.issuedAt < y.issuedAt ? 1 : x.issuedAt > y.issuedAt ? -1 : 0))
+
+/** The one-line summary of a document; the screen cuts it with an ellipsis (numberOfLines 1). Empty parts are left out. */
+export const docLine = (parts: (string | undefined)[]): string => parts.filter(Boolean).join(' · ')

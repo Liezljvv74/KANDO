@@ -35,6 +35,25 @@ export async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, 
   return out
 }
 
+/**
+ * The additional-task requests of the given root requests (a task hangs off a root booking of the request, additional.ts), oldest
+ * first, with their root request id. Read on `x`: row security shows only the caller's own.
+ */
+export async function taskRequestsOf(x: Db, rootRequestIds: string[]): Promise<{ r: typeof requests.$inferSelect; root: string }[]> {
+  if (!rootRequestIds.length) return []
+  const rows = await x
+    .select({ r: requests, root: bookings.requestId })
+    .from(requests)
+    .innerJoin(bookings, eq(bookings.id, requests.parentBookingId))
+    .where(and(inArray(bookings.requestId, rootRequestIds), isNull(bookings.parentBookingId)))
+    .orderBy(requests.createdAt, requests.id)
+  return rows.map((x) => ({ r: x.r, root: x.root! }))
+}
+
+/** The root request of a request: itself, or (an additional task) its parent booking's root request from `rootsOf`; null when that root has no request (booked direct). */
+export const rootRequestId = (r: { id: string; parentBookingId: string | null }, roots: Map<string, { requestId: string | null }>): string | null =>
+  r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id
+
 /** Root request id > job number and title, for the given root request ids. */
 export async function rootJobs(x: Db, rootRequestIds: string[], userId?: string, owner: Db = db): Promise<Map<string, { jobNumber: number; title: string }>> {
   const out = new Map<string, { jobNumber: number; title: string }>()

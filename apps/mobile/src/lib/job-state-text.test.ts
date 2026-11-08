@@ -33,7 +33,7 @@ test.each(['de', 'en'] as const)('with any missing value no text prints a placeh
         for (const viewer of ['customer', 'provider'] as const) {
           const x = stateText(state, viewer, c)!
           for (const text of [x.title, x.body]) {
-            expect(text).not.toMatch(/[{}]|–| {2}|job\.state/)
+            expect(text).not.toMatch(/[{}]| - | {2}|job\.state/)
             expect(text.length).toBeGreaterThan(0)
           }
         }

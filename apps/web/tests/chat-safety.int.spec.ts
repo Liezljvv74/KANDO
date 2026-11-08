@@ -4,10 +4,9 @@ import { MessageSchema, QuoteSchema, RequestSchema, ThreadSchema } from '@kando/
 import sharp from 'sharp'
 import { clearOutbox, notifyNewMessage } from '@kando/domain'
 import { outboxForTests, setStorageForTests } from '@kando/domain/src/testing'
-import { requestTime, call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits, sized } from './helpers'
+import { requestTime, call, cleanupUsers, EMAIL, memoryStorage, seedBase, seedProvider, seedUser, relaxLimits, sized, threadOfRequest } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
-const threadsRoute = await import('../app/app-api/v1/threads/route')
 const messagesRoute = await import('../app/app-api/v1/threads/[id]/messages/route')
 const reportRoute = await import('../app/app-api/v1/messages/[id]/report/route')
 const blocksRoute = await import('../app/app-api/v1/blocks/route')
@@ -31,7 +30,7 @@ const newRequest = async (as = U.cust) => {
   await relaxLimits(as)
   return RequestSchema.parse(await (await call(requests.POST, as, 'POST', { providerId: pOwner, description: 'Fix the fence', ...requestTime() })).json())
 }
-const threadOf = async (as: string, requestId: string) => ThreadSchema.array().parse((await (await call(threadsRoute.GET, as)).json()).docs).find((t) => t.requestId === requestId)!
+const threadOf = async (as: string, requestId: string) => ThreadSchema.parse(await threadOfRequest(as, requestId))
 const send = (thread: string, as: string, body: string) => call(messagesRoute.POST, as, 'POST', { body }, { id: thread })
 const sendOk = async (thread: string, as: string, body: string) => MessageSchema.parse(await (await send(thread, as, body)).json())
 const report = (id: string, as: string, reason = 'rude') => call(reportRoute.POST, as, 'POST', { reason }, { id })

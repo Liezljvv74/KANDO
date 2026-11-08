@@ -1,5 +1,5 @@
 import { getMe, setOnTermsRequired } from '@/api/client'
-import { clearMe, currentMe, loadMe, unseenOf } from './use-me'
+import { clearMe, currentMe, ensureMe, loadMe, noteQuoteSteps, unseenOf } from './use-me'
 
 jest.mock('@/api/client', () => ({ getMe: jest.fn(), setOnTermsRequired: jest.fn() }))
 // Taken at load, before any test clears the mock.
@@ -36,8 +36,44 @@ test('a refused write (428 terms-required) reloads /me, whose termsRequired show
   expect(currentMe()?.termsRequired).toBe(true)
 })
 
+test('two consumers of useQuoteSteps trigger one request (the first load is shared), and a held /me makes none', async () => {
+  clearMe()
+  jest.mocked(getMe).mockReset().mockResolvedValue({ id: 'p', quoteSteps: ['consent'], notifications: [] } as never)
+  await Promise.all([ensureMe(), ensureMe()])
+  expect(getMe).toHaveBeenCalledTimes(1)
+  await ensureMe()
+  expect(getMe).toHaveBeenCalledTimes(1)
+})
+
+test('a saved profile updates the held quote steps without a request; nothing is invented before /me arrives', async () => {
+  clearMe()
+  noteQuoteSteps([])
+  expect(currentMe()).toBeNull()
+  jest.mocked(getMe).mockReset().mockResolvedValue({ id: 'p', quoteSteps: ['consent', 'taxId'], notifications: [] } as never)
+  await ensureMe()
+  noteQuoteSteps(['taxId'])
+  expect(currentMe()?.quoteSteps).toEqual(['taxId'])
+  expect(getMe).toHaveBeenCalledTimes(1)
+})
+
 test('unseenOf keeps only notifications without a seenAt and copes with no list', () => {
   expect(unseenOf([{ seenAt: null }, { seenAt: 'x' }])).toEqual([{ seenAt: null }])
   expect(unseenOf([{ seenAt: 'x' }])).toEqual([])
   expect(unseenOf(undefined)).toEqual([])
+})
+
+test('a first load in flight at sign-out is not handed to the next account: ensureMe starts a fresh one', async () => {
+  clearMe()
+  const resolvers: ((m: unknown) => void)[] = []
+  jest.mocked(getMe).mockReset().mockImplementation(() => new Promise((r) => resolvers.push(r)) as never)
+  const old = ensureMe()
+  clearMe()
+  const next = ensureMe()
+  expect(next).not.toBe(old)
+  expect(getMe).toHaveBeenCalledTimes(2)
+  resolvers[0]!({ id: 'old', notifications: [] })
+  resolvers[1]!({ id: 'new', notifications: [] })
+  expect((await next).id).toBe('new')
+  await old
+  expect(currentMe()?.id).toBe('new')
 })

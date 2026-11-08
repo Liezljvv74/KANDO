@@ -3,7 +3,7 @@ import { db, pool } from '@kando/db'
 import { QuoteListSchema, RequestSchema } from '@kando/contract'
 import { deleteAccount, issueQuoteDocument, storePendingQuoteDocuments, type Storage } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, memoryStorage, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, memoryStorage, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -194,6 +194,20 @@ it('deleting an account removes its quote documents and queues the PDFs for dele
   expect([...store.objects.keys()].some((k) => k.endsWith(key))).toBe(false)
   expect((await pool.query('SELECT 1 FROM pending_object_deletes WHERE key = $1', [key])).rows).toHaveLength(0)
   vi.unstubAllEnvs()
+})
+
+it('?requestId= keeps one request\'s documents, still only the caller\'s own; a bad id is a 400', async () => {
+  const p = await provider()
+  const r1 = await request(p.id, U.c5)
+  const q1 = await quote(p, r1)
+  await quote(p, await request(p.id, U.c5)) // a second request of the same pair: not in r1's list
+  const filtered = async (as: string, requestId: string) => {
+    const res = await list.GET(new Request(`http://localhost/app-api/v1/quotes?requestId=${requestId}`, { headers: { cookie: `uid=${as}:${EMAIL(as)}` } }), { params: Promise.resolve({}) })
+    return res.ok ? QuoteListSchema.parse(await res.json()).docs.map((d) => d.quoteId) : res.status
+  }
+  for (const as of [U.c5, p.uid]) expect(await filtered(as, r1.id)).toEqual([q1.id])
+  expect(await filtered(U.third, r1.id)).toEqual([])
+  expect(await filtered(U.c5, 'nope')).toBe(400)
 })
 
 it('a third user sees no quotes and gets 404 on the link', async () => {
