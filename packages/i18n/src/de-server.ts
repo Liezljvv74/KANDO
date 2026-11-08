@@ -26,7 +26,7 @@ export const de = {
     'Ein Kunde hat Dir eine Anfrage mit Datum, Uhrzeit und Ort geschickt. Bitte antworte innerhalb von 3 Tagen: sende ein Angebot (mit oder ohne endgültiges Datum und Uhrzeit) oder lehne ab. Unbeantwortete Anfragen laufen ab und lassen Dich nicht verfügbar wirken.',
   'email.quoteReceived.subject': 'Du hast ein Angebot erhalten',
   'email.quoteReceived.body':
-    'Ein Anbieter hat Dir ein Angebot (oder ein überarbeitetes Angebot) für Deine Anfrage geschickt. Sieh es Dir bitte in der App an und bestätige es, um zu buchen. Es gilt 7 Tage, bis zum {date}. Hat es noch kein Datum mit Uhrzeit, legt ihr beides nach Deiner Bestätigung fest; die Zahlung wird erst verlangt, wenn beide Seiten Datum und Uhrzeit bestätigt haben.',
+    'Ein Anbieter hat Dir ein Angebot (oder ein überarbeitetes Angebot) für Deine Anfrage geschickt. Sieh es Dir bitte in der App an und nimm es an, um zu buchen. Es gilt 7 Tage, bis zum {date}. Hat es noch kein Datum mit Uhrzeit, legt ihr beides nachdem Du es angenommen hast fest; die Zahlung wird erst verlangt, wenn beide Seiten Datum und Uhrzeit bestätigt haben.',
   'email.bookingAccepted.subject': 'Zahlung fällig für Deine Buchung',
   'email.bookingAccepted.body':
     'Datum und Uhrzeit sind von beiden Seiten bestätigt. Die Zahlung ist bis {date} Uhr fällig. Öffne die App zum Bezahlen; dort siehst Du den Zahlungslink, sobald die Zahlung möglich ist.',
