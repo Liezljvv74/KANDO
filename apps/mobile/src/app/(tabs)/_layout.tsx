@@ -19,7 +19,7 @@ const bar = (props: BottomTabBarProps) => {
   // the screens without a button are left out of what the bar draws (else they take empty slots and squeeze the real tabs)
   const here = props.state.routes[props.state.index]?.name ?? ''
   const lit = LIT[here] ?? here
-  const routes = props.state.routes.filter((r) => !(HIDDEN as readonly string[]).includes(r.name))
+  const routes = props.state.routes.filter((r) => !props.descriptors[r.key]?.options.tabBarButton) // a screen with no button is not drawn
   const index = Math.max(0, routes.findIndex((r) => r.name === lit))
   const descriptors = Object.fromEntries(routes.map((r) => [r.key, props.descriptors[r.key]!]))
   // On a hidden screen the bar lights the tab it belongs to, which the bar then takes for "already open": a tap on it must still go there.
@@ -74,7 +74,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ tabBarIcon: icon('search-outline'), title: t('tab.search') }} />
       <Tabs.Screen name="jobs" options={{ title: t('tab.jobs'), tabBarBadge: badge > 0 ? badge : undefined, tabBarIcon: icon('clipboard-outline') }} />
-      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, href: showProfileTab(me) ? undefined : null }} />
+      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, ...(showProfileTab(me) ? {} : { tabBarButton: () => null }) }} /> // not `href: null`: that redirects away, also while the profile is still loading on a reload
       <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
       {HIDDEN.map((name) => (
         <Tabs.Screen key={name} name={name} options={{ tabBarButton: () => null }} /> // no button, but still reachable (`href: null` hides AND redirects away in this Expo Router)
