@@ -515,7 +515,7 @@ export const de = {
   'booking.declineAnyway': 'Trotzdem ablehnen',
   'booking.discussChanges': 'Für Änderungen sprich im Chat mit dem Anbieter. Er schickt ein überarbeitetes Angebot, das Du annimmst.',
   'booking.requestedWhen': 'Gewünscht: {when} ({min} Min.)',
-  'booking.enterTime': 'Neuer vorgeschlagener/vereinbarter Termin',
+  'booking.enterTime': 'Neuer Termin',
   'booking.confirmTime': 'Diesen Termin bestätigen',
   'booking.pendingTimeYou': 'Du hast {when} ({min} Min.) eingetragen. Die andere Seite muss noch bestätigen.',
   'booking.pendingTimeOther': 'Die andere Seite hat {when} ({min} Min.) eingetragen. Bestätige den Termin oder trage einen anderen ein.',
