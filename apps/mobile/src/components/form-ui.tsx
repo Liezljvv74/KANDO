@@ -32,7 +32,7 @@ export const Card = ({ children, done, list }: { children: React.ReactNode; done
   <View style={[styles.card, list && styles.cardList, done && styles.cardDone]}>{children}</View>
 )
 
-export const SectionTitle = ({ text }: { text: string }) => <Text style={styles.section}>{text}</Text>
+export const SectionTitle = ({ text, tint }: { text: string; tint?: string }) => <Text style={[styles.section, tint ? { color: tint } : null]}>{text}</Text>
 
 export const SwitchRow = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
   <View style={styles.switchRow}>

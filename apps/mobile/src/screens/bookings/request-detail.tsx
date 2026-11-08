@@ -14,7 +14,7 @@ import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, useLang, type Key } from '@/i18n'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 import { requestStateCtx, stateText } from '@/lib/job-state-text'
 import { formatWhen } from '@/lib/booking-time'
 import { isJobPageNotice } from '@/lib/correspondence'
@@ -194,7 +194,7 @@ export default function RequestDetail() {
           {editing && <LinkText label={t('common.cancel')} onPress={() => setEditing(false)} />}
         </>
       )}
-      {views.length > 0 && <SectionTitle text={t(bookingsHeading)} />}
+      {views.length > 0 && <SectionTitle text={t(bookingsHeading)} tint={bookingsHeading === 'booking.confirmedHeading' ? color.indigo : bookingsHeading === 'booking.awaitingPaymentHeading' ? color.danger : undefined} />}
       {[...views].reverse().map((v) => (
         <View key={v.booking.id} onLayout={(e) => onLayoutOf(v.booking.id)(e.nativeEvent.layout.y)} style={styles.section}>
           <BookingSection view={v} showTitle={v.booking.id !== b?.id} />
