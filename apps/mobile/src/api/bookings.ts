@@ -45,6 +45,7 @@ export const confirmJob = (id: string) => api<Booking>(bk(id, '/confirm'), json(
 export const cancelBooking = (id: string) => api<Booking>(bk(id, '/cancel'), json('POST'))
 export const reportNoShow = (id: string) => api<Booking>(bk(id, '/no-show'), json('POST'))
 export const objectNoShow = (id: string, description: string) => api<Booking>(bk(id, '/no-show/object'), json('POST', { description }))
+export const acceptNoShow = (id: string) => api<Booking>(bk(id, '/no-show/accept'), json('POST'))
 export const openDispute = (id: string, description: string) => api<Dispute>(bk(id, '/dispute'), json('POST', { description }))
 export const getDispute = (id: string) => api<Dispute>(bk(id, '/dispute'))
 export const stopJob = (id: string) => api<Booking>(bk(id, '/stop'), json('POST'))

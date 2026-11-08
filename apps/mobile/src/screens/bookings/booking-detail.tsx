@@ -4,7 +4,7 @@ import { StyleSheet, Text } from 'react-native'
 
 import type { BookingView, JobStateDto } from '@kando/contract'
 
-import { confirmAgreedTime, confirmJob, getBooking, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
+import { confirmAgreedTime, confirmJob, getBooking, acceptNoShow, objectNoShow, openDispute, reportNoShow, startAdditionalTask, stopJob, withdrawBooking } from '@/api/bookings'
 import { Button, ErrorText, Info, LinkText } from '@/components/auth-ui'
 import { Actions, Card, FormScreen, SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
@@ -100,6 +100,7 @@ export function BookingActions({ view, state, onChanged, extra }: { view: Bookin
     withdraw: ['booking.confirmWithdraw', 'booking.withdraw', () => withdrawBooking(b.id)],
     confirm: ['booking.confirmAsk', 'booking.confirmYes', () => confirmJob(b.id)],
     stop: ['booking.stopAsk', 'booking.stopYes', () => stopJob(b.id)],
+    acceptNoShow: [viewer === 'customer' ? 'booking.acceptNoShowAskCustomer' : 'booking.acceptNoShowAskProvider', 'booking.acceptNoShowYes', () => acceptNoShow(b.id)],
     reportNoShow: [viewer === 'customer' ? 'booking.noShowAskCustomer' : 'booking.noShowAskProvider', 'booking.noShowYes', () => reportNoShow(b.id)],
   }
   async function act(action: BookingAction) {

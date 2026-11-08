@@ -10,6 +10,7 @@ export type BookingAction =
   | 'withdraw'
   | 'enterTime'
   | 'confirmTime'
+  | 'acceptNoShow'
   | 'finish'
   | 'confirm'
   | 'dispute'
@@ -78,12 +79,13 @@ export const BUTTON_ACTION: Partial<Record<JobButton, BookingAction>> = {
   stop: 'stop',
   no_show: 'reportNoShow',
   object_no_show: 'objectNoShow',
+  accept_no_show: 'acceptNoShow',
   state_stop_amount: 'stateStopAmount',
   answer_stop: 'answerStop',
 }
 
 /** The button text: the customer asks for an "Additional task", the provider for a "Scope/quote review" (the same flow). */
-export const actionLabel = (a: BookingAction, viewer: Viewer): string => t(a === 'additionalTask' && viewer === 'provider' ? 'booking.scopeReview' : (`booking.${a}` as Key))
+export const actionLabel = (a: BookingAction, viewer: Viewer): string => t(a === 'additionalTask' && viewer === 'provider' ? 'booking.scopeReview' : a === 'objectNoShow' ? 'booking.objectNoShowShort' : (`booking.${a}` as Key))
 
 /**
  * What cancelling now means, shown before the person confirms: free until 24 hours before the start, then half the price; a

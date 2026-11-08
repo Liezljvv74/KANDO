@@ -1,7 +1,7 @@
 import { de, en } from '@kando/i18n'
 import type { Booking } from '@kando/contract'
 
-import { actionLabel, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
+import { actionLabel, BUTTON_ACTION, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -133,6 +133,9 @@ test('the customer asks for an "Additional task", the provider for a "Scope/quot
   expect(actionLabel('additionalTask', 'customer')).toBe('booking.additionalTask')
   expect(actionLabel('additionalTask', 'provider')).toBe('booking.scopeReview')
   expect(actionLabel('finish', 'provider')).toBe('booking.finish')
+  expect(actionLabel('objectNoShow', 'customer')).toBe('booking.objectNoShowShort') // short, so both fit side by side
+  expect(actionLabel('acceptNoShow', 'customer')).toBe('booking.acceptNoShow')
+  expect(BUTTON_ACTION.accept_no_show).toBe('acceptNoShow')
 })
 
 test('late fee is rounded from cents: 33.33 -> 16.67', () => {
