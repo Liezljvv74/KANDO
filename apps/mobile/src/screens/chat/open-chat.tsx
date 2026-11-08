@@ -7,7 +7,7 @@ import { errorText, t } from '@/i18n'
 import { go } from '@/lib/go'
 
 /** "Open chat": `find` gives the thread id (or null when there is none), then the conversation opens. */
-export function OpenChat({ find }: { find: () => Promise<string | null> }) {
+export function OpenChat({ find, grow }: { find: () => Promise<string | null>; grow?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const working = useRef(false)
@@ -28,7 +28,7 @@ export function OpenChat({ find }: { find: () => Promise<string | null> }) {
   }
   return (
     <>
-      <SmallButton label={t('chat.open')} onPress={open} busy={busy} />
+      <SmallButton label={t('chat.open')} onPress={open} busy={busy} grow={grow} />
       <ErrorText text={problem} />
     </>
   )

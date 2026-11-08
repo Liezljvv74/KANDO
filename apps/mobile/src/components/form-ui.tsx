@@ -50,6 +50,7 @@ export const SmallButton = ({
   busy,
   danger,
   solid,
+  grow,
 }: {
   label: string
   onPress: () => void
@@ -59,6 +60,8 @@ export const SmallButton = ({
   danger?: boolean
   /** Filled like the full-width Button (teal, or red with `danger`), only smaller. */
   solid?: boolean
+  /** Shares a row equally with its neighbours (the label wraps when it must). */
+  grow?: boolean
 }) => (
   <Pressable
     onPress={onPress}
@@ -66,9 +69,9 @@ export const SmallButton = ({
     accessibilityRole="button"
     accessibilityLabel={accessibilityLabel ?? label}
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
-    style={({ pressed }) => [styles.small, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
+    style={({ pressed }) => [styles.small, grow && styles.smallGrow, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={solid ? (danger ? '#fff' : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, solid && { color: danger ? '#fff' : color.ink }, !solid && danger && { color: color.danger }]}>{label}</Text>}
+    {busy ? <ActivityIndicator color={solid ? (danger ? '#fff' : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? '#fff' : color.ink }, !solid && danger && { color: color.danger }]}>{label}</Text>}
   </Pressable>
 )
 
@@ -130,6 +133,8 @@ const styles = StyleSheet.create({
   small: { minHeight: 44, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: color.indigo, justifyContent: 'center' },
   smallLabel: { color: color.indigo, fontWeight: '600', fontSize: 15 },
   smallOff: { opacity: 0.5 },
+  smallGrow: { flex: 1, flexBasis: 0, paddingHorizontal: 6, alignItems: 'center' },
+  smallGrowLabel: { textAlign: 'center', fontSize: 14 },
   icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   headerTitle: { flex: 1 },

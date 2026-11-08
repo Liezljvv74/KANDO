@@ -34,7 +34,7 @@ import { font } from '@/theme'
 /** Actions that open a form or statement below the buttons before anything is sent. */
 type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
 const SHEETS: readonly BookingAction[] = ['finish', 'cancel', 'dispute', 'objectNoShow', 'additionalTask', 'stateStopAmount', 'answerStop']
-const DANGER: readonly BookingAction[] = ['withdraw', 'cancel']
+const DANGER: readonly BookingAction[] = ['withdraw', 'cancel', 'objectNoShow']
 
 /** The status title and body of a booking's state (an older server without a state, or an awaiting-time booking: the old status line). */
 export function bookingTitle(view: BookingView, state: JobStateDto | undefined = view.booking.jobState): { title: string; body: string } {
@@ -123,13 +123,13 @@ export function BookingActions({ view, state, onChanged, extra }: { view: Bookin
       {state.buttons.includes('set_up_payouts') && <Button label={t('payouts.setUp')} onPress={() => submit(() => doQuoteStep('payout'), onChanged)} busy={busy} />}
       {!!notice && <Info text={notice} />}
       <ErrorText text={problem} />
-      {/* small buttons side by side: the booking's steps first, then the additional task / scope review with the chat and the like */}
-      {[actions.filter((a) => a !== 'additionalTask'), [...actions.filter((a) => a === 'additionalTask')]].map((row, i) => {
-        const list = row.map((a) => (
-          <SmallButton key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} solid />
-        ))
-        return i === 0 ? (list.length > 0 && <Actions key="steps">{list}</Actions>) : <Actions key="more">{list}{extra}</Actions>
-      })}
+      {/* one row of equal small buttons: the booking's steps, the additional task / scope review, contact support, chat last (right) */}
+      <Actions>
+        {actions.map((a) => (
+          <SmallButton key={a} label={actionLabel(a, viewer)} onPress={() => act(a)} busy={busy} disabled={(early && a === 'finish') || (sheet !== null && sheet !== a)} danger={DANGER.includes(a)} solid grow />
+        ))}
+        {extra}
+      </Actions>
       {sheet === 'finish' && <FinishSheet booking={b} onDone={closeAndReload} />}
       {sheet === 'cancel' && <CancelSheet booking={b} viewer={viewer} onDone={closeAndReload} onClose={() => setSheet(null)} />}
       {(sheet === 'stateStopAmount' || sheet === 'answerStop') && <StopSheet booking={b} mode={sheet === 'answerStop' ? 'answer' : 'state'} onDone={closeAndReload} />}
@@ -150,9 +150,9 @@ export function JobCommonButtons({ state, threadId, job }: { state: JobStateDto;
   const has = (x: JobStateDto['buttons'][number]) => state.buttons.includes(x)
   return (
     <>
-      {(has('open_chat') || has('ask_question')) && <OpenChat find={async () => threadId ?? null} />}
-      {has('contact_support') && <SmallButton label={t('job.button.contactSupport')} onPress={() => openSupport(job)} solid />}
-      {has('ask_someone_else') && <SmallButton label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} solid />}
+      {has('contact_support') && <SmallButton label={t('job.button.contactSupport')} onPress={() => openSupport(job)} solid grow />}
+      {has('ask_someone_else') && <SmallButton label={t('job.button.askSomeoneElse')} onPress={() => go('/search')} solid grow />}
+      {(has('open_chat') || has('ask_question')) && <OpenChat find={async () => threadId ?? null} grow />}
     </>
   )
 }
