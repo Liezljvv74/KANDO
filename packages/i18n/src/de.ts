@@ -423,6 +423,7 @@ export const de = {
   'account.pushHint': 'Alles zu deinen Buchungen und Zahlungen bekommst du immer als Mitteilung.',
   'account.offerServices': 'Leistungen anbieten',
   'account.exportHeading': 'Meine Daten',
+  'account.detailsHeading': 'Meine Angaben',
   'account.offerSwitch': 'Ich möchte eine Leistung anbieten',
   'account.stopOfferingAsk': 'Nicht mehr anbieten? Dein Profil geht offline. Deine bisherigen Aufträge und Rechnungen bleiben erhalten.',
   'account.stopOfferingConfirm': 'Nicht mehr anbieten',

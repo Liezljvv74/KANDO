@@ -424,6 +424,7 @@ export const en: Record<AppKey, string> = {
   'account.pushHint': 'You always get a notification about your bookings and payments.',
   'account.offerServices': 'Offer services',
   'account.exportHeading': 'My data',
+  'account.detailsHeading': 'My details',
   'account.offerSwitch': 'I want to provide a service',
   'account.stopOfferingAsk': 'Stop offering services? Your profile goes offline. Your past jobs and invoices stay available.',
   'account.stopOfferingConfirm': 'Stop offering',

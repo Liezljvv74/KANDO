@@ -1,7 +1,7 @@
 import type { IdScan, Me, Photo, PushSettings } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -39,6 +39,7 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState<boolean | null>(null) // the details form: null = by itself (open until the compulsory details are saved), else the person's choice
   const [saved, showSaved, hideSaved] = useFlash()
 
   const load = useCallback(async () => {
@@ -99,6 +100,7 @@ export default function AccountScreen() {
     try {
       await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr, birthDate: birthDate ? toIsoDay(birthDate) : null })
       await load()
+      setOpen(null) // saved: the card folds again once the compulsory details are in
       showSaved()
     } catch (e) {
       setError(e instanceof ApiError && e.code === 'Invalid input' && e.fields?.some((f) => f.startsWith('birthDate')) ? t('error.invalidBirthDate') : errorText(e instanceof ApiError ? e.code : ''))
@@ -107,6 +109,9 @@ export default function AccountScreen() {
   }
 
   const isProvider = showProfileTab(shared ?? me)
+  // compulsory: the name and the postcode (a provider's date of birth too); with those saved the details card folds
+  const complete = !!me && !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)
+  const showDetails = open ?? !complete
   const changeOffer = (on: boolean) => {
     if (on) return void offer()
     Alert.alert(t('account.offerSwitch'), t('account.stopOfferingAsk'), [
@@ -124,23 +129,34 @@ export default function AccountScreen() {
           <Button label={t('auth.logOut')} onPress={signOut} />
         </View>
         <View style={styles.card}>
-          <Text style={styles.heading}>{t('account.exportHeading')}</Text>
+          <Text style={styles.heading}>{t('account.detailsHeading')}</Text>
           {me && (
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
               <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
               <ErrorText text={error} />
-              <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
-              <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy && !scanning} />
-              <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy && !scanning} />
-              <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
-              <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy || scanning} />
-              <LanguageSwitch />
-              <Button label={t('common.save')} onPress={save} busy={busy} disabled={scanning} />
-              {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setOpen(!showDetails)}>
+                <Text style={styles.fold}>{`${showDetails ? '▾' : '▸'} ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trim()}</Text>
+              </Pressable>
+              {!showDetails && saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
+              {showDetails && (
+                <>
+                  <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
+                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy && !scanning} />
+                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy && !scanning} />
+                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
+                  <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy || scanning} />
+                  <LanguageSwitch />
+                  <Button label={t('common.save')} onPress={save} busy={busy} disabled={scanning} />
+                  {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
+                </>
+              )}
             </>
           )}
           {!me && loadError !== null && <ErrorRetry code={loadError} onRetry={load} />}
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.heading}>{t('account.exportHeading')}</Text>
           <AccountDataSection part="export" />
         </View>
         <PushSwitches />
@@ -186,6 +202,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: '#34328A' },
   saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#34328A' },
   email: { fontSize: 16, color: '#1D1C4A' },
+  fold: { fontSize: 16, fontWeight: '600', color: '#34328A', minHeight: 44, textAlignVertical: 'center' },
   heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
   hint: { fontSize: 14, color: '#4F4E7D' },
   link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#34328A', textDecorationLine: 'underline' },
