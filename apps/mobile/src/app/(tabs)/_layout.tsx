@@ -12,7 +12,7 @@ import { tabBadge } from '@/lib/jobs'
 import { consumePending, readyToNavigate, urlOf, usePending } from '@/lib/pending-navigation'
 import { showProfileTab } from '@/lib/profile-tab'
 
-/** Screens kept inside the tab bar (the bar stays on every signed-in screen): hidden tabs, each lighting the tab it belongs to. */
+/** Screens kept inside the tab bar (the bar stays on every signed-in screen): tabs without a button, each lighting the tab it belongs to. */
 const HIDDEN = ['bookings', 'invoices', 'learn', 'provider/[slug]', 'quotes/index', 'threads'] as const
 const LIT: Record<string, string> = { bookings: 'jobs', invoices: 'jobs', threads: 'jobs', 'quotes/index': 'jobs', 'provider/[slug]': 'search', learn: 'index' }
 const bar = (props: BottomTabBarProps) => {
@@ -64,7 +64,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, href: showProfileTab(me) ? undefined : null }} />
       <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
       {HIDDEN.map((name) => (
-        <Tabs.Screen key={name} name={name} options={{ href: null }} />
+        <Tabs.Screen key={name} name={name} options={{ tabBarButton: () => null }} /> // no button, but still reachable (`href: null` hides AND redirects away in this Expo Router)
       ))}
     </Tabs>
   )
