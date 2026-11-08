@@ -79,8 +79,9 @@ async function alwaysDerived(tx: Tx, userId: string, now: Date): Promise<string[
 
 /**
  * Root requests the settled rule called past but deriveJobState did not, seen by a Past page: always derived in code from then on.
- * ponytail: per server instance and never emptied; until an instance has opened such a Past page its Needs you/Active lists miss the
- * row (the logged drift is the signal to fix `settled`). Fine while drift is a bug that should not happen; a stored column if it does.
+ * Entries leave again once the row derives past (listJobs). ponytail: per server instance; until an instance has opened such a Past
+ * page its Needs you/Active lists miss the row (the logged drift is the signal to fix `settled`). Fine while drift is a bug that
+ * should not happen; a stored column if it does.
  */
 const drifted = new Set<string>()
 
@@ -117,6 +118,8 @@ export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = 
   const open = await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
   const openRows = await rowsOf(tx, userId, q.role, open, now)
   const openList = open.flatMap((f) => openRows.get(f.id) ?? [])
+  // a remembered row that now derives past agrees with `settled` again (or is open anyway): forget it, so the set only holds live drift
+  openList.forEach((r) => r.jobState.section === 'past' && drifted.delete(r.id))
   const pastOutside = and(jobsOf, settled(now), derived.length ? notInArray(requests.id, derived) : undefined)
   const settledCount = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(pastOutside))[0]!.n
   const counts = {
