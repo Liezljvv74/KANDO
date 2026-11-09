@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { clearOutbox, confirmQuote, createRequest, drainOutbox, getBooking, getRequest, listQuotes, runDueTimers, runExpiryAndReminders, sendQuote, withdrawRequest } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
-import { requestTime, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { requestTime, cleanupUsers, EMAIL, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 'tm-cust', cust2: 'tm-cust2', owner: 'tm-owner', owner2: 'tm-owner2' }
 let prov: string, prov2: string, service: string
@@ -29,12 +29,18 @@ const clean = async () => {
 const request = async (providerId: string, answerBy: string, status = 'open', cust = U.cust) =>
   (await pool.query("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', $3, $4) RETURNING id", [cust, providerId, status, answerBy])).rows[0].id as string
 const booking = async (status: string, o: { answerBy?: string; payBy?: string; acceptedAt?: string; startAt?: string } = {}) =>
-  (
-    await pool.query(
-      "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at) VALUES ($1, $2, $3, 'direct', $4, $5, 60, $6, $7, COALESCE($8::timestamptz, CASE WHEN $4::text = 'awaiting-payment' THEN $7::timestamptz - interval '48 hours' END)) RETURNING id",
-      [U.cust, prov, service, status, o.startAt ?? at(24 * 20), o.answerBy ?? null, o.payBy ?? null, o.acceptedAt ?? null],
-    )
-  ).rows[0].id as string
+  seedBooking({
+    customerId: U.cust,
+    providerId: prov,
+    cols: {
+      service_id: service,
+      status,
+      start_at: o.startAt ?? at(24 * 20),
+      answer_by: o.answerBy ?? null,
+      pay_by: o.payBy ?? null,
+      accepted_at: o.acceptedAt ?? (status === 'awaiting-payment' && o.payBy ? new Date(new Date(o.payBy).getTime() - 48 * 3_600_000) : null),
+    },
+  })
 const status = async (table: string, id: string) => (await pool.query(`SELECT status FROM ${table} WHERE id = $1`, [id])).rows[0].status as string
 const notes = async (kind: string) => (await pool.query('SELECT user_id, payload FROM notifications WHERE kind = $1 AND user_id LIKE $2 ORDER BY user_id', [kind, 'tm-%'])).rows
 
@@ -138,7 +144,7 @@ it('unpaid awaiting-payment past payBy expires and frees the time', async () => 
   await runDueTimers(db, new Date())
   expect(await status('bookings', b)).toBe('expired')
   expect(await busy()).toBe(0)
-  expect((await notes('booking-expired')).map((n) => n.user_id).sort()).toEqual([U.cust, U.owner])
+  expect((await notes('booking-expired')).map((n) => n.user_id)).toEqual([U.owner]) // the customer hears request-reopened (a booking always has a request)
 })
 
 it('two overlapping runs create exactly one requests-ignored notice (the lock serialises them)', async () => {
@@ -251,7 +257,7 @@ const quoteBorn = async (status: 'awaiting-time' | 'awaiting-payment', quoteExpi
   const due = status === 'awaiting-time' ? [at(-1), null, null] : [null, at(-1), at(-49)]
   const b = (
     await pool.query(
-      "INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, answer_by, pay_by, accepted_at, parent_booking_id) VALUES ($1, $2, $3, 'quote', $4, $5, 60, $6, $7, $8, $9) RETURNING id",
+      "INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, answer_by, pay_by, accepted_at, parent_booking_id) VALUES ($1, $2, $3, $4, $5, 60, $6, $7, $8, $9) RETURNING id",
       [U.cust, prov, q, status, at(24 * 20), ...due, parent],
     )
   ).rows[0].id as string
@@ -290,15 +296,14 @@ it("reopen at the quote's expiry keeps the quote expired", async () => {
   expect([(res as Response).status, await (res as Response).json()]).toEqual([409, { error: 'quote-expired' }])
 })
 
-it('a direct booking and an additional task change no request', async () => {
+it('an additional task changes no request', async () => {
   await clean()
-  const d = await booking('awaiting-time', { answerBy: at(-1) })
   const parent = await booking('confirmed')
   await pool.query('UPDATE bookings SET paid_at = $1 WHERE id = $2', [at(-24), parent])
   const kid = await quoteBorn('awaiting-payment', at(24 * 3), parent)
   const requestsBefore = (await pool.query('SELECT id, status, updated_at FROM requests WHERE customer_id = $1 ORDER BY id', [U.cust])).rows
   await run(0)
-  expect([await status('bookings', d), await status('bookings', kid.b)]).toEqual(['expired', 'expired'])
+  expect(await status('bookings', kid.b)).toBe('expired')
   expect([await status('requests', kid.r), await status('quotes', kid.q)]).toEqual(['booked', 'accepted']) // the customer starts a new one
   expect((await pool.query('SELECT id, status, updated_at FROM requests WHERE customer_id = $1 ORDER BY id', [U.cust])).rows).toEqual(requestsBefore)
   expect((await kinds(kid.b)).map((n) => [n.user_id, n.kind])).toEqual([[U.cust, 'booking-expired'], [U.owner, 'booking-expired']])

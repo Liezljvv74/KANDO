@@ -746,7 +746,6 @@ export const de = {
   'provider.reliability.one': 'In den letzten 12 Monaten einmal spät storniert oder nicht erschienen',
   'provider.reliability.other': 'In den letzten 12 Monaten {n}-mal spät storniert oder nicht erschienen',
   'error.booking.too-early': 'Das geht erst ab der vereinbarten Startzeit. Versuche es noch einmal, wenn der Auftrag begonnen hat.',
-  'error.booking.invalid-material-amount': 'Bitte gib Materialkosten zwischen 0 und dem Preis ein, mit höchstens zwei Nachkommastellen.',
   'error.booking.no-show-reported': 'Für diese Buchung wurde bereits ein Nichterscheinen gemeldet. Sie endet nach den 48 Stunden oder mit der Entscheidung unseres Teams, du musst jetzt nichts weiter tun.',
   'error.booking.started': 'Der Auftrag hat schon begonnen und kann nicht mehr storniert werden. Du kannst den Auftrag abbrechen oder melden, dass die andere Seite nicht erschienen ist.',
   'error.booking.objection-closed': 'Die 48 Stunden für einen Widerspruch sind vorbei. Schreib an {contact}, wenn du weiter Hilfe brauchst.',

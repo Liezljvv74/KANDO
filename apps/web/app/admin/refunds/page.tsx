@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { List, useTable } from '@refinedev/antd'
 import { Table } from 'antd'
-import { SearchForm, searchByText } from '../../../components/admin/search-form'
-import { money, statusLabel, when } from '../../../components/admin/booking-text'
-import { useAdminLang, useAt } from '../../../lib/admin/t'
+import { SearchForm, searchByText } from '@/components/admin/search-form'
+import { money, statusLabel, when } from '@/components/admin/booking-text'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Row = { id: string; bookingId: string; amount: number; currency: string; createdAt: string; bookingStatus: string; customerEmail: string; providerName: string }
 

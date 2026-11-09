@@ -210,11 +210,10 @@ export const BookingSchema = z.object({
   providerId: z.string(),
   serviceId: z.string().nullable(),
   quoteId: z.string().nullable(),
-  /** The request a quote booking came from (its chat is the request's); null for a direct booking. */
-  requestId: z.string().nullable(),
+  /** The request the booking's quote answered (its chat is the request's). */
+  requestId: z.string(),
   /** An additional task: the booking it adds to; null for an ordinary booking. */
   parentBookingId: z.string().nullable(),
-  source: z.enum(['quote', 'direct']),
   status: z.enum(BOOKING_STATUSES),
   startAt: z.string(),
   durationMin: z.number().int(),

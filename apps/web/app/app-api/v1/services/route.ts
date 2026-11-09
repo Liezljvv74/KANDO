@@ -1,7 +1,7 @@
 import { parseBody, ServiceInputSchema } from '@kando/contract'
 import { addService, listServices } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { appRequest } from '@/lib/app-request'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) =>
   Response.json({ docs: await listServices(tx, user!.id) }),

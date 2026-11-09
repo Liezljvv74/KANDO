@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLogin, useLogout } from '@refinedev/core'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
-import { useAt } from '../../../lib/admin/t'
+import { useAt } from '@/lib/admin/t'
 
 function SignIn() {
   const at = useAt()

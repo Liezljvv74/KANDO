@@ -109,9 +109,10 @@ export const bookings = pgTable(
       .references(() => providers.id, { onDelete: 'cascade' }),
     serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
     quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'set null' }),
-    // Filled from the quote by the bookings_fill_amount trigger, never changed (rls.ts).
-    requestId: uuid('request_id').references(() => requests.id),
-    source: text().notNull(),
+    // Filled from the quote by the bookings_fill_amount trigger, never changed (rls.ts). Every booking comes from a quote.
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => requests.id),
     status: text().notNull(),
     startAt: timestamp('start_at', { withTimezone: true }).notNull(),
     durationMin: integer('duration_min').notNull(),
@@ -128,7 +129,7 @@ export const bookings = pgTable(
     remindedLastAt: timestamp('reminded_last_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    // amount and currency come from the quote or the service (trigger bookings_fill_amount), never from the app
+    // amount and currency come from the quote (trigger bookings_fill_amount), never from the app
     amount: numeric({ precision: 10, scale: 2 }).notNull(),
     currency: text().notNull().default('EUR'),
     // copied from COMMISSION_RATE at payment, so a later change never alters old bookings
@@ -156,8 +157,6 @@ export const bookings = pgTable(
     stopAmount: numeric('stop_amount', { precision: 10, scale: 2 }),
     stopNote: text('stop_note'),
     stopStatedAt: timestamp('stop_stated_at', { withTimezone: true }),
-    // the material part of the amount, stated at "Finished" (plan 2e's invoices)
-    materialAmount: numeric('material_amount', { precision: 10, scale: 2 }).notNull().default('0'),
     // awaiting-time (flow 1, a quote accepted without a time): the time one side entered for the other to confirm.
     // Written on the owner connection after the domain checked the caller (rls.ts COLUMN_STAFF_ONLY).
     timeProposedBy: text('time_proposed_by'),
@@ -167,7 +166,6 @@ export const bookings = pgTable(
     timeAnswerBy: timestamp('time_answer_by', { withTimezone: true }),
   },
   (t) => [
-    check('bookings_source_check', sql`source in ('quote','direct')`),
     check('bookings_status_check', sql`status in ('awaiting-time','awaiting-payment','confirmed','expired','declined','withdrawn','finished','completed','disputed','cancelled','stopped','refunded')`),
     check('bookings_time_proposed_by_check', sql`time_proposed_by in ('provider','customer')`),
     index('bookings_awaiting_time_answer_by_idx').on(t.answerBy).where(sql`status = 'awaiting-time'`),
@@ -189,7 +187,6 @@ export const bookings = pgTable(
     check('bookings_amount_check', sql`amount >= 0`),
     check('bookings_commission_rate_check', sql`commission_rate >= 0 AND commission_rate < 1`),
     check('bookings_stop_amount_check', sql`stop_amount >= 0 AND stop_amount <= amount`),
-    check('bookings_material_amount_check', sql`material_amount >= 0 AND material_amount <= amount`),
     check('bookings_duration_check', sql`duration_min > 0`),
     check('bookings_currency_check', sql`currency ~ '^[A-Z]{3}$'`),
   ],

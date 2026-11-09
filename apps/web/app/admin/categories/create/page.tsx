@@ -2,7 +2,7 @@
 
 import { Create, useForm } from '@refinedev/antd'
 import { Form } from 'antd'
-import { CategoryFields } from '../../../../components/admin/category-fields'
+import { CategoryFields } from '@/components/admin/category-fields'
 
 export default function CategoryCreate() {
   const { formProps, saveButtonProps } = useForm()

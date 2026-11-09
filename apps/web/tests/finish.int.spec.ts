@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { clearOutbox, confirmJob, finishJob, releaseBooking, runDueTimers, runExpiryAndReminders, runMoneySteps } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -49,19 +49,19 @@ async function paidBooking(o: { startAt?: Date; provider?: string; status?: stri
   const startAt = o.startAt ?? new Date(Date.now() - 2 * HOUR - ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
   const finishedAt = o.finishedAt ?? null
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_fn_' || gen_random_uuid(), 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
-      [U.cust, p, service, o.status ?? 'confirmed', startAt, finishedAt],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({
+    customerId: U.cust,
+    providerId: p,
+    startAt,
+    rate: 0.12,
+    cols: { service_id: service, status: o.status ?? 'confirmed', finished_at: finishedAt, confirm_by: finishedAt ? new Date(finishedAt.getTime() + 7 * 86_400_000) : null },
+  })
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', 100, $3)", [id, p, `charge:${id}`])
   return { id, startAt }
 }
 
 const row = async (id: string) =>
-  (await pool.query('SELECT status, finished_at, confirm_by, confirm_reminders_sent, asked_done_at, completed_at, released_at, material_amount FROM bookings WHERE id = $1', [id])).rows[0]
+  (await pool.query('SELECT status, finished_at, confirm_by, confirm_reminders_sent, asked_done_at, completed_at, released_at FROM bookings WHERE id = $1', [id])).rows[0]
 const ledger = async (id: string) => (await pool.query("SELECT kind, amount FROM ledger_entries WHERE booking_id = $1 AND kind <> 'charge' ORDER BY kind", [id])).rows
 const notes = async (id: string) => (await pool.query("SELECT user_id, kind FROM notifications WHERE payload->>'bookingId' = $1 ORDER BY kind, user_id", [id])).rows
 const callsOf = (method: string) => g.calls.filter((c) => c.method === method)
@@ -70,7 +70,7 @@ const refusal = (p: Promise<unknown>) =>
     () => ({ status: 0, body: null }),
     async (e: unknown) => (e instanceof Response ? { status: e.status, body: await e.json() } : Promise.reject(e)),
   )
-const finish = (userId: string, id: string, now: Date, input: { materialAmount?: number } = {}) => asUser(userId, (tx) => finishJob(tx, userId, id, input, now))
+const finish = (userId: string, id: string, now: Date) => asUser(userId, (tx) => finishJob(tx, userId, id, now))
 const confirm = (userId: string, id: string, now: Date) => asUser(userId, (tx) => confirmJob(tx, userId, id, now))
 
 it('Finished before the start is 409; after it the 7-day clock starts', async () => {
@@ -78,10 +78,10 @@ it('Finished before the start is 409; after it the 7-day clock starts', async ()
   const { id } = await paidBooking({ startAt })
   expect(await refusal(finish(U.owner, id, new Date(startAt.getTime() - MIN)))).toEqual({ status: 409, body: { error: 'TOO_EARLY' } })
   expect((await row(id)).status).toBe('confirmed')
-  const done = await finish(U.owner, id, startAt, { materialAmount: 12.5 })
+  const done = await finish(U.owner, id, startAt)
   expect(done).toMatchObject({ status: 'finished', finishedAt: startAt.toISOString(), confirmBy: new Date(startAt.getTime() + 7 * DAY).toISOString() })
   const r = await row(id)
-  expect(r).toMatchObject({ status: 'finished', material_amount: '0.00', confirm_reminders_sent: 0 })
+  expect(r).toMatchObject({ status: 'finished', confirm_reminders_sent: 0 })
   expect(r.finished_at.getTime()).toBe(startAt.getTime())
   expect(r.confirm_by.getTime()).toBe(startAt.getTime() + 7 * DAY)
   expect(await notes(id)).toEqual([{ user_id: U.cust, kind: 'job-finished' }])
@@ -108,10 +108,10 @@ it('a third person gets 404, the customer cannot finish, the provider cannot con
   expect((await row(id)).status).toBe('finished')
 })
 
-it('finish with materialAmount from an old build succeeds and stores nothing', async () => {
+it('finish takes no input: a materialAmount is refused with 400 and nothing changes', async () => {
   const { id } = await paidBooking()
-  expect((await call(finishRoute.POST, U.owner, 'POST', { materialAmount: 12.5 }, { id })).status).toBe(200)
-  expect(await row(id)).toMatchObject({ status: 'finished', material_amount: '0.00' })
+  expect((await call(finishRoute.POST, U.owner, 'POST', { materialAmount: 12.5 }, { id })).status).toBe(400)
+  expect((await row(id)).status).toBe('confirmed')
 })
 
 it('reminders after 1, 3 and 6 days, each once', async () => {

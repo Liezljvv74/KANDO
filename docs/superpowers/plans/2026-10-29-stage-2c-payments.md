@@ -1,3 +1,5 @@
+> Superseded (9 November 2026): the commission is now 15 % including payment fees, money amounts carry their currency, and bookings are created only from quotes; see README and the job-page plan. Kept for history.
+
 # Stage 2c: payments Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

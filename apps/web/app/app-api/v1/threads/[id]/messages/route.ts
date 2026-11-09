@@ -1,6 +1,6 @@
 import { MessageInputSchema, MessagesQuerySchema, parseBody, parseQuery } from '@kando/contract'
 import { listMessages, sendMessage } from '@kando/domain'
-import { appRequest } from '../../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 /** Read-only (the 4-second chat poll): the chat's notices turn seen through POST /threads/[id]/seen. */
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user, request, params }) =>

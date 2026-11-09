@@ -4,7 +4,7 @@ import { asUser, db, pool } from '@kando/db'
 import { CommissionInvoiceListSchema } from '@kando/contract'
 import { cancelBooking, clearOutbox, COMMISSION_RATE, commissionFor, clearPushOutbox, deleteAccount, issueCommissionInvoices, runDueTimers, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
 import { pushOutboxForTests, setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, memoryStorage, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -46,13 +46,12 @@ async function provider(): Promise<{ uid: string; id: string }> {
 
 /** A settled booking as settle leaves it (released, charge + transfer + commission rows) with its money rows written at `at`. */
 async function settled(providerId: string, at: Date, amount = 100, rate = COMMISSION_RATE): Promise<string> {
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, released_at)
-       VALUES ($1, $2, 'direct', 'completed', $3::timestamptz - interval '1 day', 60, false, $4, $3, $3, $5, $6, $3, $3) RETURNING id`,
-      [U.cust, providerId, at, amount, `pi_ci_${++n}`, rate],
-    )
-  ).rows[0].id as string
+  const id = await seedBooking({
+    customerId: U.cust,
+    providerId,
+    amount,
+    cols: { status: 'completed', start_at: new Date(at.getTime() - 86_400_000), on_site: false, pay_by: at, paid_at: at, payment_ref: `pi_ci_${++n}`, commission_rate: rate, finished_at: at, released_at: at },
+  })
   const commission = Math.round(amount * rate * 100) / 100
   for (const [kind, value] of [['charge', amount], ['transfer', amount - commission], ['commission', commission]] as const) {
     await pool.query('INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, providerId, kind, value, 'pi_x', `${kind}:${id}`, at])
@@ -193,13 +192,12 @@ it('real releases: commission rows from settle are invoiced next month; refunded
   const p = await provider()
   const q = await provider() // only zero-commission bookings
   const paid = async (providerId: string, status: string, startAt = new Date(Date.now() - 3_600_000)) =>
-    (
-      await pool.query(
-        `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-         VALUES ($1, $2, 'direct', $3, $4, 60, 100, now(), now(), $5, ${COMMISSION_RATE}, now(), now() + interval '7 days') RETURNING id`,
-        [U.cust, providerId, status, startAt, `pi_ci_${++n}`],
-      )
-    ).rows[0].id as string
+    seedBooking({
+      customerId: U.cust,
+      providerId,
+      amount: 100,
+      cols: { status, start_at: startAt, pay_by: new Date(), paid_at: new Date(), payment_ref: `pi_ci_${++n}`, commission_rate: COMMISSION_RATE, finished_at: new Date(), confirm_by: new Date(Date.now() + 7 * 86_400_000) },
+    })
   const charge = (id: string, providerId: string) => pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, 'pi_x', $3)", [id, providerId, `charge:${id}`])
   const done = await paid(p.id, 'finished')
   await charge(done, p.id)

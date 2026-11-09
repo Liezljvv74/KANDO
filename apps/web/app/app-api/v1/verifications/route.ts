@@ -1,7 +1,7 @@
 import { DocumentInputSchema, DocumentsListSchema, parseBody } from '@kando/contract'
 import { listDocuments, submitDocument } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { appRequest } from '@/lib/app-request'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 // The AI check of a new document runs after the answer is sent, inside this function's time.
 export const maxDuration = 60

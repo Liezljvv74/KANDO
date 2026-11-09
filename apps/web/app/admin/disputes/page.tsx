@@ -2,8 +2,8 @@
 
 import { List, ShowButton, useTable } from '@refinedev/antd'
 import { Table, Tag } from 'antd'
-import { when } from '../../../components/admin/booking-text'
-import { useAdminLang, useAt } from '../../../lib/admin/t'
+import { when } from '@/components/admin/booking-text'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Row = { id: string; reason: string; decision: string | null; decideBy: string; decidedAt: string | null; overdue: boolean; customerEmail: string; providerName: string }
 

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 // Neon Auth settings from the root .env (git-ignored); absent in CI without secrets, then the auth test skips.
@@ -14,7 +15,7 @@ try {
 
 export default defineConfig({
   // The auth package imports next/headers without an extension, which plain Node ESM cannot resolve.
-  resolve: { alias: { 'next/headers': 'next/headers.js', 'next/server': 'next/server.js' } },
+  resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)), 'next/headers': 'next/headers.js', 'next/server': 'next/server.js' } },
   test: {
     include: ['tests/**/*.int.spec.ts'],
     globalSetup: ['../../packages/db/src/test/setup.ts'],

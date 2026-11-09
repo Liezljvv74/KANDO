@@ -1,6 +1,6 @@
 import { DisputeInputSchema, parseBody } from '@kando/contract'
 import { getDispute, openDispute } from '@kando/domain'
-import { appRequest } from '../../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 /** The booking's dispute, for its two parties (the provider reads the customer's description here). */
 export const GET = appRequest({ auth: 'required', allowWhenSuspended: true }, async ({ tx, user, params }) => Response.json(await getDispute(tx, user!.id, params.id!)))

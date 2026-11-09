@@ -77,7 +77,7 @@ export async function confirmQuote(tx: Tx, userId: string, quoteId: string, inpu
         providerId: provider.id,
         serviceId: req.serviceId,
         quoteId: quote.id,
-        source: 'quote',
+        requestId: req.id, // the trigger sets the same from the quote
         status: hasTime ? 'awaiting-payment' : 'awaiting-time',
         startAt,
         durationMin,

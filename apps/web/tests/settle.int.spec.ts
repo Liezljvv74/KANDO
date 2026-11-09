@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { db, pool } from '@kando/db'
 import { COMMISSION_RATE, commissionFor, deleteAccount, settle } from '@kando/domain'
 import { setGatewayForTests } from '@kando/domain/src/testing'
-import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 const U = { cust: 'st-cust', owner: 'st-owner', bare: 'st-bare', cust2: 'st-cust2' }
@@ -35,13 +36,11 @@ afterAll(cleanupUsers)
 async function paidBooking(o: { paid?: number | null; rate?: number; provider?: string; customer?: string } = {}): Promise<string> {
   const p = o.provider ?? providerId
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'direct', 'confirmed', now() + make_interval(hours => $4), 60, now(), 'pi_st_' || gen_random_uuid(), $5) RETURNING id`,
-      [o.customer ?? U.cust, p, service, 48 + ++hour * 2, o.rate ?? COMMISSION_RATE],
-    )
-  ).rows[0].id as string
+  const id = await seedBooking({
+    customerId: o.customer ?? U.cust,
+    providerId: p,
+    cols: { service_id: service, start_at: new Date(Date.now() + (48 + ++hour * 2) * 3_600_000), paid_at: new Date(), payment_ref: `pi_st_${randomUUID()}`, commission_rate: o.rate ?? COMMISSION_RATE },
+  })
   if (o.paid !== null) await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', $3, $4)", [id, p, o.paid ?? 100, `charge:${id}`])
   return id
 }

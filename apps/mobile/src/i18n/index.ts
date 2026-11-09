@@ -112,7 +112,6 @@ export const errorKeys: Record<string, Key> = {
   BAD_YEAR: 'error.badYear',
   // Endings and reviews (`error`); the staff-only codes (DECISION_PENDING, SETTLEMENT_STARTED ...) never reach the app
   TOO_EARLY: 'error.booking.too-early',
-  INVALID_MATERIAL_AMOUNT: 'error.booking.invalid-material-amount',
   NO_SHOW_REPORTED: 'error.booking.no-show-reported',
   STARTED: 'error.booking.started',
   OBJECTION_CLOSED: 'error.booking.objection-closed',

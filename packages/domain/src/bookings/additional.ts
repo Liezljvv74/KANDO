@@ -61,8 +61,8 @@ export async function startAdditionalTask(tx: Tx, userId: string, bookingId: str
     if (!takesAdditional(b)) fail(409, { error: 'not-open' })
     if ((await o.select({ id: requests.id }).from(requests).where(and(eq(requests.parentBookingId, b.id), liveRequest(now)))).length) fail(409, { error: 'additional-limit' })
     // the category of the ROOT request (b may itself be an additional task's booking), else the service's, as createRequest does
-    const rootRequest = (await rootsOf(o, [b.id])).get(b.id)?.requestId
-    const fromRoot = rootRequest ? (await o.select({ c: requests.categoryId }).from(requests).where(eq(requests.id, rootRequest)))[0]?.c : null
+    const rootRequest = (await rootsOf(o, [b.id])).get(b.id)!.requestId
+    const fromRoot = (await o.select({ c: requests.categoryId }).from(requests).where(eq(requests.id, rootRequest)))[0]?.c
     const categoryId = fromRoot ?? (b.serviceId ? (await o.select({ c: services.categoryId }).from(services).where(eq(services.id, b.serviceId)))[0]?.c : null) ?? null
     const [row] = await o
       .insert(requests)
@@ -96,8 +96,8 @@ export async function acceptAdditional(quote: typeof quotes.$inferSelect, req: t
         customerId: p.customerId,
         providerId: p.providerId,
         quoteId: quote.id,
+        requestId: req.id, // the trigger sets the same from the quote
         parentBookingId: p.id,
-        source: 'quote',
         status: 'awaiting-payment',
         startAt: p.startAt,
         durationMin: p.durationMin,

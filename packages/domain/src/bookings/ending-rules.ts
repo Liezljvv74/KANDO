@@ -1,4 +1,4 @@
-import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, NO_SHOW_OBJECTION_HOURS } from '@kando/contract'
+import { DAY, HOUR, NO_SHOW_OBJECTION_HOURS } from '@kando/contract'
 import { TIME_ZONE } from '@kando/i18n'
 
 export const DISPUTE_DECISION_WORKING_DAYS = 14
@@ -58,18 +58,8 @@ export const addWorkingDays = (from: Date, days: number): Date => {
   return new Date(fromWall(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), w.hour, w.minute, w.second), ms))
 }
 
-/** Late means less than 24 hours to go; exactly 24 hours before the start is still free. */
-export const isLate = (startAt: Date, now: Date): boolean => now.getTime() > startAt.getTime() - FREE_CANCEL_HOURS * HOUR
-
-/** Integer cents, half up; the small precision trim keeps 1.005 * 100 from landing on 100.49999. */
-const toCents = (x: number) => Math.round(Number((x * 100).toPrecision(12)))
-
-/** What the provider is paid when the customer cancels: nothing in time, the late share otherwise. Never above the amount. */
-export const customerCancelShare = (amount: number, startAt: Date, now: Date): number => {
-  if (!isLate(startAt, now)) return 0
-  const cents = toCents(amount)
-  return Math.min(cents, Math.round(cents * LATE_CANCEL_SHARE)) / 100
-}
+// Shim: the late-cancel rule (isLate, customerCancelShare) is implemented in @kando/contract (money.ts); new code should import it from there.
+export { customerCancelShare, isLate } from '@kando/contract'
 
 /** When both reviews are in they show now; otherwise 7 days after completion. */
 export const reviewVisibleAt = (completedAt: Date, bothIn: boolean, now: Date): Date =>

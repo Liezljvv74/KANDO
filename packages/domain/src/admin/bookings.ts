@@ -282,7 +282,6 @@ async function bookingSummary(exec: Exec, b: Row) {
   return {
     id: b.id,
     status: b.status,
-    source: b.source,
     parentBookingId: b.parentBookingId,
     startAt: iso(b.startAt),
     durationMin: b.durationMin,

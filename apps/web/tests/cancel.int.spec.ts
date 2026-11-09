@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { acceptNoShow, cancelBooking, clearOutbox, confirmJob, finishJob, getPublicProfile, objectNoShow, reportNoShow, runDueTimers, slotIsHeld } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -52,13 +52,7 @@ async function paidBooking(o: { startAt?: Date; provider?: string } = {}): Promi
   const p = o.provider ?? providerId
   const startAt = o.startAt ?? new Date(Date.now() + 3 * DAY + ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'direct', 'confirmed', $4, 60, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', 'pi_cx_' || gen_random_uuid(), 0.12) RETURNING id`,
-      [U.cust, p, service, startAt],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({ customerId: U.cust, providerId: p, startAt, rate: 0.12, cols: { service_id: service } })
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', 100, $3)", [id, p, `charge:${id}`])
   return { id, startAt }
 }
@@ -69,8 +63,8 @@ async function child(parent: string, startAt: Date, amount: number, paid: boolea
   const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, $3, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [req, providerId, amount])).rows[0].id
   const id = (
     await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'quote', $4, $5, 60, $6, now() + interval '2 days', now(), $7, $8, 0.12) RETURNING id`,
+      `INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at, paid_at, payment_ref, commission_rate)
+       VALUES ($1, $2, $3, $4, $5, 60, $6, now() + interval '2 days', now(), $7, $8, 0.12) RETURNING id`,
       [U.cust, providerId, quote, paid ? 'confirmed' : 'awaiting-payment', startAt, parent, paid ? new Date() : null, paid ? `pi_cx_child_${randomUUID()}` : null],
     )
   ).rows[0].id as string
@@ -230,7 +224,7 @@ it('customer no-show unanswered for 48 hours pays the provider in full', async (
   expect(outboxForTests().find((m) => m.to === EMAIL(U.cust))!.text).toMatch(/04[./]05[./]2028/) // the objection deadline
   // the other side cannot report back, finish or confirm while it is open
   expect(await refusal(report(U.cust, id, at))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
-  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, {}, at)))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
+  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, at)))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
 
   expect((await runDueTimers(db, new Date(at.getTime() + 48 * HOUR - MIN))).noShowsResolved).toBe(0)
   expect(g.calls).toEqual([])

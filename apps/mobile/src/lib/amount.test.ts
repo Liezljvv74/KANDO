@@ -20,3 +20,11 @@ test('receiveFrom: what the provider keeps', () => {
   expect(receiveFrom('120', 0.15)).toBe(102)
   expect(receiveFrom('x', 0.15)).toBeNull()
 })
+
+test('receiveFrom does not throw while the rate is missing or the text is no amount', () => {
+  expect(receiveFrom('120', undefined as unknown as number)).toBeNaN()
+  expect(receiveFrom('120', NaN)).toBeNaN()
+  expect(receiveFrom('', 0.15)).toBeNull()
+  expect(receiveFrom('-5', 0.15)).toBeNull()
+  expect(receiveFrom('abc', 0.15)).toBeNull()
+})
