@@ -1,4 +1,4 @@
-import { type AnyPgColumn, customType, index, integer, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, customType, index, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const point = customType<{ data: { lng: number; lat: number }; driverData: string }>({
@@ -36,7 +36,6 @@ export const categories = pgTable('categories', {
   id: uuid().primaryKey().defaultRandom(),
   slug: text().notNull().unique(),
   country: text().notNull().default('DE').references(() => countries.code),
-  sort: integer().notNull().default(0),
   requiredDocuments: text('required_documents').array().notNull().default(sql`'{}'`),
   // A slot a provider may fill; an approved one shows as a badge. Never part of the publish gate in rls.ts.
   optionalDocuments: text('optional_documents').array().notNull().default(sql`'{}'`),

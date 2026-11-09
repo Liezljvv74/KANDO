@@ -68,7 +68,6 @@ const slug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(80)
 /** German is required; an empty English text means "none" (the site falls back to German). Defaults are applied by the domain, so a PATCH never resets a field. */
 export const CategoryInputSchema = z.object({
   slug,
-  sort: z.number().int().min(0).max(10_000).optional(),
   requiredDocuments: z.array(z.string().max(50)).max(10).optional(),
   optionalDocuments: z.array(z.string().max(50)).max(10).optional(),
   names: z.object({ de: requiredText(100), en: z.string().trim().max(100).optional() }),

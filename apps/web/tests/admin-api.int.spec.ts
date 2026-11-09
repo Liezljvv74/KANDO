@@ -208,10 +208,10 @@ it('lists users with pagination and a text filter on email or name', async () =>
 })
 
 it('creates and updates a category per language', async () => {
-  const res = await adminCall(list.POST, 'aa-admin', 'POST', '/x', { slug: 'aa-cat', sort: 5, requiredDocuments: ['permit'], names: { de: 'Gartenarbeit', en: 'Gardening' } }, { resource: 'categories' })
+  const res = await adminCall(list.POST, 'aa-admin', 'POST', '/x', { slug: 'aa-cat', requiredDocuments: ['permit'], names: { de: 'Gartenarbeit', en: 'Gardening' } }, { resource: 'categories' })
   expect(res.status).toBe(201)
   const { data } = await res.json()
-  expect(data).toMatchObject({ slug: 'aa-cat', sort: 5, requiredDocuments: ['permit'], names: { de: 'Gartenarbeit', en: 'Gardening' } })
+  expect(data).toMatchObject({ slug: 'aa-cat', requiredDocuments: ['permit'], names: { de: 'Gartenarbeit', en: 'Gardening' } })
   expect((await anon((tx) => listCategories(tx, 'en'))).find((c) => c.slug === 'aa-cat')?.name).toBe('Gardening')
   const upd = await adminCall(item.PATCH, 'aa-admin', 'PATCH', '/x', { names: { de: 'Garten', en: '' } }, { resource: 'categories', id: data.id })
   expect(upd.status).toBe(200)

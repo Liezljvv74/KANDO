@@ -26,7 +26,7 @@ afterAll(async () => {
   await cleanupUsers()
 })
 
-const category = { slug: 'ar-cat', sort: 1, requiredDocuments: [], names: { de: 'Eins', en: 'One' } }
+const category = { slug: 'ar-cat', requiredDocuments: [], names: { de: 'Eins', en: 'One' } }
 const page = { slug: 'ar-page', kind: 'page', published: false, texts: { de: { title: 'T', body: 'B' } } }
 
 it('a Reviewer cannot do Administrator actions, and nothing changes', async () => {
@@ -47,10 +47,13 @@ it('a Reviewer cannot change or delete an existing category or page', async () =
   const c = await (await adminCall(list.POST, 'ar-admin', 'POST', '/x', { ...category, slug: 'ar-cat2' }, { resource: 'categories' })).json()
   const p = await (await adminCall(list.POST, 'ar-admin', 'POST', '/x', { ...page, slug: 'ar-page2' }, { resource: 'pages' })).json()
   const patch = (resource: string, id: string, b: object) => adminCall(item.PATCH, 'ar-rev', 'PATCH', '/x', b, { resource, id })
-  expect((await patch('categories', c.data.id, { sort: 99 })).status).toBe(403)
+  expect((await patch('categories', c.data.id, { slug: 'ar-cat-2' })).status).toBe(403)
+  expect((await patch('categories', c.data.id, { requiredDocuments: ['permit'], optionalDocuments: ['id-document'] })).status).toBe(403)
   expect((await patch('pages', p.data.id, { published: true })).status).toBe(403)
   expect((await adminCall(item.DELETE, 'ar-rev', 'DELETE', '/x', undefined, { resource: 'pages', id: p.data.id })).status).toBe(403)
-  expect((await pool.query("SELECT sort FROM categories WHERE slug = 'ar-cat2'")).rows[0].sort).toBe(1)
+  const row = (await pool.query('SELECT slug, required_documents r, optional_documents o FROM categories WHERE id = $1', [c.data.id])).rows[0]
+  expect(row).toEqual({ slug: 'ar-cat2', r: [], o: [] })
+  expect((await pool.query("SELECT 1 FROM categories WHERE slug = 'ar-cat-2'")).rowCount).toBe(0)
   expect((await pool.query("SELECT published FROM pages WHERE slug = 'ar-page2'")).rows[0].published).toBe(false)
 })
 

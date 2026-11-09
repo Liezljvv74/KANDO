@@ -11,12 +11,15 @@ beforeAll(async () => {
   // the real 'other-services' row may exist (seed): keep it, and remove it afterwards only if this test created it
   created = (await pool.query("SELECT 1 FROM categories WHERE slug = 'other-services'")).rows.length === 0
   const rows = [
-    [`${tag}-cleaning`, 10, 'Reinigung', 'Cleaning'],
-    [`${tag}-babysitting`, 20, 'Kinderbetreuung', null],
-    ...(created ? ([['other-services', 5, 'Sonstiges', 'Other services']] as const) : []),
+    [`${tag}-a`, 'Ärzte', 'Zebra'],
+    [`${tag}-b`, 'Backen', 'apples'],
+    [`${tag}-z`, 'Zimmerei', 'Mango'],
+    [`${tag}-o`, 'Öl', 'Oil'],
+    [`${tag}-k`, 'Kinderbetreuung', null],
+    ...(created ? ([['other-services', 'Sonstiges', 'Other services']] as const) : []),
   ] as const
-  for (const [slug, sort, de, en] of rows) {
-    const id = (await pool.query('INSERT INTO categories (slug, sort) VALUES ($1, $2) RETURNING id', [slug, sort])).rows[0].id
+  for (const [slug, de, en] of rows) {
+    const id = (await pool.query('INSERT INTO categories (slug) VALUES ($1) RETURNING id', [slug])).rows[0].id
     await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', $2)", [id, de])
     if (en) await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'en', $2)", [id, en])
   }
@@ -28,16 +31,15 @@ afterAll(async () => {
 
 const get = (q = '') => route.GET(new Request(`http://localhost/app-api/v1/categories${q}`), { params: Promise.resolve({}) })
 
-it('ordered by sort, "other services" always last, names in the requested language, anonymous allowed', async () => {
-  const res = await get('?lang=en')
-  expect(res.status).toBe(200)
-  const list = CategorySchema.array().parse(await res.json())
-  const mine = list.filter((c) => c.slug === 'other-services' || c.slug.startsWith(tag))
-  expect(mine.map((c) => c.slug)).toEqual([`${tag}-cleaning`, `${tag}-babysitting`, 'other-services'])
-  expect(list.at(-1)!.slug).toBe('other-services')
-  expect(mine.slice(0, 2).map((c) => c.name)).toEqual(['Cleaning', 'Kinderbetreuung']) // missing English falls back to German
-  const de = CategorySchema.array().parse(await (await get()).json())
-  expect(de.find((c) => c.slug === `${tag}-cleaning`)!.name).toBe('Reinigung')
+it('alphabetical in the language of the request (umlauts with their base letter), "other services" always last', async () => {
+  const names = async (q: string) => {
+    const list = CategorySchema.array().parse(await (await get(q)).json())
+    expect(list.at(-1)!.slug).toBe('other-services')
+    return list.filter((c) => c.slug.startsWith(tag)).map((c) => c.name)
+  }
+  expect(await names('')).toEqual(['Ärzte', 'Backen', 'Kinderbetreuung', 'Öl', 'Zimmerei'])
+  // English: missing English falls back to German; case-insensitive
+  expect(await names('?lang=en')).toEqual(['apples', 'Kinderbetreuung', 'Mango', 'Oil', 'Zebra'])
 })
 
 it('an unknown language is 400', async () => {

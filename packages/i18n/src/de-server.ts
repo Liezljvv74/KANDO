@@ -234,7 +234,6 @@ export const de = {
   'admin.field.email': 'E-Mail',
   'admin.field.name': 'Name',
   'admin.field.slug': 'Kürzel in der Adresse',
-  'admin.field.sort': 'Reihenfolge',
   'admin.field.kind': 'Art',
   'admin.field.requiredDocuments': 'Erforderliche Nachweise',
   'admin.field.optionalDocuments': 'Optionale Nachweise',

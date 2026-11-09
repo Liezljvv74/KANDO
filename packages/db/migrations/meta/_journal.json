@@ -267,6 +267,13 @@
       "when": 1794223922833,
       "tag": "0037_drop_material_source",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794238537849,
+      "tag": "0038_drop_category_sort",
+      "breakpoints": true
     }
   ]
 }

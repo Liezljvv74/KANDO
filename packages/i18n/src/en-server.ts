@@ -236,7 +236,6 @@ export const en: Record<ServerKey, string> = {
   'admin.field.email': 'Email',
   'admin.field.name': 'Name',
   'admin.field.slug': 'Slug',
-  'admin.field.sort': 'Order',
   'admin.field.kind': 'Kind',
   'admin.field.requiredDocuments': 'Required documents',
   'admin.field.optionalDocuments': 'Optional documents',
