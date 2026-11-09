@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Share, StyleSheet, Text, View } from 'react-native'
+import { Pressable, Share, StyleSheet, Text } from 'react-native'
 
 import { ApiError } from '@/api/client'
 import { exportInvoices } from '@/api/invoices'
-import { Button, ErrorText, LinkText } from '@/components/auth-ui'
-import { Actions, SmallButton } from '@/components/form-ui'
+import { Button, ErrorText } from '@/components/auth-ui'
+import { Actions, Card, SectionHeader, SmallButton } from '@/components/form-ui'
 import { Select } from '@/components/select'
 import { signOutGeneration } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
@@ -42,12 +42,12 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
   }
 
   return (
-    <View style={styles.card}>
-      <LinkText label={t('invoice.title')} onPress={() => go('/invoices')} />
-      {show.commission && <LinkText label={t('invoice.commissionTitle')} onPress={() => go('/invoices/commission')} />}
+    <Card>
+      <HeaderLink label={t('invoice.title')} onPress={() => go('/invoices')} />
+      {show.commission && <HeaderLink label={t('invoice.commissionTitle')} onPress={() => go('/invoices/commission')} />}
       {show.export && (
         <>
-          <Text style={styles.heading}>{t('invoice.exportHeading')}</Text>
+          <SectionHeader title={t('invoice.exportHeading')} />
           <Text style={styles.text}>{t('invoice.exportHint')}</Text>
           <Select label={t('invoice.year')} options={exportYears().map((y) => ({ value: y, label: String(y) }))} value={year} onChange={setYear} />
           <ErrorText text={error} />
@@ -60,12 +60,22 @@ export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
           )}
         </>
       )}
-    </View>
+    </Card>
+  )
+}
+
+/** A card header that opens a screen: same look and left alignment as the other cards' headers, with an arrow at the right. */
+function HeaderLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={label} onPress={onPress}>
+      <SectionHeader title={label}>
+        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.arrow}>→</Text>
+      </SectionHeader>
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 6, padding: 16, gap: 12 },
-  heading: { fontSize: 17, fontFamily: font.heading, color: '#1D1C4A' },
+  arrow: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
   text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
 })
