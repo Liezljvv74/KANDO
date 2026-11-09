@@ -4,9 +4,9 @@ import { cache } from 'react'
 import { asUser } from '@kando/db'
 import { getPage } from '@kando/domain'
 import type { Lang } from '@kando/i18n'
-import { LangSwitch } from '../../../../components/lang-switch'
-import { renderMarkdown } from '../../../../lib/markdown'
-import { alternates, pageLang } from '../../../../lib/site'
+import { LangSwitch } from '@/components/lang-switch'
+import { renderMarkdown } from '@/lib/markdown'
+import { alternates, pageLang } from '@/lib/site'
 
 type Args = { params: Promise<{ lang: string; slug: string }> }
 

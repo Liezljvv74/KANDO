@@ -3,8 +3,8 @@
 import { List, ShowButton, useTable } from '@refinedev/antd'
 import { Button, Form, Input, Select, Space, Table, Tag } from 'antd'
 import { BOOKING_STATUSES } from '@kando/contract'
-import { money, statusLabel, when } from '../../../components/admin/booking-text'
-import { useAdminLang, useAt } from '../../../lib/admin/t'
+import { money, statusLabel, when } from '@/components/admin/booking-text'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Row = { id: string; status: string; startAt: string; amount: number; currency: string; customerEmail: string; providerName: string; parentBookingId: string | null; disputeDecideBy: string | null; disputeOverdue: boolean }
 

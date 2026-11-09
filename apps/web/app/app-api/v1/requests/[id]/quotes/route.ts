@@ -1,6 +1,6 @@
 import { parseBody, QuoteInputSchema } from '@kando/contract'
 import { listQuotes, sendQuote } from '@kando/domain'
-import { appRequest } from '../../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user, params }) =>
   Response.json({ docs: await listQuotes(tx, user!.id, params.id!) }),
