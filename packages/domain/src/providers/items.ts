@@ -79,7 +79,7 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
       description: input.description?.trim() || null,
       priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
-      currency: input.currency ?? 'EUR', // ponytail: EUR only in v1; derive from the provider's country when a second currency exists
+      currency: (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${profile.country}`)).rows[0]!.currency, // the provider's country decides, never the body
     })
     .returning()
   return withState(tx, profile, row!)
@@ -112,7 +112,6 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
       ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
       ...(patch.title !== undefined && { title: patch.title.trim() || (await categoryTitle(tx, userId, patch.categoryId ?? existing.categoryId)) }),
       ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
-      ...(patch.currency !== undefined && { currency: patch.currency }),
       priceType,
       price: price === null ? null : price.toFixed(2),
     })

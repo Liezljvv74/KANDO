@@ -407,7 +407,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
   const threadId = await threadForRequest(tx, requestId)
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
-  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
+  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency, version: row!.version }))
   afterCommit(() => notifyBookingEvent(proposedOtherTime ? 'time-proposed' : 'quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   if (ordinary) afterCommit(async () => void (await issueQuoteDocument(row!.id, now))) // the numbered quote and its PDF (a revision keeps the number, adds _Rev.N)
   return toQuote(row!, now)
@@ -480,6 +480,6 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // the provider's payouts stopped being ready since the quote
   const child = await acceptAdditional(quote, req, input.note ?? null, now)
   const threadId = await threadForRequest(tx, req.id) // the parent's thread
-  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
+  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency }))
   return (await withBookingRefs(tx, [toBooking(child, now)], userId))[0]!
 }

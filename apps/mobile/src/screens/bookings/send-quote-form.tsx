@@ -4,7 +4,7 @@ import { COMMISSION_RATE, type BookingRequest, type QuoteInput } from '@kando/co
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
-import { servicesApi } from '@/api/my-profile'
+import { getMyProfile, servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
 import { useQuoteSteps } from '@/hooks/use-me'
@@ -30,6 +30,10 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [currency, setCurrency] = useState<string | null>(null) // the provider's country currency, for the preview; no preview until known
+  useEffect(() => {
+    getMyProfile().then((p) => setCurrency(p?.currency ?? null), () => {})
+  }, [])
   // The shared /me copy (the job page waits for it before showing this form); each step updates it, so the gate clears itself. Without steps (an older server) the button stays usable; the server still refuses.
   const steps = useQuoteSteps().steps ?? []
   const blocked = quoteBlocked(steps)
@@ -86,7 +90,7 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   return (
     <>
       <Field label={t('booking.quoteAmount')} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" editable={!busy} />
-      {receiveFrom(amount, COMMISSION_RATE) !== null && <Info text={t('money.quotePreview', { amount: formatPrice({ priceType: 'fixed', price: receiveFrom(amount, COMMISSION_RATE)!, currency: 'EUR' }), rate: Math.round(COMMISSION_RATE * 100) })} />}
+      {currency && receiveFrom(amount, COMMISSION_RATE) !== null && <Info text={t('money.quotePreview', { amount: formatPrice({ priceType: 'fixed', price: receiveFrom(amount, COMMISSION_RATE)!, currency }), rate: Math.round(COMMISSION_RATE * 100) })} />}
       <Field label={t('booking.quoteScope')} hint={t('booking.quoteScopeHint')} value={scope} onChangeText={setScope} multiline editable={!busy} />
       <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
       {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}

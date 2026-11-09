@@ -73,7 +73,6 @@ export const serviceBody = (f: ServiceForm) => ({
   description: f.description.trim(),
   priceType: f.priceType,
   price: f.priceType === 'on-request' ? null : parsePrice(f.price),
-  currency: 'EUR',
 })
 
 export type ReferenceForm = { clientName: string; description: string; year: string }

@@ -20,7 +20,7 @@ export const bookingMoney = (amount: number, storedRate: number | string | null)
  * transfer row). On its way: paid, not released, not on hold. On hold: a problem (dispute or no-show) or an open money flag.
  * Each booking, an additional task too, uses its own stored rate. ponytail: a stopped job is not counted until it is released.
  */
-export async function providerMoney(owner: Exec, providerId: string, now: Date, month?: { from: Date; to: Date }): Promise<{ receivedThisMonth: number; onItsWay: number; onHold: number }> {
+export async function providerMoney(owner: Exec, providerId: string, now: Date, month?: { from: Date; to: Date }): Promise<{ receivedThisMonth: number; onItsWay: number; onHold: number; currency: string }> {
   // `month`: the caller's own calendar month (the device's time zone); without it the UTC month
   const from = month?.from ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const to = month?.to ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
@@ -44,5 +44,7 @@ export async function providerMoney(owner: Exec, providerId: string, now: Date, 
     .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
     .where(and(eq(ledgerEntries.providerId, providerId), eq(ledgerEntries.kind, 'transfer'), gte(bookings.releasedAt, from), lt(bookings.releasedAt, to)))
   const cents = (n: number) => Math.round(n * 100) / 100
-  return { receivedThisMonth: Number(r!.sum), onItsWay: cents(onItsWay), onHold: cents(onHold) }
+  // the provider's country decides the currency of the strip (every booking of a provider is in it)
+  const currency = (await owner.execute<{ currency: string }>(sql`SELECT c.currency FROM countries c JOIN providers p ON p.country = c.code WHERE p.id = ${providerId}`)).rows[0]!.currency
+  return { receivedThisMonth: Number(r!.sum), onItsWay: cents(onItsWay), onHold: cents(onHold), currency }
 }

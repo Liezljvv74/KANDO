@@ -101,6 +101,8 @@ describe('money', () => {
   it('formats per language', () => {
     expect(plain(formatMoney(80, 'EUR', 'de'))).toBe('80,00 €')
     expect(formatMoney(80, 'EUR', 'en')).toBe('€80.00')
+    expect(plain(formatMoney(80, 'ZAR', 'de'))).toMatch(/^80,00 (ZAR|R)$/)
+    expect(formatMoney(80, 'ZAR', 'en')).toMatch(/^(ZAR\s?|R)80\.00$/)
   })
 
   it('formats price labels from the catalogue', () => {

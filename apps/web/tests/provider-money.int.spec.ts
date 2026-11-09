@@ -44,7 +44,7 @@ it('received this month counts only releases in the current calendar month', asy
   const p = await provider()
   await paid(p.id, { status: 'completed', releasedAt: new Date() })
   await paid(p.id, { status: 'completed', releasedAt: day(-70), amount: 250 })
-  expect(await money(p.uid)).toEqual({ receivedThisMonth: net(100), onItsWay: 0, onHold: 0 })
+  expect(await money(p.uid)).toEqual({ receivedThisMonth: net(100), onItsWay: 0, onHold: 0, currency: 'EUR' })
 })
 
 it("received this month uses the caller's own month when it is given", async () => {
@@ -61,7 +61,7 @@ it('on hold covers problem and delayed jobs', async () => {
   await paid(p.id, { status: 'confirmed', noShow: 'customer', amount: 50 })
   const delayed = await paid(p.id, { status: 'completed', amount: 200 })
   await pool.query("INSERT INTO staff_flags (kind, ref_id, user_id, note) VALUES ('refund-failed', $1, $2, 'test')", [delayed, U.cust])
-  expect(await money(p.uid)).toEqual({ receivedThisMonth: 0, onItsWay: 0, onHold: net(100) + net(50) + net(200) })
+  expect(await money(p.uid)).toEqual({ receivedThisMonth: 0, onItsWay: 0, onHold: net(100) + net(50) + net(200), currency: 'EUR' })
 })
 
 it('on its way excludes held and released', async () => {
@@ -73,6 +73,21 @@ it('on its way excludes held and released', async () => {
   const m = await money(p.uid)
   expect(m.onItsWay).toBe(net(100) + net(40))
   expect(m.onHold).toBe(net(300))
+})
+
+it("the strip carries the currency of the provider's country, unchanged (ZAR)", async () => {
+  const p = await provider()
+  await pool.query("INSERT INTO currencies (code) VALUES ('ZAR') ON CONFLICT DO NOTHING")
+  await pool.query("INSERT INTO countries (code, name_de, name_en, postcode_pattern, currency) VALUES ('ZA', 'Suedafrika', 'South Africa', '^[0-9]{4}$', 'ZAR') ON CONFLICT DO NOTHING")
+  try {
+    await pool.query("UPDATE providers SET country = 'ZA' WHERE id = $1", [p.id])
+    await paid(p.id, { status: 'confirmed' })
+    expect(await money(p.uid)).toEqual({ receivedThisMonth: 0, onItsWay: net(100), onHold: 0, currency: 'ZAR' })
+  } finally {
+    await pool.query("UPDATE providers SET country = 'DE' WHERE id = $1", [p.id])
+    await pool.query("DELETE FROM countries WHERE code = 'ZA'")
+    await pool.query("DELETE FROM currencies WHERE code = 'ZAR'")
+  }
 })
 
 it('a customer cannot read provider money', async () => {

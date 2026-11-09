@@ -7,7 +7,7 @@ import { formatPrice } from '@/lib/format'
 
 /** What the server recorded in the thread (a quote, its acceptance, an additional task): amounts and ids only, never text from a person. */
 export function CardBubble({ card }: { card: Card }) {
-  const amount = card.amount === undefined ? '' : formatPrice({ priceType: 'fixed', price: card.amount, currency: card.currency ?? 'EUR' })
+  const amount = card.amount === undefined || !card.currency ? '' : formatPrice({ priceType: 'fixed', price: card.amount, currency: card.currency })
   const text =
     card.type === 'quote'
       ? t('chat.card.quote', { amount, version: card.version })

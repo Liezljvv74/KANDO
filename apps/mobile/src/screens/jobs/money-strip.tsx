@@ -25,7 +25,7 @@ export function MoneyStrip() {
         {cells.map(([key, amount]) => (
           <View key={key} style={styles.cell}>
             <View style={styles.labelRow}>
-              <Text style={styles.amount}>{formatPrice({ priceType: 'fixed', price: amount, currency: 'EUR' })}</Text>
+              <Text style={styles.amount}>{formatPrice({ priceType: 'fixed', price: amount, currency: data.currency })}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel={`${t(key)}: ${t('money.info.open')}`} accessibilityState={{ expanded: info === key }} hitSlop={8} onPress={() => setInfo(info === key ? null : key)}>
                 <Text style={styles.i}>(i)</Text>
               </Pressable>
