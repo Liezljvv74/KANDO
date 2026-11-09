@@ -21,7 +21,7 @@ Note (5 November 2026): all earlier test users were deleted from production (onl
 3. The request appears under "My requests" as Pending.
 
 - [ ] The date and time pickers are the phone's own pickers, not typed text.
-- [ ] The street is not shown to the provider before the booking is accepted and paid.
+- [ ] The street is not shown to the provider before the customer has accepted the quote.
 - [ ] Sending a sixth open request to the same provider is refused with a sentence that names the problem and what to do.
 
 Taps: ____
@@ -51,8 +51,8 @@ Stripe is in TEST mode. Use these cards only.
 
 | Case | Card | Expected |
 |---|---|---|
-| Paid | 4242 4242 4242 4242 | Booking appears as booked; provider gets a notice; a receipt or invoice exists |
-| Declined | 4000 0000 0000 0002 | A clear text, the booking is not created, you can try again |
+| Paid | 4242 4242 4242 4242 | Booking appears as booked; provider gets a notice. The invoice or receipt appears after the job is completed and settled |
+| Declined | 4000 0000 0000 0002 | A clear text; no charge is made; the booking stays "waiting for payment" and you can pay again |
 | 3-D Secure | 4000 0027 6000 3184 | The extra step opens and completes |
 
 - [ ] Decline on a quote first offers "Open chat"; "Decline anyway" ends it and tells the provider.

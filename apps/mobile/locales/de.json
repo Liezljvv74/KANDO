@@ -1,4 +1,4 @@
 {
-  "NSCameraUsageDescription": "KANDO nutzt die Kamera für dein Anbieterprofil und deine Dokumente.",
-  "NSPhotoLibraryUsageDescription": "KANDO nutzt deine Fotos für dein Anbieterprofil."
+  "NSCameraUsageDescription": "KANDO nutzt die Kamera für Fotos zu deinem Profil, deinen Dokumenten, Anfragen und Nachrichten und, wenn du das willst, um deinen Ausweis zu lesen.",
+  "NSPhotoLibraryUsageDescription": "KANDO nutzt deine Fotos für dein Profil, deine Dokumente, Anfragen und Nachrichten."
 }
