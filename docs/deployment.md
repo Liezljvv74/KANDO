@@ -73,6 +73,8 @@ neon neon-auth domain add <origin>
 
 `https://skillweb.space` is already added on `kando-dev`. Add the preview address and, at cutover, the production address on `kando-main`.
 
+`https://www.skillweb.space` is deliberately not trusted: in Vercel (Project, Settings, Domains) the `www.skillweb.space` domain is set to redirect (308) to `skillweb.space`, so nobody signs in from the `www` address. Without that redirect, staff who open `www.skillweb.space/admin` (Chrome hides the `www.` in the address bar) get "Invalid origin" at sign-in. Checked 9 November 2026.
+
 ## Deleting an account
 
 `DELETE /app-api/v1/me` runs on the owner connection (the app role may not delete from several tables), so it needs no setting of its own. It also deletes the person's rows in the `neon_auth` schema (every table with a foreign key to the user, the pending codes `<type>-otp-<email>` and the bare email, then the user); the database owner role must be allowed to write there. Migration `0009` adds `pending_object_deletes` (no access for the app role): run `pnpm db:migrate` (owner) on `kando-dev` and on `kando-main` before this ships (migrations `0009` and `0010` both). The keys of the person's files are stored there in the delete transaction, the objects are removed after the commit, and the daily cron (`/api/cron/suspensions`) retries what is left (200 even when storage is down). Before the first real use, try it once on a throw-away account on the `kando-dev` branch and check that the person is gone from the `neon_auth` tables.
