@@ -64,3 +64,27 @@ describe('late cancellation', () => {
     expect(customerCancelShare(80, start, ago(24 * H - 1))).toBe(40)
   })
 })
+
+describe('isLate without a start', () => {
+  it('a null, undefined or invalid start is never late', () => {
+    const now = new Date('2026-12-10T12:00:00Z')
+    expect(isLate(null, now)).toBe(false)
+    expect(isLate(undefined, now)).toBe(false)
+    expect(isLate(new Date(NaN), now)).toBe(false)
+  })
+})
+
+describe('same results as the formulas before the merge, for every 2-decimal amount 0.00 to 5000.00', () => {
+  const oldCents12 = (x: number) => Math.round(Number((x * 100).toPrecision(12))) // the late-cancel copy
+  const oldFee = (amount: number) => Math.min(oldCents12(amount), Math.round(oldCents12(amount) * 0.5)) / 100
+  const oldPhoneFee = (amount: number) => Math.round(Math.round(amount * 100) * 0.5) / 100 // the phone copy
+  const oldReceive = (v: number, rate: number) => Math.round((v - Math.round(Number((v * 100 * rate).toPrecision(15))) / 100) * 100) / 100 // the phone preview
+  it('toCents, lateCancelFee and the preview agree', () => {
+    const differ: number[] = []
+    for (let c = 0; c <= 500_000; c++) {
+      const a = c / 100
+      if (toCents(a) !== c || lateCancelFee(a) !== oldFee(a) || lateCancelFee(a) !== oldPhoneFee(a) || youReceive(a, 0.15) !== oldReceive(a, 0.15)) differ.push(c)
+    }
+    expect(differ).toEqual([])
+  }, 60_000)
+})

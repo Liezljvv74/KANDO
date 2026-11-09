@@ -154,3 +154,12 @@ test('every booking status a fallback can name has a text in German and English'
   for (const dict of [de, en] as Record<string, string>[])
     for (const status of ['awaiting-time', 'awaiting-payment', 'confirmed', 'declined', 'expired', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded']) expect(dict[`bookingStatus.${status}`]).toBeTruthy()
 })
+
+test('cancelStatement never throws on a bad amount and never calls a booking without a start late', () => {
+  const now = new Date('2026-12-10T12:00:00Z')
+  const kids = ' booking.cancelChildren'
+  expect(cancelStatement(b({ status: 'awaiting-time', startAt: null as unknown as string }), 'customer', now)).toBe('booking.cancelFree' + kids)
+  expect(() => cancelStatement(b({ status: 'confirmed', amount: NaN, startAt: '2026-12-10T13:00:00Z' }), 'customer', now)).not.toThrow()
+  expect(() => cancelStatement(b({ status: 'confirmed', amount: -5, startAt: '2026-12-10T13:00:00Z' }), 'customer', now)).not.toThrow()
+  expect(() => stopAnswerText(b({ status: 'stopped', amount: NaN, stopAmount: -1 }))).not.toThrow()
+})

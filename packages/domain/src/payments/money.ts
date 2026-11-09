@@ -4,6 +4,7 @@ import { MONEY_FLAGS } from '../bookings/job-state-lookup'
 import type { Exec } from '../providers/eligibility'
 import { COMMISSION_RATE, commissionFor, roundMoney, youReceive } from '@kando/contract'
 
+// Shim: youReceive is implemented in @kando/contract (money.ts); new code should import it from there.
 export { youReceive }
 
 /** The money box numbers of one booking; before payment (no stored rate) the current rate, so the line is "expected". */

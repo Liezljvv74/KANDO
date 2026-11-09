@@ -22,8 +22,8 @@ export function commissionFor(share: number, rate: number): number {
 /** What a provider keeps of `amount` after commission (payment fees are inside the rate). */
 export const youReceive = (amount: number, rate: number): number => roundMoney(amount - commissionFor(amount, rate))
 
-/** Late means less than 24 hours to go; exactly 24 hours before the start is still free. */
-export const isLate = (startAt: Date, now: Date): boolean => now.getTime() > startAt.getTime() - FREE_CANCEL_HOURS * HOUR
+/** Late means less than 24 hours to go; exactly 24 hours before the start is still free. No start time (null) or an invalid date is never late. */
+export const isLate = (startAt: Date | null | undefined, now: Date): boolean => !!startAt && now.getTime() > startAt.getTime() - FREE_CANCEL_HOURS * HOUR
 
 /** What a late customer cancellation costs: the late share of the amount in whole cents, half up. Never above the amount. */
 export const lateCancelFee = (amount: number): number => {

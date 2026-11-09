@@ -58,7 +58,7 @@ export const addWorkingDays = (from: Date, days: number): Date => {
   return new Date(fromWall(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), w.hour, w.minute, w.second), ms))
 }
 
-// The late-cancel rule (isLate, customerCancelShare) lives in @kando/contract with the phone's preview.
+// Shim: the late-cancel rule (isLate, customerCancelShare) is implemented in @kando/contract (money.ts); new code should import it from there.
 export { customerCancelShare, isLate } from '@kando/contract'
 
 /** When both reviews are in they show now; otherwise 7 days after completion. */

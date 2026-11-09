@@ -1,6 +1,6 @@
 // COMMISSION_RATE (15% including Stripe's payment fees, provisional, to be reviewed after research; copied to bookings.commission_rate at payment)
 // lives in @kando/contract so the phone shows the same rate; this is still the one place the server reads it from.
-// toCents and commissionFor (the money rounding) live there too.
+// Shim: toCents and commissionFor are implemented in @kando/contract (money.ts); new code should import them from there.
 export { COMMISSION_RATE, commissionFor, toCents } from '@kando/contract'
 
 /** Real money needs a reviewed code change after the lawyer clears spec section 9: only Stripe test keys are accepted. */

@@ -14,5 +14,10 @@ export const parseAmountOrZero = (s: string): number | null => (/^0+([.,]0{1,2})
 /** What the provider keeps of a typed amount at `rate` ("102.00" for 120 at 0.15); null while the text is no valid amount. Same rounding as the server (youReceive). */
 export function receiveFrom(typed: string, rate: number): number | null {
   const v = parseAmount(typed)
-  return v === null ? null : youReceive(v, rate)
+  if (v === null) return null
+  try {
+    return youReceive(v, rate)
+  } catch {
+    return NaN // a rate not loaded yet: render must not throw (the old code gave NaN too)
+  }
 }
