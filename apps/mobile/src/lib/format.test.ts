@@ -14,6 +14,8 @@ test('prices follow the website rules in German and English', () => {
   expect(formatPrice({ priceType: 'from', price: 20, currency: 'EUR' })).toMatch(/^ab 20,00\s€$/)
   expect(formatPrice({ priceType: 'hourly', price: 35.5, currency: 'EUR' })).toMatch(/^35,50\s€\/Std\.$/)
   expect(formatPrice({ priceType: 'on-request', price: null, currency: 'EUR' })).toBe('Preis auf Anfrage')
+  expect(formatPrice({ priceType: 'fixed', price: 80, currency: 'ZAR' })).toMatch(/^80,00\s(ZAR|R)$/) // another currency formats with its own code, not the euro
+  expect(formatPrice({ priceType: 'fixed', price: 80, currency: 'ZAR' })).not.toContain('€')
   expect(formatPrice({ priceType: 'fixed', price: null, currency: 'EUR' })).toBe('Preis auf Anfrage')
   setLang('en')
   expect(formatPrice({ priceType: 'from', price: 20, currency: 'EUR' })).toBe('from €20.00')

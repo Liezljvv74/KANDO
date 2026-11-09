@@ -9,4 +9,4 @@ export const statusLabel = (at: At, s: string) =>
   s === 'awaiting-payment' ? at('admin.bookingStatus.awaitingPayment') : at(`bookingStatus.${s}` as Key)
 
 export const when = (lang: Lang, v: string | null | undefined) => (v ? new Date(v).toLocaleString(LOCALE[lang]) : '')
-export const money = (lang: Lang, amount: number | null | undefined, currency = 'EUR') => (amount === null || amount === undefined ? '' : formatMoney(amount, currency, lang))
+export const money = (lang: Lang, amount: number | null | undefined, currency: string) => (amount === null || amount === undefined ? '' : formatMoney(amount, currency, lang))

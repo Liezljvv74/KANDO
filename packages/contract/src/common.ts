@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const LangSchema = z.enum(['de', 'en'])
-export const CurrencySchema = z.literal('EUR')
+export const CurrencySchema = z.string().regex(/^[A-Z]{3}$/, 'ISO 4217 code') // a shape check only: a client never sends a currency, the server takes it from the country record or the parent row (a quote, a booking), and every country's currency is a row of the currencies table
 export const PriceTypeSchema = z.enum(['fixed', 'hourly', 'from', 'on-request'])
 
 /** A money amount: 0 or more, at most two decimals. */

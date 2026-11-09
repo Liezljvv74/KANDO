@@ -2,6 +2,7 @@ import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
 import { DAY, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
+import { currencyOfCountry } from '../country-currency'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
@@ -384,7 +385,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     else assertFuture(startAt, now)
   }
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
-  const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${provider.country}`)).rows[0]!.currency
+  const currency = await currencyOfCountry(tx, provider.country)
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
   const [row] = await tx
     .insert(quotes)
@@ -406,7 +407,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
   await tx.update(requests).set({ status: 'quoted', updatedAt: now }).where(eq(requests.id, requestId))
   const threadId = await threadForRequest(tx, requestId)
   // an additional task's quote shows as the additional-task card (with the explainer in the app)
-  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR' } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency as 'EUR', version: row!.version }))
+  afterCommit(() => postCard(threadId, userId, req.parentBookingId ? { type: 'additional-task', refId: row!.id, amount: input.amount, currency: row!.currency } : { type: 'quote', refId: row!.id, amount: input.amount, currency: row!.currency, version: row!.version }))
   afterCommit(() => notifyBookingEvent(proposedOtherTime ? 'time-proposed' : 'quote-received', req.customerId, { requestId, quoteId: row!.id, date: iso(row!.expiresAt) }))
   if (ordinary) afterCommit(async () => void (await issueQuoteDocument(row!.id, now))) // the numbered quote and its PDF (a revision keeps the number, adds _Rev.N)
   return toQuote(row!, now)
@@ -479,6 +480,6 @@ export async function acceptQuote(tx: Tx, userId: string, quoteId: string, input
   if (!canTransact(provider)) fail(409, { error: 'PROVIDER_NOT_READY' }) // the provider's payouts stopped being ready since the quote
   const child = await acceptAdditional(quote, req, input.note ?? null, now)
   const threadId = await threadForRequest(tx, req.id) // the parent's thread
-  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency as 'EUR' }))
+  afterCommit(() => postCard(threadId, userId, { type: 'acceptance', refId: child.id, amount: Number(child.amount), currency: child.currency }))
   return (await withBookingRefs(tx, [toBooking(child, now)], userId))[0]!
 }

@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { categories, categoryTexts, providerReferences, providers, serviceAppInsert, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
+import { currencyOfCountry } from '../country-currency'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
 import { getMyProfile, isSuspendedNow, lockProfile, ownProvider } from './profile'
@@ -79,7 +80,7 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
       description: input.description?.trim() || null,
       priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
-      currency: input.currency ?? 'EUR', // ponytail: EUR only in v1; derive from the provider's country when a second currency exists
+      currency: await currencyOfCountry(tx, profile.country), // the provider's country decides, never the body
     })
     .returning()
   return withState(tx, profile, row!)
@@ -112,7 +113,6 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
       ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
       ...(patch.title !== undefined && { title: patch.title.trim() || (await categoryTitle(tx, userId, patch.categoryId ?? existing.categoryId)) }),
       ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
-      ...(patch.currency !== undefined && { currency: patch.currency }),
       priceType,
       price: price === null ? null : price.toFixed(2),
     })

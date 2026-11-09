@@ -39,7 +39,7 @@ const setup = async (uid: string, businessName: string) => {
   const p = { providerType: 'business', businessName, impressum: 'Impressum', basePostcode: '10115', strengths: 'Ruhig', skills: ['a'] }
   expect((await call(profileRoute.PUT, uid, 'PUT', p)).status).toBe(201)
   await givePhoto(uid)
-  await call(services.POST, uid, 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
+  await call(services.POST, uid, 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null })
   return (await call(publish.POST, uid, 'POST')).status
 }
 const slugOf = async (uid: string) => (await pool.query('SELECT slug FROM providers WHERE owner_id = $1', [uid])).rows[0].slug
@@ -59,7 +59,7 @@ it('an individual without names cannot publish; with names the public name follo
   await call(profileRoute.GET, 'pn3')
   expect((await call(profileRoute.PUT, 'pn3', 'PUT', profile)).status).toBe(201)
   await givePhoto('pn3')
-  await call(services.POST, 'pn3', 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null, currency: 'EUR' })
+  await call(services.POST, 'pn3', 'POST', { categoryId, title: 'S', priceType: 'on-request', price: null })
   const refused = await call(publish.POST, 'pn3', 'POST')
   expect(refused.status).toBe(409)
   expect((await refused.json()).missing).toEqual(['name'])

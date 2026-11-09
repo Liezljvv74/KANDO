@@ -56,7 +56,7 @@ const none = { params: Promise.resolve({}) }
 
 async function publishedUser(uid: string) {
   const id = (await (await sendPhoto(uid, 'profile')).json()).id as string
-  await call(services.POST, uid, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+  await call(services.POST, uid, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10 })
   expect((await call(publish.POST, uid, 'POST')).status).toBe(200)
   return id
 }
@@ -220,7 +220,7 @@ it('the database refuses a second pending check for a requirement', async () => 
 })
 
 it('approval (staff SQL) makes a service with required documents offerable', async () => {
-  const svc = (await (await call(services.POST, 'rv1', 'POST', { categoryId: docCategoryId, title: 'Kinder', priceType: 'fixed', price: 10, currency: 'EUR' })).json()).id
+  const svc = (await (await call(services.POST, 'rv1', 'POST', { categoryId: docCategoryId, title: 'Kinder', priceType: 'fixed', price: 10 })).json()).id
   const pid = (await pool.query("SELECT id FROM providers WHERE owner_id = 'rv1'")).rows[0].id
   // rv1's profile is a draft: only its owner gets an answer about it.
   const offerable = () => asUser('rv1', (tx) => offerableServiceIds(tx, pid))

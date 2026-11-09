@@ -640,6 +640,8 @@ export const de = {
   'chat.unblockAsk': 'Blockierung von {name} aufheben?',
   'chat.card.quote': 'Angebot: {amount} (Version {version})',
   'chat.card.acceptance': 'Angebot angenommen: {amount}',
+  'chat.card.quoteBare': 'Angebot (Version {version})',
+  'chat.card.acceptanceBare': 'Angebot angenommen',
   'chat.card.additionalTask': 'Zusätzliche Aufgabe: {amount}',
   'chat.card.additionalTaskRequested': 'Zusätzliche Aufgabe angefragt',
   'additionalTask.explainer': 'Die Arbeit an der zusätzlichen Aufgabe beginnt erst, wenn sie angenommen und bezahlt ist. Bis dahin ist nur der ursprüngliche Auftrag geschuldet.',

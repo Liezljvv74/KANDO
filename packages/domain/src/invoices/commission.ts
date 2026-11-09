@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import { commissionInvoices, db, providers, type Tx } from '@kando/db'
 import type { CommissionInvoice } from '@kando/contract'
-import { formatMoney, TIME_ZONE } from '@kando/i18n'
+import { DEFAULT_LANG, formatMoney, LOCALE, TIME_ZONE } from '@kando/i18n'
 import { isUuid } from '../admin/common'
 import { notifyBookingEvent } from '../bookings/notify'
 import { describeError } from '../log-error'
@@ -38,7 +38,7 @@ export const COMMISSION_LIST_URL = 'skilled://invoices/commission'
 const LOST = Symbol('lost') // another run issued this invoice first
 
 const ym = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit' })
-const day = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric' })
+const day = (d: Date) => d.toLocaleDateString(LOCALE[DEFAULT_LANG], { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric' })
 
 /** The calendar month of an instant in TIME_ZONE, as YYYY-MM. */
 export const monthOf = (d: Date): string => ym.format(d)

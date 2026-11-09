@@ -289,5 +289,5 @@ export const ProviderMoneyQuerySchema = z
   .refine((q) => (q.from === undefined) === (q.to === undefined), 'from and to go together')
   .refine((q) => !q.from || !q.to || (Date.parse(q.to) > Date.parse(q.from) && Date.parse(q.to) - Date.parse(q.from) <= 32 * 86_400_000), 'a month at most')
 /** GET /provider-money: the provider's net amounts for the Jobs strip. */
-export const ProviderMoneySchema = z.object({ receivedThisMonth: AmountSchema, onItsWay: AmountSchema, onHold: AmountSchema })
+export const ProviderMoneySchema = z.object({ receivedThisMonth: AmountSchema, onItsWay: AmountSchema, onHold: AmountSchema, currency: CurrencySchema })
 export type ProviderMoney = z.infer<typeof ProviderMoneySchema>

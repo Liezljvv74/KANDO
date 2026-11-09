@@ -3,20 +3,12 @@ import { StyleSheet, Text, View } from 'react-native'
 import type { Card } from '@kando/contract'
 
 import { t } from '@/i18n'
-import { formatAmount } from '@/lib/format'
+import { cardText } from '@/lib/card-text'
 import { color } from '@/theme'
 
 /** What the server recorded in the thread (a quote, its acceptance, an additional task): amounts and ids only, never text from a person. */
 export function CardBubble({ card }: { card: Card }) {
-  const amount = card.amount === undefined ? '' : formatAmount(card.amount, card.currency ?? 'EUR')
-  const text =
-    card.type === 'quote'
-      ? t('chat.card.quote', { amount, version: card.version })
-      : card.type === 'acceptance'
-        ? t('chat.card.acceptance', { amount })
-        : amount
-          ? t('chat.card.additionalTask', { amount })
-          : t('chat.card.additionalTaskRequested')
+  const text = cardText(card)
   return (
     <View style={styles.card}>
       <Text style={styles.text}>{text}</Text>

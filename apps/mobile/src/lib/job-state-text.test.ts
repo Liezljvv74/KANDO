@@ -45,15 +45,15 @@ test('texts without the unknown clause (German)', () => {
   expect(stateText(st('problem_reported'), 'customer', { number: 5 })!.body).toBe('Unser Team entscheidet. Auftrag #5. Bis dahin wird kein Geld bewegt.')
   expect(stateText(st('time_to_agree'), 'customer')!.title).toBe('Termin vorgeschlagen')
   expect(stateText(st('time_to_agree'), 'provider')!.body).toContain('Du hast einen Termin vorgeschlagen')
-  expect(stateText(st('delayed'), 'customer', { refund: true, amount: 12, number: 3 })!.title).toBe('Erstattung verzögert')
-  expect(stateText(st('delayed'), 'customer', { refund: true, amount: 12, number: 3 })!.body).toBe('Wir konnten deine Erstattung von EUR 12 nicht abschließen. Unser Team kümmert sich darum. Auftrag #3.')
+  expect(stateText(st('delayed'), 'customer', { refund: true, amount: 12, currency: 'EUR', number: 3 })!.title).toBe('Erstattung verzögert')
+  expect(stateText(st('delayed'), 'customer', { refund: true, amount: 12, currency: 'EUR', number: 3 })!.body).toBe('Wir konnten deine Erstattung von EUR 12 nicht abschließen. Unser Team kümmert sich darum. Auftrag #3.')
 })
 
 test('a provider on a cancelled and delayed booking is owed nothing: no amount waits for them', () => {
   mockLang = 'en'
   const x = stateText(st('delayed'), 'provider', { refund: true, net: 8, number: 3 })!
   expect(x.body).toBe('A payment step is delayed. Our team is on it.')
-  expect(stateText(st('delayed'), 'provider', { net: 8, number: 3 })!.body).toContain('EUR 8 is waiting')
+  expect(stateText(st('delayed'), 'provider', { net: 8, currency: 'EUR', number: 3 })!.body).toContain('EUR 8 is waiting')
   expect(stateText(st('delayed'), 'provider', { number: 3 })!.body).not.toContain('waiting')
 })
 

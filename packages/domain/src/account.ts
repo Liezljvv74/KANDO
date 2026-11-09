@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm'
 import { availabilityWatches, blocks, bookings, contactAttempts, db, disputes, reviews, messages, staffFlags, threads, documents, notifications, pendingObjectDeletes, photos, retainedRecords, privateFiles, providerReferences, providers, pushTokens, quoteDocuments, quotes, requests, services, users, type Tx } from '@kando/db'
-import { DEFAULT_LANG, isLang, LOCALE } from '@kando/i18n'
+import { DEFAULT_LANG, isLang, LOCALE, TIME_ZONE } from '@kando/i18n'
 import type { AfterCommit } from './app-request'
 import { sendEmail } from './email'
 import { hasUninvoicedPayout, issueDueInvoices } from './invoices/issue'
@@ -207,7 +207,7 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
       to: email,
       lang,
       template: keepUntil ? 'account-deleted-retained' : 'account-deleted',
-      params: keepUntil ? { date: keepUntil.toLocaleDateString(LOCALE[lang], { timeZone: 'Europe/Berlin' }), months: String(months) } : {},
+      params: keepUntil ? { date: keepUntil.toLocaleDateString(LOCALE[lang], { timeZone: TIME_ZONE }), months: String(months) } : {},
     }),
   )
 }

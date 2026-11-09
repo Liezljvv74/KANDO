@@ -49,14 +49,13 @@ test('service and reference validation', () => {
   expect(validateReference({ clientName: 'A', description: 'B', year: '' }, 2026)).toEqual({})
 })
 
-test('the service body names the category by id and the currency, as the server expects', () => {
+test('the service body names the category by id, as the server expects', () => {
   expect(serviceBody({ category: 'c1', title: ' Fix ', description: '', priceType: 'fixed', price: '12,5' })).toEqual({
     categoryId: 'c1',
     title: 'Fix',
     description: '',
     priceType: 'fixed',
     price: 12.5,
-    currency: 'EUR',
   })
 })
 

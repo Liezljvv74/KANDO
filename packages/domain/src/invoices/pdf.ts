@@ -1,5 +1,5 @@
 import { degrees, PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib'
-import { TIME_ZONE } from '@kando/i18n'
+import { DEFAULT_LANG, LOCALE, TIME_ZONE } from '@kando/i18n'
 import { invoiceLines, type InvoiceDraft } from './build'
 
 export const TEST_WATERMARK = 'TESTDOKUMENT / TEST DOCUMENT'
@@ -62,7 +62,7 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return out
 }
 
-const dateDe = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric' })
+const dateDe = (d: Date) => d.toLocaleDateString(LOCALE[DEFAULT_LANG], { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', year: 'numeric' })
 
 /**
  * The invoice or receipt as a PDF: A4, Helvetica, the lines of `invoiceLines` (German labels, English in brackets) under the

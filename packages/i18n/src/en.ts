@@ -641,6 +641,8 @@ export const en: Record<AppKey, string> = {
   'chat.unblockAsk': 'Unblock {name}?',
   'chat.card.quote': 'Quote: {amount} (version {version})',
   'chat.card.acceptance': 'Quote accepted: {amount}',
+  'chat.card.quoteBare': 'Quote (version {version})',
+  'chat.card.acceptanceBare': 'Quote accepted',
   'chat.card.additionalTask': 'Additional task: {amount}',
   'chat.card.additionalTaskRequested': 'Additional task requested',
   'additionalTask.explainer': 'Work on the additional task starts only once it is accepted and paid. Until then, only the original job is owed.',
