@@ -432,7 +432,7 @@ export const de = {
   'account.exportHint': 'Hol dir deine Kontodaten, dein Profil, deine Dateien, Anfragen, Angebote, Buchungen und deine Nachrichten als ein Dokument (JSON oder CSV für eine Tabellenkalkulation) und schick es dir über das Teilen-Menü selbst oder speichere es.',
   'account.deleteOpen': 'Mein Konto löschen',
   'account.deleteHeading': 'Konto löschen?',
-  'account.deleteWarning': 'Das löscht dein Konto, dein Profil mit Leistungen und Referenzen, deine Fotos, deine hochgeladenen Dateien und deine Nachrichten. Deine Anfragen, Angebote, Buchungen, Chats und Bewertungen (geschriebene und erhaltene) werden ebenfalls gelöscht, die andere Seite verliert sie also auch. Rechnungen und Zahlungsbelege, die wir gesetzlich aufbewahren müssen, bleiben erhalten. Es passiert sofort und lässt sich nicht rückgängig machen. Wir schicken dir eine Bestätigung per E-Mail.',
+  'account.deleteWarning': 'Das löscht dein Konto, dein Profil mit Leistungen und Referenzen, deine Fotos, deine hochgeladenen Dateien und deine Nachrichten. Deine Anfragen, Angebote, Buchungen und Chats werden ebenfalls gelöscht, die andere Seite verliert sie also auch. Rechnungen und Zahlungsbelege, die wir gesetzlich aufbewahren müssen, bleiben erhalten. Es passiert sofort und lässt sich nicht rückgängig machen. Wir schicken dir eine Bestätigung per E-Mail.',
   'account.deletePassword': 'Gib zur Bestätigung dein Passwort ein',
   'account.deleteConfirm': 'Endgültig löschen',
   'account.deleteCancel': 'Konto behalten',
