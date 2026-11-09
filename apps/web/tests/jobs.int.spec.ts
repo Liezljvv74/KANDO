@@ -295,27 +295,34 @@ it('opening the chat (POST seen) clears its message notices on the server, also 
   expect(RequestSchema.parse(await (await page('jb-m1', job)).json()).unread).toBe(0)
 })
 
-it('a job the settled rule calls past but the state does not (drift) shows in its own section, and the counters agree', async () => {
+it('a job the settled rule calls past but the state does not (drift) is shown in no wrong section, warns once per call, keeps no state', async () => {
   const { pid, sid } = await ownProviderFor('jb-downer', 'Drift Owner')
   await seedUser('jb-d1', null, 'Dana Drift')
   const lapsed = await seedJob({ customer: 'jb-d1', pid, sid, status: 'withdrawn' })
   const other = await seedJob({ customer: 'jb-d1', pid, sid, status: 'declined', daysAgo: 5 })
-  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   drift.on = true
   try {
-    const past = await list('jb-d1', { section: 'past' })
-    expect(past.items).toEqual([]) // the drifted rows are not in Past ...
-    expect(past.counts).toMatchObject({ needsYou: 2, past: 0 }) // ... nor counted there
+    const a = await list('jb-d1', { section: 'past' })
+    expect(a.items).toEqual([]) // the drifted rows are not in Past ...
+    expect(a.counts).toMatchObject({ needsYou: 2, past: 0 }) // ... nor counted there
+    expect(spy).toHaveBeenCalledTimes(1) // one warning per call, one retry at most
     expect(spy).toHaveBeenCalledWith(expect.stringContaining('settled rule drifted'))
-    const needs = await list('jb-d1', { section: 'needs_you' }) // ... but where their state says, also on later loads
-    expect(ids(needs).sort()).toEqual([lapsed, other].sort())
-    expect(needs.counts).toMatchObject({ needsYou: 2, past: 0 })
+    expect(spy.mock.calls[0]![0]).toContain(lapsed)
+    expect(spy.mock.calls[0]![0]).toContain(other)
+    // no module state: the same call gives the same answer, and warns again (once)
+    expect(await list('jb-d1', { section: 'past' })).toEqual(a)
+    expect(spy).toHaveBeenCalledTimes(2)
+    // a section list does not look at the Past page, so it does not see the drift (and does not warn)
+    await list('jb-d1', { section: 'needs_you' })
+    expect(spy).toHaveBeenCalledTimes(2)
   } finally {
     drift.on = false
-    spy.mockRestore()
   }
-  // the rule back in line: the remembered rows are derived in code and land in Past again
+  // the rule back in line: nothing remembered, both land in Past
+  spy.mockClear()
   const back = await list('jb-d1', { section: 'past' })
+  spy.mockRestore()
   expect(ids(back).sort()).toEqual([lapsed, other].sort())
   expect(back.counts).toMatchObject({ needsYou: 0, past: 2 })
 })

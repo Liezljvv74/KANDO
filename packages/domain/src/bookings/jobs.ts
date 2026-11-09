@@ -77,14 +77,6 @@ async function alwaysDerived(tx: Tx, userId: string, now: Date): Promise<string[
   return [...new Set([...reqs.filter((r) => !r.parent).map((r) => r.id), ...[...roots.values()].flatMap((r) => r.requestId ?? []), ...liveTasks.flatMap((t) => t.root ?? [])])]
 }
 
-/**
- * Root requests the settled rule called past but deriveJobState did not, seen by a Past page: always derived in code from then on.
- * Entries leave again once the row derives past (listJobs). ponytail: per server instance; until an instance has opened such a Past
- * page its Needs you/Active lists miss the row (the logged drift is the signal to fix `settled`). Fine while drift is a bug that
- * should not happen; a stored column if it does.
- */
-const drifted = new Set<string>()
-
 /** The list rows of the given root requests, as `role` sees them (state, number, title, other party, date, unread). */
 async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], found: Found[], now: Date): Promise<Map<string, JobRow>> {
   const out = new Map<string, JobRow>()
@@ -112,14 +104,27 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
  * and Active come whole (Active: problems and delays first). A search covers all sections of the role: number, title, other party.
  */
 export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = new Date()): Promise<JobsPage> {
+  // `settled` is a hand-made twin of deriveJobState. A row it calls past that derives otherwise ("drift") is logged once (ids only,
+  // so the rule gets fixed); the list is worked out ONE more time with those rows derived in code (they then show in the section
+  // their state says, and the counters agree). No state outlives the call. If the second pass still finds drift (it cannot, the ids
+  // are no longer in the settled set) those rows are left out of the page rather than shown in the wrong section.
+  let drifted: string[] = []
+  for (let attempt = 0; ; attempt++) {
+    const out = await listJobsOnce(tx, userId, q, now, drifted, attempt > 0)
+    if (!out.drift.length) return out.page
+    if (attempt === 0) console.warn(`[jobs] settled rule drifted from deriveJobState: ${out.drift.map((r) => `${r.id}=${r.jobState.key}`).join(', ')}`)
+    if (attempt > 0) return out.page
+    drifted = out.drift.map((r) => r.id)
+  }
+}
+
+async function listJobsOnce(tx: Tx, userId: string, q: JobsQueryInput, now: Date, drifted: string[], last: boolean): Promise<{ page: JobsPage; drift: JobRow[] }> {
   const mine = q.role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   const jobsOf = and(mine, isNull(requests.parentBookingId)) // an additional task is part of its job, not a row
   const derived = [...new Set([...(await alwaysDerived(tx, userId, now)), ...drifted])]
   const open = await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
   const openRows = await rowsOf(tx, userId, q.role, open, now)
   const openList = open.flatMap((f) => openRows.get(f.id) ?? [])
-  // a remembered row that now derives past agrees with `settled` again (or is open anyway): forget it, so the set only holds live drift
-  openList.forEach((r) => r.jobState.section === 'past' && drifted.delete(r.id))
   const pastOutside = and(jobsOf, settled(now), derived.length ? notInArray(requests.id, derived) : undefined)
   const settledCount = (await tx.select({ n: sql<number>`count(*)::int` }).from(requests).where(pastOutside))[0]!.n
   const counts = {
@@ -136,13 +141,13 @@ export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = 
     const hits = all.filter((_, i) => { const j = refs[i]; return !!j && `${taskNumber(j.number, 1)} ${j.title} ${j.otherParty}`.toLowerCase().includes(needle) })
     const { rows, next } = pageOf(hits.slice(0, LIST_PAGE + 1))
     const known = await rowsOf(tx, userId, q.role, rows.filter((f) => !openRows.has(f.id)), now)
-    return { items: rows.flatMap((f) => openRows.get(f.id) ?? known.get(f.id) ?? []), ...(next && { next }), counts }
+    return { page: { items: rows.flatMap((f) => openRows.get(f.id) ?? known.get(f.id) ?? []), ...(next && { next }), counts }, drift: [] }
   }
 
   if (q.section !== 'past') {
     const items = openList.filter((r) => r.jobState.section === q.section)
     if (q.section === 'active') items.sort((a, b) => Number(b.jobState.tone === 'bad') - Number(a.jobState.tone === 'bad')) // stable: newest first within
-    return { items, counts }
+    return { page: { items, counts }, drift: [] }
   }
 
   const fromDb = await tx
@@ -154,14 +159,7 @@ export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = 
   const fromOpen = open.filter((f) => openRows.get(f.id)?.jobState.section === 'past').filter(afterCursor(q.cursor))
   const { rows, next } = pageOf([...fromDb, ...fromOpen].sort(byKeyDesc).slice(0, LIST_PAGE + 1))
   const settledRows = await rowsOf(tx, userId, q.role, rows.filter((f) => !openRows.has(f.id)), now)
-  // guard: `settled` is a hand-made twin of deriveJobState (jobs.int.spec.ts checks every stored combination it covers). A row it
-  // calls past that derives otherwise is logged (ids only, so the rule gets fixed), remembered as derived-in-code and the list is
-  // worked out again: the row then shows in the section its state says, and the counters agree with the sections.
   const drift = [...settledRows.values()].filter((r) => r.jobState.section !== 'past')
-  if (drift.length) {
-    console.error(`[jobs] settled rule drifted from deriveJobState: ${drift.map((r) => `${r.id}=${r.jobState.key}`).join(', ')}`)
-    drift.forEach((r) => drifted.add(r.id))
-    return listJobs(tx, userId, q, now) // ends: a remembered id is no longer in the settled set
-  }
-  return { items: rows.flatMap((f) => openRows.get(f.id) ?? settledRows.get(f.id) ?? []), ...(next && { next }), counts }
+  const drifting = new Set(drift.map((r) => r.id))
+  return { page: { items: rows.flatMap((f) => (drifting.has(f.id) && last ? [] : openRows.get(f.id) ?? settledRows.get(f.id) ?? [])), ...(next && { next }), counts }, drift }
 }
