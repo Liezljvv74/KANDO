@@ -75,8 +75,8 @@ async function seedAll() {
     const quoteOf = new Map(accepted.map((a) => [a.r, a.q]))
     const rows = part.flatMap((c) => c.seq.map((s, k) => ({ id: randomUUID(), r: c.id, q: quoteOf.get(c.id)!, s, k })))
     await pool.query(
-      `INSERT INTO bookings (id, customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, pay_by, accepted_at, paid_at, payment_ref, commission_rate, released_at, completed_at, created_at)
-       SELECT u.id, $1::text, $2::uuid, $3::uuid, u.q, u.r, 'quote', u.st, now() - interval '3 days', 60,
+      `INSERT INTO bookings (id, customer_id, provider_id, service_id, quote_id, request_id, status, start_at, duration_min, pay_by, accepted_at, paid_at, payment_ref, commission_rate, released_at, completed_at, created_at)
+       SELECT u.id, $1::text, $2::uuid, $3::uuid, u.q, u.r, u.st, now() - interval '3 days', 60,
          CASE WHEN u.st = 'awaiting-payment' THEN now() + interval '1 hour' END, CASE WHEN u.st = 'awaiting-payment' THEN now() END,
          CASE WHEN u.paid THEN now() END, CASE WHEN u.paid THEN 'pi_jbx_' || gen_random_uuid() END, ${COMMISSION_RATE}, CASE WHEN u.rel THEN now() END,
          CASE WHEN u.days IS NOT NULL THEN now() - (u.days || ' days')::interval END, now() + (u.k || ' minutes')::interval
