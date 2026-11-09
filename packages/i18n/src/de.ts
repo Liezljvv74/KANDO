@@ -973,6 +973,7 @@ export const de = {
   'money.line.task': 'Zusätzliche Aufgabe {n}',
   'money.line.total': 'Vom Kunden bezahlt',
   'money.line.commission': 'Provision {rate}%, Zahlungsgebühren inklusive',
+  'money.line.commissionMixed': 'Provision, Zahlungsgebühren inklusive',
   'money.line.receive': 'Du erhältst',
   'money.line.receiveExpected': 'Du erhältst (voraussichtlich)',
   'money.quotePreview': 'Du erhältst {amount} nach {rate}% Provision, Zahlungsgebühren inklusive.',

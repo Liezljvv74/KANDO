@@ -20,12 +20,15 @@ export async function exportInvoices(tx: Tx, userId: string, year: number): Prom
   const own = await ownProvider(tx, userId)
   // ponytail: reads all of the provider's invoices and filters by year in code (exact zone boundaries); add a range query if a provider ever has thousands
   const rows = own ? await tx.select().from(invoices).where(eq(invoices.providerId, own.id)).orderBy(asc(invoices.issuedAt), asc(invoices.number)) : []
-  const lines = rows
-    .filter((r) => yearOf(r.issuedAt) === year)
-    .map((r) => {
-      const d = r.draft as InvoiceDraft
-      const x = d.totals
-      return [r.number, day.format(r.issuedAt), noFormula(d.recipient.name), money(x.labour), money(x.net), money(x.vat), money(x.gross), r.currency, r.kind]
-    })
-  return '\uFEFF' + [['number', 'date', 'customer', 'labour', 'net', 'vat', 'gross', 'currency', 'kind'], ...lines].map((l) => l.map(quote).join(',')).join('\r\n') + '\r\n'
+  const inYear = rows.filter((r) => yearOf(r.issuedAt) === year)
+  // New invoices have one amount (labour = the share). A `material` column appears only when an invoice of that year issued before
+  // materials were dropped carries a material part, so the section 35a split of those old rows is not lost.
+  const withMaterial = inYear.some((r) => (r.draft as InvoiceDraft).totals.material > 0)
+  const lines = inYear.map((r) => {
+    const d = r.draft as InvoiceDraft
+    const x = d.totals
+    return [r.number, day.format(r.issuedAt), noFormula(d.recipient.name), money(x.labour), ...(withMaterial ? [money(x.material)] : []), money(x.net), money(x.vat), money(x.gross), r.currency, r.kind]
+  })
+  const head = ['number', 'date', 'customer', 'labour', ...(withMaterial ? ['material'] : []), 'net', 'vat', 'gross', 'currency', 'kind']
+  return '\uFEFF' + [head, ...lines].map((l) => l.map(quote).join(',')).join('\r\n') + '\r\n'
 }

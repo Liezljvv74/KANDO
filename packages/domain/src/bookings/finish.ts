@@ -23,7 +23,7 @@ export const reload = async (id: string, userId?: string) => (await withBookingR
  * The provider's "Finished": from `confirmed`, once the agreed start has come (else 409 TOO_EARLY), once (else 409 not-open).
  * Starts the customer's 7 days (`confirmBy`); a `materialAmount` from an old build is ignored. Owner connection (finished is an owner-only status), the row locked and re-checked.
  */
-export async function finishJob(tx: Tx, userId: string, bookingId: string, input: FinishInput, now = new Date()): Promise<Booking> {
+export async function finishJob(tx: Tx, userId: string, bookingId: string, _input: FinishInput, now = new Date()): Promise<Booking> {
   if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'wrong-side' })
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)

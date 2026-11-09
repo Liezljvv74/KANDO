@@ -16,3 +16,9 @@ test('before payment the last line is marked expected, and a booking without mon
   expect(moneyLines(bk(100, 0.15, 'awaiting-payment'), []).at(-1)!.label).toBe('money.line.receiveExpected')
   expect(moneyLines({ status: 'confirmed' } as Booking, [])).toEqual([])
 })
+
+test('a task paid at another rate leaves the percentage out of the commission label', () => {
+  const lines = moneyLines(bk(100, 0.12), [bk(20, 0.15)])
+  expect(lines[3]!.label).toBe('money.line.commissionMixed')
+  expect(lines[3]!.amount).toBe(-15)
+})

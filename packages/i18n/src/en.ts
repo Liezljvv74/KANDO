@@ -974,6 +974,7 @@ export const en: Record<AppKey, string> = {
   'money.line.task': 'Additional task {n}',
   'money.line.total': 'Paid by the customer',
   'money.line.commission': 'Commission {rate}%, payment fees included',
+  'money.line.commissionMixed': 'Commission, payment fees included',
   'money.line.receive': 'You receive',
   'money.line.receiveExpected': 'You receive (expected)',
   'money.quotePreview': 'You receive {amount} after {rate}% commission, payment fees included.',
