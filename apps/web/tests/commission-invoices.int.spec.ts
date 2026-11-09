@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { CommissionInvoiceListSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, clearPushOutbox, deleteAccount, issueCommissionInvoices, runDueTimers, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
+import { cancelBooking, clearOutbox, COMMISSION_RATE, commissionFor, clearPushOutbox, deleteAccount, issueCommissionInvoices, runDueTimers, tryRelease, type CommissionDraft, type Storage } from '@kando/domain'
 import { pushOutboxForTests, setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
@@ -45,7 +45,7 @@ async function provider(): Promise<{ uid: string; id: string }> {
 }
 
 /** A settled booking as settle leaves it (released, charge + transfer + commission rows) with its money rows written at `at`. */
-async function settled(providerId: string, at: Date, amount = 100, rate = 0.12): Promise<string> {
+async function settled(providerId: string, at: Date, amount = 100, rate = COMMISSION_RATE): Promise<string> {
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, released_at)
@@ -63,6 +63,9 @@ async function settled(providerId: string, at: Date, amount = 100, rate = 0.12):
 const of = async (providerId: string) => (await pool.query('SELECT * FROM commission_invoices WHERE provider_id = $1 ORDER BY month', [providerId])).rows
 const readyNotices = async (uid: string) => (await pool.query("SELECT payload FROM notifications WHERE kind = 'commission-invoice-ready' AND user_id = $1", [uid])).rows
 const pdfOf = (inv: { file_key: string }) => store.objects.get(`documents/${inv.file_key}`)
+/** The commission on a 100 booking, and on 250, at the current rate. */
+const c100 = commissionFor(100, COMMISSION_RATE)
+const c250 = commissionFor(250, COMMISSION_RATE)
 const seq = (number: string) => Number(number.split('-').at(-1))
 
 it('two commissions in January give one January invoice with their sum', async () => {
@@ -74,13 +77,13 @@ it('two commissions in January give one January invoice with their sum', async (
   expect(await issueCommissionInvoices(db, now, { clock: () => now })).toBe(2) // the number's year is the year of issue
   const [dec, inv, ...more] = await of(p.id)
   expect(more).toEqual([])
-  expect([dec.month, dec.total]).toEqual(['2030-12', '12.00'])
-  expect(inv).toMatchObject({ month: '2031-01', total: '42.00', currency: 'EUR', file_key: `commission-invoices/${p.id}/${inv.number}.pdf` })
+  expect([dec.month, dec.total]).toEqual(['2030-12', c100.toFixed(2)])
+  expect(inv).toMatchObject({ month: '2031-01', total: (c100 + c250).toFixed(2), currency: 'EUR', file_key: `commission-invoices/${p.id}/${inv.number}.pdf` })
   expect(inv.number).toMatch(/^TEST-K-2031-\d{5}$/) // payments not live: a test document in its own series
   const draft = inv.draft as CommissionDraft
   expect(draft.lines.map((l) => [l.bookingId, l.amount])).toEqual([
-    [a, 12],
-    [b, 30],
+    [a, c100],
+    [b, c250],
   ])
   expect(draft.issuer.name).toBe('[LEGAL NAME]')
   expect(draft.recipient).toEqual({ name: 'Hans Müller', address: expect.any(String), taxId: null })
@@ -96,7 +99,7 @@ it('a commission at 23:30 UTC on 31 January is on February\'s invoice', async ()
   await settled(p.id, new Date('2032-01-31T22:30:00Z')) // 23:30 in Berlin: January
   const feb = await settled(p.id, new Date('2032-01-31T23:30:00Z')) // 00:30 on 1 February in Berlin
   await issueCommissionInvoices(db, new Date('2032-02-15T12:00:00Z'))
-  expect((await of(p.id)).map((i) => [i.month, i.total])).toEqual([['2032-01', '12.00']])
+  expect((await of(p.id)).map((i) => [i.month, i.total])).toEqual([['2032-01', c100.toFixed(2)]])
   await issueCommissionInvoices(db, new Date('2032-03-01T00:30:00Z')) // 01:30 on 1 March in Berlin: February is over
   const [, f] = await of(p.id)
   expect([f.month, (f.draft as CommissionDraft).lines.map((l) => l.bookingId)]).toEqual(['2032-02', [feb]])
@@ -193,7 +196,7 @@ it('real releases: commission rows from settle are invoiced next month; refunded
     (
       await pool.query(
         `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-         VALUES ($1, $2, 'direct', $3, $4, 60, 100, now(), now(), $5, 0.12, now(), now() + interval '7 days') RETURNING id`,
+         VALUES ($1, $2, 'direct', $3, $4, 60, 100, now(), now(), $5, ${COMMISSION_RATE}, now(), now() + interval '7 days') RETURNING id`,
         [U.cust, providerId, status, startAt, `pi_ci_${++n}`],
       )
     ).rows[0].id as string
@@ -213,7 +216,7 @@ it('real releases: commission rows from settle are invoiced next month; refunded
   const next = new Date(Date.UTC(m === 12 ? y! + 1 : y!, m === 12 ? 0 : m!, 1, 11))
   await issueCommissionInvoices(db, next)
   const [inv] = await of(p.id)
-  expect([inv.total, (inv.draft as CommissionDraft).lines.map((l) => [l.bookingId, l.amount])]).toEqual(['12.00', [[done, 12]]])
+  expect([inv.total, (inv.draft as CommissionDraft).lines.map((l) => [l.bookingId, l.amount])]).toEqual([c100.toFixed(2), [[done, c100]]])
   expect(await of(q.id)).toEqual([])
 })
 
@@ -242,7 +245,7 @@ it('only the provider can download it', async () => {
   await issueCommissionInvoices(db, new Date('2038-02-02T10:00:00Z'))
   const [inv] = await of(p.id)
   const list = async (uid: string) => CommissionInvoiceListSchema.parse(await (await call(listRoute.GET, uid)).json()).docs.filter((d) => d.id === inv.id)
-  expect(await list(p.uid)).toEqual([{ id: inv.id, number: inv.number, month: '2038-01', issuedAt: new Date(inv.issued_at).toISOString(), total: 12, currency: 'EUR', pdfReady: true }])
+  expect(await list(p.uid)).toEqual([{ id: inv.id, number: inv.number, month: '2038-01', issuedAt: new Date(inv.issued_at).toISOString(), total: c100, currency: 'EUR', pdfReady: true }])
   expect(await list(U.cust)).toEqual([])
   expect(JSON.stringify(await (await call(listRoute.GET, p.uid)).json())).not.toMatch(/pi_|tr_|re_|acct_|ledger|charge|transfer/)
   const res = await call(pdfRoute.GET, p.uid, 'GET', undefined, { id: inv.id })

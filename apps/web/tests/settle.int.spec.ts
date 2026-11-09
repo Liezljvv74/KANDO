@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { deleteAccount, settle } from '@kando/domain'
+import { COMMISSION_RATE, commissionFor, deleteAccount, settle } from '@kando/domain'
 import { setGatewayForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
@@ -39,7 +39,7 @@ async function paidBooking(o: { paid?: number | null; rate?: number; provider?: 
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate)
        VALUES ($1, $2, $3, 'direct', 'confirmed', now() + make_interval(hours => $4), 60, now(), 'pi_st_' || gen_random_uuid(), $5) RETURNING id`,
-      [o.customer ?? U.cust, p, service, 48 + ++hour * 2, o.rate ?? 0.12],
+      [o.customer ?? U.cust, p, service, 48 + ++hour * 2, o.rate ?? COMMISSION_RATE],
     )
   ).rows[0].id as string
   if (o.paid !== null) await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', $3, $4)", [id, p, o.paid ?? 100, `charge:${id}`])
@@ -59,10 +59,11 @@ const refusal = (p: Promise<unknown>) =>
 
 it('settle full: one transfer of amount minus commission, one commission row, no refund', async () => {
   const id = await paidBooking()
-  expect(await settle(db, id, 100)).toEqual({ refunded: 0, transferred: 88, commission: 12 })
-  expect(await rows(id)).toEqual({ transfer: { amount: '88.00', key: `transfer:${id}` }, commission: { amount: '12.00', key: `commission:${id}` } })
+  const c = commissionFor(100, COMMISSION_RATE)
+  expect(await settle(db, id, 100)).toEqual({ refunded: 0, transferred: 100 - c, commission: c })
+  expect(await rows(id)).toEqual({ transfer: { amount: (100 - c).toFixed(2), key: `transfer:${id}` }, commission: { amount: c.toFixed(2), key: `commission:${id}` } })
   expect(callsOf('refund')).toEqual([])
-  expect(callsOf('transfer')).toEqual([{ accountId: 'acct_st_1', amountCents: 8800, currency: 'EUR', paymentRef: expect.stringMatching(/^pi_st_/), bookingId: id, idempotencyKey: `transfer:${id}` }])
+  expect(callsOf('transfer')).toEqual([{ accountId: 'acct_st_1', amountCents: Math.round((100 - c) * 100), currency: 'EUR', paymentRef: expect.stringMatching(/^pi_st_/), bookingId: id, idempotencyKey: `transfer:${id}` }])
   expect(await releasedAt(id)).not.toBeNull()
 })
 
@@ -84,27 +85,33 @@ it('settle zero needs no payout account; any transfer does (409 NO_PAYOUT_ACCOUN
   expect(await releasedAt(id)).toBeNull()
 })
 
-it('settle partial 40 of 100 at 0.12: refund 60, transfer 35.20, commission 4.80', async () => {
+it('settle partial 40 of 100 at the current rate: refund 60, the rest split by the rate', async () => {
   const id = await paidBooking()
-  expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 35.2, commission: 4.8 })
+  const c = commissionFor(40, COMMISSION_RATE)
+  expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 40 - c, commission: c })
   expect(await rows(id)).toEqual({
     refund: { amount: '60.00', key: `refund:${id}` },
-    transfer: { amount: '35.20', key: `transfer:${id}` },
-    commission: { amount: '4.80', key: `commission:${id}` },
+    transfer: { amount: (40 - c).toFixed(2), key: `transfer:${id}` },
+    commission: { amount: c.toFixed(2), key: `commission:${id}` },
   })
   expect(callsOf('refund')).toEqual([{ paymentRef: expect.stringMatching(/^pi_st_/), amountCents: 6000, bookingId: id, idempotencyKey: `refund:${id}` }])
-  expect(callsOf('transfer')).toMatchObject([{ amountCents: 3520, idempotencyKey: `transfer:${id}` }])
+  expect(callsOf('transfer')).toMatchObject([{ amountCents: Math.round((40 - c) * 100), idempotencyKey: `transfer:${id}` }])
 })
 
 it('money math is in cents: 33.33 and 0.07 leave no float drift', async () => {
+  const split = (paid: number, share: number) => {
+    const c = commissionFor(share, COMMISSION_RATE)
+    return { refunded: Math.round((paid - share) * 100) / 100, transferred: Math.round((share - c) * 100) / 100, commission: c }
+  }
   const a = await paidBooking({ paid: 33.33 })
-  expect(await settle(db, a, 33.33)).toEqual({ refunded: 0, transferred: 29.33, commission: 4 }) // 3333 * 0.12 = 399.96 -> 400
+  expect(await settle(db, a, 33.33)).toEqual(split(33.33, 33.33))
   const b = await paidBooking({ paid: 0.07 })
-  expect(await settle(db, b, 0.07)).toEqual({ refunded: 0, transferred: 0.06, commission: 0.01 }) // 7 * 0.12 = 0.84 -> 1
+  expect(await settle(db, b, 0.07)).toEqual(split(0.07, 0.07))
   const c = await paidBooking({ paid: 33.33 })
-  expect(await settle(db, c, 0.1)).toEqual({ refunded: 33.23, transferred: 0.09, commission: 0.01 })
-  expect(callsOf('transfer').map((t) => (t as { amountCents: number }).amountCents)).toEqual([2933, 6, 9])
-  expect(callsOf('refund').map((t) => (t as { amountCents: number }).amountCents)).toEqual([3323])
+  expect(await settle(db, c, 0.1)).toEqual(split(33.33, 0.1))
+  const cents = (x: number) => Math.round(x * 100)
+  expect(callsOf('transfer').map((t) => (t as { amountCents: number }).amountCents)).toEqual([33.33, 0.07, 0.1].map((x) => cents(split(x, x).transferred)))
+  expect(callsOf('refund').map((t) => (t as { amountCents: number }).amountCents)).toEqual([cents(split(33.33, 0.1).refunded)])
 })
 
 it('the ledger sums per booking balance: charge = refund + transfer + commission once settled', async () => {
@@ -118,6 +125,11 @@ it('the ledger sums per booking balance: charge = refund + transfer + commission
 it("the commission rate used is the booking's stored rate, not the current constant", async () => {
   const id = await paidBooking({ rate: 0.2 })
   expect(await settle(db, id, 100)).toEqual({ refunded: 0, transferred: 80, commission: 20 })
+})
+
+it('a booking paid at the old rate keeps its stored rate', async () => {
+  const id = await paidBooking({ rate: 0.12 }) // paid before the rate became 0.15
+  expect(await settle(db, id, 100)).toEqual({ refunded: 0, transferred: 88, commission: 12 })
 })
 
 it('settle twice writes the rows once (second call 409, gateway called once per key)', async () => {
@@ -151,7 +163,7 @@ it('a retry after a failure between refund and transfer completes without a seco
   expect(await rows(id)).toEqual({ refund: { amount: '60.00', key: `refund:${id}` } }) // the refund that happened is recorded
   g.transfer = transfer
   expect(g.attempts.refund).toBe(1)
-  expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 35.2, commission: 4.8 })
+  expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 40 - commissionFor(40, COMMISSION_RATE), commission: commissionFor(40, COMMISSION_RATE) })
   expect(g.attempts.refund).toBe(1) // the ledger row skips the refund: no call at all, not even a replay (safe after any delay)
   expect(callsOf('refund')).toHaveLength(1)
   expect(Object.keys(await rows(id)).sort()).toEqual(['commission', 'refund', 'transfer'])
@@ -187,13 +199,13 @@ it('a crash between the gateway and the ledger row: the retry after the key wind
     await failOn(`${step}:${id}`, () => expect(settle(db, id, 40)).rejects.toMatchObject({ cause: { message: 'crash' } }))
     expect(await releasedAt(id)).toBeNull()
     g.forgetKeys()
-    expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 35.2, commission: 4.8 })
+    expect(await settle(db, id, 40)).toEqual({ refunded: 60, transferred: 40 - commissionFor(40, COMMISSION_RATE), commission: commissionFor(40, COMMISSION_RATE) })
     expect(callsOf('refund')).toHaveLength(1) // exactly one refund object and one transfer object exist
     expect(callsOf('transfer')).toHaveLength(1)
     expect(await rows(id)).toEqual({
       refund: { amount: '60.00', key: `refund:${id}` },
-      transfer: { amount: '35.20', key: `transfer:${id}` },
-      commission: { amount: '4.80', key: `commission:${id}` },
+      transfer: { amount: (40 - commissionFor(40, COMMISSION_RATE)).toFixed(2), key: `transfer:${id}` },
+      commission: { amount: commissionFor(40, COMMISSION_RATE).toFixed(2), key: `commission:${id}` },
     })
   }
 })
@@ -266,5 +278,5 @@ it('a booking with an open chargeback flag or an open dispute cannot be settled:
   expect(await releasedAt(disputed)).toBeNull()
   // once staff resolved the chargeback flag, it settles
   await pool.query("UPDATE staff_flags SET resolved_at = now() WHERE kind = 'chargeback' AND ref_id = $1", [charged])
-  expect(await settle(db, charged, 100)).toEqual({ refunded: 0, transferred: 88, commission: 12 })
+  expect(await settle(db, charged, 100)).toEqual({ refunded: 0, transferred: 100 - commissionFor(100, COMMISSION_RATE), commission: commissionFor(100, COMMISSION_RATE) })
 })

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateway, setGatewayForTests, type PaymentsGateway } from './gateway'
-import { belowMinCharge, canTransact, checkoutExpiry, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, quoteSteps, toCents } from './rules'
+import { belowMinCharge, canTransact, checkoutExpiry, COMMISSION_RATE, commissionFor, LIVE_PAYMENTS_ALLOWED, MAX_HOLD_DAYS, MAX_PAY_AHEAD_DAYS, paymentsEnabled, quoteSteps, toCents } from './rules'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -16,12 +16,12 @@ const keys = (env: Record<string, string>) => {
 }
 
 describe('commissionFor', () => {
-  it('is 12 on 100 at 0.12', () => expect(commissionFor(100, 0.12)).toBe(12))
-  it('rounds 3.9996 (33.33 at 0.12) to 4', () => expect(commissionFor(33.33, 0.12)).toBe(4))
+  it('is the rate in percent on 100', () => expect(commissionFor(100, COMMISSION_RATE)).toBe(COMMISSION_RATE * 100))
+  it('rounds 3.9996 (33.33 at 0.12) to 4', () => expect(commissionFor(33.33, 0.12)).toBe(4)) // fixed rate: rounding case
   it('rounds 0.006 (0.05 at 0.12) up to 0.01', () => expect(commissionFor(0.05, 0.12)).toBe(0.01))
   it('rounds an exact half cent up', () => expect(commissionFor(0.25, 0.1)).toBe(0.03))
   it('is 0 on 0', () => expect(commissionFor(0, 0.12)).toBe(0))
-  it('is 4.80 on 40 at 0.12', () => expect(commissionFor(40, 0.12)).toBe(4.8))
+  it('is 6 on 40 at the current rate', () => expect(commissionFor(40, COMMISSION_RATE)).toBe(Math.round(40 * COMMISSION_RATE * 100) / 100))
   it('rejects a negative share or a rate outside 0..1', () => {
     expect(() => commissionFor(-1, 0.12)).toThrow()
     expect(() => commissionFor(10, 1.5)).toThrow()

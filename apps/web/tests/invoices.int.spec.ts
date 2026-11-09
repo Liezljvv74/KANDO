@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { sql } from 'drizzle-orm'
 import { asUser, db, pool } from '@kando/db'
 import { InvoiceListSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, clearPushOutbox, decideDispute, deleteAccount, dueRoots, issueCommissionInvoices, issueDueInvoices, releaseBooking, runDueTimers, tryRelease, withDeferredInvoices, type InvoiceDraft, type Storage } from '@kando/domain'
+import { cancelBooking, clearOutbox, clearPushOutbox, COMMISSION_RATE, decideDispute, deleteAccount, dueRoots, issueCommissionInvoices, issueDueInvoices, releaseBooking, runDueTimers, tryRelease, type InvoiceDraft, type Storage, withDeferredInvoices } from '@kando/domain'
 import { pushOutboxForTests, setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { invoiceLines } from '@kando/domain/src/invoices/build'
 import { call, cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
@@ -58,7 +58,7 @@ async function paid(providerId: string, o: { amount?: number; status?: string; p
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by, parent_booking_id, material_amount, quote_id)
-       VALUES ($1, $2, 'direct', $3, $4, 60, true, 'Hauptstr. 1', '10115', 'Berlin', $5, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', $6, 0.12, now(), now() + interval '7 days', $7, $8, $9) RETURNING id`,
+       VALUES ($1, $2, 'direct', $3, $4, 60, true, 'Hauptstr. 1', '10115', 'Berlin', $5, $4::timestamptz - interval '2 days', $4::timestamptz - interval '2 days', $6, ${COMMISSION_RATE}, now(), now() + interval '7 days', $7, $8, $9) RETURNING id`,
       [o.customer ?? U.cust, providerId, o.status ?? 'finished', startAt, amount, `pi_${++n}`, o.parent ?? null, o.material ?? 0, o.quote ?? null],
     )
   ).rows[0].id as string

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { asUser, COLUMN_STAFF_ONLY, db, OWNER_ONLY_BOOKING_STATUSES, pool } from '@kando/db'
+import { COMMISSION_RATE } from '@kando/domain'
 import { cleanupUsers, seedProvider, seedUser } from './helpers'
 
 const ids = { customer: 'rp-cust', other: 'rp-other', owner: 'rp-owner', owner2: 'rp-owner2' }
@@ -81,7 +82,7 @@ it('app_user cannot set amount or payment_ref on a booking', async () => {
     await expect(run(uid, sql`UPDATE providers SET payouts_ready_at = now()`)).rejects.toMatchObject(denied)
   }
   // the owner connection (staff, the payment code) can
-  await pool.query("UPDATE bookings SET payment_ref = 'pi_ok', commission_rate = 0.12 WHERE id = $1", [bookingId])
+  await pool.query(`UPDATE bookings SET payment_ref = 'pi_ok', commission_rate = ${COMMISSION_RATE} WHERE id = $1`, [bookingId])
   await pool.query('UPDATE bookings SET payment_ref = NULL, commission_rate = NULL WHERE id = $1', [bookingId])
 })
 

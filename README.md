@@ -170,7 +170,7 @@ Copy `.env.example` to `.env.local` (every variable is listed there). `DATABASE_
 
 - AI: the document check is live in production (#70) and only runs for accounts that accepted the terms; there is no quote assistant (planned, later). The other AI feature is the translate button on provider pages.
 - Not in the app stores; the sign-up terms checkbox is live (#73), but nobody is asked again after a change of the terms until step 2.7 is built; no "report this profile or photo"; no web page to request account deletion; the legal pages are drafts until published.
-- Payments are Stripe test mode only; live payments are blocked in code. The commission (12%) and the platform's company details are placeholders.
+- Payments are Stripe test mode only; live payments are blocked in code. The commission (15%, provisional, Stripe payment fees included) and the platform's company details are placeholders.
 - No availability calendar or instant booking (Flow 2 is only an outline: `docs/superpowers/plans/2026-11-01-flow-2-availability-and-instant-booking-outline.md`); no inbox screen with counts and "tentative" bookings; the chat polls every 4 seconds (no live push).
 
 ## Next steps to finish the MVP (the order of the Plan sheet)
@@ -195,7 +195,7 @@ Copy `.env.example` to `.env.local` (every variable is listed there). `DATABASE_
 
 ## Decisions still to be made (owner)
 
-1. **Commission percentage** (`COMMISSION_RATE` is a placeholder of 12% in `packages/domain/src/payments/rules.ts`) before payouts or the Preise page go live.
+1. **Commission percentage** (`COMMISSION_RATE` is set to 15% including Stripe payment fees, provisional, in `packages/domain/src/payments/rules.ts`; review it after research) before payouts or the Preise page go live.
 2. **Cancellation rules:** the 50 percent late-cancellation fee, the 48-hour no-show objection and the 7-day stop-job answer (lawyer to confirm, see below).
 3. **Retention periods:** notices 180 days, Stripe events 90 days, device tokens 270 days, blocked contact text 90 days, trader records 6 months (`packages/domain/src/retention.ts`).
 4. **The 25 megapixel picture limit** also refuses very high-resolution document scans (a 600 dpi A4 page is about 35 megapixels): keep, or raise for documents.

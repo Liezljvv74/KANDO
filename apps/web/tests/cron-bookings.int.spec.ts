@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
-import { tryRelease, withDeferredInvoices } from '@kando/domain'
+import { COMMISSION_RATE, tryRelease, withDeferredInvoices } from '@kando/domain'
 import { setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
 import { cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
@@ -55,7 +55,7 @@ it('each cron route has its own budget: a slow release does not stop the invoice
     const id = (
       await pool.query(
         `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-         VALUES ('cb-cust', $1, 'direct', 'finished', now() - interval '9 days', 60, true, 'Hauptstr. 1', '10115', 'Berlin', 100, now() - interval '10 days', now() - interval '10 days', gen_random_uuid()::text, 0.12, now() - interval '8 days', now() - interval '${confirmBy}') RETURNING id`,
+         VALUES ('cb-cust', $1, 'direct', 'finished', now() - interval '9 days', 60, true, 'Hauptstr. 1', '10115', 'Berlin', 100, now() - interval '10 days', now() - interval '10 days', gen_random_uuid()::text, ${COMMISSION_RATE}, now() - interval '8 days', now() - interval '${confirmBy}') RETURNING id`,
         [prov],
       )
     ).rows[0].id as string
