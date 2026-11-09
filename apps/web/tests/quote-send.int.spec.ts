@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { QuoteSchema, RequestSchema } from '@kando/contract'
-import { call, cleanupUsers, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, relaxLimits, requestTime, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const requests = await import('../app/app-api/v1/requests/route')
@@ -78,11 +78,7 @@ it('a quote expires after 7 days, or at its start time when that comes first', a
 
 it('a time that clashes with a held booking is refused with slot-pending, but a quote without a time is not', async () => {
   const when = day(40)
-  await pool.query(
-    `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, currency, on_site, pay_by, accepted_at)
-     VALUES ($1, $2, 'direct', 'awaiting-payment', $3, 60, 50, 'EUR', true, now() + interval '2 days', now())`,
-    [U.third, pOwner, when],
-  )
+  await seedBooking({ customerId: U.third, providerId: pOwner, amount: 50, cols: { status: 'awaiting-payment', start_at: when, on_site: true, pay_by: new Date(Date.now() + 2 * 86_400_000), accepted_at: new Date() } })
   const r = await newRequest({ ...requestTime(), startAt: when })
   const clash = await send(r.id, { amount: 50, scope: 'Fence', startAt: when, durationMin: 60 })
   expect([clash.status, (await clash.json()).error]).toEqual([409, 'slot-pending'])

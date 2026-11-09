@@ -3,7 +3,7 @@ import { asUser, db, pool } from '@kando/db'
 import { BookingViewSchema, RequestSchema } from '@kando/contract'
 import { cancelBooking, clearOutbox, COMMISSION_RATE, createPayLink, runDueTimers } from '@kando/domain'
 import { setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, makeAwaitingPayment, makeQuote, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, makeAwaitingPayment, makeQuote, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -47,13 +47,7 @@ const flag = (kind: string, ref: string, note: string | null, resolved = false) 
 /** A paid, confirmed booking (as the webhook leaves it), 100 EUR, with its charge row. */
 async function paidBooking(o: { startAt?: Date; status?: string } = {}): Promise<string> {
   const startAt = o.startAt ?? new Date(Date.now() + 3 * DAY + ++slot * 3 * HOUR)
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_js_' || gen_random_uuid(), ${COMMISSION_RATE}) RETURNING id`,
-      [U.cust, providerId, serviceId, o.status ?? 'confirmed', startAt],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({ customerId: U.cust, providerId, startAt, cols: { service_id: serviceId, status: o.status ?? 'confirmed' } })
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, idempotency_key) VALUES ($1, $2, 'charge', 100, $3)", [id, providerId, `charge:${id}`])
   return id
 }
@@ -117,7 +111,7 @@ it('an unseen notice in the root job chat marks the root request, the root booki
   await pool.query(`UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_x', commission_rate = ${COMMISSION_RATE} WHERE id = $1`, [root.id])
   const taskReq = (await pool.query("INSERT INTO requests (customer_id, provider_id, service_id, description, answer_by, parent_booking_id) VALUES ($1, $2, $3, 'Noch ein Tor', now() + interval '3 days', $4) RETURNING id", [U.cust, providerId, serviceId, root.id])).rows[0].id
   const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 20, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [taskReq, providerId])).rows[0].id
-  const task = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', $4, 60, $5, now() + interval '2 days', now()) RETURNING id", [U.cust, providerId, quote, day(19), root.id])).rows[0].id as string
+  const task = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at) VALUES ($1, $2, $3, 'awaiting-payment', $4, 60, $5, now() + interval '2 days', now()) RETURNING id", [U.cust, providerId, quote, day(19), root.id])).rows[0].id as string
   await pool.query(`UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_y', commission_rate = ${COMMISSION_RATE} WHERE id = $1`, [task])
   const counts = async () => ({
     root: (await stateOf(U.cust, root.id)).countsForMe,

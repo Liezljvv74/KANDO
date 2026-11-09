@@ -46,7 +46,7 @@ it('confirming a quote with a time makes a booking that awaits payment, at the q
   const res = await confirming(q.id, U.cust, { note: 'Thank you' })
   expect(res.status).toBe(200)
   const b = BookingSchema.parse(await res.json())
-  expect(b).toMatchObject({ status: 'awaiting-payment', source: 'quote', amount: 150, durationMin: r.durationMin, note: 'Thank you', quoteId: q.id, requestId: r.id })
+  expect(b).toMatchObject({ status: 'awaiting-payment', amount: 150, durationMin: r.durationMin, note: 'Thank you', quoteId: q.id, requestId: r.id })
   expect(new Date(b.startAt).getTime()).toBe(new Date(q.startAt!).getTime())
   expect(b.payBy).not.toBeNull()
   expect(b.address).toEqual({ postcode: '10115' }) // the customer reads the whole place back

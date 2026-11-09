@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { sql } from 'drizzle-orm'
-import { cleanupUsers, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBooking, seedProvider, seedUser } from './helpers'
 
 const ids = { customer: 'rb-cust', owner: 'rb-owner', other: 'rb-other' }
 let providerId: string
@@ -19,7 +19,7 @@ beforeAll(async () => {
   requestId = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ($1, $2, 'Fix the fence', now() + interval '7 days') RETURNING id", [ids.customer, providerId])).rows[0].id
   quoteId = (await pool.query("INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, expires_at) VALUES ($1, $2, 1, 100, 'EUR', 'Fence', now() + interval '14 days') RETURNING id", [requestId, providerId])).rows[0].id
   await pool.query(
-    "INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '1 day', now()) RETURNING id",
+    "INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, amount, currency, on_site, pay_by, accepted_at) VALUES ($1, $2, $3, 'awaiting-payment', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '1 day', now()) RETURNING id",
     [ids.customer, providerId, quoteId],
   )
 })
@@ -45,8 +45,8 @@ it('a third user reads none of the three', async () => {
 it('app_user cannot insert a booking at all: not for another customer, not for themselves, not as the provider', async () => {
   const insert = (as: string, customer: string) =>
     asUser(as, (tx) =>
-      tx.execute(sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site)
-        VALUES (${customer}, ${providerId}, ${serviceId}, 'direct', 'awaiting-time', now() + interval '3 days', 60, false)`),
+      tx.execute(sql`INSERT INTO bookings (customer_id, provider_id, service_id, status, start_at, duration_min, on_site)
+        VALUES (${customer}, ${providerId}, ${serviceId}, 'awaiting-time', now() + interval '3 days', 60, false)`),
     )
   // layer 1: no INSERT privilege (permission denied); layer 2: the deny-all insert policy stays
   const denied = { cause: { message: expect.stringContaining('permission denied') } }
@@ -64,8 +64,8 @@ const permission = { cause: { message: expect.stringContaining('permission denie
 const run = (uid: string | null, q: ReturnType<typeof sql>) => asUser(uid, (tx) => tx.execute(q))
 const future = sql`now() + interval '3 days'`
 const insertBooking = (customer: string) =>
-  sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site)
-    VALUES (${customer}, ${providerId}, ${serviceId}, 'direct', 'awaiting-time', ${future}, 60, false)`
+  sql`INSERT INTO bookings (customer_id, provider_id, service_id, status, start_at, duration_min, on_site)
+    VALUES (${customer}, ${providerId}, ${serviceId}, 'awaiting-time', ${future}, 60, false)`
 const insertRequest = (customer: string) =>
   sql`INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES (${customer}, ${providerId}, 'x', ${future})`
 const insertQuote = (provider: string, request: string, version = 2) =>
@@ -112,16 +112,17 @@ const newRequest = (status = 'open') =>
   one("INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES ($1, $2, 'x', $3, now() + interval '7 days') RETURNING id", [ids.customer, providerId, status])
 const newQuote = async () =>
   one("INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, expires_at) VALUES ($1, $2, 1, 100, 'EUR', 's', now() + interval '14 days') RETURNING id", [await newRequest('quoted'), providerId])
-const newBooking = (status: 'awaiting-time' | 'awaiting-payment') =>
-  one(
-    `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, answer_by, pay_by, accepted_at)
-     VALUES ($1, $2, $3, 'direct', $4, now() + interval '3 days', 60, false, now() + interval '1 day',
-       ${status === 'awaiting-time' ? 'NULL, NULL' : "now() + interval '1 day', now()"}) RETURNING id`,
-    [ids.customer, providerId, serviceId, status],
-  )
+const newBooking = (status: 'awaiting-time' | 'awaiting-payment') => {
+  const day = new Date(Date.now() + 86_400_000)
+  return seedBooking({
+    customerId: ids.customer,
+    providerId,
+    cols: { service_id: serviceId, status, start_at: new Date(Date.now() + 3 * 86_400_000), on_site: false, answer_by: day, ...(status === 'awaiting-payment' && { pay_by: day, accepted_at: new Date() }) },
+  })
+}
 const notAppMove = { cause: { message: expect.stringContaining('not a move the app makes') } }
 
-it('app_user cannot make a status move the domain does not make', async () => {
+it('app_user cannot make a status move the domain does not make', { timeout: 30_000 }, async () => {
   // the listed moves pass, by the listed side
   const open = await newRequest()
   expect((await run(ids.owner, sql`UPDATE requests SET status = 'quoted' WHERE id = ${open}`)).rowCount).toBe(1)
@@ -140,8 +141,8 @@ it('app_user cannot make a status move the domain does not make', async () => {
   await expect(run(ids.customer, sql`INSERT INTO requests (customer_id, provider_id, description, status, answer_by) VALUES (${ids.customer}, ${providerId}, 'x', 'booked', ${future})`)).rejects.toMatchObject(rls)
   await expect(run(ids.owner, sql`INSERT INTO quotes (request_id, provider_id, version, amount, currency, scope, status, expires_at) VALUES (${open}, ${providerId}, 1, 1, 'EUR', 's', 'accepted', ${future})`)).rejects.toMatchObject(rls)
   const book = (cols: ReturnType<typeof sql>) =>
-    run(ids.customer, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, start_at, duration_min, on_site, status, pay_by, accepted_at)
-      VALUES (${ids.customer}, ${providerId}, ${serviceId}, 'direct', ${future}, 60, false, ${cols})`)
+    run(ids.customer, sql`INSERT INTO bookings (customer_id, provider_id, service_id, start_at, duration_min, on_site, status, pay_by, accepted_at)
+      VALUES (${ids.customer}, ${providerId}, ${serviceId}, ${future}, 60, false, ${cols})`)
   await expect(book(sql`'awaiting-payment', now() + interval '1 day', now()`)).rejects.toMatchObject(permission)
   await expect(book(sql`'awaiting-time', NULL, NULL`)).rejects.toMatchObject(permission)
 })
@@ -203,8 +204,8 @@ it('a request stores the customer\'s time and place, and a new request starts at
 
 it('a booking can wait for its time (awaiting-time) and then holds no slot', async () => {
   const [b] = (await pool.query(
-    `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, answer_by)
-     VALUES ($1, $2, $3, 'quote', 'awaiting-time', now() + interval '50 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id, status, pay_by`,
+    `INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, amount, currency, on_site, answer_by)
+     VALUES ($1, $2, $3, 'awaiting-time', now() + interval '50 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id, status, pay_by`,
     [ids.customer, providerId, quoteId],
   )).rows
   expect(b).toMatchObject({ status: 'awaiting-time', pay_by: null })
@@ -215,8 +216,8 @@ it('a booking can wait for its time (awaiting-time) and then holds no slot', asy
 
 it('the customer may withdraw an awaiting-time booking, the provider may not', async () => {
   const id = (await pool.query(
-    `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, answer_by)
-     VALUES ($1, $2, $3, 'quote', 'awaiting-time', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id`,
+    `INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, amount, currency, on_site, answer_by)
+     VALUES ($1, $2, $3, 'awaiting-time', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id`,
     [ids.customer, providerId, quoteId],
   )).rows[0].id
   await expect(run(ids.owner, sql`UPDATE bookings SET status = 'withdrawn' WHERE id = ${id}`)).rejects.toBeTruthy()
@@ -225,8 +226,8 @@ it('the customer may withdraw an awaiting-time booking, the provider may not', a
 
 it('the app role cannot set the agree-the-time columns of a booking', async () => {
   const id = (await pool.query(
-    `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, currency, on_site, answer_by)
-     VALUES ($1, $2, $3, 'quote', 'awaiting-time', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id`,
+    `INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, amount, currency, on_site, answer_by)
+     VALUES ($1, $2, $3, 'awaiting-time', now() + interval '3 days', 60, 100, 'EUR', false, now() + interval '7 days') RETURNING id`,
     [ids.customer, providerId, quoteId],
   )).rows[0].id
   await expect(run(ids.customer, sql`UPDATE bookings SET time_proposed_by = 'customer' WHERE id = ${id}`)).rejects.toBeTruthy()

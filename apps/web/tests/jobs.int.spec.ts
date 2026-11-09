@@ -57,8 +57,8 @@ const settle = (bookingId: string, status: 'completed' | 'cancelled', released: 
 /** A lapsed copy of the booking, created after it: the newest row of the request, but not the live one. */
 const newerExpiredCopy = (bookingId: string) =>
   pool.query(
-    `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, created_at)
-     SELECT customer_id, provider_id, service_id, quote_id, request_id, source, 'expired', start_at, duration_min, now() + interval '1 minute' FROM bookings WHERE id = $1`,
+    `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, status, start_at, duration_min, created_at)
+     SELECT customer_id, provider_id, service_id, quote_id, request_id, 'expired', start_at, duration_min, now() + interval '1 minute' FROM bookings WHERE id = $1`,
     [bookingId],
   )
 
@@ -88,8 +88,8 @@ async function seedJob(o: { customer: string; pid: string; sid: string; status: 
     for (const b of o.bookings) {
       const paid = ['completed', 'cancelled', 'refunded'].includes(b.status)
       await pool.query(
-        `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate, released_at, completed_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, 'quote', $6, $7, 60, ${paid ? `now(), 'pi_jb_' || gen_random_uuid(), ${COMMISSION_RATE}` : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, ${b.completedDaysAgo != null ? "now() - ($9 || ' days')::interval" : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
+        `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, status, start_at, duration_min, paid_at, payment_ref, commission_rate, released_at, completed_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 60, ${paid ? `now(), 'pi_jb_' || gen_random_uuid(), ${COMMISSION_RATE}` : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, ${b.completedDaysAgo != null ? "now() - ($9 || ' days')::interval" : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
         [o.customer, o.pid, o.sid, quote, id, b.status, start, String(b.minutesLater ?? 0), ...(b.completedDaysAgo != null ? [String(b.completedDaysAgo)] : [])],
       )
     }
@@ -246,8 +246,8 @@ it('an additional task is part of its job: it leads the row while it needs someo
   await pool.query("UPDATE requests SET status = 'booked' WHERE id = $1", [task])
   const taskBooking = (
     await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, parent_booking_id, source, status, start_at, duration_min, pay_by, accepted_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'quote', 'awaiting-payment', now() - interval '3 days', 60, now() + interval '24 hours', now()) RETURNING id`,
+      `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, parent_booking_id, status, start_at, duration_min, pay_by, accepted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'awaiting-payment', now() - interval '3 days', 60, now() + interval '24 hours', now()) RETURNING id`,
       ['jb-t1', pid, sid, quote, task, rootBooking],
     )
   ).rows[0].id
