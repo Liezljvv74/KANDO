@@ -4,6 +4,8 @@ import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { ScreenBanner } from '@/components/screen-banner'
+
 import { MAX_MESSAGE_CHARS } from '@kando/contract'
 
 import { blockUser, getThread, listBlocks, markThreadSeen, unblockUser } from '@/api/chat'
@@ -122,12 +124,13 @@ export default function ThreadScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
+      <ScreenBanner title={thread.otherName} />
       {/* The message box rides above the keyboard on Android and iPhone alike (React Native's own view only did it on iPhone). */}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.header}>
           <LinkText label={t('common.back')} onPress={goBack} />
-          <Text style={styles.title} numberOfLines={1}>{thread.otherName}</Text>
+          <View style={styles.flex} />
           <SmallButton label={t(blockedByMe ? 'chat.unblock' : 'chat.block')} onPress={toggleBlock} />
         </View>
         <FlatList
