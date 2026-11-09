@@ -1,6 +1,6 @@
 'use client'
 
-import { Form, Input, InputNumber, Select } from 'antd'
+import { Form, Input, Select } from 'antd'
 import { DOCUMENT_TYPES } from '@kando/contract'
 import { useAt } from '../../lib/admin/t'
 
@@ -17,9 +17,6 @@ export function CategoryFields() {
       </Form.Item>
       <Form.Item label={at('admin.field.nameEn')} name={['names', 'en']}>
         <Input />
-      </Form.Item>
-      <Form.Item label={at('admin.field.sort')} name="sort">
-        <InputNumber min={0} />
       </Form.Item>
       <Form.Item label={at('admin.field.requiredDocuments')} name="requiredDocuments">
         <Select mode="multiple" options={options} />

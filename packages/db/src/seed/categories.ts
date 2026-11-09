@@ -8,7 +8,7 @@ type Row = { slug: string; de: string; en: string; requiredDocuments: string[]; 
 const BASE = ['id-document']
 const TRADE = 'trade-registration'
 
-// Order is the display order (sort = index + 1); "other-services" is always listed last by the query.
+// The list is shown alphabetically by the query, "other-services" last.
 export const CATEGORIES: Row[] = [
   { slug: 'photography', de: 'Fotografie', en: 'Photography', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
   { slug: 'dj', de: 'DJ', en: 'DJ', requiredDocuments: BASE, optionalDocuments: [TRADE, 'liability-insurance'] },
@@ -33,11 +33,11 @@ const list = (docs: string[] = []) => sql`ARRAY[${sql.join(docs.map((d) => sql`$
  * set on INSERT only: a re-run must keep what staff edited in the back office.
  */
 export async function seedCategories(): Promise<number> {
-  for (const [i, c] of CATEGORIES.entries()) {
+  for (const c of CATEGORIES) {
     const { rows } = await db.execute<{ id: string }>(sql`
-      INSERT INTO categories (slug, country, sort, required_documents, optional_documents)
-      VALUES (${c.slug}, 'DE', ${i + 1}, ${list(c.requiredDocuments)}, ${list(c.optionalDocuments)})
-      ON CONFLICT (slug) DO UPDATE SET sort = excluded.sort
+      INSERT INTO categories (slug, country, required_documents, optional_documents)
+      VALUES (${c.slug}, 'DE', ${list(c.requiredDocuments)}, ${list(c.optionalDocuments)})
+      ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
       RETURNING id`)
     for (const [lang, name] of [['de', c.de], ['en', c.en]] as const) {
       await db.execute(sql`
