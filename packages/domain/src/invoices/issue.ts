@@ -80,7 +80,6 @@ type GroupRow = {
   parent_booking_id: string | null
   status: string
   amount: string
-  material_amount: string
   start_at: Date | string
   cancelled_by: string | null
   no_show: string | null
@@ -122,7 +121,7 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
     if (!due.rows.length) return null
     const group = (
       await o.execute<GroupRow>(sql`
-      SELECT b.id, b.parent_booking_id, b.status, b.amount::text AS amount, b.material_amount::text AS material_amount, b.start_at,
+      SELECT b.id, b.parent_booking_id, b.status, b.amount::text AS amount, b.start_at,
         b.cancelled_by, b.no_show, b.created_at, coalesce(q.scope, s.title, rq.description, '') AS title,
         (CASE WHEN b.released_at IS NULL THEN 0
           ELSE coalesce((SELECT sum(l.amount) FROM ledger_entries l WHERE l.booking_id = b.id AND l.kind IN ('transfer', 'commission')), 0) END)::text AS share
@@ -147,7 +146,6 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
         parentBookingId: g.parent_booking_id,
         status: g.status,
         amount: Number(g.amount),
-        materialAmount: Number(g.material_amount),
         providerShare: Number(g.share),
         startAt: new Date(g.start_at),
         title: g.title,

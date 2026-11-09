@@ -4,6 +4,7 @@ import type { Booking, BookingView } from '@kando/contract'
 import { fail, notFound } from '../providers/http'
 import { jobStates } from './job-state-lookup'
 import { lockRow, partyOf } from './party'
+import { bookingMoney } from '../payments/money'
 import { bookingItem, toBooking, withBookingRefs, withdrawRequest } from './requests'
 import { canTransition } from './rules'
 import type { AfterCommit } from '../app-request'
@@ -13,7 +14,8 @@ type Row = typeof bookings.$inferSelect
 /** The job address stays private to the customer; the provider sees it only once the booking was accepted (payBy is set then). */
 export const view = (b: Row, userId: string, now = new Date()): Booking => {
   const dto = toBooking(b, now)
-  return b.customerId !== userId && b.payBy === null ? { ...dto, address: null } : dto
+  if (b.customerId === userId) return dto
+  return { ...(b.payBy === null ? { ...dto, address: null } : dto), money: bookingMoney(dto.amount, b.commissionRate) } // the provider's side: the commission box
 }
 
 /** One booking for one of its parties: which side they are on and its chat. Reads only (no timers, no thread is created). */

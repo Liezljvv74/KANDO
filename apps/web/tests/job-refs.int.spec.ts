@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import { pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
+import { COMMISSION_RATE } from '@kando/domain'
 import { call, cleanupUsers, makeAwaitingPayment, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -37,7 +38,7 @@ async function paidJob(owner: string, pid: string) {
   const startAt = new Date(Date.now() - 3 * HOUR)
   const b = await makeAwaitingPayment({ customerId: U.cust, ownerId: owner, providerId: pid, serviceId: (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pid])).rows[0].id, startAt: new Date(Date.now() + 5 * 86_400_000) })
   const ref = `pi_jr_${randomUUID()}`
-  await pool.query("UPDATE bookings SET status = 'confirmed', start_at = $2, paid_at = now(), payment_ref = $3, commission_rate = 0.12, pay_by = $2 WHERE id = $1", [b.id, startAt, ref])
+  await pool.query(`UPDATE bookings SET status = 'confirmed', start_at = $2, paid_at = now(), payment_ref = $3, commission_rate = ${COMMISSION_RATE}, pay_by = $2 WHERE id = $1`, [b.id, startAt, ref])
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, $4, $3)", [b.id, pid, `charge:${b.id}`, ref])
   return b
 }

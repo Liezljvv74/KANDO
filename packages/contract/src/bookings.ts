@@ -255,6 +255,8 @@ export const BookingSchema = z.object({
   title: z.string().optional(),
   taskNumber: z.string().optional(),
   jobState: JobStateSchema.optional(),
+  /** The provider's money box numbers (provider side only): total paid, commission, net, and the rate used (stored, or the current one before payment). */
+  money: z.object({ total: AmountSchema, commission: AmountSchema, net: AmountSchema, rate: z.number() }).optional(),
 })
 export type Booking = z.infer<typeof BookingSchema>
 
@@ -280,3 +282,13 @@ export const BUSY_MAX_DAYS = 62
 export const BusyQuerySchema = z
   .object({ from: z.coerce.date(), to: z.coerce.date() })
   .refine((q) => q.to > q.from && q.to.getTime() - q.from.getTime() <= BUSY_MAX_DAYS * 86_400_000, { message: `range must be 1 to ${BUSY_MAX_DAYS} days` })
+
+/** GET /provider-money `?from=&to=`: the device's current calendar month (start, start of the next month); without it the server uses the UTC month. At most 32 days. */
+export const ProviderMoneyQuerySchema = z
+  .object({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }) })
+  .partial()
+  .refine((q) => (q.from === undefined) === (q.to === undefined), 'from and to go together')
+  .refine((q) => !q.from || !q.to || (Date.parse(q.to) > Date.parse(q.from) && Date.parse(q.to) - Date.parse(q.from) <= 32 * 86_400_000), 'a month at most')
+/** GET /provider-money: the provider's net amounts for the Jobs strip. */
+export const ProviderMoneySchema = z.object({ receivedThisMonth: AmountSchema, onItsWay: AmountSchema, onHold: AmountSchema })
+export type ProviderMoney = z.infer<typeof ProviderMoneySchema>

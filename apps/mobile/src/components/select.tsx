@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -29,6 +29,7 @@ export function Select<T extends string | number>({
   /** A search field above the list: typing narrows the options; empty shows all. */
   searchable?: boolean
 }) {
+  const windowHeight = useWindowDimensions().height
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const selected = options.find((o) => o.value === value)
@@ -69,7 +70,8 @@ export function Select<T extends string | number>({
       <Modal visible={open} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
         <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <Pressable style={styles.backdrop} onPress={close} accessibilityLabel={t('common.close')} accessibilityRole="button" />
-        <SafeAreaView style={styles.sheet} edges={['bottom']}>
+        {/* A pixel height, not '70%': a percentage has nothing to measure against on the web, so the list grew past the screen and could not scroll. */}
+        <SafeAreaView style={[styles.sheet, { maxHeight: windowHeight * 0.7 }]} edges={['bottom']}>
           <View style={styles.sheetHead}>
             <Text style={styles.sheetTitle} accessibilityRole="header">
               {label}
@@ -90,16 +92,13 @@ export function Select<T extends string | number>({
               style={styles.search}
             />
           )}
-          <FlatList
-            data={shown}
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={<Text style={styles.empty}>{t('common.noMatches')}</Text>}
-            keyExtractor={(o) => String(o.value)}
-            accessibilityRole="radiogroup"
-            renderItem={({ item }) => {
+          {/* A ScrollView, not a FlatList: the lists are short (categories, countries), and a FlatList inside this web modal did not scroll. */}
+          <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" accessibilityRole="radiogroup">
+            {shown.length === 0 && <Text style={styles.empty}>{t('common.noMatches')}</Text>}
+            {shown.map((item) => {
               const on = item.value === value
               return (
-                <Pressable onPress={() => pick(item.value)} accessibilityRole="radio" accessibilityState={{ checked: on }} style={[styles.option, on && styles.optionOn]}>
+                <Pressable key={String(item.value)} onPress={() => pick(item.value)} accessibilityRole="radio" accessibilityState={{ checked: on }} style={[styles.option, on && styles.optionOn]}>
                   <Text style={[styles.optionLabel, on && styles.optionLabelOn]}>{item.label}</Text>
                   {on && (
                     <Text style={styles.check} importantForAccessibility="no">
@@ -108,8 +107,8 @@ export function Select<T extends string | number>({
                   )}
                 </Pressable>
               )
-            }}
-          />
+            })}
+          </ScrollView>
         </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
@@ -136,7 +135,8 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 16, color: '#34328A' },
   flex: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(20, 53, 46, 0.35)' },
-  sheet: { maxHeight: '70%', backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  list: { flexShrink: 1 },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
   sheetTitle: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
   close: { minHeight: 44, justifyContent: 'center' },

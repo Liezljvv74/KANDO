@@ -24,6 +24,7 @@ import { CancelSheet } from '@/screens/bookings/cancel-sheet'
 import { DescriptionForm, DisputeInfo } from '@/screens/bookings/dispute-form'
 import { FinishSheet } from '@/screens/bookings/finish-sheet'
 import { JobHeader } from '@/screens/bookings/job-header'
+import { MoneyBox } from '@/screens/bookings/money-box'
 import { PayPanel } from '@/screens/bookings/pay-card'
 import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
@@ -199,6 +200,7 @@ export default function BookingDetail() {
         {!!head.body && <Text style={styles.text}>{head.body}</Text>}
         <BookingStatusLines view={data} />
       </Card>
+      {b.money && <MoneyBox booking={b} taskIds={[]} />}
       {b.jobState && (
         <BookingActions view={data} state={b.jobState} onChanged={retry} extra={<JobCommonButtons state={b.jobState} threadId={data.threadId} job={{ number: b.jobNumber, title: b.title }} />} />
       )}

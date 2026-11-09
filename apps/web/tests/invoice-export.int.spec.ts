@@ -23,7 +23,7 @@ async function add(pid: string, number: string, issuedAt: string, d: InvoiceDraf
   )
 }
 const body = async (res: Response) => (await res.text()).replace(/^\uFEFF/, '').split('\r\n').filter(Boolean)
-const HEAD = 'number,date,customer,labour,material,net,vat,gross,currency,kind'
+const HEAD = 'number,date,customer,labour,net,vat,gross,currency,kind'
 
 beforeAll(async () => {
   await cleanupUsers()
@@ -31,11 +31,13 @@ beforeAll(async () => {
   await seedUser(U.cust)
   providerId = await seedProvider(U.mine, { name: 'IE Mine', categoryId, price: 100 })
   otherId = await seedProvider(U.other, { name: 'IE Other', categoryId, price: 100 })
-  const t = { labour: 80, material: 20, net: 100, vat: 19, gross: 119 }
+  const t = { labour: 100, material: 0, net: 100, vat: 19, gross: 119 }
+  const old = { labour: 80, material: 20, net: 100, vat: 19, gross: 119 }
   await add(providerId, 'A-2025-0001', '2025-06-01T10:00:00Z', draft('Zoë Müller', t))
   await add(providerId, 'A-2025-0002', '2025-12-31T22:30:00Z', draft('Sylvester, "Sly" Stallone', { labour: 10.5, material: 0, net: 10.5, vat: 0, gross: 10.5 }), 'receipt') // 23:30 Berlin, 31 Dec
   await add(providerId, 'A-2026-0001', '2025-12-31T23:30:00Z', draft('New Year', t)) // 00:30 Berlin, 1 Jan 2026
   await add(providerId, 'A-2025-0003', '2025-07-01T10:00:00Z', draft('=HYPERLINK("http://x","y")', t))
+  await add(providerId, 'A-2024-0001', '2024-06-01T10:00:00Z', draft('Old Material', old)) // issued before materials were dropped: keeps its material part
   await add(otherId, 'B-2025-0001', '2025-06-02T10:00:00Z', draft('Not Mine', t))
 })
 afterAll(cleanupUsers)
@@ -48,7 +50,7 @@ it('the provider gets this year\'s invoices only, totals match the PDFs', async 
   expect([...new Uint8Array(await res.clone().arrayBuffer()).slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf])
   const lines = await body(res)
   expect(lines[0]).toBe(HEAD)
-  expect(lines[1]).toBe('A-2025-0001,2025-06-01,Zoë Müller,80.00,20.00,100.00,19.00,119.00,EUR,invoice')
+  expect(lines[1]).toBe('A-2025-0001,2025-06-01,Zoë Müller,100.00,100.00,19.00,119.00,EUR,invoice')
   expect(lines.some((l) => l.includes('B-2025-0001') || l.includes('Not Mine'))).toBe(false) // another provider's never
 })
 
@@ -63,7 +65,7 @@ it('year boundaries use the app time zone', async () => {
 
 it('quotes commas and quotes, keeps plain decimals', async () => {
   const l = (await body(await get(U.mine, '?year=2025'))).find((x) => x.startsWith('A-2025-0002'))
-  expect(l).toBe('A-2025-0002,2025-12-31,"Sylvester, ""Sly"" Stallone",10.50,0.00,10.50,0.00,10.50,EUR,receipt')
+  expect(l).toBe('A-2025-0002,2025-12-31,"Sylvester, ""Sly"" Stallone",10.50,10.50,0.00,10.50,EUR,receipt')
 })
 
 it('a formula in a customer name is neutralised', async () => {
@@ -85,4 +87,10 @@ it('year=abc is 400, as is a year out of range or not whole', async () => {
 
 it('defaults to the current year', async () => {
   expect((await get(U.mine)).headers.get('content-disposition')).toContain(`invoices-${yearOf(new Date())}.csv`) // the year in the app's time zone
+})
+
+it('a year with an old invoice that has a material part gets a material column', async () => {
+  const lines = await body(await get(U.mine, '?year=2024'))
+  expect(lines[0]).toBe('number,date,customer,labour,material,net,vat,gross,currency,kind')
+  expect(lines[1]).toBe('A-2024-0001,2024-06-01,Old Material,80.00,20.00,100.00,19.00,119.00,EUR,invoice')
 })

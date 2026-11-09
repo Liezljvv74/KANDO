@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { BookingViewSchema, RequestSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, createPayLink, runDueTimers } from '@kando/domain'
+import { cancelBooking, clearOutbox, COMMISSION_RATE, createPayLink, runDueTimers } from '@kando/domain'
 import { setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, makeAwaitingPayment, makeQuote, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
@@ -50,7 +50,7 @@ async function paidBooking(o: { startAt?: Date; status?: string } = {}): Promise
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_js_' || gen_random_uuid(), 0.12) RETURNING id`,
+       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_js_' || gen_random_uuid(), ${COMMISSION_RATE}) RETURNING id`,
       [U.cust, providerId, serviceId, o.status ?? 'confirmed', startAt],
     )
   ).rows[0].id as string
@@ -114,11 +114,11 @@ it('an unseen message notice makes the job count for the viewer; seen, it does n
 it('an unseen notice in the root job chat marks the root request, the root booking, and an additional task (it talks in the root chat)', async () => {
   const root = await makeAwaitingPayment({ customerId: U.cust, ownerId: U.owner, providerId, startAt: day(19) })
   const thread = (await pool.query('INSERT INTO threads (request_id, customer_id, provider_id) VALUES ($1, $2, $3) ON CONFLICT (request_id) DO UPDATE SET customer_id = threads.customer_id RETURNING id', [root.requestId, U.cust, providerId])).rows[0].id
-  await pool.query("UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_x', commission_rate = 0.12 WHERE id = $1", [root.id])
+  await pool.query(`UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_x', commission_rate = ${COMMISSION_RATE} WHERE id = $1`, [root.id])
   const taskReq = (await pool.query("INSERT INTO requests (customer_id, provider_id, service_id, description, answer_by, parent_booking_id) VALUES ($1, $2, $3, 'Noch ein Tor', now() + interval '3 days', $4) RETURNING id", [U.cust, providerId, serviceId, root.id])).rows[0].id
   const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 20, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [taskReq, providerId])).rows[0].id
   const task = (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', $4, 60, $5, now() + interval '2 days', now()) RETURNING id", [U.cust, providerId, quote, day(19), root.id])).rows[0].id as string
-  await pool.query("UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_y', commission_rate = 0.12 WHERE id = $1", [task])
+  await pool.query(`UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_js_y', commission_rate = ${COMMISSION_RATE} WHERE id = $1`, [task])
   const counts = async () => ({
     root: (await stateOf(U.cust, root.id)).countsForMe,
     task: (await stateOf(U.cust, task)).countsForMe,

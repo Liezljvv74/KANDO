@@ -7,7 +7,7 @@ export const FREE_CANCEL_HOURS = 24
 export const STOP_ANSWER_DAYS = 7
 export const NO_SHOW_OBJECTION_HOURS = 48
 
-/** POST /bookings/:id/finish (provider): the material part of the price, 0 up to the booking amount (the server checks the upper bound). */
+/** POST /bookings/:id/finish (provider). `materialAmount` is still accepted from installed builds and ignored: materials are in the quote. */
 export const FinishInputSchema = z.object({ materialAmount: AmountSchema.optional() }).strict()
 export type FinishInput = z.infer<typeof FinishInputSchema>
 

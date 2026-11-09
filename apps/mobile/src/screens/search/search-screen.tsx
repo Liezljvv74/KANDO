@@ -1,8 +1,10 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppState, FlatList, StyleSheet, Text, View } from 'react-native'
+import { AppState, FlatList, StyleSheet, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
+
+import { ScreenBanner } from '@/components/screen-banner'
 
 import type { SearchItem } from '@kando/contract'
 
@@ -99,7 +101,6 @@ export default function SearchScreen() {
 
   const header = (
     <View style={styles.form}>
-      <Text style={styles.title}>{t('search.title')}</Text>
       {categories ? (
         <CategorySelect categories={categories} value={category} onChange={setCategory} />
       ) : categoriesError ? (
@@ -124,7 +125,8 @@ export default function SearchScreen() {
     ) : null
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['left', 'right']}>
+      <ScreenBanner title={t('search.title')} />
       <FlatList
         data={status === 'ok' ? items : []}
         keyExtractor={(i) => i.slug}

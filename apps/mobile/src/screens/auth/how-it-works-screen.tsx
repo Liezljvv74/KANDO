@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { ScreenBanner } from '@/components/screen-banner'
+
 import { Button } from '@/components/auth-ui'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang, type Key } from '@/i18n'
@@ -23,12 +25,12 @@ export default function HowItWorksScreen() {
   const router = useRouter()
   const signedIn = !!useSession().user // signed in: back goes to Home and there is nothing to register for
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
+      <ScreenBanner title={t('welcome.howTitle')} />
       <ScrollView contentContainerStyle={styles.content}>
         <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace(signedIn ? '/' : '/welcome'))} hitSlop={12}>
           <Text style={styles.link}>← {t('welcome.backHome')}</Text>
         </Pressable>
-        <Text style={styles.title}>{t('welcome.howTitle')}</Text>
         {GROUPS.map(({ title, steps, bg }) => (
           <View key={title} style={[styles.box, { backgroundColor: bg }]}>
             <Text style={styles.boxTitle}>{t(title)}</Text>

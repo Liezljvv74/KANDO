@@ -21,20 +21,17 @@ export const reload = async (id: string, userId?: string) => (await withBookingR
 
 /**
  * The provider's "Finished": from `confirmed`, once the agreed start has come (else 409 TOO_EARLY), once (else 409 not-open).
- * Starts the customer's 7 days (`confirmBy`) and stores the material part of the price (0 up to the booking amount, 400
- * INVALID_MATERIAL_AMOUNT). Owner connection (finished is an owner-only status), the row locked and re-checked.
+ * Starts the customer's 7 days (`confirmBy`); a `materialAmount` from an old build is ignored. Owner connection (finished is an owner-only status), the row locked and re-checked.
  */
-export async function finishJob(tx: Tx, userId: string, bookingId: string, input: FinishInput, now = new Date()): Promise<Booking> {
+export async function finishJob(tx: Tx, userId: string, bookingId: string, _input: FinishInput, now = new Date()): Promise<Booking> {
   if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'wrong-side' })
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)
     if (b.status !== 'confirmed') fail(409, { error: 'not-open' })
     if (b.noShow) fail(409, { error: 'NO_SHOW_REPORTED' }) // a reported no-show ends by objection or its 48 hours (cancel.ts)
     if (now < b.startAt) fail(409, { error: 'TOO_EARLY' })
-    const materialC = toCents(input.materialAmount ?? 0)
-    if (materialC > toCents(Number(b.amount))) fail(400, { error: 'INVALID_MATERIAL_AMOUNT' })
     const confirmBy = new Date(now.getTime() + CONFIRM_DAYS * DAY)
-    const [r] = await o.update(bookings).set({ status: 'finished', finishedAt: now, confirmBy, materialAmount: (materialC / 100).toFixed(2), updatedAt: now }).where(eq(bookings.id, b.id)).returning()
+    const [r] = await o.update(bookings).set({ status: 'finished', finishedAt: now, confirmBy, updatedAt: now }).where(eq(bookings.id, b.id)).returning()
     return r!
   })
   await notifyBookingEvent('job-finished', row.customerId, { bookingId: row.id, date: row.confirmBy!.toISOString() })

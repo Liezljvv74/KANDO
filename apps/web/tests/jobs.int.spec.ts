@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db, pool, requests } from '@kando/db'
 import { JobsPageSchema, LIST_PAGE, RequestSchema, type JobsPage } from '@kando/contract'
-import { settled } from '@kando/domain'
+import { COMMISSION_RATE, settled } from '@kando/domain'
 import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits, requestTime, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -52,7 +52,7 @@ async function openRequest(customerId: string, pid = providerId): Promise<string
 
 /** Moves a request's booking to completed (released or not) or cancelled, as the money steps leave it. */
 const settle = (bookingId: string, status: 'completed' | 'cancelled', released: boolean) =>
-  pool.query(`UPDATE bookings SET status = $2, paid_at = now(), payment_ref = 'pi_jb_' || gen_random_uuid(), commission_rate = 0.12, released_at = ${released ? 'now()' : 'NULL'} WHERE id = $1`, [bookingId, status])
+  pool.query(`UPDATE bookings SET status = $2, paid_at = now(), payment_ref = 'pi_jb_' || gen_random_uuid(), commission_rate = ${COMMISSION_RATE}, released_at = ${released ? 'now()' : 'NULL'} WHERE id = $1`, [bookingId, status])
 
 /** A lapsed copy of the booking, created after it: the newest row of the request, but not the live one. */
 const newerExpiredCopy = (bookingId: string) =>
@@ -89,7 +89,7 @@ async function seedJob(o: { customer: string; pid: string; sid: string; status: 
       const paid = ['completed', 'cancelled', 'refunded'].includes(b.status)
       await pool.query(
         `INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, paid_at, payment_ref, commission_rate, released_at, completed_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, 'quote', $6, $7, 60, ${paid ? "now(), 'pi_jb_' || gen_random_uuid(), 0.12" : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, ${b.completedDaysAgo != null ? "now() - ($9 || ' days')::interval" : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
+         VALUES ($1, $2, $3, $4, $5, 'quote', $6, $7, 60, ${paid ? `now(), 'pi_jb_' || gen_random_uuid(), ${COMMISSION_RATE}` : 'NULL, NULL, NULL'}, ${b.released ? 'now()' : 'NULL'}, ${b.completedDaysAgo != null ? "now() - ($9 || ' days')::interval" : 'NULL'}, now() + ($8 || ' minutes')::interval)`,
         [o.customer, o.pid, o.sid, quote, id, b.status, start, String(b.minutesLater ?? 0), ...(b.completedDaysAgo != null ? [String(b.completedDaysAgo)] : [])],
       )
     }

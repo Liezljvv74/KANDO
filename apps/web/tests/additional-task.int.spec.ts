@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { randomUUID } from 'node:crypto'
 import { asUser, db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { cancelBooking, clearOutbox, confirmJob, createPayLink, finishJob, handleGatewayEvent, objectNoShow, openDispute, reportNoShow, runDueTimers, stopJob, type GatewayEvent } from '@kando/domain'
+import { cancelBooking, COMMISSION_RATE, commissionFor, clearOutbox, confirmJob, createPayLink, finishJob, handleGatewayEvent, objectNoShow, openDispute, reportNoShow, runDueTimers, stopJob, type GatewayEvent } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
 import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
@@ -218,13 +218,13 @@ it('the child is paid, finished and released on its own clock', async () => {
   await asUser(U.owner, (tx) => finishJob(tx, U.owner, child, {}, now))
   expect((await row(child)).status).toBe('finished')
   expect((await row(root.id)).status).toBe('confirmed')
-  // 7 days later the child alone is paid out: 40 minus 12% commission, nothing refunded
+  // 7 days later the child alone is paid out: 40 minus the commission (the child is created at the current rate), nothing refunded
   await runDueTimers(db, new Date(now.getTime() + 7 * DAY + MIN))
   expect(await row(child)).toMatchObject({ status: 'completed' })
   expect((await row(child)).released_at).not.toBeNull()
   expect(await ledger(child)).toEqual([
-    { kind: 'commission', amount: 4.8 },
-    { kind: 'transfer', amount: 35.2 },
+    { kind: 'commission', amount: commissionFor(40, COMMISSION_RATE) },
+    { kind: 'transfer', amount: 40 - commissionFor(40, COMMISSION_RATE) },
   ])
   expect((await row(root.id)).released_at).toBeNull()
   expect(await ledger(root.id)).toEqual([])
@@ -280,8 +280,8 @@ it('a dispute on the root does not hold up its finished additional task', async 
   expect(await ledger(root.id)).toEqual([])
   expect((await row(child)).status).toBe('completed')
   expect(await ledger(child)).toEqual([
-    { kind: 'commission', amount: 4.8 },
-    { kind: 'transfer', amount: 35.2 },
+    { kind: 'commission', amount: commissionFor(40, COMMISSION_RATE) },
+    { kind: 'transfer', amount: 40 - commissionFor(40, COMMISSION_RATE) },
   ])
 })
 
@@ -353,8 +353,8 @@ it("a root's customer no-show pays its paid additional task to the provider", as
   await runDueTimers(db, new Date(now.getTime() + 48 * HOUR + MIN))
   expect(await row(child)).toMatchObject({ status: 'cancelled', no_show: 'customer' })
   expect(await ledger(child)).toEqual([
-    { kind: 'commission', amount: 4.8 },
-    { kind: 'transfer', amount: 35.2 },
+    { kind: 'commission', amount: commissionFor(40, COMMISSION_RATE) },
+    { kind: 'transfer', amount: 40 - commissionFor(40, COMMISSION_RATE) },
   ])
 })
 

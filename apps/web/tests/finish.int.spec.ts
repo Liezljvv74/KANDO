@@ -81,7 +81,7 @@ it('Finished before the start is 409; after it the 7-day clock starts', async ()
   const done = await finish(U.owner, id, startAt, { materialAmount: 12.5 })
   expect(done).toMatchObject({ status: 'finished', finishedAt: startAt.toISOString(), confirmBy: new Date(startAt.getTime() + 7 * DAY).toISOString() })
   const r = await row(id)
-  expect(r).toMatchObject({ status: 'finished', material_amount: '12.50', confirm_reminders_sent: 0 })
+  expect(r).toMatchObject({ status: 'finished', material_amount: '0.00', confirm_reminders_sent: 0 })
   expect(r.finished_at.getTime()).toBe(startAt.getTime())
   expect(r.confirm_by.getTime()).toBe(startAt.getTime() + 7 * DAY)
   expect(await notes(id)).toEqual([{ user_id: U.cust, kind: 'job-finished' }])
@@ -108,13 +108,10 @@ it('a third person gets 404, the customer cannot finish, the provider cannot con
   expect((await row(id)).status).toBe('finished')
 })
 
-it('a material amount that is negative, above the price or in fractions of cents is 400', async () => {
-  const { id, startAt } = await paidBooking()
-  expect((await call(finishRoute.POST, U.owner, 'POST', { materialAmount: -1 }, { id })).status).toBe(400)
-  expect((await call(finishRoute.POST, U.owner, 'POST', { materialAmount: 1.005 }, { id })).status).toBe(400)
-  expect(await refusal(finish(U.owner, id, startAt, { materialAmount: 100.01 }))).toEqual({ status: 400, body: { error: 'INVALID_MATERIAL_AMOUNT' } })
-  expect((await row(id)).status).toBe('confirmed')
-  expect((await finish(U.owner, id, startAt, { materialAmount: 100 })).status).toBe('finished')
+it('finish with materialAmount from an old build succeeds and stores nothing', async () => {
+  const { id } = await paidBooking()
+  expect((await call(finishRoute.POST, U.owner, 'POST', { materialAmount: 12.5 }, { id })).status).toBe(200)
+  expect(await row(id)).toMatchObject({ status: 'finished', material_amount: '0.00' })
 })
 
 it('reminders after 1, 3 and 6 days, each once', async () => {

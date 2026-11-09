@@ -8,6 +8,7 @@ import type { ProviderDetail } from '@kando/contract'
 import { ApiError } from '@/api/client'
 import { getProvider, getTranslation, photoSrc } from '@/api/providers'
 import { Avatar } from '@/components/avatar'
+import { ScreenBanner } from '@/components/screen-banner'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { getLang, t, useLang, type Key } from '@/i18n'
@@ -58,12 +59,13 @@ export default function ProviderScreen() {
   }
 
   const options = (
-    <Stack.Screen options={{ headerShown: true, title: p?.publicName ?? '', headerTintColor: '#34328A', headerStyle: { backgroundColor: '#E3F6EE' } }} />
+    <Stack.Screen options={{ headerShown: false }} />
   )
   if (!p)
     return (
       <View style={styles.root}>
         {options}
+        <ScreenBanner title="" />
         {error ? <ErrorRetry code={error} onRetry={load} /> : <Loading />}
       </View>
     )
@@ -73,13 +75,14 @@ export default function ProviderScreen() {
   const strengths = [...new Set((p.strengths ?? '').split('\n').map((s) => s.trim()).filter(Boolean))]
   const checkedLine = `${t('provider.checkedDocuments')}: ${(p.checkedDocuments ?? []).map((d) => t(`doc.short.${d}` as Key)).join(', ')}`
   return (
-    <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingBottom: 16 + bottom }]}>
+    <View style={styles.root}>
       {options}
+      <ScreenBanner title={p.publicName} />
+      <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingBottom: 16 + bottom }]}>
       <View style={styles.header}>
         <Avatar name={p.publicName} url={p.photoUrl} size={88} />
         <View style={styles.headerText}>
           <View style={styles.titleRow}>
-            <Text style={styles.name}>{p.publicName}</Text>
             {!p.rating && <Text style={styles.badge}>{ratingBadge(p.rating)}</Text>}
             {!!p.verified && <Text style={styles.badge}>{t('provider.verified')}</Text>}
           </View>
@@ -200,7 +203,8 @@ export default function ProviderScreen() {
       )}
 
       {canRequest && (waitlist ? <NotifyMe slug={slug} watching={!!p.watching} /> : <RequestButton provider={p} />)}
-    </ScrollView>
+      </ScrollView>
+    </View>
   )
 }
 

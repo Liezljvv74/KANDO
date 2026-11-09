@@ -5,6 +5,8 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { ScreenBanner } from '@/components/screen-banner'
+
 import { stopOffering } from '@/api/account'
 import { API_URL, ApiError, updateMe } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
@@ -122,10 +124,10 @@ export default function AccountScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
+      <ScreenBanner title={t('tab.account')} />
       <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
-          <Text style={styles.title}>{t('tab.account')}</Text>
           {user && <Text style={styles.email}>{user.email}</Text>}
           <Button label={t('auth.logOut')} onPress={signOut} />
         </View>

@@ -6,6 +6,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
+import { ScreenBanner } from '@/components/screen-banner'
 import { t } from '@/i18n'
 import { color, font } from '@/theme'
 
@@ -13,10 +14,10 @@ import { color, font } from '@/theme'
 export function FormScreen({ title, children, back = true, scrollRef }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>> }) {
   const router = useRouter()
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
+      <ScreenBanner title={title} />
       <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
-        <Text style={styles.title}>{title}</Text>
         {children}
       </KeyboardAwareScrollView>
     </SafeAreaView>
@@ -124,7 +125,6 @@ export { styles as formStyles }
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 12, gap: 8 },
-  title: { fontSize: 24, fontFamily: font.heading, color: color.indigo },
   card: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.divider, borderRadius: 6, padding: 12, gap: 6 },
   cardList: { borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo },
   cardDone: { backgroundColor: color.divider },

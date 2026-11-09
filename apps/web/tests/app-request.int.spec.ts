@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, pool } from '@kando/db'
 import { appPool } from '@kando/db/src/client'
 import { parseBody, ServiceInputSchema } from '@kando/contract'
-import { AuthUnavailableError, clearOutbox, createAppRequest, finishJob, sendEmail } from '@kando/domain'
+import { AuthUnavailableError, clearOutbox, COMMISSION_RATE, createAppRequest, finishJob, sendEmail } from '@kando/domain'
 import { outboxForTests } from '@kando/domain/src/testing'
 import { t } from '@kando/i18n'
 import { cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
@@ -364,7 +364,7 @@ it('notices of a committed owner step go out when the request then fails', async
   const id = (
     await pool.query(
       `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate)
-       VALUES ('aq-cust', $1, $2, 'direct', 'confirmed', $3, 60, $3::timestamptz - interval '2 days', $3::timestamptz - interval '2 days', 'pi_aq_' || gen_random_uuid(), 0.12) RETURNING id`,
+       VALUES ('aq-cust', $1, $2, 'direct', 'confirmed', $3, 60, $3::timestamptz - interval '2 days', $3::timestamptz - interval '2 days', 'pi_aq_' || gen_random_uuid(), ${COMMISSION_RATE}) RETURNING id`,
       [providerId, service, startAt],
     )
   ).rows[0].id as string

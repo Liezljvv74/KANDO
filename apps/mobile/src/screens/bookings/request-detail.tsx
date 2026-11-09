@@ -25,6 +25,7 @@ import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingActions, BookingSection, BookingStatusLines, bookingTitle, JobCommonButtons } from '@/screens/bookings/booking-detail'
 import { PayPrompt } from '@/screens/bookings/pay-card'
 import { JobHeader } from '@/screens/bookings/job-header'
+import { MoneyBox } from '@/screens/bookings/money-box'
 import { LapsedAsk } from '@/screens/bookings/lapse-banner'
 import { QuoteCard } from '@/screens/bookings/quote-card'
 import { SendQuoteForm } from '@/screens/bookings/send-quote-form'
@@ -167,6 +168,7 @@ export default function RequestDetail() {
         {onBooking && current && <BookingStatusLines view={current} />}
       </Card>
       )}
+      {!isCustomer && b?.money && <MoneyBox booking={b} taskIds={(request.tasks ?? []).map((x) => x.id)} />}
       {onBooking && current && state ? <BookingActions view={current} state={state} onChanged={retry} extra={common} onPayDue={setPayFor} onSheetShown={(y) => scroll.current?.scrollTo({ y: Math.max(0, y - 80), animated: true })} /> : !atBottom && <Actions>{common}</Actions>}
       {isCustomer && !!request.lapsed && <LapsedAsk requestId={request.id} onClosed={retry} />}
       {!atBottom && closeButtons}
