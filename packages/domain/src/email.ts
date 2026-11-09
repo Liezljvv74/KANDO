@@ -114,24 +114,37 @@ export async function sendEmail(args: EmailArgs): Promise<void> {
 }
 
 async function deliverEmail(args: EmailArgs): Promise<void> {
+  try {
+    await transport({ to: args.to, from: FROM, replyTo: REPLY_TO, ...compose(args.lang, args.template, args.params) }, args.template)
+  } catch (e) {
+    console.error(`[email] send failed ${describeError(e)}`)
+  }
+}
+
+/** One Resend call; true when the mail was handed over (or recorded in the test outbox), false on any failure (logged without the recipient or text). */
+export async function transport(mail: Mail, label: string): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    const mail: Mail = { to: args.to, from: FROM, replyTo: REPLY_TO, ...compose(args.lang, args.template, args.params) }
     const key = process.env.RESEND_API_KEY
     if (!key) {
       // Never the recipient or the text in the log; the outbox is for tests only (in production it would only grow).
-      console.log(`[email] not sent (no RESEND_API_KEY): ${args.template}`)
+      console.log(`[email] not sent (no RESEND_API_KEY): ${label}`)
       if (process.env.VITEST || process.env.NODE_ENV === 'test') outbox.push(mail)
-      return
+      return true
     }
     client ??= new Resend(key)
     const timeout = new Promise<'timeout'>((resolve) => (timer = setTimeout(() => resolve('timeout'), EMAIL_TIMEOUT_MS)))
     const result = await Promise.race([client.emails.send({ from: mail.from, to: mail.to, replyTo: mail.replyTo, subject: mail.subject, text: mail.text, html: mail.html }), timeout])
     if (result === 'timeout') console.error('[email] send failed timeout')
     else if (result.error) console.error('[email] send failed', result.error.name)
+    else return true
+    return false
   } catch (e) {
     console.error(`[email] send failed ${describeError(e)}`)
+    return false
   } finally {
     clearTimeout(timer)
   }
 }
+
+export { esc as escapeHtml }

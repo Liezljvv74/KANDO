@@ -119,6 +119,7 @@ Amplivine, [address], Germany. Email: info@skillweb.space. [Data protection offi
 | Technical server logs (IP address, time, requested page) kept by our hosting provider Vercel, and a salted hash of your IP address kept 24 hours to limit translation requests | Operate and secure the service | Art. 6(1)(f) |
 | Camera and photo library access on your phone | Only when you choose to take or pick a picture or document; pictures are uploaded only when you confirm | Your choice; consent in the phone's permission dialog |
 | Provider texts sent to the translation function, and the translations we store | Translate public profile texts when a visitor presses the translate button (see section 4). Stored translations are not linked to your account | Art. 6(1)(f) |
+| Feedback you send from the app: your email address, your message and, if you are signed in, your user id and app language | Read your feedback and answer you | Art. 6(1)(f) legitimate interest in improving the service (and Art. 6(1)(b) where you contact us about your account) |
 
 We do not use advertising, tracking or analytics cookies. We use only what is needed to keep you logged in. [Confirm when the website gets analytics: then add a consent banner.]
 
@@ -146,6 +147,7 @@ Our main servers are in Germany. Some processors may process data in other count
 - Documents you uploaded but did not submit, and notifications: deleted with the account.
 - Technical logs: kept by Vercel for [its retention period, to be confirmed]; the hashed IP address for translation limits: 24 hours.
 - Emails we send are processed by Resend, which keeps them for [period to be confirmed].
+- Feedback emails (your email address and message): kept in our support mailbox (info@skillweb.space) and deleted on request; the message is not stored in our database. To limit how often feedback can be sent we keep a salted hash of your IP address (not the address itself) and, if you are signed in, your user id for 2 days, then delete it. Resend sends the mail for us.
 
 **7. Your rights**
 You may ask for access to your data, correction, deletion, restriction of processing, a copy in a common format (data portability), and you may object to processing based on legitimate interest. Where processing relies on consent you can withdraw it at any time. You can do most of this yourself in the app, under Account: "Export my data" gives you a copy of your data (JSON or CSV) and "Delete my account" erases it, as described under retention. For anything else write to info@skillweb.space; we answer within one month and may ask you to write from your registered email address.
