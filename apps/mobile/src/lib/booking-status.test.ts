@@ -1,7 +1,7 @@
 import { de, en } from '@kando/i18n'
-import type { Booking } from '@kando/contract'
+import { lateCancelFee as lateFee, type Booking } from '@kando/contract'
 
-import { actionLabel, BUTTON_ACTION, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
+import { actionLabel, BUTTON_ACTION, bookingStatusText, cancelStatement, cancelTap, daysLeft, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))

@@ -1,4 +1,4 @@
-import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type Booking, type JobStateDto } from '@kando/contract'
+import { DAY, isLate, lateCancelFee, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, toCents, type Booking, type JobStateDto } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
@@ -24,13 +24,9 @@ export type BookingAction =
 
 const ms = (iso: string | null) => (iso ? new Date(iso).getTime() : NaN)
 const money = (b: Pick<Booking, 'currency'>, cents: number) => formatPrice({ priceType: 'fixed', price: cents / 100, currency: b.currency })
-const cents = (x: number) => Math.round(x * 100)
 
 /** Whole days left until `iso` (a started day counts), never below 0: the confirmation countdown. */
 export const daysLeft = (iso: string, now = new Date()): number => Math.max(0, Math.ceil((ms(iso) - now.getTime()) / DAY))
-
-/** What a late customer cancellation costs: half the price in whole cents, half up (the server's Math.round). */
-export const lateFee = (amount: number): number => Math.round(cents(amount) * LATE_CANCEL_SHARE) / 100
 
 /**
  * The status in plain words for the viewer: the detail line under a problem (no-show, stop, dispute) and an awaiting-time
@@ -44,8 +40,8 @@ export function bookingStatusText(b: Booking, viewer: Viewer): string {
       return t(b.askedDoneAt && viewer === 'customer' ? 'bookingStatus.askedDone' : 'bookingStatus.confirmed')
     case 'stopped':
       if (b.stopAmount === null || !b.stopStatedAt) return t(viewer === 'provider' ? 'bookingStatus.stoppedStateAmount' : 'bookingStatus.stoppedWaitAmount')
-      if (viewer === 'provider') return t('bookingStatus.stopWaitAnswer', { amount: money(b, cents(b.stopAmount)) })
-      return t('bookingStatus.stopAnswerBy', { amount: money(b, cents(b.stopAmount)), date: formatWhen(new Date(ms(b.stopStatedAt) + STOP_ANSWER_DAYS * DAY).toISOString()) })
+      if (viewer === 'provider') return t('bookingStatus.stopWaitAnswer', { amount: money(b, toCents(b.stopAmount)) })
+      return t('bookingStatus.stopAnswerBy', { amount: money(b, toCents(b.stopAmount)), date: formatWhen(new Date(ms(b.stopStatedAt) + STOP_ANSWER_DAYS * DAY).toISOString()) })
     case 'cancelled':
       return t(cancelledKey(b, viewer))
     default:
@@ -92,12 +88,12 @@ export const actionLabel = (a: BookingAction, viewer: Viewer): string => t(a ===
  * provider cancellation refunds the customer fully. A root booking's paid additional tasks are cancelled with it, by the same rule.
  */
 export function cancelStatement(b: Booking, viewer: Viewer, now = new Date()): string {
-  const late = now.getTime() > ms(b.startAt) - FREE_CANCEL_HOURS * HOUR
+  const late = isLate(new Date(b.startAt), now)
   const kids = b.parentBookingId === null ? ` ${t('booking.cancelChildren')}` : ''
   if (viewer === 'provider') return t(late ? 'booking.cancelByProviderLate' : 'booking.cancelByProvider') + kids
   if (!late) return t('booking.cancelFree') + kids
-  const fee = cents(lateFee(b.amount))
-  return t('booking.cancelLate', { percent: LATE_CANCEL_SHARE * 100, fee: money(b, fee), back: money(b, cents(b.amount) - fee) }) + kids
+  const fee = toCents(lateCancelFee(b.amount))
+  return t('booking.cancelLate', { percent: LATE_CANCEL_SHARE * 100, fee: money(b, fee), back: money(b, toCents(b.amount) - fee) }) + kids
 }
 
 /**
@@ -111,6 +107,6 @@ export function cancelTap(shown: string, b: Booking, viewer: Viewer, now = new D
 
 /** The customer's choice after a stop: the stated amount goes to the provider, the rest of the price comes back. */
 export function stopAnswerText(b: Booking): string {
-  const share = cents(b.stopAmount ?? 0)
-  return t('booking.stopAnswerText', { amount: money(b, share), back: money(b, cents(b.amount) - share) })
+  const share = toCents(b.stopAmount ?? 0)
+  return t('booking.stopAnswerText', { amount: money(b, share), back: money(b, toCents(b.amount) - share) })
 }

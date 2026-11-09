@@ -1,6 +1,7 @@
 // COMMISSION_RATE (15% including Stripe's payment fees, provisional, to be reviewed after research; copied to bookings.commission_rate at payment)
 // lives in @kando/contract so the phone shows the same rate; this is still the one place the server reads it from.
-export { COMMISSION_RATE } from '@kando/contract'
+// toCents and commissionFor (the money rounding) live there too.
+export { COMMISSION_RATE, commissionFor, toCents } from '@kando/contract'
 
 /** Real money needs a reviewed code change after the lawyer clears spec section 9: only Stripe test keys are accepted. */
 export const LIVE_PAYMENTS_ALLOWED = false
@@ -51,18 +52,6 @@ export function checkoutExpiry(payBy: Date, now: Date): Date | null {
 }
 
 export const paymentsEnabled = (): boolean => process.env.PAYMENTS_ENABLED === 'true'
-
-/** Integer cents for the gateway. toPrecision(15) drops binary noise (19.99 * 100 = 1998.9999999999998). */
-export function toCents(amount: number): number {
-  if (!Number.isFinite(amount) || amount < 0 || amount > Number.MAX_SAFE_INTEGER / 100) throw new RangeError(`invalid amount ${amount}`)
-  return Math.round(Number((amount * 100).toPrecision(15)))
-}
-
-/** Commission on the amount actually paid out, rounded half up to cents. */
-export function commissionFor(share: number, rate: number): number {
-  if (!(rate >= 0 && rate <= 1)) throw new RangeError(`invalid commission rate ${rate}`)
-  return Math.round(Number((toCents(share) * rate).toPrecision(15))) / 100
-}
 
 export type TransactFacts = { payoutsReadyAt: Date | null; invoiceConsentAt: Date | null; legalStatus: string | null; vatId: string | null; taxNumber: string | null }
 
