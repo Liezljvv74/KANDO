@@ -11,6 +11,7 @@ import { errorText, t } from '@/i18n'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { photoMenu } from '@/lib/photo-menu'
 import { DeniedNotice } from './denied-notice'
+import { color } from '@/theme'
 
 /** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library, and offers Remove when there is a picture. */
 export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | null; name: string; onChanged: () => void }) {
@@ -83,7 +84,7 @@ export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | nul
           accessibilityState={{ busy, disabled: busy }}
           style={styles.edit}
         >
-          {busy ? <ActivityIndicator color="#34328A" /> : <Ionicons name="pencil" size={20} color="#34328A" style={styles.halo} />}
+          {busy ? <ActivityIndicator color={color.indigo} /> : <Ionicons name="pencil" size={20} color={color.indigo} style={styles.halo} />}
         </Pressable>
       </View>
       <ErrorText text={problem} />
@@ -97,5 +98,5 @@ const styles = StyleSheet.create({
   // Half over the photo's edge; no frame, a white halo keeps the pencil readable on any photo.
   // Just below the photo's centre line, on its right edge (photo 72, button 44: its centre sits at 46 of 72).
   edit: { position: 'absolute', right: -14, top: 24, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  halo: { textShadowColor: '#fff', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
+  halo: { textShadowColor: color.surface, textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
 })

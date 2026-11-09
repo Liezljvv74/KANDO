@@ -25,7 +25,7 @@ import { nearBottom } from '@/lib/scroll'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
 import { MessageBubble } from '@/screens/chat/message-bubble'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 
 /** One conversation. Deep link `skilled://threads/<id>` (the new-message notice) lands here. */
 export default function ThreadScreen() {
@@ -168,7 +168,7 @@ export default function ThreadScreen() {
                 onChangeText={setText}
                 placeholder={t('chat.placeholder')}
                 accessibilityLabel={t('chat.placeholder')}
-                placeholderTextColor="#5E5D90"
+                placeholderTextColor={color.placeholder}
                 maxLength={MAX_MESSAGE_CHARS}
                 multiline
                 editable={!busy}
@@ -185,14 +185,14 @@ export default function ThreadScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#E3F6EE', padding: 12 },
+  root: { flex: 1, backgroundColor: color.bg, padding: 12 },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
+  title: { flex: 1, fontSize: 18, fontFamily: font.heading, color: color.ink },
   messages: { paddingVertical: 8, flexGrow: 1 },
-  empty: { textAlign: 'center', color: '#4F4E7D', padding: 24 },
-  blocked: { textAlign: 'center', color: '#4F4E7D', padding: 12, fontSize: 15 },
+  empty: { textAlign: 'center', color: color.inkMuted, padding: 24 },
+  blocked: { textAlign: 'center', color: color.inkMuted, padding: 12, fontSize: 15 },
   composer: { gap: 8, paddingTop: 8 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: '#CFE6DC', borderRadius: 4, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#1D1C4A' },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: color.divider, borderRadius: 4, backgroundColor: color.surface, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: color.ink },
 })

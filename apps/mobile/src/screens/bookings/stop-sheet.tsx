@@ -10,9 +10,9 @@ import { t } from '@/i18n'
 import { parseAmountOrZero } from '@/lib/amount'
 import { stopAnswerText } from '@/lib/booking-status'
 import { confirmDanger } from '@/lib/confirm'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 
-const price = (b: Booking, amount: number) => formatPrice({ priceType: 'fixed', price: amount, currency: b.currency })
+const price = (b: Booking, amount: number) => formatAmount(amount, b.currency)
 
 /** After a stop the provider states what was earned (once, final); the customer agrees (payment) or disagrees (our team decides). */
 export function StopSheet({ booking, mode, onDone }: { booking: Booking; mode: 'state' | 'answer'; onDone: () => void }) {

@@ -7,11 +7,11 @@ import { ScreenBanner } from '@/components/screen-banner'
 import { Button } from '@/components/auth-ui'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang, type Key } from '@/i18n'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 
 const GROUPS: { title: Key; steps: [Key, Key, Key]; bg: string }[] = [
-  { title: 'home.customerTitle', steps: ['home.customer1', 'home.customer2', 'home.customer3'], bg: '#CFE6DC' },
-  { title: 'home.providerTitle', steps: ['home.provider1', 'home.provider2', 'home.provider3'], bg: '#FFFFFF' },
+  { title: 'home.customerTitle', steps: ['home.customer1', 'home.customer2', 'home.customer3'], bg: color.divider },
+  { title: 'home.providerTitle', steps: ['home.provider1', 'home.provider2', 'home.provider3'], bg: color.surface },
 ]
 const SAFETY: [Key, Key][] = [
   ['home.payment', 'howto.paymentText'],
@@ -55,13 +55,13 @@ export default function HowItWorksScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#E3F6EE' },
+  root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 16, gap: 16 },
-  link: { fontSize: 15, fontWeight: '600', color: '#34328A' },
-  title: { fontSize: 28, fontFamily: font.heading, color: '#1D1C4A' },
+  link: { fontSize: 15, fontWeight: '600', color: color.indigo },
+  title: { fontSize: 28, fontFamily: font.heading, color: color.ink },
   box: { borderRadius: 6, padding: 16, gap: 8 },
-  boxTitle: { fontSize: 17, fontFamily: font.heading, color: '#1D1C4A' },
-  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
-  sub: { fontSize: 22, fontFamily: font.heading, color: '#1D1C4A', marginTop: 8 },
+  boxTitle: { fontSize: 17, fontFamily: font.heading, color: color.ink },
+  text: { fontSize: 15, lineHeight: 21, color: color.ink },
+  sub: { fontSize: 22, fontFamily: font.heading, color: color.ink, marginTop: 8 },
   safe: { gap: 4 },
 })

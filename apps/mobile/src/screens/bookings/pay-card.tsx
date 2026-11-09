@@ -8,11 +8,12 @@ import { payBooking } from '@/api/payments'
 import { Button, ErrorText, LinkText } from '@/components/auth-ui'
 import { Card, SmallButton } from '@/components/form-ui'
 import { errorText, t } from '@/i18n'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 import type { Viewer } from '@/lib/booking-status'
 import { useMe } from '@/hooks/use-me'
 import { paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { isHttps } from '@/lib/safe-url'
+import { color } from '@/theme'
 
 /**
  * The pay area of a booking. "Pay now" opens the Stripe page in the in-app browser; the server's state (jobState) decides what
@@ -78,7 +79,7 @@ export function PayPrompt({ booking, onClose, onRefresh }: { booking: Booking; o
       <View style={styles.backdrop}>
         <View style={styles.box}>
           <Text style={styles.text}>{t('booking.payPromptNote')}</Text>
-          {paymentsOff(me) ? <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text> : <Button label={t('booking.payAmount', { amount: formatPrice({ priceType: 'fixed', price: booking.amount, currency: booking.currency }) })} onPress={pay} busy={busy} />}
+          {paymentsOff(me) ? <Text style={styles.text}>{errorText('PAYMENTS_OFF')}</Text> : <Button label={t('booking.payAmount', { amount: formatAmount(booking.amount, booking.currency) })} onPress={pay} busy={busy} />}
           <ErrorText text={problem} />
           <LinkText label={t('booking.payNotNow')} onPress={onClose} />
         </View>
@@ -88,7 +89,7 @@ export function PayPrompt({ booking, onClose, onRefresh }: { booking: Booking; o
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, color: '#1D1C4A' },
+  text: { fontSize: 16, color: color.ink },
   backdrop: { flex: 1, backgroundColor: 'rgba(29,28,74,0.5)', justifyContent: 'center', padding: 24 },
-  box: { backgroundColor: '#fff', borderRadius: 8, padding: 20, gap: 14 },
+  box: { backgroundColor: color.surface, borderRadius: 8, padding: 20, gap: 14 },
 })

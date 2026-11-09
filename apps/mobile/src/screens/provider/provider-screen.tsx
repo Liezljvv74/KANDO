@@ -15,7 +15,7 @@ import { getLang, t, useLang, type Key } from '@/i18n'
 import { formatPrice, ratingBadge } from '@/lib/format'
 import { applyTexts } from '@/lib/translation'
 import { notifyOnly } from '@/lib/request-target'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 import { NotifyMe } from '@/screens/provider/notify-me'
 import { RequestButton, useCanRequest } from '@/screens/provider/request-actions'
 
@@ -104,7 +104,7 @@ export default function ProviderScreen() {
         p.translatable && (
           <View style={styles.translateBox}>
             <Pressable accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={translate} style={styles.translate}>
-              {busy ? <ActivityIndicator color="#34328A" accessibilityLabel={t('provider.translate')} /> : <Text style={styles.translateLabel}>{t('provider.translate')}</Text>}
+              {busy ? <ActivityIndicator color={color.indigo} accessibilityLabel={t('provider.translate')} /> : <Text style={styles.translateLabel}>{t('provider.translate')}</Text>}
             </Pressable>
             {translateError && (
               <Text style={styles.small} accessibilityRole="alert">
@@ -218,27 +218,27 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 )
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#E3F6EE' },
+  root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 16, gap: 12 },
   header: { flexDirection: 'row', gap: 16, alignItems: 'center' },
   headerText: { flex: 1, gap: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  name: { fontSize: 26, fontFamily: font.display, color: '#1D1C4A' },
-  badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#34328A', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-  text: { fontSize: 16, lineHeight: 22, color: '#1D1C4A' },
-  small: { fontSize: 14, lineHeight: 20, color: '#1D1C4A' },
+  name: { fontSize: 26, fontFamily: font.display, color: color.ink },
+  badge: { fontSize: 12, fontWeight: '700', color: color.surface, backgroundColor: color.indigo, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  text: { fontSize: 16, lineHeight: 22, color: color.ink },
+  small: { fontSize: 14, lineHeight: 20, color: color.ink },
   translateBox: { gap: 4, alignItems: 'flex-start' },
-  translate: { minHeight: 44, minWidth: 44, borderRadius: 4, borderWidth: 1, borderColor: '#34328A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  translateLabel: { color: '#34328A', fontSize: 14, fontWeight: '700' },
+  translate: { minHeight: 44, minWidth: 44, borderRadius: 4, borderWidth: 1, borderColor: color.indigo, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  translateLabel: { color: color.indigo, fontSize: 14, fontWeight: '700' },
   section: { gap: 8 },
-  h2: { fontSize: 20, fontFamily: font.heading, color: '#34328A' },
+  h2: { fontSize: 20, fontFamily: font.heading, color: color.indigo },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tag: { fontSize: 14, color: '#1D1C4A', backgroundColor: '#fff', borderWidth: 1, borderColor: '#7B7AB8', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 },
-  service: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, backgroundColor: '#fff', borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: '#34328A', padding: 12 },
+  tag: { fontSize: 14, color: color.ink, backgroundColor: color.surface, borderWidth: 1, borderColor: color.border, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 },
+  service: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, backgroundColor: color.surface, borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo, padding: 12 },
   serviceText: { flex: 1, gap: 2 },
-  serviceTitle: { fontSize: 16, fontWeight: '600', color: '#1D1C4A' },
-  price: { fontSize: 16, fontFamily: font.tag, color: '#34328A', textAlign: 'right', flexShrink: 0 },
-  reference: { backgroundColor: '#fff', borderWidth: 2, borderStyle: 'dashed', borderColor: '#34328A', borderRadius: 6, padding: 12, gap: 2 },
+  serviceTitle: { fontSize: 16, fontWeight: '600', color: color.ink },
+  price: { fontSize: 16, fontFamily: font.tag, color: color.indigo, textAlign: 'right', flexShrink: 0 },
+  reference: { backgroundColor: color.surface, borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo, borderRadius: 6, padding: 12, gap: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  gridImage: { width: '31%', aspectRatio: 1, borderRadius: 6, backgroundColor: '#7B7AB8' },
+  gridImage: { width: '31%', aspectRatio: 1, borderRadius: 6, backgroundColor: color.border },
 })

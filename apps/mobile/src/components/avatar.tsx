@@ -2,6 +2,7 @@ import { Image, StyleSheet, Text, View } from 'react-native'
 
 import { photoSrc } from '@/api/providers'
 import { initials } from '@/lib/format'
+import { color } from '@/theme'
 
 export function Avatar({ name, url, size = 56 }: { name: string; url: string | null; size?: number }) {
   const box = { width: size, height: size, borderRadius: size / 2 }
@@ -16,7 +17,7 @@ export function Avatar({ name, url, size = 56 }: { name: string; url: string | n
 }
 
 const styles = StyleSheet.create({
-  photo: { backgroundColor: '#7B7AB8' },
-  fallback: { backgroundColor: '#7B7AB8', alignItems: 'center', justifyContent: 'center' },
-  initials: { fontWeight: '700', color: '#34328A' },
+  photo: { backgroundColor: color.border },
+  fallback: { backgroundColor: color.border, alignItems: 'center', justifyContent: 'center' },
+  initials: { fontWeight: '700', color: color.indigo },
 })

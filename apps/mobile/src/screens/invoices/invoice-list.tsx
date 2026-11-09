@@ -11,10 +11,11 @@ import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang } from '@/i18n'
 import { formatDay } from '@/lib/booking-time'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 import { invoiceForBooking, openPdf } from '@/lib/invoices'
+import { color } from '@/theme'
 
-export const money = (total: number, currency: string) => formatPrice({ priceType: 'fixed', price: total, currency })
+export const money = (total: number, currency: string) => formatAmount(total, currency)
 
 /** Opens one PDF in the in-app browser; `problem` is the text to show when it fails. */
 export function usePdf() {
@@ -104,7 +105,7 @@ export function BookingInvoiceRow({ booking }: { booking: Pick<Booking, 'id' | '
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, fontWeight: '600', color: '#1D1C4A' },
-  small: { fontSize: 14, color: '#4F4E7D' },
+  text: { fontSize: 16, fontWeight: '600', color: color.ink },
+  small: { fontSize: 14, color: color.inkMuted },
   pressed: { opacity: 0.6 },
 })

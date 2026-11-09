@@ -75,7 +75,7 @@ export const SmallButton = ({
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
     style={({ pressed }) => [styles.small, grow && styles.smallGrow, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, !!badge && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={solid ? (danger ? '#fff' : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? '#fff' : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>}
+    {busy ? <ActivityIndicator color={solid ? (danger ? color.surface : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? color.surface : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>}
   </Pressable>
 )
 

@@ -17,7 +17,7 @@ import { t, useLang, type Key } from '@/i18n'
 import { color, font } from '@/theme'
 import { requestStateCtx, stateText } from '@/lib/job-state-text'
 import { formatWhen } from '@/lib/booking-time'
-import { isJobPageNotice } from '@/lib/correspondence'
+import { isJobPageNotice } from '@/lib/job-notices'
 import { go } from '@/lib/go'
 import { confirmDanger } from '@/lib/confirm'
 import { placeText } from '@/lib/place'
@@ -218,8 +218,8 @@ export default function RequestDetail() {
 }
 
 const styles = StyleSheet.create({
-  status: { fontSize: 18, fontFamily: font.heading, color: '#34328A' },
-  text: { fontSize: 16, color: '#1D1C4A' },
-  small: { fontSize: 14, color: '#4F4E7D' },
+  status: { fontSize: 18, fontFamily: font.heading, color: color.indigo },
+  text: { fontSize: 16, color: color.ink },
+  small: { fontSize: 14, color: color.inkMuted },
   section: { gap: 8 },
 })

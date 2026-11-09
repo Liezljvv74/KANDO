@@ -11,6 +11,7 @@ import { SmallButton } from '@/components/form-ui'
 import { errorText, t } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
 import { CardBubble } from '@/screens/chat/card-bubble'
+import { color } from '@/theme'
 
 /** "Report message" under a message of the other side: opens a reason box here (Alert.prompt exists on iOS only). */
 function Report({ id }: { id: string }) {
@@ -65,10 +66,10 @@ const styles = StyleSheet.create({
   mine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   theirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   bubble: { borderRadius: 6, padding: 10, gap: 4 },
-  bubbleMine: { backgroundColor: '#CFE6DC' },
-  bubbleTheirs: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CFE6DC' },
-  photo: { width: 200, height: 200, borderRadius: 6, backgroundColor: '#7B7AB8' },
-  text: { fontSize: 16, color: '#1D1C4A' },
-  small: { fontSize: 12, color: '#4F4E7D' },
+  bubbleMine: { backgroundColor: color.divider },
+  bubbleTheirs: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.divider },
+  photo: { width: 200, height: 200, borderRadius: 6, backgroundColor: color.border },
+  text: { fontSize: 16, color: color.ink },
+  small: { fontSize: 12, color: color.inkMuted },
   report: { alignSelf: 'stretch', minWidth: 260, gap: 8 },
 })

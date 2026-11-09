@@ -13,6 +13,7 @@ import { t } from '@/i18n'
 import { confirmDanger } from '@/lib/confirm'
 import { goReplace } from '@/lib/go'
 import { closeSummary, lapseKey, lapsedQuoteOf } from '@/lib/lapse'
+import { color } from '@/theme'
 
 /**
  * A booking lapsed (its payment time passed, or the time was never agreed) and its quote is open again: says what lapsed and asks
@@ -47,5 +48,5 @@ export function LapsedAsk({ requestId, onClosed }: { requestId: string; onClosed
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 16, color: '#1D1C4A' },
+  text: { fontSize: 16, color: color.ink },
 })

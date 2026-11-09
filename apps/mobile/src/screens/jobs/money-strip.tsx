@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { getProviderMoney } from '@/api/money'
 import { useLoad } from '@/hooks/use-load'
 import { t, useLang, type Key } from '@/i18n'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
+import { color } from '@/theme'
 
 const KEYS = ['money.strip.received', 'money.strip.onItsWay', 'money.strip.onHold'] as const
 
@@ -25,7 +26,7 @@ export function MoneyStrip() {
         {cells.map(([key, amount]) => (
           <View key={key} style={styles.cell}>
             <View style={styles.labelRow}>
-              <Text style={styles.amount}>{formatPrice({ priceType: 'fixed', price: amount, currency: 'EUR' })}</Text>
+              <Text style={styles.amount}>{formatAmount(amount, 'EUR')}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel={`${t(key)}: ${t('money.info.open')}`} accessibilityState={{ expanded: info === key }} hitSlop={8} onPress={() => setInfo(info === key ? null : key)}>
                 <Text style={styles.i}>(i)</Text>
               </Pressable>
@@ -44,9 +45,9 @@ const styles = StyleSheet.create({
   box: { gap: 4 },
   row: { flexDirection: 'row', gap: 8 },
   cell: { flex: 1, gap: 2 },
-  amount: { fontSize: 16, fontWeight: '700', color: '#1D1C4A' },
-  small: { fontSize: 12, color: '#4F4E7D' },
+  amount: { fontSize: 16, fontWeight: '700', color: color.ink },
+  small: { fontSize: 12, color: color.inkMuted },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
-  i: { fontSize: 12, fontWeight: '700', color: '#34328A' },
-  explain: { fontSize: 13, color: '#1D1C4A', backgroundColor: '#fff', borderRadius: 4, padding: 8 },
+  i: { fontSize: 12, fontWeight: '700', color: color.indigo },
+  explain: { fontSize: 13, color: color.ink, backgroundColor: color.surface, borderRadius: 4, padding: 8 },
 })
