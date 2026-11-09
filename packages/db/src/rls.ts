@@ -92,7 +92,7 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
   // Rows are created on the owner connection; the app only sets seen_at and dismissed_at.
   notifications: ['kind', 'payload', 'user_id'],
   documents: ['status', 'note', 'reviewed_by', 'reviewed_at', 'image_deleted_at'],
-  // Money and payment: the price comes from the quote or service (bookings_fill_amount), the rest from the payment code.
+  // Money and payment: the price comes from the quote (bookings_fill_amount), the rest from the payment code.
   // The app role still reads them; no DTO carries commission_rate or the gateway references.
   // The endings (plan 2d) likewise: finishing, cancelling, stopping and disputing run on the owner connection after the
   // domain checked the caller.
@@ -100,7 +100,7 @@ export const COLUMN_STAFF_ONLY: Record<string, string[]> = {
     'amount', 'currency', 'commission_rate', 'paid_at', 'payment_ref', 'checkout_ref', 'released_at',
     'parent_booking_id', 'finished_at', 'confirm_by', 'confirm_reminders_sent', 'asked_done_at', 'completed_at', 'cancelled_at',
     'cancelled_by', 'late_cancel', 'no_show', 'no_show_reported_at', 'stopped_at', 'stopped_by', 'stop_amount', 'stop_note',
-    'stop_stated_at', 'material_amount', 'time_proposed_by', 'time_proposed_start_at', 'time_proposed_duration_min', 'time_proposed_on_site', 'time_answer_by',
+    'stop_stated_at', 'time_proposed_by', 'time_proposed_start_at', 'time_proposed_duration_min', 'time_proposed_on_site', 'time_answer_by',
   ],
   // Numbered by the database (sequence default); never written by the app.
   requests: ['job_number'],
@@ -431,7 +431,7 @@ const BUSY_FUNCTIONS = [
 
 // Booking guards, for every writer (the owner connection included unless said otherwise). Invoker rights: the inserting
 // customer reads the quote and service under RLS, so a quote or service they cannot see counts as foreign.
-// bookings_fill_amount, on insert: the price is the quote's, else the service's (an app insert cannot name amount or currency
+// bookings_fill_amount, on insert: a quote is required and the price is the quote's (an app insert cannot name amount or currency
 // at all); the quote must be the booking provider's, on a request of the booking's customer; the service must be the
 // provider's; request_id is the quote's request (whatever was supplied). On update quote_id and service_id are frozen:
 // only unchanged or NULL (an ON DELETE SET NULL cascade) passes.
@@ -442,26 +442,23 @@ const APP_STATUS_MOVE_CASES = Object.entries(APP_STATUS_MOVES)
   .join('\n        ')
 const BOOKING_TRIGGERS = [
   `CREATE OR REPLACE FUNCTION bookings_fill_amount() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
-    DECLARE q_amount numeric; q_currency text; q_request uuid; s_price numeric; s_currency text;
+    DECLARE q_amount numeric; q_currency text; q_request uuid;
     BEGIN
       IF TG_OP = 'UPDATE' THEN
         IF NEW.quote_id IS NOT NULL AND NEW.quote_id IS DISTINCT FROM OLD.quote_id THEN RAISE EXCEPTION 'quote_id cannot be changed'; END IF;
         IF NEW.service_id IS NOT NULL AND NEW.service_id IS DISTINCT FROM OLD.service_id THEN RAISE EXCEPTION 'service_id cannot be changed'; END IF;
         RETURN NEW;
       END IF;
-      IF NEW.service_id IS NOT NULL THEN
-        SELECT price, currency INTO s_price, s_currency FROM services WHERE id = NEW.service_id AND provider_id = NEW.provider_id;
-        IF NOT FOUND THEN RAISE EXCEPTION 'bookings: service % does not belong to the provider', NEW.service_id; END IF;
+      IF NEW.service_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM services WHERE id = NEW.service_id AND provider_id = NEW.provider_id) THEN
+        RAISE EXCEPTION 'bookings: service % does not belong to the provider', NEW.service_id;
       END IF;
-      IF NEW.quote_id IS NOT NULL THEN
-        SELECT q.amount, q.currency, q.request_id INTO q_amount, q_currency, q_request FROM quotes q JOIN requests r ON r.id = q.request_id
-          WHERE q.id = NEW.quote_id AND q.provider_id = NEW.provider_id AND r.customer_id = NEW.customer_id;
-        IF NOT FOUND THEN RAISE EXCEPTION 'bookings: quote % does not belong to this customer and provider', NEW.quote_id; END IF;
-      END IF;
+      IF NEW.quote_id IS NULL THEN RAISE EXCEPTION 'bookings: a booking is made from a quote'; END IF;
+      SELECT q.amount, q.currency, q.request_id INTO q_amount, q_currency, q_request FROM quotes q JOIN requests r ON r.id = q.request_id
+        WHERE q.id = NEW.quote_id AND q.provider_id = NEW.provider_id AND r.customer_id = NEW.customer_id;
+      IF NOT FOUND THEN RAISE EXCEPTION 'bookings: quote % does not belong to this customer and provider', NEW.quote_id; END IF;
       NEW.request_id := q_request;
-      IF q_amount IS NOT NULL THEN NEW.amount := q_amount; NEW.currency := q_currency;
-      ELSIF s_price IS NOT NULL THEN NEW.amount := s_price; NEW.currency := s_currency;
-      END IF;
+      NEW.amount := q_amount;
+      NEW.currency := q_currency;
       RETURN NEW;
     END $$`,
   `DROP TRIGGER IF EXISTS bookings_fill_amount ON bookings`,

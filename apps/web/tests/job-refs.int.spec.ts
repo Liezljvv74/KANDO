@@ -115,26 +115,7 @@ it('GET /requests/:id carries the job page fields: the other party for each side
   const asOwner = RequestSchema.parse(await (await call(requestRoute.GET, U.owner, 'GET', undefined, { id: root.requestId! })).json())
   expect(asOwner).toMatchObject({ otherParty: 'Clara K.', currentBookingId: root.id })
   // an older dead booking stays listed; the live one is current
-  const old = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, source, status, start_at, duration_min, amount, currency, on_site, created_at) SELECT customer_id, provider_id, service_id, quote_id, request_id, source, 'expired', start_at, duration_min, amount, currency, on_site, created_at - interval '1 day' FROM bookings WHERE id = $1 RETURNING id", [root.id])).rows[0].id
+  const old = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, quote_id, request_id, status, start_at, duration_min, amount, currency, on_site, created_at) SELECT customer_id, provider_id, service_id, quote_id, request_id, 'expired', start_at, duration_min, amount, currency, on_site, created_at - interval '1 day' FROM bookings WHERE id = $1 RETURNING id", [root.id])).rows[0].id
   const again = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: root.requestId! })).json())
   expect(again).toMatchObject({ bookingIds: [old, root.id], currentBookingId: root.id })
-})
-
-it('an additional task whose root booking has no request shows no job refs (not its own unused number)', async () => {
-  const { jobsForNotices } = await import('@kando/domain')
-  const { db } = await import('@kando/db')
-  const root = await paidJob(U.owner, providerId)
-  const r = RequestSchema.parse(await (await call(startRoute.POST, U.cust, 'POST', { description: 'Noch etwas' }, { id: root.id })).json())
-  const c = await pool.connect() // as a direct booking: the guard trigger forbids the change, so it is off for this one statement
-  try {
-    await c.query('BEGIN')
-    await c.query("SET LOCAL session_replication_role = 'replica'")
-    await c.query('UPDATE bookings SET request_id = NULL WHERE id = $1', [root.id])
-    await c.query('COMMIT')
-  } finally {
-    c.release()
-  }
-  const got = RequestSchema.parse(await (await call(requestRoute.GET, U.cust, 'GET', undefined, { id: r.id })).json())
-  expect(got.jobNumber).toBeUndefined()
-  expect(await jobsForNotices(db as never, U.cust, [{ requestId: r.id }])).toEqual([null])
 })

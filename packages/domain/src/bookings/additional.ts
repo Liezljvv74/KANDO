@@ -96,8 +96,8 @@ export async function acceptAdditional(quote: typeof quotes.$inferSelect, req: t
         customerId: p.customerId,
         providerId: p.providerId,
         quoteId: quote.id,
+        requestId: req.id, // the trigger sets the same from the quote
         parentBookingId: p.id,
-        source: 'quote',
         status: 'awaiting-payment',
         startAt: p.startAt,
         durationMin: p.durationMin,

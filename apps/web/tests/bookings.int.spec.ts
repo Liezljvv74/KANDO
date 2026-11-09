@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { pool } from '@kando/db'
 import { BookingSchema, BookingViewSchema, QuoteSchema, RequestSchema } from '@kando/contract'
-import { requestTime, call, cleanupUsers, makeAwaitingPayment, seedBase, seedProvider, seedUser, relaxLimits } from './helpers'
+import { requestTime, call, cleanupUsers, makeAwaitingPayment, seedBase, seedBooking, seedProvider, seedUser, relaxLimits } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const bookingOne = await import('../app/app-api/v1/bookings/[id]/route')
@@ -42,7 +42,7 @@ const seen = async (uid: string, id: string) => {
 
 it('a booking from the request flow: amount from the quote, payBy set, listed for both parties and not for a stranger', async () => {
   const b = await made(day(nextDay++), U.cust, { amount: 120 })
-  expect(b).toMatchObject({ status: 'awaiting-payment', source: 'quote', customerId: U.cust, providerId: pOwner, amount: 120, currency: 'EUR', onSite: true, answerBy: null, address: { postcode: '10115' } })
+  expect(b).toMatchObject({ status: 'awaiting-payment', customerId: U.cust, providerId: pOwner, amount: 120, currency: 'EUR', onSite: true, answerBy: null, address: { postcode: '10115' } })
   expect(b.payBy).not.toBeNull()
   expect((await seen(U.cust, b.id))?.id).toBe(b.id)
   expect((await seen(U.owner, b.id))?.id).toBe(b.id)
@@ -110,7 +110,7 @@ it('the customer withdraws a quote-born booking: the whole job is closed (bookin
 it('withdrawing an additional task leaves the root job alone', async () => {
   const root = await made()
   await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [root.id])
-  const kid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, parent_booking_id, pay_by, accepted_at) SELECT customer_id, provider_id, service_id, 'direct', 'awaiting-payment', start_at, 60, 5, id, now() + interval '1 day', now() FROM bookings WHERE id = $1 RETURNING id", [root.id])).rows[0].id
+  const kid = await seedBooking({ customerId: root.customerId, providerId: root.providerId, amount: 5, cols: { service_id: root.serviceId, status: 'awaiting-payment', start_at: new Date(root.startAt), parent_booking_id: root.id, pay_by: new Date(Date.now() + 86_400_000), accepted_at: new Date() } })
   expect((await withdrawing(kid, U.cust)).status).toBe(200)
   expect((await row(kid)).status).toBe('withdrawn')
   expect((await row(root.id)).status).toBe('completed')
@@ -130,7 +130,7 @@ it('GET /bookings/{id} answers each party with viewer and threadId, a stranger 4
   expect((await one(U.cust, 'not-a-uuid')).status).toBe(404)
   // an additional task talks in its root's thread
   await pool.query("UPDATE bookings SET status = 'completed' WHERE id = $1", [b.id])
-  const kid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, amount, parent_booking_id) SELECT customer_id, provider_id, service_id, 'direct', 'declined', start_at, 60, 5, id FROM bookings WHERE id = $1 RETURNING id", [b.id])).rows[0].id
+  const kid = await seedBooking({ customerId: b.customerId, providerId: b.providerId, amount: 5, cols: { service_id: b.serviceId, status: 'declined', start_at: new Date(b.startAt), parent_booking_id: b.id } })
   expect((await one(U.owner, kid)).body).toMatchObject({ viewer: 'provider', threadId, booking: { parentBookingId: b.id } })
   // no writes: an unpaid booking past its deadline reads expired but stays awaiting-payment in the row, and a missing thread is not created
   const late = await made()

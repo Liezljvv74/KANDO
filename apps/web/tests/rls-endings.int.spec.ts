@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { asUser, COLUMN_STAFF_ONLY, db, OWNER_ONLY_BOOKING_STATUSES, pool } from '@kando/db'
 import { deleteAccount, MONEY_OPEN_STATUSES, slotIsHeld } from '@kando/domain'
-import { cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 
 const U = { cust: 're-cust', other: 're-other', owner: 're-owner', owner2: 're-owner2', gone: 're-gone' }
 let providerId: string
@@ -21,17 +21,13 @@ const rows = async (uid: string | null, q: ReturnType<typeof sql>) => (await run
 /** A booking written on the owner connection (as the payment code and the endings leave it). */
 async function booking(o: { status?: string; customer?: string; provider?: string; startHours?: number; extra?: Record<string, unknown> } = {}): Promise<string> {
   const p = o.provider ?? providerId
-  const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
-  const extra = Object.entries(o.extra ?? {})
-  const cols = extra.map(([c]) => `, ${c}`).join('')
-  const vals = extra.map((_, i) => `, $${i + 6}`).join('')
-  return (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min${cols})
-       VALUES ($1, $2, $3, 'direct', $4, now() + make_interval(hours => $5), 60${vals}) RETURNING id`,
-      [o.customer ?? U.cust, p, service, o.status ?? 'confirmed', o.startHours ?? 72, ...extra.map(([, v]) => v)],
-    )
-  ).rows[0].id
+  const service = (await pool.query('SELECT id, price FROM services WHERE provider_id = $1', [p])).rows[0]
+  return seedBooking({
+    customerId: o.customer ?? U.cust,
+    providerId: p,
+    amount: Number(service.price),
+    cols: { service_id: service.id, status: o.status ?? 'confirmed', start_at: new Date(Date.now() + (o.startHours ?? 72) * 3_600_000), ...o.extra },
+  })
 }
 
 beforeAll(async () => {
@@ -105,7 +101,7 @@ it('app_user cannot set completed, cancelled or refunded', async () => {
   const waiting = await booking({ status: 'awaiting-time' })
   for (const to of ending) {
     // not on insert, not by moving a booking in, by either party
-    await expect(run(U.cust, sql`INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES (${U.cust}, ${providerId}, ${serviceId}, 'direct', ${to}, now() + interval '3 days', 60)`)).rejects.toMatchObject(denied)
+    await expect(run(U.cust, sql`INSERT INTO bookings (customer_id, provider_id, service_id, status, start_at, duration_min) VALUES (${U.cust}, ${providerId}, ${serviceId}, ${to}, now() + interval '3 days', 60)`)).rejects.toMatchObject(denied)
     for (const uid of [U.cust, U.owner]) {
       await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${waiting}`)).rejects.toMatchObject(ownerOnly)
       await expect(run(uid, sql`UPDATE bookings SET status = ${to} WHERE id = ${rootId}`)).rejects.toMatchObject(ownerOnly)
@@ -144,17 +140,16 @@ const NEW_COLUMNS: [string, string][] = [
   ['stop_amount', '1'],
   ['stop_note', "'x'"],
   ['stop_stated_at', 'now()'],
-  ['material_amount', '1'],
 ]
 
 it('the new booking columns cannot be set by app_user on insert or update', async () => {
   for (const [c] of NEW_COLUMNS) expect(COLUMN_STAFF_ONLY.bookings, c).toContain(c)
   for (const [c, v] of NEW_COLUMNS) {
-    await expect(run(U.cust, sql.raw(`INSERT INTO bookings (customer_id, provider_id, service_id, source, start_at, duration_min, ${c}) VALUES ('${U.cust}', '${providerId}', '${serviceId}', 'direct', now() + interval '3 days', 60, ${v})`))).rejects.toMatchObject(denied)
+    await expect(run(U.cust, sql.raw(`INSERT INTO bookings (customer_id, provider_id, service_id, start_at, duration_min, ${c}) VALUES ('${U.cust}', '${providerId}', '${serviceId}', now() + interval '3 days', 60, ${v})`))).rejects.toMatchObject(denied)
     for (const uid of [U.cust, U.owner]) await expect(run(uid, sql.raw(`UPDATE bookings SET ${c} = ${v} WHERE id = '${rootId}'`))).rejects.toMatchObject(denied)
   }
   // safe defaults for rows written without them
-  expect((await pool.query('SELECT confirm_reminders_sent, late_cancel, material_amount, parent_booking_id FROM bookings WHERE id = $1', [rootId])).rows).toEqual([{ confirm_reminders_sent: 0, late_cancel: false, material_amount: '0.00', parent_booking_id: null }])
+  expect((await pool.query('SELECT confirm_reminders_sent, late_cancel, parent_booking_id FROM bookings WHERE id = $1', [rootId])).rows).toEqual([{ confirm_reminders_sent: 0, late_cancel: false, parent_booking_id: null }])
   // the who-columns are fixed lists
   await expect(pool.query("UPDATE bookings SET cancelled_by = 'staff' WHERE id = $1", [rootId])).rejects.toThrow(/bookings_cancelled_by_check/)
   await expect(pool.query("UPDATE bookings SET no_show = 'both' WHERE id = $1", [rootId])).rejects.toThrow(/bookings_no_show_check/)
@@ -175,7 +170,7 @@ it('parentBookingId: a forged parent, another pair, an unpaid or nested parent i
   const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 30, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [req, providerId])).rows[0].id
   const child = (o: { parent: string | null; customer?: string }) =>
     pool.query(
-      "INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', now() + interval '3 days', 60, $4, now() + interval '2 days', now()) RETURNING id, amount, request_id",
+      "INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at) VALUES ($1, $2, $3, 'awaiting-payment', now() + interval '3 days', 60, $4, now() + interval '2 days', now()) RETURNING id, amount, request_id",
       [o.customer ?? U.cust, providerId, quote, o.parent],
     )
   await expect(child({ parent: null })).rejects.toThrow(/parent booking/) // a quote of an additional-task request makes an additional task
@@ -184,7 +179,7 @@ it('parentBookingId: a forged parent, another pair, an unpaid or nested parent i
   const made = (await child({ parent: rootId })).rows[0]
   expect(made).toMatchObject({ amount: '30.00', request_id: req }) // the price still comes from the quote
   await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [made.id])
-  await expect(pool.query("INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, parent_booking_id) VALUES ($1, $2, $3, 'direct', 'confirmed', now() + interval '3 days', 60, $4)", [U.cust, providerId, serviceId, made.id])).rejects.toThrow(/parent booking/) // no additional task of an additional task
+  await expect(pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, service_id, status, start_at, duration_min, parent_booking_id) VALUES ($1, $2, $3, $4, 'confirmed', now() + interval '3 days', 60, $5)", [U.cust, providerId, quote, serviceId, made.id])).rejects.toThrow(/parent booking/) // no additional task of an additional task
   await expect(run(U.cust, sql`INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES (${U.cust}, ${providerId}, 'x', now() + interval '3 days', ${made.id})`)).rejects.toMatchObject(foreignParent)
   // a forged id: no such booking
   await expect(request('00000000-0000-0000-0000-000000000000')).rejects.toMatchObject(foreignParent)
@@ -249,7 +244,7 @@ it('deleting an account with a finished, disputed or stopped booking is 409; rev
   // an additional task of it (child booking from its request and quote): goes too
   const childRequest = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES ($1, $2, 'Zusatz', now(), $3) RETURNING id", [U.gone, providerId, done])).rows[0].id
   const childQuote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 20, 'Zusatz', now() + interval '7 days', 'accepted') RETURNING id", [childRequest, providerId])).rows[0].id
-  await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id) VALUES ($1, $2, $3, 'quote', 'completed', now() + interval '3 days', 60, $4)", [U.gone, providerId, childQuote, done])
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, parent_booking_id) VALUES ($1, $2, $3, 'completed', now() + interval '3 days', 60, $4)", [U.gone, providerId, childQuote, done])
   await pool.query("INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars) VALUES ($1, $2, $3, 'customer', 2), ($1, $3, $2, 'provider', 5)", [done, U.gone, U.owner])
   await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, parent_booking_id) VALUES ($1, $2, 'Noch ein Tor', now(), $3)", [U.gone, providerId, done]) // an additional task's request
   await deleteAccount(U.gone, () => {})

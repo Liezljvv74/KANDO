@@ -50,7 +50,7 @@ export async function taskRequestsOf(x: Db, rootRequestIds: string[]): Promise<{
   return rows.map((x) => ({ r: x.r, root: x.root! }))
 }
 
-/** The root request of a request: itself, or (an additional task) its parent booking's root request from `rootsOf`; null when that root has no request (booked direct). */
+/** The root request of a request: itself, or (an additional task) its parent booking's root request from `rootsOf` (null only for an unknown booking). */
 export const rootRequestId = (r: { id: string; parentBookingId: string | null }, roots: Map<string, { requestId: string | null }>): string | null =>
   r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id
 

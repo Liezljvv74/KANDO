@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { asUser, db, pool } from '@kando/db'
 import { answerStop, cancelBooking, clearOutbox, confirmJob, finishJob, handleGatewayEvent, objectNoShow, openDispute, reportNoShow, runDueTimers, stateStopAmount, staffMayReadThread, stopJob } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { appConnectionsAtMoneyCalls, fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -55,13 +55,14 @@ async function paidBooking(o: { startAt?: Date; provider?: string; finishedAt?: 
   const p = o.provider ?? providerId
   const startAt = o.startAt ?? new Date(Date.now() - 2 * HOUR - ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by, parent_booking_id)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', $7, 0.12, $6::timestamptz, $6::timestamptz + interval '7 days', $8) RETURNING id`,
-      [U.cust, p, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null, ref, o.parent ?? null],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({
+    customerId: U.cust,
+    providerId: p,
+    startAt,
+    ref,
+    rate: 0.12,
+    cols: { service_id: service, status: o.finishedAt ? 'finished' : 'confirmed', finished_at: o.finishedAt ?? null, confirm_by: o.finishedAt ? new Date(o.finishedAt.getTime() + 7 * 86_400_000) : null, parent_booking_id: o.parent ?? null },
+  })
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, $3, $4)", [id, p, ref, `charge:${id}`])
   return { id, startAt }
 }

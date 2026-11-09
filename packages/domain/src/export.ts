@@ -76,7 +76,6 @@ export async function exportMyData(tx: Tx, userId: string) {
     bookings: myBookings.map((b) => ({
       id: b.id,
       role: roleOf(b.customerId),
-      source: b.source,
       quoteId: b.quoteId,
       parentBookingId: b.parentBookingId,
       status: b.status,

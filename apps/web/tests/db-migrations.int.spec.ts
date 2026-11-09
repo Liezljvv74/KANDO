@@ -126,15 +126,15 @@ it('0017 on a database with data: accepted_at and request_id backfilled, an awai
   const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m17-p', 'published') RETURNING id")).rows[0].id
   const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m17-c', $1, 'x', now(), 'booked') RETURNING id", [p])).rows[0].id
   const q = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 80, 's', now(), 'accepted') RETURNING id", [r, p])).rows[0].id
-  const booking = async (status: string, quote: string | null, payBy: string | null) =>
-    (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, pay_by, updated_at) VALUES ('m17-c', $1, $2, $3, $4, now() + interval '9 days', 60, 80, $5, '2026-10-01T10:00:00Z') RETURNING id", [p, quote, quote ? 'quote' : 'direct', status, payBy])).rows[0].id as string
+  const booking = async (status: string, quote: string, payBy: string | null) =>
+    (await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, amount, pay_by, updated_at) VALUES ('m17-c', $1, $2, 'quote', $3, now() + interval '9 days', 60, 80, $4, '2026-10-01T10:00:00Z') RETURNING id", [p, quote, status, payBy])).rows[0].id as string
   const paying = await booking('awaiting-payment', q, '2026-10-03T10:00:00Z')
-  const noDeadline = await booking('awaiting-payment', null, null)
+  const noDeadline = await booking('awaiting-payment', q, null)
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m17-c', 'booking-accepted')")
   await migrate()
   const rows = Object.fromEntries((await pool.query('SELECT id, accepted_at, request_id, pay_by, amount, commission_rate, payment_ref, paid_at FROM bookings')).rows.map((b) => [b.id, b]))
   expect(rows[paying]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), request_id: r, pay_by: new Date('2026-10-03T10:00:00Z'), amount: '80.00', commission_rate: null, payment_ref: null, paid_at: null })
-  expect(rows[noDeadline]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), pay_by: new Date('2026-10-01T10:00:00Z'), request_id: null }) // lapses at the next sweep
+  expect(rows[noDeadline]).toMatchObject({ accepted_at: new Date('2026-10-01T10:00:00Z'), pay_by: new Date('2026-10-01T10:00:00Z'), request_id: r }) // lapses at the next sweep
   expect((await pool.query("SELECT stripe_account_id, payouts_ready_at FROM providers WHERE owner_id = 'm17-p'")).rows).toEqual([{ stripe_account_id: null, payouts_ready_at: null }])
   // the existing rows still satisfy every check, and the new kinds are accepted
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m17-c', 'payment-received')")
@@ -156,10 +156,10 @@ it('0018 on a database with data: existing bookings keep their status and get sa
   await pool.query("INSERT INTO users (id, email) VALUES ('m18-c', 'm18-c@test.skilled.invalid'), ('m18-p', 'm18-p@test.skilled.invalid')")
   const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m18-p', 'published') RETURNING id")).rows[0].id
   const r = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by) VALUES ('m18-c', $1, 'x', now()) RETURNING id", [p])).rows[0].id
-  const paid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, paid_at) VALUES ('m18-c', $1, 'direct', 'confirmed', now() + interval '9 days', 60, 80, now()) RETURNING id", [p])).rows[0].id
+  const paid = (await pool.query("INSERT INTO bookings (customer_id, provider_id, request_id, source, status, start_at, duration_min, amount, paid_at) VALUES ('m18-c', $1, $2, 'quote', 'confirmed', now() + interval '9 days', 60, 80, now()) RETURNING id", [p, r])).rows[0].id
   await migrate()
-  expect((await pool.query('SELECT status, parent_booking_id, confirm_reminders_sent, late_cancel, material_amount, finished_at, cancelled_by FROM bookings WHERE id = $1', [paid])).rows).toEqual([
-    { status: 'confirmed', parent_booking_id: null, confirm_reminders_sent: 0, late_cancel: false, material_amount: '0.00', finished_at: null, cancelled_by: null },
+  expect((await pool.query('SELECT status, parent_booking_id, confirm_reminders_sent, late_cancel, finished_at, cancelled_by FROM bookings WHERE id = $1', [paid])).rows).toEqual([
+    { status: 'confirmed', parent_booking_id: null, confirm_reminders_sent: 0, late_cancel: false, finished_at: null, cancelled_by: null },
   ])
   expect((await pool.query('SELECT parent_booking_id FROM requests WHERE id = $1', [r])).rows).toEqual([{ parent_booking_id: null }])
   await pool.query("UPDATE bookings SET status = 'finished', finished_at = now() WHERE id = $1", [paid])
@@ -213,8 +213,9 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   await drizzleMigrate(db, { migrationsFolder: upTo27 })
   await pool.query("INSERT INTO users (id, email) VALUES ('m28-c', 'm28-c@test.skilled.invalid'), ('m28-p', 'm28-p@test.skilled.invalid')")
   const p = (await pool.query("INSERT INTO providers (owner_id, status) VALUES ('m28-p', 'published') RETURNING id")).rows[0].id
+  const rw = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m28-c', $1, 'x', now() + interval '3 days', 'booked') RETURNING id", [p])).rows[0].id
   const booking = async (status: string) =>
-    (await pool.query("INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, pay_by, accepted_at) VALUES ('m28-c', $1, 'direct', $2, now() + interval '9 days', 60, 80, now() + interval '1 day', now()) RETURNING id", [p, status])).rows[0].id as string
+    (await pool.query("INSERT INTO bookings (customer_id, provider_id, request_id, source, status, start_at, duration_min, amount, pay_by, accepted_at) VALUES ('m28-c', $1, $3, 'quote', $2, now() + interval '9 days', 60, 80, now() + interval '1 day', now()) RETURNING id", [p, status, rw])).rows[0].id as string
   // a database that was migrated and had its row-level security applied before 0028 has this policy, which reads counter_by
   await pool.query("CREATE POLICY insert_rule ON bookings AS RESTRICTIVE FOR INSERT WITH CHECK (status = 'proposed' AND counter_by IS NULL)")
   const proposed = await booking('proposed')
@@ -223,7 +224,7 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   // a quote-born proposed booking: deleting it must give the request and the quote back (they were booked and accepted)
   const r28 = (await pool.query("INSERT INTO requests (customer_id, provider_id, description, answer_by, status) VALUES ('m28-c', $1, 'x', now() + interval '3 days', 'booked') RETURNING id", [p])).rows[0].id
   const q28 = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, 80, 's', now() + interval '5 days', 'accepted') RETURNING id", [r28, p])).rows[0].id
-  await pool.query("INSERT INTO bookings (customer_id, provider_id, source, request_id, quote_id, status, start_at, duration_min, amount, answer_by) VALUES ('m28-c', $1, 'quote', $2, $3, 'proposed', now() + interval '9 days', 60, 80, now() + interval '1 day')", [p, r28, q28])
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, request_id, quote_id, source, status, start_at, duration_min, amount, answer_by) VALUES ('m28-c', $1, $2, $3, 'quote', 'proposed', now() + interval '9 days', 60, 80, now() + interval '1 day')", [p, r28, q28])
   await pool.query("INSERT INTO notifications (user_id, kind) VALUES ('m28-c', 'booking-proposed'), ('m28-c', 'booking-declined'), ('m28-p', 'pending-slot-requested'), ('m28-c', 'booking-accepted')")
   await migrate()
   expect((await pool.query('SELECT id, status FROM bookings')).rows).toEqual([{ id: waiting, status: 'awaiting-payment' }])
@@ -235,7 +236,7 @@ it('0028 on a database with data: proposed bookings (and their chat) and the thr
   expect((await pool.query("SELECT with_check FROM pg_policies WHERE tablename = 'bookings' AND policyname = 'insert_rule'")).rows).toEqual([{ with_check: 'false' }]) // dropped by the migration, created again by applyRls as deny-all
   // the new checks: no proposed status, no default status, none of the removed kinds
   const insert = (status: string | null) =>
-    pool.query(`INSERT INTO bookings (customer_id, provider_id, source${status ? ', status' : ''}, start_at, duration_min, amount) VALUES ('m28-c', $1, 'direct'${status ? `, '${status}'` : ''}, now() + interval '9 days', 60, 80)`, [p])
+    pool.query(`INSERT INTO bookings (customer_id, provider_id, quote_id${status ? ', status' : ''}, start_at, duration_min) VALUES ('m28-c', $1, $2${status ? `, '${status}'` : ''}, now() + interval '9 days', 60)`, [p, q28])
   await expect(insert('proposed')).rejects.toThrow(/bookings_status_check/)
   await expect(insert(null)).rejects.toThrow(/null value/)
   for (const kind of ['booking-proposed', 'booking-declined', 'pending-slot-requested']) {
@@ -298,3 +299,14 @@ it('existing requests are numbered in creation order', async () => {
   expect(created.rows[0].job_number).toBe(1003)
   await wipe()
 }, 60_000)
+
+it('0037: bookings have no source and no material_amount, and request_id is required', async () => {
+  assertTestDatabase(pool.options.connectionString!)
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
+  await migrate()
+  const b = await columns('bookings')
+  expect(b).not.toHaveProperty('source')
+  expect(b).not.toHaveProperty('material_amount')
+  expect(b.request_id).toBe(false) // not nullable
+})

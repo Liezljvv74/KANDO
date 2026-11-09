@@ -115,7 +115,7 @@ export const bookingItem = (b: Booking, userId: string): JobStateItem => ({ key:
 export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string, withState: boolean | Map<string, JobStateOf> = false): Promise<T[]> {
   const parents = [...new Set(list.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : [])))]
   const roots = await rootsOf(x, parents)
-  // a task whose root booking has no request (booked direct) has no job to show: no refs, never its own unused number
+  // a task whose root is unknown has no job to show: no refs, never its own unused number
   const rootOf = (r: T) => rootRequestId(r, roots)
   const jobs = await rootJobs(x, [...new Set(list.flatMap((r) => rootOf(r) ?? []))], userId)
   // the derived job state, as seen by the caller
@@ -161,7 +161,6 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   quoteId: b.quoteId,
   requestId: b.requestId,
   parentBookingId: b.parentBookingId,
-  source: b.source as Booking['source'],
   status: bookingShownStatus(b, now) as Booking['status'],
   startAt: iso(b.startAt),
   durationMin: b.durationMin,

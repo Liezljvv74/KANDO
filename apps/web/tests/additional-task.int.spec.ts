@@ -4,7 +4,7 @@ import { asUser, db, pool } from '@kando/db'
 import { BookingSchema, QuoteSchema, RequestSchema } from '@kando/contract'
 import { cancelBooking, COMMISSION_RATE, commissionFor, clearOutbox, confirmJob, createPayLink, finishJob, handleGatewayEvent, objectNoShow, openDispute, reportNoShow, runDueTimers, stopJob, type GatewayEvent } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -49,14 +49,14 @@ afterAll(cleanupUsers)
 async function paidRoot(o: { startAt?: Date; finishedAt?: Date; paymentRef?: string } = {}): Promise<{ id: string; startAt: Date }> {
   const ref = o.paymentRef ?? `pi_at_${randomUUID()}`
   const startAt = o.startAt ?? new Date(Date.now() - 2 * HOUR - ++slot * 3 * HOUR)
-  const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, on_site, address_postcode, address_street, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, true, '10115', 'Hauptstr. 1', $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', $7, 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
-      [U.cust, providerId, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null, ref],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({
+    customerId: U.cust,
+    providerId,
+    startAt,
+    ref,
+    rate: 0.12,
+    cols: { service_id: (await pool.query('SELECT id FROM services WHERE provider_id = $1', [providerId])).rows[0].id, status: o.finishedAt ? 'finished' : 'confirmed', on_site: true, address_postcode: '10115', address_street: 'Hauptstr. 1', finished_at: o.finishedAt ?? null, confirm_by: o.finishedAt ? new Date(o.finishedAt.getTime() + 7 * DAY) : null },
+  })
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, $4, $3)", [id, providerId, `charge:${id}`, ref])
   return { id, startAt }
 }
@@ -95,7 +95,7 @@ const row = async (id: string) =>
   (await pool.query('SELECT status, parent_booking_id, start_at, duration_min, on_site, address_postcode, address_street, amount, pay_by, paid_at, released_at, no_show, asked_done_at, confirm_by FROM bookings WHERE id = $1', [id])).rows[0]
 const ledger = async (id: string) => (await pool.query("SELECT kind, amount::float AS amount FROM ledger_entries WHERE booking_id = $1 AND kind <> 'charge' ORDER BY kind", [id])).rows
 const cardsOf = async (bookingId: string) =>
-  (await pool.query("SELECT m.card FROM messages m JOIN threads t ON t.id = m.thread_id WHERE t.booking_id = $1 AND m.kind = 'card' ORDER BY m.created_at", [bookingId])).rows.map((r) => r.card)
+  (await pool.query("SELECT m.card FROM messages m JOIN threads t ON t.id = m.thread_id JOIN bookings b ON t.request_id = b.request_id WHERE b.id = $1 AND m.kind = 'card' ORDER BY m.created_at", [bookingId])).rows.map((r) => r.card)
 const refusal = (p: Promise<unknown>) =>
   p.then(
     () => ({ status: 0, body: null }),

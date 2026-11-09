@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { asUser, pool } from '@kando/db'
 import { timeIsAcceptable } from '@kando/domain'
-import { cleanupUsers, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, seedBooking, seedProvider, seedUser } from './helpers'
 
 const ids = { cust: 'ta-cust', owner: 'ta-owner' }
 let providerId: string
@@ -24,11 +24,12 @@ beforeAll(async () => {
   await seedUser(ids.cust)
   providerId = await seedProvider(ids.owner, { name: 'Ta Owner', categoryId: (await pool.query('SELECT id FROM categories LIMIT 1')).rows[0]?.id ?? (await pool.query("INSERT INTO categories (slug) VALUES ('rb-cat') RETURNING id")).rows[0].id })
   const book = (status: string, startH: number, onSite: boolean, payBy: string | null) =>
-    pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, amount, currency, on_site, pay_by, accepted_at)
-       VALUES ($1, $2, 'direct', $3, $4, 60, 50, 'EUR', $5, $6, CASE WHEN $6::timestamptz IS NULL THEN NULL ELSE $7::timestamptz END)`,
-      [ids.cust, providerId, status, at(startH), onSite, payBy, now],
-    )
+    seedBooking({
+      customerId: ids.cust,
+      providerId,
+      amount: 50,
+      cols: { status, start_at: at(startH), on_site: onSite, pay_by: payBy, accepted_at: payBy ? now : null },
+    })
   await book('awaiting-payment', 48, true, at(60).toISOString()) // on site, 48h to 49h, payment window open
   await book('confirmed', 100, false, null) // remote, paid, 100h to 101h
 })

@@ -22,8 +22,8 @@ export async function threadForRequest(tx: Exec, requestId: string): Promise<str
 }
 
 /**
- * The thread of a booking: a booking from a quote shares its request's thread, a direct booking has its own (created on
- * first use); an additional task shares its parent's (through its request). `tx` is the caller's request transaction
+ * The thread of a booking: it shares its request's thread (through its quote; a booking whose quote is gone has its own,
+ * created on first use); an additional task shares its parent's (through its request). `tx` is the caller's request transaction
  * (RLS: 404 for a non-party), or the owner connection after the domain checked the caller.
  */
 export async function threadForBooking(tx: Exec, bookingId: string): Promise<string> {
