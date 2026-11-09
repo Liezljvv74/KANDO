@@ -1,6 +1,6 @@
 import { and, eq, isNull, like } from 'drizzle-orm'
 import { bookings, db, providers, staffFlags, type Tx } from '@kando/db'
-import { DAY, type Booking, type FinishInput } from '@kando/contract'
+import { DAY, type Booking } from '@kando/contract'
 import { flagForStaff } from '../chat/flags'
 import { describeError } from '../log-error'
 import { issueInvoiceFor } from '../invoices/issue'
@@ -21,9 +21,9 @@ export const reload = async (id: string, userId?: string) => (await withBookingR
 
 /**
  * The provider's "Finished": from `confirmed`, once the agreed start has come (else 409 TOO_EARLY), once (else 409 not-open).
- * Starts the customer's 7 days (`confirmBy`); Owner connection (finished is an owner-only status), the row locked and re-checked.
+ * Starts the customer's 7 days (`confirmBy`). Owner connection (finished is an owner-only status), the row locked and re-checked.
  */
-export async function finishJob(tx: Tx, userId: string, bookingId: string, _input: FinishInput, now = new Date()): Promise<Booking> {
+export async function finishJob(tx: Tx, userId: string, bookingId: string, now = new Date()): Promise<Booking> {
   if (((await partyOf(tx, userId, bookingId)).role) !== 'provider') fail(403, { error: 'wrong-side' })
   const row = await db.transaction(async (o) => {
     const b = await lockRow(o, bookingId)

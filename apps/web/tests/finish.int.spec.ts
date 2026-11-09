@@ -70,7 +70,7 @@ const refusal = (p: Promise<unknown>) =>
     () => ({ status: 0, body: null }),
     async (e: unknown) => (e instanceof Response ? { status: e.status, body: await e.json() } : Promise.reject(e)),
   )
-const finish = (userId: string, id: string, now: Date) => asUser(userId, (tx) => finishJob(tx, userId, id, {}, now))
+const finish = (userId: string, id: string, now: Date) => asUser(userId, (tx) => finishJob(tx, userId, id, now))
 const confirm = (userId: string, id: string, now: Date) => asUser(userId, (tx) => confirmJob(tx, userId, id, now))
 
 it('Finished before the start is 409; after it the 7-day clock starts', async () => {

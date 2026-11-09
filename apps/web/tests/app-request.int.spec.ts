@@ -364,7 +364,7 @@ it('notices of a committed owner step go out when the request then fails', async
   const id = await seedPaidBooking({ customerId: 'aq-cust', providerId, startAt, cols: { service_id: service } })
   const { wrap, jobs } = scheduled()
   const h = wrap({ auth: 'required' }, async ({ tx, user }) => {
-    await finishJob(tx, user!.id, id, {})
+    await finishJob(tx, user!.id, id)
     throw new Error('after the finish')
   })
   vi.spyOn(console, 'error').mockImplementation(() => {})

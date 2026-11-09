@@ -28,7 +28,6 @@ import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
-import { font } from '@/theme'
 
 /** Actions that open a form or statement below the buttons before anything is sent. */
 type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
@@ -179,7 +178,6 @@ export default function BookingDetail() {
 }
 
 const styles = StyleSheet.create({
-  status: { fontSize: 18, fontFamily: font.heading, color: '#34328A' },
   text: { fontSize: 16, color: '#1D1C4A' },
   small: { fontSize: 14, color: '#4F4E7D' },
   sheet: { gap: 8 },

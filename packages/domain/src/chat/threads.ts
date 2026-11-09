@@ -1,5 +1,5 @@
 import { desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requests, threads, users, type Tx } from '@kando/db'
+import { bookings, db, providers, requests, threads, users, type Tx } from '@kando/db'
 import type { Thread } from '@kando/contract'
 import { isUuid } from '../admin/common'
 import type { Exec } from '../providers/eligibility'
@@ -22,19 +22,13 @@ export async function threadForRequest(tx: Exec, requestId: string): Promise<str
 }
 
 /**
- * The thread of a booking: it shares its request's thread (through its quote; a booking whose quote is gone has its own,
- * created on first use); an additional task shares its parent's (through its request). `tx` is the caller's request transaction
+ * The thread of a booking: it shares its request's thread; an additional task shares its parent's (through its request). `tx` is the caller's request transaction
  * (RLS: 404 for a non-party), or the owner connection after the domain checked the caller.
  */
 export async function threadForBooking(tx: Exec, bookingId: string): Promise<string> {
   const b = isUuid(bookingId) ? (await tx.select().from(bookings).where(eq(bookings.id, bookingId)))[0] : undefined
   if (!b) return notFound()
-  if (b.quoteId) {
-    const q = (await tx.select({ requestId: quotes.requestId }).from(quotes).where(eq(quotes.id, b.quoteId)))[0]
-    if (q) return threadForRequest(tx, q.requestId)
-  }
-  await tx.insert(threads).values({ bookingId: b.id, customerId: b.customerId, providerId: b.providerId }).onConflictDoNothing()
-  return (await tx.select({ id: threads.id }).from(threads).where(eq(threads.bookingId, b.id)))[0]!.id
+  return threadForRequest(tx, b.requestId)
 }
 
 /** What decides where a job talks: its own booking, its request, else (an additional task) its parent booking's. `key` finds the answer again. */

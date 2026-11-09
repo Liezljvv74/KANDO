@@ -114,7 +114,7 @@ it('the customer disputes within 7 days of Finished; the timer then releases not
   const later = new Date(T.getTime() + 8 * DAY)
   const notOpen = { status: 409, body: { error: 'not-open' } }
   expect(await refusal(stop(U.owner, id, later))).toEqual(notOpen)
-  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, {}, later)))).toEqual(notOpen)
+  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, later)))).toEqual(notOpen)
   expect(await refusal(asUser(U.cust, (tx) => confirmJob(tx, U.cust, id, later)))).toEqual(notOpen)
   expect(await refusal(asUser(U.cust, (tx) => cancelBooking(tx, U.cust, id, later)))).toEqual(notOpen)
   expect((await row(id)).status).toBe('disputed')

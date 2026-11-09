@@ -224,7 +224,7 @@ it('customer no-show unanswered for 48 hours pays the provider in full', async (
   expect(outboxForTests().find((m) => m.to === EMAIL(U.cust))!.text).toMatch(/04[./]05[./]2028/) // the objection deadline
   // the other side cannot report back, finish or confirm while it is open
   expect(await refusal(report(U.cust, id, at))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
-  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, {}, at)))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
+  expect(await refusal(asUser(U.owner, (tx) => finishJob(tx, U.owner, id, at)))).toEqual({ status: 409, body: { error: 'NO_SHOW_REPORTED' } })
 
   expect((await runDueTimers(db, new Date(at.getTime() + 48 * HOUR - MIN))).noShowsResolved).toBe(0)
   expect(g.calls).toEqual([])
