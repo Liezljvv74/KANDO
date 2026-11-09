@@ -2,6 +2,7 @@ import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
 import { DAY, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
+import { currencyOfCountry } from '../country-currency'
 import { blockedWithProvider } from '../chat/blocks'
 import { assertNoContactDetails } from '../chat/flags'
 import { postCard } from '../chat/messages'
@@ -384,7 +385,7 @@ export async function sendQuote(tx: Tx, userId: string, requestId: string, input
     else assertFuture(startAt, now)
   }
   const prev = (await tx.select({ v: quotes.version }).from(quotes).where(eq(quotes.requestId, requestId)).orderBy(desc(quotes.version)).limit(1))[0]
-  const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${provider.country}`)).rows[0]!.currency
+  const currency = await currencyOfCountry(tx, provider.country)
   await tx.update(quotes).set({ status: 'superseded' }).where(and(eq(quotes.requestId, requestId), eq(quotes.status, 'sent')))
   const [row] = await tx
     .insert(quotes)

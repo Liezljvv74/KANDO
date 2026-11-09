@@ -4,10 +4,10 @@ import { COMMISSION_RATE, type BookingRequest, type QuoteInput } from '@kando/co
 
 import { sendQuote } from '@/api/bookings'
 import { ApiError } from '@/api/client'
-import { getMyProfile, servicesApi } from '@/api/my-profile'
+import { servicesApi } from '@/api/my-profile'
 import { Button, ErrorText, Field, Info } from '@/components/auth-ui'
 import { SwitchRow } from '@/components/form-ui'
-import { useQuoteSteps } from '@/hooks/use-me'
+import { useMe, useQuoteSteps } from '@/hooks/use-me'
 import { errorText, t } from '@/i18n'
 import { parseAmount, receiveFrom } from '@/lib/amount'
 import { formatAmount } from '@/lib/format'
@@ -30,10 +30,7 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
   const [when, setWhen] = useState(() => whenFromRequest(request))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [currency, setCurrency] = useState<string | null>(null) // the provider's country currency, for the preview; no preview until known
-  useEffect(() => {
-    getMyProfile().then((p) => setCurrency(p?.currency ?? null), () => {})
-  }, [])
+  const currency = useMe()?.currency // the provider's country currency from the shared /me; no preview until it is known
   // The shared /me copy (the job page waits for it before showing this form); each step updates it, so the gate clears itself. Without steps (an older server) the button stays usable; the server still refuses.
   const steps = useQuoteSteps().steps ?? []
   const blocked = quoteBlocked(steps)

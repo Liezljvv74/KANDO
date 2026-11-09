@@ -9,7 +9,7 @@ import { slugify } from './slug'
 
 type Row = typeof providers.$inferSelect
 
-const toMyProfile = (r: Row, missing: Missing[], underCheck: string[], currency: string): MyProfile => ({
+const toMyProfile = (r: Row, missing: Missing[], underCheck: string[]): MyProfile => ({
   id: r.id,
   publicName: r.publicName,
   providerType: r.type === null ? null : r.type === 'business' ? 'business' : 'individual',
@@ -30,7 +30,6 @@ const toMyProfile = (r: Row, missing: Missing[], underCheck: string[], currency:
   taxNumber: r.taxNumber,
   invoiceConsent: r.invoiceConsentAt !== null,
   quoteSteps: quoteSteps(r),
-  currency,
 })
 
 /** The caller's provider row (RLS also shows published rows of others; the owner filter picks the caller's). */
@@ -82,8 +81,7 @@ async function view(tx: Tx, userId: string, row: Row): Promise<MyProfile> {
       SELECT unnest(c.required_documents) FROM services s JOIN categories c ON c.id = s.category_id WHERE s.provider_id = ${row.id}))
     ORDER BY d.requirement`)
   const underCheck = (pending.rows as { requirement: string }[]).map((x) => x.requirement)
-  const currency = (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${row.country}`)).rows[0]!.currency // the country's currency: what this provider's quotes and money are in
-  return toMyProfile(row, completeness(row, svc, !!person?.first?.trim() && !!person?.last?.trim()), underCheck, currency)
+  return toMyProfile(row, completeness(row, svc, !!person?.first?.trim() && !!person?.last?.trim()), underCheck)
 }
 
 export async function getMyProfile(tx: Tx, userId: string): Promise<MyProfile | null> {

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { ProviderMoneySchema } from '@kando/contract'
-import { COMMISSION_RATE, providerMoney, youReceive } from '@kando/domain'
+import { COMMISSION_RATE, currencyOfCountry, getMe, providerMoney, UnknownCountryError, youReceive } from '@kando/domain'
 import { call, cleanupUsers, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -93,11 +93,18 @@ it("the strip carries the currency of the provider's country, unchanged (ZAR)", 
     await pool.query("UPDATE providers SET country = 'ZA' WHERE id = $1", [p.id])
     await paid(p.id, { status: 'confirmed' })
     expect(await money(p.uid)).toEqual({ receivedThisMonth: 0, onItsWay: net(100), onHold: 0, currency: 'ZAR' })
+    expect(await currencyOfCountry(db, 'ZA')).toBe('ZAR')
+    await pool.query("UPDATE users SET is_provider = true WHERE id = (SELECT owner_id FROM providers WHERE id = $1)", [p.id])
+    expect((await db.transaction((tx) => getMe(tx, p.uid))).currency).toBe('ZAR') // /me carries it for the quote preview
   } finally {
     await pool.query("UPDATE providers SET country = 'DE' WHERE id = $1", [p.id])
     await pool.query("DELETE FROM countries WHERE code = 'ZA'")
     await pool.query("DELETE FROM currencies WHERE code = 'ZAR'")
   }
+})
+
+it('an unknown country is a named error, not a crash on undefined', async () => {
+  await expect(currencyOfCountry(db, 'XX')).rejects.toBeInstanceOf(UnknownCountryError)
 })
 
 it('a customer cannot read provider money', async () => {

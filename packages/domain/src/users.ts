@@ -8,6 +8,7 @@ import { fail } from './providers/http'
 import { ownProvider, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
+import { currencyOfCountrySql, requireCurrency } from './country-currency'
 import { paymentsEnabled, quoteSteps, type QuoteStep } from './payments/rules'
 import { acceptLang, DEFAULT_LANG, isLang, type Lang } from '@kando/i18n'
 
@@ -92,7 +93,7 @@ export const addressOf = (row: typeof users.$inferSelect): Me['address'] =>
     ? { street: row.addressStreet, postcode: row.addressPostcode, city: row.addressCity, country: row.addressCountry }
     : null
 
-const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notifications: Me['notifications'], steps?: QuoteStep[]): Me => ({
+const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notifications: Me['notifications'], steps?: QuoteStep[], currency?: string): Me => ({
   id: row.id,
   email: row.email,
   firstName: row.firstName,
@@ -105,6 +106,7 @@ const toMe = (row: typeof users.$inferSelect, pictureKey: string | null, notific
   termsRequired: termsStale(row),
   paymentsEnabled: paymentsEnabled(),
   ...(steps && { quoteSteps: steps }),
+  ...(currency && { currency }),
   notifications,
 })
 
@@ -113,8 +115,8 @@ export async function getMe(tx: Tx, userId: string): Promise<Me> {
   const row = (await tx.select().from(users).where(eq(users.id, userId)))[0]!
   const pic = (await tx.select({ key: photos.key }).from(photos).where(and(eq(photos.ownerId, userId), eq(photos.kind, 'profile'))))[0]
   // a provider only (a customer skips the read); only the columns quoteSteps reads
-  const [provider] = !row.isProvider ? [] : await tx.select({ payoutsReadyAt: providers.payoutsReadyAt, invoiceConsentAt: providers.invoiceConsentAt, legalStatus: providers.legalStatus, vatId: providers.vatId, taxNumber: providers.taxNumber }).from(providers).where(eq(providers.ownerId, userId))
-  return toMe(row, pic?.key ?? null, await listNotifications(tx, userId), provider ? quoteSteps(provider) : undefined)
+  const [provider] = !row.isProvider ? [] : await tx.select({ payoutsReadyAt: providers.payoutsReadyAt, invoiceConsentAt: providers.invoiceConsentAt, legalStatus: providers.legalStatus, vatId: providers.vatId, taxNumber: providers.taxNumber, country: providers.country, currency: currencyOfCountrySql(sql`${providers.country}`) }).from(providers).where(eq(providers.ownerId, userId))
+  return toMe(row, pic?.key ?? null, await listNotifications(tx, userId), provider ? quoteSteps(provider) : undefined, provider ? requireCurrency(provider.currency, provider.country) : undefined)
 }
 
 /** Saves what changed; address null clears it. A new name reaches the public name of an existing provider profile. */

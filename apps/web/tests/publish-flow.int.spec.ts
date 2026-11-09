@@ -34,7 +34,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
   expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service', 'strengths', 'skills'] })
   await givePhoto('pf1') // Task 6 uploads for real
   await call(profileRoute.PUT, 'pf1', 'PUT', profile)
-  await call(services.POST, 'pf1', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+  await call(services.POST, 'pf1', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10 })
   const ok = await call(publish.POST, 'pf1', 'POST')
   expect(ok.status).toBe(200)
   expect(MyProfileSchema.parse(await ok.json())).toMatchObject({ status: 'published' })
@@ -45,7 +45,7 @@ it('the first-time flow: refused until photo and service exist, then published, 
 it('a postcode-less profile is refused until a postcode is saved', async () => {
   await call(profileRoute.PUT, 'pf2', 'PUT', { providerType: 'individual', strengths: 'Ruhig', skills: ['a'] })
   await givePhoto('pf2')
-  await call(services.POST, 'pf2', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+  await call(services.POST, 'pf2', 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10 })
   const refused = await call(publish.POST, 'pf2', 'POST')
   expect((await refused.json()).missing).toEqual(['postcode'])
   await call(profileRoute.PUT, 'pf2', 'PUT', { basePostcode: '10115' })
@@ -140,7 +140,7 @@ it('two providers with the same name publish at once', async () => {
       await pool.query("INSERT INTO users (id, email, first_name, last_name) VALUES ($1, $2, $3, 'Zed') ON CONFLICT (id) DO NOTHING", [u, EMAIL(u), `Twin${i}`])
       await call(profileRoute.PUT, u, 'PUT', profile)
       await givePhoto(u)
-      await call(services.POST, u, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+      await call(services.POST, u, 'POST', { categoryId, title: 'A', priceType: 'fixed', price: 10 })
     }
     const res = await Promise.all(uids.map((u) => call(publish.POST, u, 'POST')))
     expect(res.map((r) => r.status)).toEqual([200, 200])

@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { categories, categoryTexts, providerReferences, providers, serviceAppInsert, services, users, type Tx } from '@kando/db'
 import { DEFAULT_LANG } from '@kando/i18n'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
+import { currencyOfCountry } from '../country-currency'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
 import { getMyProfile, isSuspendedNow, lockProfile, ownProvider } from './profile'
@@ -79,7 +80,7 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
       description: input.description?.trim() || null,
       priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
-      currency: (await tx.execute<{ currency: string }>(sql`SELECT currency FROM countries WHERE code = ${profile.country}`)).rows[0]!.currency, // the provider's country decides, never the body
+      currency: await currencyOfCountry(tx, profile.country), // the provider's country decides, never the body
     })
     .returning()
   return withState(tx, profile, row!)

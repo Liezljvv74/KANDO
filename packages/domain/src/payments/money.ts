@@ -1,5 +1,6 @@
 import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import { bookings, ledgerEntries, staffFlags } from '@kando/db'
+import { currencyOfCountrySql, requireCurrency } from '../country-currency'
 import { MONEY_FLAGS } from '../bookings/job-state-lookup'
 import type { Exec } from '../providers/eligibility'
 import { COMMISSION_RATE, commissionFor, roundMoney, youReceive } from '@kando/contract'
@@ -39,11 +40,10 @@ export async function providerMoney(owner: Exec, providerId: string, now: Date, 
     else onItsWay += net
   }
   const [r] = await owner
-    .select({ sum: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)::text` })
+    .select({ sum: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)::text`, currency: currencyOfCountrySql(sql`(SELECT country FROM providers WHERE id = ${providerId})`) })
     .from(ledgerEntries)
     .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
     .where(and(eq(ledgerEntries.providerId, providerId), eq(ledgerEntries.kind, 'transfer'), gte(bookings.releasedAt, from), lt(bookings.releasedAt, to)))
-  // the provider's country decides the currency of the strip (every booking of a provider is in it)
-  const currency = (await owner.execute<{ currency: string }>(sql`SELECT c.currency FROM countries c JOIN providers p ON p.country = c.code WHERE p.id = ${providerId}`)).rows[0]!.currency
-  return { receivedThisMonth: Number(r!.sum), onItsWay: roundMoney(onItsWay), onHold: roundMoney(onHold), currency }
+  // the provider's country decides the currency of the strip (read in the same query)
+  return { receivedThisMonth: Number(r!.sum), onItsWay: roundMoney(onItsWay), onHold: roundMoney(onHold), currency: requireCurrency(r!.currency, providerId) }
 }

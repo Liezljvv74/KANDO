@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { LangSchema, requiredText } from './common'
+import { CurrencySchema, LangSchema, requiredText } from './common'
 
 const optionalText = (max: number) => z.string().trim().max(max).transform((v) => v || null).nullish()
 
@@ -64,6 +64,8 @@ export const MeSchema = z.object({
   paymentsEnabled: z.boolean().optional(),
   /** Providers only (absent for a customer and from older servers): what is still needed before quoting, as on the provider profile. */
   quoteSteps: z.array(z.enum(['payout', 'consent', 'taxId'])).optional(),
+  /** Providers only: the currency of their country (quotes and money are in it). */
+  currency: CurrencySchema.optional(),
   /** Tolerant: a kind or payload this version does not know (a newer server) is dropped, the rest of /me still parses. */
   notifications: z.array(z.unknown()).transform((items) => items.flatMap((i) => { const r = NotificationSchema.safeParse(i); return r.success ? [r.data] : [] })),
 })

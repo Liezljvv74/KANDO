@@ -108,7 +108,7 @@ it('deleting a photo: another user gets 404, the owner 204 and the object and ro
 it('a published provider may delete the profile photo: the profile stays live and complete, the public page shows none', async () => {
   const cat = (await pool.query('SELECT id FROM categories LIMIT 1')).rows[0].id
   const id = (await (await sendPhoto('fl3', 'profile')).json()).id
-  await call(services.POST, 'fl3', 'POST', { categoryId: cat, title: 'A', priceType: 'fixed', price: 10, currency: 'EUR' })
+  await call(services.POST, 'fl3', 'POST', { categoryId: cat, title: 'A', priceType: 'fixed', price: 10 })
   expect((await call(publish.POST, 'fl3', 'POST')).status).toBe(200)
   const res = await call(photo.DELETE, 'fl3', 'DELETE', undefined, { id })
   expect(res.status).toBe(204)

@@ -28,9 +28,11 @@ export function stateText(state: JobStateDto | undefined, viewer: 'customer' | '
   if (!state) return null
   // Only the values we know are passed: a text that still shows a {name} is skipped for its Plain, then Bare, variant (no clause for what is unknown).
   const p: Record<string, string | number> = {}
-  const price = (n: number) => formatAmount(n, ctx.currency!)
-  if (ctx.currency && ctx.amount !== undefined) p.amount = price(ctx.amount) // no currency known: no amount clause
-  if (ctx.currency && ctx.net !== undefined) p.net = price(ctx.net)
+  // no currency known: no amount clause
+  const cur = ctx.currency
+  const money = cur ? (n: number) => formatAmount(n, cur) : undefined
+  if (money && ctx.amount !== undefined) p.amount = money(ctx.amount)
+  if (money && ctx.net !== undefined) p.net = money(ctx.net)
   if (ctx.date) p.date = formatWhen(ctx.date)
   if (ctx.startAt) p.time = formatWhen(ctx.startAt)
   if (ctx.number !== undefined) p.number = ctx.number

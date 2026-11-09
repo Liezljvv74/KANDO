@@ -33,8 +33,6 @@ export const MyProfileSchema = z.object({
   underCheck: z.array(z.string()).optional(),
   /** What the provider still needs before quoting (empty when payments are off); the server always sends it. */
   quoteSteps: z.array(z.enum(['payout', 'consent', 'taxId'])).optional(),
-  /** The currency of the provider's country (quotes, money); the server always sends it. */
-  currency: CurrencySchema.optional(),
 })
 export type MyProfile = z.infer<typeof MyProfileSchema>
 
@@ -78,7 +76,6 @@ const serviceFields = {
   description: text(2000).nullish(),
   priceType: PriceTypeSchema.optional(),
   price: AmountSchema.nullish(),
-  currency: CurrencySchema.optional(), // ignored: the server takes the currency of the provider's country
 }
 
 /** A service may be saved with a category alone; once a price type is set, everything but "on request" needs a price. */

@@ -90,7 +90,6 @@ export async function buildTestUser(auth: TestAuth, a: Account | Provider, categ
         description: s.description,
         priceType: s.priceType,
         price: s.priceType === 'on-request' ? null : s.price!,
-        currency: 'EUR',
       })
     }
     for (const r of a.references ?? []) await addReference(tx, id, r)
