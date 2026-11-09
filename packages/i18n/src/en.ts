@@ -433,7 +433,7 @@ export const en: Record<AppKey, string> = {
   'account.exportHint': 'Get your account details, profile, files, requests, quotes, bookings and your messages as one document (JSON, or CSV for a spreadsheet) and send it to yourself or save it with the share menu.',
   'account.deleteOpen': 'Delete my account',
   'account.deleteHeading': 'Delete your account?',
-  'account.deleteWarning': 'This deletes your account, your profile with its services and references, your photos, your uploaded files and your messages. Your requests, quotes, bookings and chats are deleted too, so the other side loses them as well. Invoices and payment records we must keep by law are kept. It happens at once and cannot be undone. We send you a confirmation email.',
+  'account.deleteWarning': 'This deletes your account, your profile with its services and references, your photos, your uploaded files and your messages. Your requests, quotes, bookings, chats and reviews (written and received) are deleted too, so the other side loses them as well. Invoices and payment records we must keep by law are kept. It happens at once and cannot be undone. We send you a confirmation email.',
   'account.deletePassword': 'To confirm, enter your password',
   'account.deleteConfirm': 'Delete permanently',
   'account.deleteCancel': 'Keep my account',
