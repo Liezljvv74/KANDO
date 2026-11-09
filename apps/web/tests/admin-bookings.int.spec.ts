@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { asUser, db, pool } from '@kando/db'
 import { clearOutbox, decideDispute, getPublicProfile, objectNoShow, openDispute, reportNoShow, runDueTimers, threadForBooking } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { adminCall, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedProvider, seedUser } from './helpers'
+import { adminCall, cleanupUsers, EMAIL, fakeSession, mockAuth, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ ...(await mockAuth()), sessionFromRequest: fakeSession }))
@@ -56,13 +56,13 @@ async function paidBooking(o: { startAt?: Date; provider?: string; finishedAt?: 
   const p = o.provider ?? providerId
   const startAt = o.startAt ?? new Date(Date.now() - 2 * HOUR - ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_ab_' || gen_random_uuid(), 0.12, $6::timestamptz, $6::timestamptz + interval '7 days') RETURNING id`,
-      [U.cust, p, service, o.finishedAt ? 'finished' : 'confirmed', startAt, o.finishedAt ?? null],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({
+    customerId: U.cust,
+    providerId: p,
+    startAt,
+    rate: 0.12,
+    cols: { service_id: service, status: o.finishedAt ? 'finished' : 'confirmed', finished_at: o.finishedAt ?? null, confirm_by: o.finishedAt ? new Date(o.finishedAt.getTime() + 7 * 86_400_000) : null },
+  })
   await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, 'pi_ab', $3)", [id, p, `charge:${id}`])
   return { id, startAt }
 }
@@ -73,8 +73,8 @@ async function paidChild(parent: string, startAt: Date, amount: number): Promise
   const quote = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at, status) VALUES ($1, $2, $3, 'Tor', now() + interval '7 days', 'accepted') RETURNING id", [req, providerId, amount])).rows[0].id
   const id = (
     await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at, paid_at, payment_ref, commission_rate)
-       VALUES ($1, $2, $3, 'quote', 'confirmed', $4, 60, $5, now() + interval '2 days', now(), now() - interval '1 hour', 'pi_ab_child_' || gen_random_uuid(), 0.12) RETURNING id`,
+      `INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, parent_booking_id, pay_by, accepted_at, paid_at, payment_ref, commission_rate)
+       VALUES ($1, $2, $3, 'confirmed', $4, 60, $5, now() + interval '2 days', now(), now() - interval '1 hour', 'pi_ab_child_' || gen_random_uuid(), 0.12) RETURNING id`,
       [U.cust, providerId, quote, startAt, parent],
     )
   ).rows[0].id as string

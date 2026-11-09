@@ -24,7 +24,7 @@ export async function jobsForNotices(x: Db, userId: string, refs: Ref[]): Promis
   const bookingIds = [...new Set(refs.flatMap((r) => (ok(r.bookingId) ? [r.bookingId] : [])))]
   const requestIds = [...new Set(refs.flatMap((r) => (ok(r.requestId) ? [r.requestId] : [])))]
   const bks = bookingIds.length ? await x.select({ id: bookings.id, requestId: bookings.requestId, customerId: bookings.customerId, providerId: bookings.providerId }).from(bookings).where(inArray(bookings.id, bookingIds)) : []
-  const rqIds = [...new Set([...requestIds, ...bks.flatMap((b) => b.requestId ?? [])])]
+  const rqIds = [...new Set([...requestIds, ...bks.map((b) => b.requestId)])]
   const rqs = rqIds.length ? await x.select({ id: requests.id, parentBookingId: requests.parentBookingId, customerId: requests.customerId, providerId: requests.providerId }).from(requests).where(inArray(requests.id, rqIds)) : []
   const sides = [...bks, ...rqs]
   const provs = sides.length ? await db.select({ id: providers.id, ownerId: providers.ownerId, publicName: providers.publicName, businessName: providers.businessName, type: providers.type }).from(providers).where(inArray(providers.id, [...new Set(sides.map((s) => s.providerId))])) : []

@@ -1,7 +1,7 @@
 import { db } from '@kando/db'
 import { endExpiredSuspensions, flushPendingObjects, pruneOldRows, purgeContactAttempts, purgeExpiredRetained, sweepIdImages, closeInterruptedChecks } from '@kando/domain'
-import { cronAuthorized } from '../../../../lib/cron'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { cronAuthorized } from '@/lib/cron'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 export const maxDuration = 60
 

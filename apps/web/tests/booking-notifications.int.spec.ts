@@ -103,7 +103,7 @@ it('real sweeps: quote-expiring and payment-reminder emails carry their dates, o
   const expires = new Date(stamp.getTime() + 12 * 3_600_000)
   const quoteId = (await pool.query("INSERT INTO quotes (request_id, provider_id, amount, scope, expires_at) VALUES ($1, $2, 50, 's', $3) RETURNING id", [r, prov, expires])).rows[0].id
   const payBy = new Date(stamp.getTime() + 2 * 3_600_000)
-  await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, source, status, start_at, duration_min, pay_by, accepted_at) VALUES ($1, $2, $3, 'quote', 'awaiting-payment', $4, 60, $5, $6)", [U.cust, prov, quoteId, new Date(stamp.getTime() + 5 * 86_400_000), payBy, new Date(stamp.getTime() - 86_400_000)])
+  await pool.query("INSERT INTO bookings (customer_id, provider_id, quote_id, status, start_at, duration_min, pay_by, accepted_at) VALUES ($1, $2, $3, 'awaiting-payment', $4, 60, $5, $6)", [U.cust, prov, quoteId, new Date(stamp.getTime() + 5 * 86_400_000), payBy, new Date(stamp.getTime() - 86_400_000)])
   await runDueTimers(db, stamp)
   expect((await rows(U.cust)).map((x) => x.kind).sort()).toEqual(['payment-reminder', 'quote-expiring'])
   const de = (d: Date) => d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' })

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { t } from '@kando/i18n'
-import { pageLang } from '../../../../lib/site'
+import { pageLang } from '@/lib/site'
 
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 

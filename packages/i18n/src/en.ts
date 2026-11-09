@@ -747,7 +747,6 @@ export const en: Record<AppKey, string> = {
   'provider.reliability.one': 'Cancelled late or did not turn up once in the last 12 months',
   'provider.reliability.other': 'Cancelled late or did not turn up {n} times in the last 12 months',
   'error.booking.too-early': 'This is possible only from the agreed start time. Try again once the job has started.',
-  'error.booking.invalid-material-amount': 'Please enter material costs between 0 and the price, with at most two decimals.',
   'error.booking.no-show-reported': 'Not turning up was already reported for this booking. It ends after the 48 hours or with our team\'s decision, so there is nothing more to do now.',
   'error.booking.started': 'The job has already started, so it can no longer be cancelled. You can stop the job or report that the other side did not turn up.',
   'error.booking.objection-closed': 'The 48 hours to object have passed. Write to {contact} if you still need help.',

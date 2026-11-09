@@ -18,15 +18,15 @@ type Db = Tx | typeof db
  * checked out while its locks are held; request-transaction callers leave `owner` out (they read on the request connection
  * first, the public data on the owner pool after).
  */
-export async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, { id: string; requestId: string | null }>> {
-  const rows = new Map<string, { id: string; requestId: string | null; parentBookingId: string | null }>()
+export async function rootsOf(x: Db, bookingIds: string[]): Promise<Map<string, { id: string; requestId: string }>> {
+  const rows = new Map<string, { id: string; requestId: string; parentBookingId: string | null }>()
   let todo = [...new Set(bookingIds)]
   for (let i = 0; i < 8 && todo.length; i++) {
     const found = await x.select({ id: bookings.id, requestId: bookings.requestId, parentBookingId: bookings.parentBookingId }).from(bookings).where(inArray(bookings.id, todo))
     for (const r of found) rows.set(r.id, r)
     todo = [...new Set(found.flatMap((r) => (r.parentBookingId && !rows.has(r.parentBookingId) ? [r.parentBookingId] : [])))]
   }
-  const out = new Map<string, { id: string; requestId: string | null }>()
+  const out = new Map<string, { id: string; requestId: string }>()
   for (const id of bookingIds) {
     let r = rows.get(id)
     for (let i = 0; r?.parentBookingId && rows.has(r.parentBookingId) && i < 8; i++) r = rows.get(r.parentBookingId)
@@ -50,8 +50,8 @@ export async function taskRequestsOf(x: Db, rootRequestIds: string[]): Promise<{
   return rows.map((x) => ({ r: x.r, root: x.root! }))
 }
 
-/** The root request of a request: itself, or (an additional task) its parent booking's root request from `rootsOf`; null when that root has no request (booked direct). */
-export const rootRequestId = (r: { id: string; parentBookingId: string | null }, roots: Map<string, { requestId: string | null }>): string | null =>
+/** The root request of a request: itself, or (an additional task) its parent booking's root request from `rootsOf` (null only for an unknown booking). */
+export const rootRequestId = (r: { id: string; parentBookingId: string | null }, roots: Map<string, { requestId: string }>): string | null =>
   r.parentBookingId ? roots.get(r.parentBookingId)?.requestId ?? null : r.id
 
 /** Root request id > job number and title, for the given root request ids. */

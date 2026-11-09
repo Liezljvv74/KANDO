@@ -3,7 +3,7 @@ import { asUser, distanceKm, pool } from '@kando/db'
 import { SearchResultSchema } from '@kando/contract'
 import { getPublicProfile } from '@kando/domain'
 import { setStorageForTests } from '@kando/domain/src/testing'
-import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedProvider } from './helpers'
+import { cleanupUsers, EMAIL, givePhoto, memoryStorage, seedBase, seedBooking, seedProvider } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/providers/route')
@@ -170,12 +170,7 @@ it('a rated provider shows its rating and is not new', async () => {
   await pool.query("INSERT INTO users (id, email) VALUES ('sx-rater', $1) ON CONFLICT DO NOTHING", [EMAIL('sx-rater')])
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [pid])).rows[0].id
   for (const stars of [4, 5]) {
-    const b = (
-      await pool.query(
-        "INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min) VALUES ('sx-rater', $1, $2, 'direct', 'awaiting-time', now() + interval '3 days', 60) RETURNING id",
-        [pid, service],
-      )
-    ).rows[0].id
+    const b = await seedBooking({ customerId: 'sx-rater', providerId: pid, cols: { service_id: service, status: 'awaiting-time', start_at: new Date(Date.now() + 3 * 86_400_000) } })
     await pool.query(
       "INSERT INTO reviews (booking_id, author_id, subject_id, author_role, stars, visible_at) VALUES ($1, 'sx-rater', 'sx-rated', 'customer', $2, now() - interval '1 day')",
       [b, stars],

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { db, pool } from '@kando/db'
 import { ProviderMoneySchema } from '@kando/contract'
 import { COMMISSION_RATE, providerMoney, youReceive } from '@kando/domain'
-import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
 const route = await import('../app/app-api/v1/provider-money/route')
@@ -28,13 +28,23 @@ async function provider(): Promise<{ uid: string; id: string }> {
 /** A paid booking; `releasedAt` set also writes the transfer row as settle does. */
 async function paid(providerId: string, o: { status: string; amount?: number; releasedAt?: Date; noShow?: string }): Promise<string> {
   const amount = o.amount ?? 100
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, amount, pay_by, paid_at, payment_ref, commission_rate, released_at, no_show, no_show_reported_at)
-       VALUES ($1, $2, 'direct', $3, now() - interval '3 days', 60, false, $4, now(), now(), $5, $6, $7, $8, CASE WHEN $8::text IS NULL THEN NULL ELSE now() END) RETURNING id`,
-      [U.cust, providerId, o.status, amount, `pi_pm_${++n}`, COMMISSION_RATE, o.releasedAt ?? null, o.noShow ?? null],
-    )
-  ).rows[0].id as string
+  const id = await seedBooking({
+    customerId: U.cust,
+    providerId,
+    amount,
+    cols: {
+      status: o.status,
+      start_at: new Date(Date.now() - 3 * 86_400_000),
+      on_site: false,
+      pay_by: new Date(),
+      paid_at: new Date(),
+      payment_ref: `pi_pm_${++n}`,
+      commission_rate: COMMISSION_RATE,
+      released_at: o.releasedAt ?? null,
+      no_show: o.noShow ?? null,
+      no_show_reported_at: o.noShow ? new Date() : null,
+    },
+  })
   if (o.releasedAt) await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'transfer', $3, 'tr_x', $4)", [id, providerId, net(amount), `transfer:${id}`])
   return id
 }

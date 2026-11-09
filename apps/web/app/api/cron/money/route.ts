@@ -1,6 +1,6 @@
 import { db } from '@kando/db'
 import { runMoneySteps } from '@kando/domain'
-import { cronAuthorized } from '../../../../lib/cron'
+import { cronAuthorized } from '@/lib/cron'
 
 export const maxDuration = 60
 

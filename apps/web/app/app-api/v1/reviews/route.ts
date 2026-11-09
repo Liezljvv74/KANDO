@@ -1,7 +1,7 @@
 import { parseBody, WriteReviewSchema } from '@kando/contract'
 import { listMyReviews, writeReview } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { appRequest } from '@/lib/app-request'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 /** The caller's reviews: those they wrote, and those about them once shown. */
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) => Response.json({ docs: await listMyReviews(tx, user!.id) }))

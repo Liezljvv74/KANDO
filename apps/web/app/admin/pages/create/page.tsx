@@ -2,7 +2,7 @@
 
 import { Create, useForm } from '@refinedev/antd'
 import { Form } from 'antd'
-import { PageFields } from '../../../../components/admin/page-fields'
+import { PageFields } from '@/components/admin/page-fields'
 
 export default function PageCreate() {
   const { formProps, saveButtonProps } = useForm()

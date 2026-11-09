@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { sql } from 'drizzle-orm'
-import { clearOutbox, clearPushOutbox, COMMISSION_RATE, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, providerRating, runDueTimers, writeReview } from '@kando/domain'
+import { clearOutbox, clearPushOutbox, editReview, exportMyData, getPublicProfile, getRequest, listMyReviews, providerRating, runDueTimers, writeReview } from '@kando/domain'
 import { outboxForTests, pushOutboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, seedBase, seedPaidBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -44,14 +44,19 @@ async function done(o: { completedAt?: Date; status?: string; provider?: string;
   const p = o.provider ?? providerId
   const startAt = new Date(completedAt.getTime() - DAY - ++slot * 3 * HOUR)
   const service = (await pool.query('SELECT id FROM services WHERE provider_id = $1', [p])).rows[0].id
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, paid_at, payment_ref, commission_rate, finished_at, completed_at, released_at, parent_booking_id)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $5::timestamptz - interval '2 days', $5::timestamptz - interval '2 days', 'pi_rv_' || gen_random_uuid(), ${COMMISSION_RATE}, $5::timestamptz + interval '1 hour',
-         CASE WHEN $4 = 'completed' THEN $6::timestamptz END, CASE WHEN $4 = 'completed' THEN $6::timestamptz END, $7) RETURNING id`,
-      [o.customer ?? U.cust, p, service, status, startAt, completedAt, o.parent ?? null],
-    )
-  ).rows[0].id as string
+  const id = await seedPaidBooking({
+    customerId: o.customer ?? U.cust,
+    providerId: p,
+    startAt,
+    cols: {
+      service_id: service,
+      status,
+      finished_at: new Date(startAt.getTime() + 3_600_000),
+      completed_at: status === 'completed' ? completedAt : null,
+      released_at: status === 'completed' ? completedAt : null,
+      parent_booking_id: o.parent ?? null,
+    },
+  })
   return { id, completedAt }
 }
 

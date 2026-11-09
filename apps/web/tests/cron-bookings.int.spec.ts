@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { db, pool } from '@kando/db'
 import { COMMISSION_RATE, tryRelease, withDeferredInvoices } from '@kando/domain'
 import { setGatewayForTests, setStorageForTests } from '@kando/domain/src/testing'
-import { cleanupUsers, memoryStorage, seedBase, seedProvider, seedUser } from './helpers'
+import { cleanupUsers, memoryStorage, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway } from './fake-gateway'
 
 const routes = {
@@ -51,22 +52,35 @@ it('each cron route has its own budget: a slow release does not stop the invoice
   const prov = await seedProvider('cb-owner', { name: 'Cb Owner', categoryId, price: 100 })
   await pool.query("UPDATE users SET first_name = 'Hans', last_name = 'Müller' WHERE id = 'cb-owner'")
   await pool.query("UPDATE providers SET stripe_account_id = 'acct_cb', payouts_ready_at = now(), invoice_consent_at = now() WHERE id = $1", [prov])
-  const paid = async (confirmBy: string) => {
-    const id = (
-      await pool.query(
-        `INSERT INTO bookings (customer_id, provider_id, source, status, start_at, duration_min, on_site, address_street, address_postcode, address_city, amount, pay_by, paid_at, payment_ref, commission_rate, finished_at, confirm_by)
-         VALUES ('cb-cust', $1, 'direct', 'finished', now() - interval '9 days', 60, true, 'Hauptstr. 1', '10115', 'Berlin', 100, now() - interval '10 days', now() - interval '10 days', gen_random_uuid()::text, ${COMMISSION_RATE}, now() - interval '8 days', now() - interval '${confirmBy}') RETURNING id`,
-        [prov],
-      )
-    ).rows[0].id as string
+  const paid = async (confirmByDays: number) => {
+    const day = 86_400_000
+    const id = await seedBooking({
+      customerId: 'cb-cust',
+      providerId: prov,
+      amount: 100,
+      cols: {
+        status: 'finished',
+        start_at: new Date(Date.now() - 9 * day),
+        on_site: true,
+        address_street: 'Hauptstr. 1',
+        address_postcode: '10115',
+        address_city: 'Berlin',
+        pay_by: new Date(Date.now() - 10 * day),
+        paid_at: new Date(Date.now() - 10 * day),
+        payment_ref: randomUUID(),
+        commission_rate: COMMISSION_RATE,
+        finished_at: new Date(Date.now() - 8 * day),
+        confirm_by: new Date(Date.now() - confirmByDays * day),
+      },
+    })
     await pool.query("INSERT INTO ledger_entries (booking_id, provider_id, kind, amount, gateway_ref, idempotency_key) VALUES ($1, $2, 'charge', 100, 'pi_x', $3)", [id, prov, `charge:${id}`])
     return id
   }
   // released earlier with its invoice left for later (as the money route leaves it)
-  const done = await paid('2 days')
+  const done = await paid(2)
   expect(await withDeferredInvoices(() => tryRelease(db, done, 'cb-cust', new Date()))).toBe(true)
-  await paid('1 day')
-  await paid('1 day')
+  await paid(1)
+  await paid(1)
   // every transfer takes a minute on the fake clock: the money route uses up its budget after the first release
   let offset = 0
   const realNow = Date.now.bind(Date)

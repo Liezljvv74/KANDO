@@ -1,6 +1,6 @@
 import { db } from '@kando/db'
 import { runExpiryAndReminders } from '@kando/domain'
-import { cronAuthorized } from '../../../../lib/cron'
+import { cronAuthorized } from '@/lib/cron'
 
 /**
  * Seconds this function may run. The real limit on the free plan depends on the project's settings (Fluid compute and the

@@ -1,6 +1,6 @@
 import { parseBody, PushSettingsPatchSchema } from '@kando/contract'
 import { getPushSettings, setPushSettings } from '@kando/domain'
-import { appRequest } from '../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) => Response.json(await getPushSettings(tx, user!.id)))
 

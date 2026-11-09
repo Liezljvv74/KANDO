@@ -2,8 +2,8 @@
 
 import { List, ShowButton, useTable } from '@refinedev/antd'
 import { Table, Tag } from 'antd'
-import { SearchForm, searchByText } from '../../../components/admin/search-form'
-import { useAt } from '../../../lib/admin/t'
+import { SearchForm, searchByText } from '@/components/admin/search-form'
+import { useAt } from '@/lib/admin/t'
 
 export default function ProvidersList() {
   const at = useAt()

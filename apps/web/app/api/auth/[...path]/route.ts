@@ -1,4 +1,4 @@
-import { getAuth } from '../../../../lib/auth/server'
+import { getAuth } from '@/lib/auth/server'
 
 type Ctx = { params: Promise<{ path: string[] }> }
 const h =

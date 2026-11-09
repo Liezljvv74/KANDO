@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { asUser } from '@kando/db'
 import { listCategories } from '@kando/domain'
 import { t, type Key, type Lang } from '@kando/i18n'
-import { LangSwitch } from '../../../components/lang-switch'
-import { alternates, pageLang } from '../../../lib/site'
+import { LangSwitch } from '@/components/lang-switch'
+import { alternates, pageLang } from '@/lib/site'
 
 type Args = { params: Promise<{ lang: string }> }
 

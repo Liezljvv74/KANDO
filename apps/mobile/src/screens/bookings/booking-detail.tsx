@@ -23,14 +23,12 @@ import { placeText } from '@/lib/place'
 import { CancelSheet } from '@/screens/bookings/cancel-sheet'
 import { DescriptionForm, DisputeInfo } from '@/screens/bookings/dispute-form'
 import { FinishSheet } from '@/screens/bookings/finish-sheet'
-import { JobHeader } from '@/screens/bookings/job-header'
-import { MoneyBox } from '@/screens/bookings/money-box'
 import { PayPanel } from '@/screens/bookings/pay-card'
 import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
-import { color, font } from '@/theme'
+import { color } from '@/theme'
 
 /** Actions that open a form or statement below the buttons before anything is sent. */
 type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
@@ -167,10 +165,7 @@ export function JobCommonButtons({ state, threadId, job, unread, onChatOpened }:
   )
 }
 
-/**
- * `/bookings/[id]` stays for push links and installed builds: a booking made from a request (the current one or an older one, or an
- * additional task's) opens its job page, scrolled to it. A direct booking (no request) is shown here on its own.
- */
+/** `/bookings/[id]` stays for push links: every booking comes from a request, so it opens that job page, scrolled to the booking. */
 export default function BookingDetail() {
   useLang()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -180,37 +175,10 @@ export default function BookingDetail() {
   useEffect(() => {
     if (requestId) goReplace(`/bookings/request/${requestId}`, { booking: id })
   }, [requestId, id])
-  const title = t('booking.booking')
-  if (!done || !data || requestId)
-    return (
-      <FormScreen title={title}>
-        {!requestId && (error || done) ? <ErrorRetry code={error ?? 'Not found'} onRetry={retry} /> : <Loading />}
-      </FormScreen>
-    )
-  const b = data.booking
-  const head = bookingTitle(data)
-  const unsure = b.status === 'awaiting-time'
-  return (
-    <FormScreen title={b.title ?? title}>
-      <JobHeader viewer={data.viewer} job={{ jobNumber: b.jobNumber, startAt: unsure ? null : b.startAt, durationMin: unsure ? null : b.durationMin, onSite: b.onSite, address: b.address }} />
-      <Card>
-        <Text style={styles.status} accessibilityRole="header">
-          {head.title}
-        </Text>
-        {!!head.body && <Text style={styles.text}>{head.body}</Text>}
-        <BookingStatusLines view={data} />
-      </Card>
-      {b.money && <MoneyBox booking={b} taskIds={[]} />}
-      {b.jobState && (
-        <BookingActions view={data} state={b.jobState} onChanged={retry} extra={<JobCommonButtons state={b.jobState} threadId={data.threadId} job={{ number: b.jobNumber, title: b.title }} />} />
-      )}
-      <BookingSection view={data} />
-    </FormScreen>
-  )
+  return <FormScreen title={t('booking.booking')}>{!requestId && (error || done) ? <ErrorRetry code={error ?? 'Not found'} onRetry={retry} /> : <Loading />}</FormScreen>
 }
 
 const styles = StyleSheet.create({
-  status: { fontSize: 18, fontFamily: font.heading, color: color.indigo },
   text: { fontSize: 16, color: color.ink },
   small: { fontSize: 14, color: color.inkMuted },
   sheet: { gap: 8 },

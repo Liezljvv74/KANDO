@@ -2,10 +2,10 @@ import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import { bookings, ledgerEntries, staffFlags } from '@kando/db'
 import { MONEY_FLAGS } from '../bookings/job-state-lookup'
 import type { Exec } from '../providers/eligibility'
-import { COMMISSION_RATE, commissionFor } from './rules'
+import { COMMISSION_RATE, commissionFor, roundMoney, youReceive } from '@kando/contract'
 
-/** What a provider keeps of `amount` after commission (payment fees are inside the rate). */
-export const youReceive = (amount: number, rate: number): number => Math.round((amount - commissionFor(amount, rate)) * 100) / 100
+// Shim: youReceive is implemented in @kando/contract (money.ts); new code should import it from there.
+export { youReceive }
 
 /** The money box numbers of one booking; before payment (no stored rate) the current rate, so the line is "expected". */
 export const bookingMoney = (amount: number, storedRate: number | string | null) => {
@@ -43,6 +43,5 @@ export async function providerMoney(owner: Exec, providerId: string, now: Date, 
     .from(ledgerEntries)
     .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
     .where(and(eq(ledgerEntries.providerId, providerId), eq(ledgerEntries.kind, 'transfer'), gte(bookings.releasedAt, from), lt(bookings.releasedAt, to)))
-  const cents = (n: number) => Math.round(n * 100) / 100
-  return { receivedThisMonth: Number(r!.sum), onItsWay: cents(onItsWay), onHold: cents(onHold) }
+  return { receivedThisMonth: Number(r!.sum), onItsWay: roundMoney(onItsWay), onHold: roundMoney(onHold) }
 }

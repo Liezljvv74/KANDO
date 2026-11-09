@@ -1,7 +1,7 @@
 import { de, en } from '@kando/i18n'
-import type { Booking } from '@kando/contract'
+import { lateCancelFee as lateFee, type Booking } from '@kando/contract'
 
-import { actionLabel, BUTTON_ACTION, bookingStatusText, cancelStatement, cancelTap, daysLeft, lateFee, stopAnswerText } from './booking-status'
+import { actionLabel, BUTTON_ACTION, bookingStatusText, cancelStatement, cancelTap, daysLeft, stopAnswerText } from './booking-status'
 
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
@@ -153,4 +153,13 @@ test('the exact 24 h mark is free, one minute inside is late (same numbers as th
 test('every booking status a fallback can name has a text in German and English', () => {
   for (const dict of [de, en] as Record<string, string>[])
     for (const status of ['awaiting-time', 'awaiting-payment', 'confirmed', 'declined', 'expired', 'withdrawn', 'finished', 'completed', 'disputed', 'cancelled', 'stopped', 'refunded']) expect(dict[`bookingStatus.${status}`]).toBeTruthy()
+})
+
+test('cancelStatement never throws on a bad amount and never calls a booking without a start late', () => {
+  const now = new Date('2026-12-10T12:00:00Z')
+  const kids = ' booking.cancelChildren'
+  expect(cancelStatement(b({ status: 'awaiting-time', startAt: null as unknown as string }), 'customer', now)).toBe('booking.cancelFree' + kids)
+  expect(() => cancelStatement(b({ status: 'confirmed', amount: NaN, startAt: '2026-12-10T13:00:00Z' }), 'customer', now)).not.toThrow()
+  expect(() => cancelStatement(b({ status: 'confirmed', amount: -5, startAt: '2026-12-10T13:00:00Z' }), 'customer', now)).not.toThrow()
+  expect(() => stopAnswerText(b({ status: 'stopped', amount: NaN, stopAmount: -1 }))).not.toThrow()
 })
