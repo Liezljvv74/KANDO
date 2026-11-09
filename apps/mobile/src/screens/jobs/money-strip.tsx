@@ -24,13 +24,13 @@ export function MoneyStrip() {
       <View style={styles.row}>
         {cells.map(([key, amount]) => (
           <View key={key} style={styles.cell}>
-            <Text style={styles.amount}>{formatPrice({ priceType: 'fixed', price: amount, currency: 'EUR' })}</Text>
             <View style={styles.labelRow}>
-              <Text style={[styles.small, styles.label]}>{t(key)}</Text>
+              <Text style={styles.amount}>{formatPrice({ priceType: 'fixed', price: amount, currency: 'EUR' })}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel={`${t(key)}: ${t('money.info.open')}`} accessibilityState={{ expanded: info === key }} hitSlop={8} onPress={() => setInfo(info === key ? null : key)}>
                 <Text style={styles.i}>(i)</Text>
               </Pressable>
             </View>
+            <Text style={styles.small}>{t(key)}</Text>
           </View>
         ))}
       </View>
@@ -47,7 +47,6 @@ const styles = StyleSheet.create({
   amount: { fontSize: 16, fontWeight: '700', color: '#1D1C4A' },
   small: { fontSize: 12, color: '#4F4E7D' },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
-  label: { flexShrink: 1 },
   i: { fontSize: 12, fontWeight: '700', color: '#34328A' },
   explain: { fontSize: 13, color: '#1D1C4A', backgroundColor: '#fff', borderRadius: 4, padding: 8 },
 })
