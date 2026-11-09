@@ -1,6 +1,6 @@
 import { adminGet, adminRemove, adminUpdate, roleFor } from '@kando/domain'
-import { adminRequest } from '../../../../../lib/admin-request'
-import { refreshAfterAdminChange } from '../../../../../lib/public-cache'
+import { adminRequest } from '@/lib/admin-request'
+import { refreshAfterAdminChange } from '@/lib/public-cache'
 
 export const GET = adminRequest(roleFor, async ({ tx, staff, params }) => adminGet(tx, params.resource!, params.id!, staff.id))
 export const PATCH = adminRequest(roleFor, async ({ tx, request, params }) => {

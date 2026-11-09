@@ -1,5 +1,5 @@
 import { logStaffThreadAccess, staffThread, threadReadReason } from '@kando/domain'
-import { adminRequest } from '../../../../../lib/admin-request'
+import { adminRequest } from '@/lib/admin-request'
 
 // A Reviewer may read a reported thread. Every attempt, allowed or denied, is a staff_access_log row (GET requests leave
 // no audit line otherwise) plus a console line: ids only, no text.

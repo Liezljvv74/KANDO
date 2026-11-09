@@ -1,7 +1,7 @@
 import { parseQuery, TranslationQuerySchema } from '@kando/contract'
 import { db } from '@kando/db'
 import { clientKeyOf, getPublicProfile, textsOf, translateTexts, TranslationUnavailable } from '@kando/domain'
-import { appRequest } from '../../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 const unavailable = () => Response.json({ error: 'Translation unavailable' }, { status: 503 })
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Alert, Button, List, Spin, Tag, Typography } from 'antd'
 import { LOCALE } from '@kando/i18n'
-import { useAdminLang, useAt } from '../../../../lib/admin/t'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Msg = {
   id: string

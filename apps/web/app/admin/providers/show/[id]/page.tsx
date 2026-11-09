@@ -3,8 +3,8 @@
 import { useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Descriptions, Image, Space } from 'antd'
-import { RemovePhotoButton } from '../../../../../lib/admin/RemovePhotoButton'
-import { useAt } from '../../../../../lib/admin/t'
+import { RemovePhotoButton } from '@/lib/admin/RemovePhotoButton'
+import { useAt } from '@/lib/admin/t'
 
 type Provider = {
   id: string

@@ -1,7 +1,7 @@
 import { parseBody, ReferenceInputSchema } from '@kando/contract'
 import { addReference, listReferences } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { appRequest } from '@/lib/app-request'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) =>
   Response.json({ docs: await listReferences(tx, user!.id) }),

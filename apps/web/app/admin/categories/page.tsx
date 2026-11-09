@@ -3,8 +3,8 @@
 import { EditButton, List, useTable } from '@refinedev/antd'
 import { Table } from 'antd'
 import type { DocumentType } from '@kando/contract'
-import { SearchForm, searchByText } from '../../../components/admin/search-form'
-import { useAt } from '../../../lib/admin/t'
+import { SearchForm, searchByText } from '@/components/admin/search-form'
+import { useAt } from '@/lib/admin/t'
 
 export default function CategoriesList() {
   const at = useAt()

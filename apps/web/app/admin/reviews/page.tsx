@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { List, useTable } from '@refinedev/antd'
 import { useCustomMutation, useGetIdentity } from '@refinedev/core'
 import { Button, Input, Modal, Table, Tag } from 'antd'
-import { SearchForm, searchByText } from '../../../components/admin/search-form'
-import { when } from '../../../components/admin/booking-text'
-import { useAdminLang, useAt } from '../../../lib/admin/t'
+import { SearchForm, searchByText } from '@/components/admin/search-form'
+import { when } from '@/components/admin/booking-text'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Row = { id: string; authorEmail: string; subjectEmail: string; authorRole: string; stars: number; text: string | null; hidden: boolean; hiddenReason: string | null; visibleAt: string | null; createdAt: string }
 

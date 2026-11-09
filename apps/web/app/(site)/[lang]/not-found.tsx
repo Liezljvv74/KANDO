@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { LANGS, t, type Lang } from '@kando/i18n'
-import { langPath } from '../../../lib/site'
+import { langPath } from '@/lib/site'
 import { InLang } from './in-lang'
 
 // A not-found file gets no params: both languages are rendered here and InLang shows the one in the path.

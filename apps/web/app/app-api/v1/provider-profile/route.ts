@@ -1,7 +1,7 @@
 import { parseBody, ProfileInputSchema } from '@kando/contract'
 import { ensureDraft, getMyProfile, upsertMyProfile } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { appRequest } from '@/lib/app-request'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) =>
   Response.json(await getMyProfile(tx, user!.id)),

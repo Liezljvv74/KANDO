@@ -5,7 +5,7 @@ import { useCustomMutation, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, Descriptions, Input, Space, Tag } from 'antd'
 import { LOCALE } from '@kando/i18n'
-import { useAdminLang, useAt } from '../../../../../lib/admin/t'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Ai = { verdict: string | null; confidence: number | null; explanation: string | null; sampled: boolean; decision: string | null; failure: string | null; model: string; staffDecision: string | null }
 type Doc = { id: string; ownerEmail: string; requirement: string; status: string; note: string | null; reviewedAt: string | null; link: string | null; imageDeletedAt: string | null; ai: Ai | null }

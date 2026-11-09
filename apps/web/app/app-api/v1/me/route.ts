@@ -1,8 +1,8 @@
 import { DeleteMeSchema, MePatchSchema, parseBody } from '@kando/contract'
 import { deleteAccount, getMe, updateMe } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
-import { verifyPassword } from '../../../../lib/auth/server'
-import { refreshPublicPages } from '../../../../lib/public-cache'
+import { appRequest } from '@/lib/app-request'
+import { verifyPassword } from '@/lib/auth/server'
+import { refreshPublicPages } from '@/lib/public-cache'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) => Response.json(await getMe(tx, user!.id)))
 
