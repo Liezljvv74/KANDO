@@ -153,7 +153,7 @@ export const de = {
   'setup.noPrice': 'Noch kein Preis',
   'setup.aboutEmpty': 'Erzähl den Kunden, wer du bist.',
   'setup.aboutStrengths': 'Stärken: {n}',
-  'setup.documentsExtra': 'Überlege, zusätzliche Dokumente einzureichen, wie unten vorgeschlagen, um deine Chancen zu verbessern. Unser Team prüft deine Dokumente, unterstützt durch eine automatische Prüfung. Kunden sehen nur, welche Dokumente du eingereicht hast, nie die Dokumente selbst.',
+  'setup.documentsExtra': 'Überlege, zusätzliche Dokumente einzureichen, wie unten vorgeschlagen, um deine Chancen zu verbessern. Unser Team prüft deine Dokumente. Kunden sehen nur, welche Dokumente du eingereicht hast, nie die Dokumente selbst.',
   'missing.photo': 'Profilbild',
   'setup.share': 'Teilen',
   'setup.shareText': 'Finde mich bei {brand}: {url}',
