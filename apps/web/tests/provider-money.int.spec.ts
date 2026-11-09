@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
-import { pool } from '@kando/db'
+import { db, pool } from '@kando/db'
 import { ProviderMoneySchema } from '@kando/contract'
-import { COMMISSION_RATE, youReceive } from '@kando/domain'
+import { COMMISSION_RATE, providerMoney, youReceive } from '@kando/domain'
 import { call, cleanupUsers, seedBase, seedProvider, seedUser } from './helpers'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -45,6 +45,14 @@ it('received this month counts only releases in the current calendar month', asy
   await paid(p.id, { status: 'completed', releasedAt: new Date() })
   await paid(p.id, { status: 'completed', releasedAt: day(-70), amount: 250 })
   expect(await money(p.uid)).toEqual({ receivedThisMonth: net(100), onItsWay: 0, onHold: 0 })
+})
+
+it("received this month uses the caller's own month when it is given", async () => {
+  const p = await provider()
+  await paid(p.id, { status: 'completed', releasedAt: new Date() })
+  await paid(p.id, { status: 'completed', releasedAt: day(-30), amount: 250 })
+  const m = await providerMoney(db, p.id, new Date(), { from: day(-45), to: day(-15) })
+  expect(m.receivedThisMonth).toBe(net(250))
 })
 
 it('on hold covers problem and delayed jobs', async () => {

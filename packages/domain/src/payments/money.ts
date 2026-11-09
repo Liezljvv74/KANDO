@@ -16,13 +16,14 @@ export const bookingMoney = (amount: number, storedRate: number | string | null)
 
 /**
  * The provider's money strip (net amounts, spec 8b point 7). Owner connection: the ledger is staff only, so the caller checks
- * first that `providerId` is their own. Received this month: money released in the current calendar month (UTC; the net is the
+ * first that `providerId` is their own. Received this month: money released in the current calendar month (the device's month if given, else UTC; the net is the
  * transfer row). On its way: paid, not released, not on hold. On hold: a problem (dispute or no-show) or an open money flag.
  * Each booking, an additional task too, uses its own stored rate. ponytail: a stopped job is not counted until it is released.
  */
-export async function providerMoney(owner: Exec, providerId: string, now: Date): Promise<{ receivedThisMonth: number; onItsWay: number; onHold: number }> {
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+export async function providerMoney(owner: Exec, providerId: string, now: Date, month?: { from: Date; to: Date }): Promise<{ receivedThisMonth: number; onItsWay: number; onHold: number }> {
+  // `month`: the caller's own calendar month (the device's time zone); without it the UTC month
+  const from = month?.from ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const to = month?.to ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
   const open = await owner
     .select({ id: bookings.id, amount: bookings.amount, rate: bookings.commissionRate, status: bookings.status, noShow: bookings.noShow })
     .from(bookings)
