@@ -1,6 +1,6 @@
 import { photoSrc, searchPath } from '@/api/providers'
 import { setLang } from '@/i18n'
-import { formatDistance, formatPrice, ratingBadge } from './format'
+import { formatAmount, formatDistance, formatPrice, ratingBadge } from './format'
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
@@ -21,6 +21,19 @@ test('prices follow the website rules in German and English', () => {
   expect(formatPrice({ priceType: 'from', price: 20, currency: 'EUR' })).toBe('from €20.00')
   expect(formatPrice({ priceType: 'hourly', price: 20, currency: 'EUR' })).toBe('€20.00/hr')
   expect(formatPrice({ priceType: 'on-request', price: null, currency: 'EUR' })).toBe('Price on request')
+})
+
+test('formatAmount gives the same text as the old fixed-price label', () => {
+  for (const lang of ['de', 'en'] as const) {
+    setLang(lang)
+    for (const [amount, currency] of [[20, 'EUR'], [35.5, 'EUR'], [0, 'EUR'], [1234.56, 'EUR'], [12.5, 'ZAR']] as const) {
+      expect(formatAmount(amount, currency)).toBe(formatPrice({ priceType: 'fixed', price: amount, currency }))
+    }
+  }
+  setLang('de')
+  expect(formatAmount(20, 'EUR')).toMatch(/^20,00\s€$/)
+  setLang('en')
+  expect(formatAmount(35.5, 'EUR')).toBe('€35.50')
 })
 
 test('distance shows km, remote or nothing', () => {

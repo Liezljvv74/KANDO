@@ -5,7 +5,7 @@ import { asksStillWanted, closeSummary, lapsedQuoteOf, lapseKey } from './lapse'
 // The text is the key followed by its parameters, so the tests see which text and which values were chosen.
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, unknown>) => (p ? [key, ...Object.values(p)].join(' ') : key) }))
 jest.mock('@/lib/booking-time', () => ({ formatWhen: (iso: string) => `when:${iso}`, formatDay: (iso: string) => `day:${iso}` }))
-jest.mock('@/lib/format', () => ({ formatPrice: (s: { price: number }) => `EUR ${s.price.toFixed(2)}` }))
+jest.mock('@/lib/format', () => ({ formatAmount: (n: number) => `EUR ${n.toFixed(2)}` }))
 
 const now = new Date('2026-11-03T12:00:00.000Z')
 const q = (over: Partial<QuoteListItem>): QuoteListItem => ({

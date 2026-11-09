@@ -1,5 +1,6 @@
 import { DOCUMENT_TYPES, type Category, type Document, type OwnService } from '@kando/contract'
 import type { Key } from '@/i18n'
+import { color } from '@/theme'
 
 export type DocumentRow = { requirement: string; optional: boolean; state: 'none' | 'pending' | 'approved' | 'rejected'; note: string | null }
 
@@ -49,7 +50,7 @@ export type DocTone = 'required' | 'optional' | 'pending' | 'approved'
 export const docTone = (r: DocumentRow): DocTone => (r.state === 'approved' ? 'approved' : r.state === 'pending' ? 'pending' : r.optional ? 'optional' : 'required')
 
 /** Text colours per tone, readable (4.5:1 or more) on the white and on the green card. */
-export const DOC_COLORS: Record<DocTone, string> = { required: '#B3261E', optional: '#34328A', pending: '#4F4E7D', approved: '#08674F' }
+export const DOC_COLORS: Record<DocTone, string> = { required: color.danger, optional: color.indigo, pending: color.inkMuted, approved: color.success }
 
 /** A group needs attention: a required document is missing or rejected, or an optional one was rejected (its note must be seen). */
 export const groupNeedsAction = (rows: DocumentRow[], optional: boolean): boolean =>

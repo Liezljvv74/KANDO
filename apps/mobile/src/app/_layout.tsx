@@ -14,6 +14,7 @@ import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { pushRoute } from '@/lib/push'
+import { color } from '@/theme'
 
 // A push that arrives while the app is open still shows as a banner.
 setNotificationHandler({
@@ -35,7 +36,7 @@ export default function RootLayout() {
     return (
       <View style={styles.center}>
         {loading || !offline ? ( // spinner while the session or the fonts load; the offline notice only once loading is over
-          <ActivityIndicator size="large" color="#34328A" />
+          <ActivityIndicator size="large" color={color.indigo} />
         ) : (
           <>
             <Text style={styles.text}>{t(isAuthBusy() ? 'error.authBusy' : 'error.network')}</Text>
@@ -74,6 +75,6 @@ function usePushTaps(signedIn: boolean) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: '#E3F6EE', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  text: { fontSize: 16, color: '#1D1C4A', textAlign: 'center' },
+  center: { flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  text: { fontSize: 16, color: color.ink, textAlign: 'center' },
 })

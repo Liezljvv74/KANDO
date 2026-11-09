@@ -20,6 +20,7 @@ import { isLive } from '@/lib/profile-form'
 import { providerUrl, shareProfile } from '@/lib/share-profile'
 import { quoteBlocked } from '@/lib/quote-gate'
 import { GateRow, QuoteGate } from '@/screens/bookings/quote-gate'
+import { color } from '@/theme'
 
 /**
  * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
@@ -122,11 +123,11 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
 }
 
 const styles = StyleSheet.create({
-  live: { fontSize: 16, fontWeight: '700', color: '#34328A' },
-  hint: { fontSize: 14, color: '#4F4E7D' },
-  heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
+  live: { fontSize: 16, fontWeight: '700', color: color.indigo },
+  hint: { fontSize: 14, color: color.inkMuted },
+  heading: { fontSize: 17, fontWeight: '700', color: color.ink },
   checking: { minHeight: 44, justifyContent: 'center' },
-  name: { fontSize: 16, color: '#1D1C4A' },
-  awaiting: { fontSize: 15, fontWeight: '600', color: '#4F4E7D' },
+  name: { fontSize: 16, color: color.ink },
+  awaiting: { fontSize: 15, fontWeight: '600', color: color.inkMuted },
   done: { fontSize: 16, fontWeight: '700', color: '#1F6B3A' },
 })

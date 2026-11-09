@@ -8,6 +8,7 @@ import { Card, DONE_TEXT, EditButton, SectionHeader } from '@/components/form-ui
 import { t } from '@/i18n'
 import { aboutComplete } from '@/lib/completeness'
 import { aboutSummary } from '@/lib/profile-form'
+import { color } from '@/theme'
 
 /** About you: a short summary; the form is on its own screen. */
 export function AboutCard({ profile }: { profile: MyProfile }) {
@@ -34,6 +35,6 @@ export function AboutCard({ profile }: { profile: MyProfile }) {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  status: { fontSize: 14, color: '#4F4E7D' },
+  name: { fontSize: 17, fontWeight: '700', color: color.ink },
+  status: { fontSize: 14, color: color.inkMuted },
 })

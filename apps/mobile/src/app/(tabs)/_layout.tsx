@@ -7,10 +7,11 @@ import { AppState, type ColorValue } from 'react-native'
 import { jobCounts } from '@/api/jobs'
 import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
 import { t, useLang } from '@/i18n'
-import { categoryOf } from '@/lib/correspondence'
+import { categoryOf } from '@/lib/job-notices'
 import { tabBadge } from '@/lib/jobs'
 import { consumePending, readyToNavigate, urlOf, usePending } from '@/lib/pending-navigation'
 import { showProfileTab } from '@/lib/profile-tab'
+import { color } from '@/theme'
 
 /** Screens kept inside the tab bar (the bar stays on every signed-in screen): tabs without a button, each lighting the tab it belongs to. */
 const HIDDEN = ['bookings', 'invoices', 'learn', 'provider/[slug]', 'quotes/index', 'threads'] as const
@@ -70,7 +71,7 @@ export default function TabsLayout() {
   // Provider notices (payouts, documents, invoices ...) show as a dot on My business, where opening the page marks them seen.
   const businessDot = unseenOf(me?.notifications).some((n) => !n.dismissedAt && !categoryOf(n))
   return (
-    <Tabs backBehavior="history" tabBar={bar} screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true, tabBarActiveTintColor: '#34328A', tabBarInactiveTintColor: '#4F4E7D', tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#CFE6DC' }, tabBarLabelStyle: { fontWeight: '700' } }}>
+    <Tabs backBehavior="history" tabBar={bar} screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true, tabBarActiveTintColor: color.indigo, tabBarInactiveTintColor: color.inkMuted, tabBarStyle: { backgroundColor: color.surface, borderTopColor: color.divider }, tabBarLabelStyle: { fontWeight: '700' } }}>
       <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ tabBarIcon: icon('search-outline'), title: t('tab.search') }} />
       <Tabs.Screen name="jobs" options={{ title: t('tab.jobs'), tabBarBadge: badge > 0 ? badge : undefined, tabBarIcon: icon('clipboard-outline') }} />

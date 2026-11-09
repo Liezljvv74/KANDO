@@ -10,6 +10,7 @@ import { errorText, t } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { pictureNudgeKey } from '@/lib/picture-nudge'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
+import { color } from '@/theme'
 
 /** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
 export function PictureNudge() {
@@ -55,6 +56,6 @@ export function PictureNudge() {
 }
 
 const styles = StyleSheet.create({
-  body: { fontSize: 15, lineHeight: 22, color: '#1D1C4A' },
-  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: '#1D1C4A' },
+  body: { fontSize: 15, lineHeight: 22, color: color.ink },
+  dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: color.ink },
 })

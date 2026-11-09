@@ -13,6 +13,7 @@ import { formatDay } from '@/lib/booking-time'
 import { docLine, newestFirst } from '@/lib/invoices'
 import { monthName } from '@/screens/invoices/commission-list'
 import { money, usePdf } from '@/screens/invoices/invoice-list'
+import { color } from '@/theme'
 
 type Doc = ({ commission: false } & Invoice) | ({ commission: true } & CommissionInvoice)
 
@@ -75,7 +76,7 @@ export function InvoicesFold({ provider }: { provider: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  line: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#CFE6DC' },
+  line: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.divider },
   details: { gap: 6, paddingTop: 6 },
-  small: { fontSize: 14, color: '#4F4E7D' },
+  small: { fontSize: 14, color: color.inkMuted },
 })

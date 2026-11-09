@@ -14,6 +14,7 @@ import { docText, errorText, t, useLang } from '@/i18n'
 import { DOC_COLORS, deleteBodyKey, docTone, documentRows, submittedDocs, type DocumentRow } from '@/lib/documents'
 import { pickDocument, pickPhoto, tooLarge, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
+import { color } from '@/theme'
 
 const loadAll = async () => ({ services: await servicesApi.list(), verifications: await documentsApi.list() })
 
@@ -101,7 +102,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
+  text: { fontSize: 15, lineHeight: 21, color: color.ink },
   state: { fontSize: 17, fontWeight: '700' },
   sub: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
 })

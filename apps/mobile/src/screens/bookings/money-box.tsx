@@ -7,8 +7,9 @@ import { getBooking, getRequest } from '@/api/bookings'
 import { Card } from '@/components/form-ui'
 import { useLoad } from '@/hooks/use-load'
 import { t, useLang } from '@/i18n'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 import { moneyLines } from '@/lib/money-lines'
+import { color } from '@/theme'
 
 const PAID = ['confirmed', 'finished', 'completed', 'disputed', 'stopped']
 
@@ -31,7 +32,7 @@ export function MoneyBox({ booking, taskIds }: { booking: Booking; taskIds: stri
       {lines.map((l, i) => (
         <View key={i} style={styles.row}>
           <Text style={[styles.text, i === lines.length - 1 && styles.bold]}>{l.label}</Text>
-          <Text style={[styles.text, i === lines.length - 1 && styles.bold]}>{formatPrice({ priceType: 'fixed', price: l.amount, currency: booking.currency })}</Text>
+          <Text style={[styles.text, i === lines.length - 1 && styles.bold]}>{formatAmount(l.amount, booking.currency)}</Text>
         </View>
       ))}
     </Card>
@@ -39,8 +40,8 @@ export function MoneyBox({ booking, taskIds }: { booking: Booking; taskIds: stri
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 14, fontWeight: '600', color: '#34328A' },
+  title: { fontSize: 14, fontWeight: '600', color: color.indigo },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  text: { fontSize: 14, color: '#4F4E7D', flexShrink: 1 },
-  bold: { fontWeight: '700', color: '#1D1C4A' },
+  text: { fontSize: 14, color: color.inkMuted, flexShrink: 1 },
+  bold: { fontWeight: '700', color: color.ink },
 })

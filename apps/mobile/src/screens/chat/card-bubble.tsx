@@ -3,11 +3,12 @@ import { StyleSheet, Text, View } from 'react-native'
 import type { Card } from '@kando/contract'
 
 import { t } from '@/i18n'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
+import { color } from '@/theme'
 
 /** What the server recorded in the thread (a quote, its acceptance, an additional task): amounts and ids only, never text from a person. */
 export function CardBubble({ card }: { card: Card }) {
-  const amount = card.amount === undefined || !card.currency ? '' : formatPrice({ priceType: 'fixed', price: card.amount, currency: card.currency })
+  const amount = card.amount === undefined || !card.currency ? '' : formatAmount(card.amount, card.currency)
   const text =
     card.type === 'quote'
       ? t('chat.card.quote', { amount, version: card.version })
@@ -25,7 +26,7 @@ export function CardBubble({ card }: { card: Card }) {
 }
 
 const styles = StyleSheet.create({
-  card: { alignSelf: 'center', backgroundColor: '#CFE6DC', borderRadius: 6, padding: 12, marginVertical: 6, maxWidth: '90%' },
-  text: { fontSize: 15, fontWeight: '700', color: '#1D1C4A', textAlign: 'center' },
-  note: { fontSize: 13, color: '#1D1C4A', textAlign: 'center', marginTop: 4 },
+  card: { alignSelf: 'center', backgroundColor: color.divider, borderRadius: 6, padding: 12, marginVertical: 6, maxWidth: '90%' },
+  text: { fontSize: 15, fontWeight: '700', color: color.ink, textAlign: 'center' },
+  note: { fontSize: 13, color: color.ink, textAlign: 'center', marginTop: 4 },
 })

@@ -8,6 +8,7 @@ import { signOutGeneration } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { accountError, afterDeleteFailure, exportText } from '@/lib/account-data'
+import { color } from '@/theme'
 
 /** Export of the person's data through the share sheet, and the deletion of the account behind a password confirmation. */
 export function AccountDataSection({ part }: { part: 'export' | 'delete' }) {
@@ -79,10 +80,10 @@ export function AccountDataSection({ part }: { part: 'export' | 'delete' }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 8, padding: 16, gap: 12 },
+  card: { backgroundColor: color.surface, borderRadius: 8, padding: 16, gap: 12 },
   plain: { gap: 12 },
-  heading: { fontSize: 18, fontWeight: '700', color: '#1D1C4A' },
-  danger: { fontSize: 18, fontWeight: '700', color: '#B3261E' },
-  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
-  rule: { height: 1, backgroundColor: '#7B7AB8', marginVertical: 4 },
+  heading: { fontSize: 18, fontWeight: '700', color: color.ink },
+  danger: { fontSize: 18, fontWeight: '700', color: color.danger },
+  text: { fontSize: 15, lineHeight: 21, color: color.ink },
+  rule: { height: 1, backgroundColor: color.border, marginVertical: 4 },
 })

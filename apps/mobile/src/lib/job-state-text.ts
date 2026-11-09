@@ -2,7 +2,7 @@ import { JOB_STATE_KEYS, type JobStateDto } from '@kando/contract'
 
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 
 export type StateCtx = {
   /** What the customer pays / what the provider receives (major units). */
@@ -28,7 +28,7 @@ export function stateText(state: JobStateDto | undefined, viewer: 'customer' | '
   if (!state) return null
   // Only the values we know are passed: a text that still shows a {name} is skipped for its Plain, then Bare, variant (no clause for what is unknown).
   const p: Record<string, string | number> = {}
-  const price = (n: number) => formatPrice({ priceType: 'fixed', price: n, currency: ctx.currency! })
+  const price = (n: number) => formatAmount(n, ctx.currency!)
   if (ctx.currency && ctx.amount !== undefined) p.amount = price(ctx.amount) // no currency known: no amount clause
   if (ctx.currency && ctx.net !== undefined) p.net = price(ctx.net)
   if (ctx.date) p.date = formatWhen(ctx.date)

@@ -7,6 +7,7 @@ import { Info } from '@/components/auth-ui'
 import { Card, DONE_TEXT, EditButton, IconButton, SectionHeader } from '@/components/form-ui'
 import { t } from '@/i18n'
 import { hasEntries } from '@/lib/completeness'
+import { color } from '@/theme'
 
 export const MAX_REFERENCES = 2 // mirrors MAX_PROVIDER_REFERENCES on the server
 
@@ -36,8 +37,8 @@ export function ReferencesCard({ references }: { references: OwnReference[] }) {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  status: { fontSize: 14, color: '#4F4E7D' },
+  name: { fontSize: 17, fontWeight: '700', color: color.ink },
+  status: { fontSize: 14, color: color.inkMuted },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowText: { flex: 1 },
 })

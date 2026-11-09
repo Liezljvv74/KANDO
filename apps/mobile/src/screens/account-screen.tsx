@@ -28,6 +28,7 @@ import { AccountDataSection } from '@/screens/account-data-section'
 import { IdScanButton } from '@/screens/id-scan-button'
 import { PictureNudge } from '@/screens/picture-nudge'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
+import { color } from '@/theme'
 
 export default function AccountScreen() {
   useLang()
@@ -200,14 +201,14 @@ function PushSwitches() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#E3F6EE' },
+  root: { flex: 1, backgroundColor: color.bg },
   scroll: { padding: 16, gap: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: '700', color: '#34328A' },
-  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#34328A' },
-  email: { fontSize: 16, color: '#1D1C4A' },
-  fold: { fontSize: 16, fontWeight: '600', color: '#34328A', minHeight: 44, textAlignVertical: 'center' },
-  heading: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  hint: { fontSize: 14, color: '#4F4E7D' },
-  link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: '#34328A', textDecorationLine: 'underline' },
+  card: { backgroundColor: color.surface, borderRadius: 16, padding: 16, gap: 12 },
+  title: { fontSize: 22, fontWeight: '700', color: color.indigo },
+  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: color.indigo },
+  email: { fontSize: 16, color: color.ink },
+  fold: { fontSize: 16, fontWeight: '600', color: color.indigo, minHeight: 44, textAlignVertical: 'center' },
+  heading: { fontSize: 17, fontWeight: '700', color: color.ink },
+  hint: { fontSize: 14, color: color.inkMuted },
+  link: { paddingVertical: 12, textAlign: 'center', fontSize: 15, color: color.indigo, textDecorationLine: 'underline' },
 })

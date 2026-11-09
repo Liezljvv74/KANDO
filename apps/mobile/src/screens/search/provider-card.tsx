@@ -33,11 +33,11 @@ export function ProviderCard({ item, names }: { item: SearchItem; names: Map<str
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', gap: 12, backgroundColor: '#fff', borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo, padding: 14, alignItems: 'center' },
+  card: { flexDirection: 'row', gap: 12, backgroundColor: color.surface, borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: color.indigo, padding: 14, alignItems: 'center' },
   body: { flex: 1, gap: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { flexShrink: 1, fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
-  badge: { fontSize: 12, fontWeight: '700', color: '#fff', backgroundColor: '#34328A', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-  sub: { fontSize: 14, color: '#1D1C4A' },
-  meta: { fontSize: 14, color: '#34328A', fontFamily: font.tag },
+  name: { flexShrink: 1, fontSize: 18, fontFamily: font.heading, color: color.ink },
+  badge: { fontSize: 12, fontWeight: '700', color: color.surface, backgroundColor: color.indigo, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  sub: { fontSize: 14, color: color.ink },
+  meta: { fontSize: 14, color: color.indigo, fontFamily: font.tag },
 })

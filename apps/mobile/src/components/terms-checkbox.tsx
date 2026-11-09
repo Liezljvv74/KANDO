@@ -4,6 +4,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { API_URL } from '@/api/client'
 import { getLang, t, useLang } from '@/i18n'
 import { splitSentence } from '@/lib/terms-sentence'
+import { color } from '@/theme'
 
 /** The page staff publish on the website (slug agb or datenschutz), in the app's language. */
 const openPage = (slug: 'agb' | 'datenschutz') => Linking.openURL(`${API_URL}/${slug}${getLang() === 'de' ? '' : '?lang=en'}`).catch(() => {})
@@ -15,7 +16,7 @@ export function TermsCheckbox({ checked, onChange, sentenceKey = 'auth.termsSent
   return (
     <View style={styles.row}>
       <Pressable style={styles.box} onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={t('auth.termsLabel')} hitSlop={8}>
-        <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={26} color="#34328A" />
+        <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={26} color={color.indigo} />
       </Pressable>
       <Text
         style={styles.text}
@@ -40,6 +41,6 @@ export function TermsCheckbox({ checked, onChange, sentenceKey = 'auth.termsSent
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, minHeight: 44 },
   box: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  text: { flex: 1, fontSize: 15, color: '#1D1C4A', paddingTop: 10 },
-  link: { color: '#1D1C4A', textDecorationLine: 'underline' },
+  text: { flex: 1, fontSize: 15, color: color.ink, paddingTop: 10 },
+  link: { color: color.ink, textDecorationLine: 'underline' },
 })

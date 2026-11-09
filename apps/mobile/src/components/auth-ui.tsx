@@ -32,7 +32,7 @@ export const Field = ({ label, error, style, hint, ...props }: TextInputProps & 
       {...props}
       accessibilityLabel={label}
       accessibilityHint={hint}
-      placeholderTextColor="#5E5D90"
+      placeholderTextColor={color.placeholder}
       style={[styles.input, error ? styles.inputError : null, style]}
     />
     <ErrorText text={error ?? null} />
@@ -49,7 +49,7 @@ export const Button = ({ label, onPress, busy, disabled, danger, a11yLabel, sele
     accessibilityState={{ busy: !!busy, disabled: !!(busy || disabled), selected }}
     // Dims while pressed, so a tap is visible.
     style={({ pressed }) => [styles.button, danger && styles.danger, (busy || disabled) && styles.busy, pressed && styles.pressed]}>
-    {busy ? <ActivityIndicator color={danger ? '#fff' : color.ink} /> : <Text style={[styles.buttonLabel, danger && styles.dangerLabel]}>{label}</Text>}
+    {busy ? <ActivityIndicator color={danger ? color.surface : color.ink} /> : <Text style={[styles.buttonLabel, danger && styles.dangerLabel]}>{label}</Text>}
   </Pressable>
 )
 
@@ -75,17 +75,17 @@ const styles = StyleSheet.create({
   card: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.divider, borderRadius: 6, padding: 16, gap: 12 },
   title: { fontSize: 24, fontFamily: font.heading, color: color.indigo },
   field: { gap: 4 },
-  label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
-  input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, fontSize: 16, color: '#1D1C4A', backgroundColor: '#fff' },
-  inputError: { borderColor: '#B3261E' },
-  hint: { fontSize: 13, color: '#4F4E7D' },
+  label: { fontSize: 14, fontWeight: '600', color: color.ink },
+  input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: color.border, paddingHorizontal: 12, fontSize: 16, color: color.ink, backgroundColor: color.surface },
+  inputError: { borderColor: color.danger },
+  hint: { fontSize: 13, color: color.inkMuted },
   button: { minHeight: 48, borderRadius: 4, backgroundColor: color.teal, alignItems: 'center', justifyContent: 'center' },
-  danger: { backgroundColor: '#B3261E' },
+  danger: { backgroundColor: color.danger },
   busy: { opacity: 0.6 },
   buttonLabel: { color: color.ink, fontSize: 16, fontWeight: '700' },
-  dangerLabel: { color: '#fff' },
+  dangerLabel: { color: color.surface },
   link: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  linkLabel: { color: '#34328A', fontSize: 15, fontWeight: '600' },
-  error: { color: '#B3261E', fontSize: 14 },
-  info: { color: '#1D1C4A', fontSize: 16, lineHeight: 22 },
+  linkLabel: { color: color.indigo, fontSize: 15, fontWeight: '600' },
+  error: { color: color.danger, fontSize: 14 },
+  info: { color: color.ink, fontSize: 16, lineHeight: 22 },
 })

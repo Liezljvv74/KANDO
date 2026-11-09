@@ -14,7 +14,7 @@ import { Button, ErrorText, Field, KEYBOARD_GAP } from '@/components/auth-ui'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { t, useLang } from '@/i18n'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 import { CategorySelect } from './category-select'
 import { ProviderCard } from './provider-card'
 
@@ -145,8 +145,8 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#E3F6EE' },
+  root: { flex: 1, backgroundColor: color.bg },
   list: { padding: 16, gap: 12 },
   form: { gap: 12, marginBottom: 4 },
-  title: { fontSize: 26, fontFamily: font.heading, color: '#34328A' },
+  title: { fontSize: 26, fontFamily: font.heading, color: color.indigo },
 })

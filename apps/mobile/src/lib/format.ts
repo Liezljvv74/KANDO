@@ -1,11 +1,14 @@
 import type { Rating } from '@kando/contract'
-import { formatPrice as priceLabel, type PriceType } from '@kando/i18n/app'
+import { formatMoney, formatPrice as priceLabel, type PriceType } from '@kando/i18n/app'
 
 import { getLang, t } from '@/i18n'
 
 /** Same rules as the website (shared catalogue): "ab 20,00 €", "20,00 €/Std.", "Preis auf Anfrage". */
 export const formatPrice = (s: { priceType: PriceType; price: number | null; currency: string }): string =>
   priceLabel(s.priceType, s.price, s.currency, getLang())
+
+/** A plain money amount in the app language, e.g. "20,00 €" (not a price label: no "ab", no "/Std."). */
+export const formatAmount = (amount: number, currency: string): string => formatMoney(amount, currency, getLang())
 
 /** "≈ 12 km", "remote" when no distance is known but the provider works remotely, else null. */
 export function formatDistance(p: { distanceKm: number | null; worksRemotely: boolean }): string | null {
