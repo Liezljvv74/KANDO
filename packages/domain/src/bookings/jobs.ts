@@ -74,7 +74,7 @@ async function alwaysDerived(tx: Tx, userId: string, now: Date): Promise<string[
   // the flags table is staff-only: read on the owner pool, only ids, then narrowed to the caller's own bookings by rootsOf on `tx`
   const flagged = (await db.select({ ref: staffFlags.refId }).from(staffFlags).where(and(inArray(staffFlags.kind, MONEY_FLAGS), isNull(staffFlags.resolvedAt)))).flatMap((f) => (isUuid(f.ref) ? [f.ref] : []))
   const roots = await rootsOf(tx, [...ths.flatMap((t) => t.bookingId ?? []), ...reqs.flatMap((r) => r.parent ?? []), ...flagged])
-  return [...new Set([...reqs.filter((r) => !r.parent).map((r) => r.id), ...[...roots.values()].flatMap((r) => r.requestId ?? []), ...liveTasks.flatMap((t) => t.root ?? [])])]
+  return [...new Set([...reqs.filter((r) => !r.parent).map((r) => r.id), ...[...roots.values()].map((r) => r.requestId), ...liveTasks.flatMap((t) => t.root ?? [])])]
 }
 
 /** The list rows of the given root requests, as `role` sees them (state, number, title, other party, date, unread). */

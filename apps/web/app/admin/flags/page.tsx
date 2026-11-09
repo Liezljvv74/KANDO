@@ -2,9 +2,9 @@
 
 import { List, ShowButton, useTable } from '@refinedev/antd'
 import { Table, Tag } from 'antd'
-import { SearchForm, searchByText } from '../../../components/admin/search-form'
+import { SearchForm, searchByText } from '@/components/admin/search-form'
 import { LOCALE } from '@kando/i18n'
-import { useAdminLang, useAt } from '../../../lib/admin/t'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 export default function FlagsList() {
   const at = useAt()

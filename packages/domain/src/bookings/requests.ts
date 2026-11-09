@@ -115,7 +115,7 @@ export const bookingItem = (b: Booking, userId: string): JobStateItem => ({ key:
 export async function withRequestRefs<T extends BookingRequest>(x: Db, list: T[], userId?: string, withState: boolean | Map<string, JobStateOf> = false): Promise<T[]> {
   const parents = [...new Set(list.flatMap((r) => (r.parentBookingId ? [r.parentBookingId] : [])))]
   const roots = await rootsOf(x, parents)
-  // a task whose root booking has no request (booked direct) has no job to show: no refs, never its own unused number
+  // a task whose root is unknown has no job to show: no refs, never its own unused number
   const rootOf = (r: T) => rootRequestId(r, roots)
   const jobs = await rootJobs(x, [...new Set(list.flatMap((r) => rootOf(r) ?? []))], userId)
   // the derived job state, as seen by the caller
@@ -140,9 +140,9 @@ export async function withBookingRefs(x: Db, list: Booking[], userId?: string, w
   // the derived job state of each booking itself, as seen by the caller (`withState` as in withRequestRefs)
   const states = withState instanceof Map ? withState : userId && withState && list.length ? await jobStates(x, userId, list.map((b) => bookingItem(b, userId))) : undefined
   const stated = (b: Booking): Booking => { const s = states?.get(b.id); return s ? { ...b, jobState: toJobStateDto(s) } : b }
-  if (!list.some((b) => b.requestId)) return list.map(stated)
-  const roots = await rootsOf(x, list.filter((b) => b.requestId).map((b) => b.id))
-  const rootReqs = [...new Set([...roots.values()].flatMap((r) => r.requestId ?? []))]
+  if (!list.length) return list.map(stated)
+  const roots = await rootsOf(x, list.map((b) => b.id))
+  const rootReqs = [...new Set([...roots.values()].map((r) => r.requestId))]
   const jobs = await rootJobs(x, rootReqs, userId)
   const position = await taskPositions(x, rootReqs)
   return list.map((b) => {
@@ -161,7 +161,6 @@ export const toBooking = (b: typeof bookings.$inferSelect, now = new Date()): Bo
   quoteId: b.quoteId,
   requestId: b.requestId,
   parentBookingId: b.parentBookingId,
-  source: b.source as Booking['source'],
   status: bookingShownStatus(b, now) as Booking['status'],
   startAt: iso(b.startAt),
   durationMin: b.durationMin,

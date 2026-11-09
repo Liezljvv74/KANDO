@@ -1,5 +1,5 @@
 import { deleteFile, fileLink, notFound } from '@kando/domain'
-import { appRequest } from '../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user, params }) => {
   const url = await fileLink(tx, user!.id, params.id!)

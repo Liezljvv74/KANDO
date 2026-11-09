@@ -1,7 +1,7 @@
 import { asUser } from '@kando/db'
 import { visibleProviderSlugs } from '@kando/domain'
-import { siteUrl } from '../../../lib/site'
-import { urlset } from '../../../lib/sitemap'
+import { siteUrl } from '@/lib/site'
+import { urlset } from '@/lib/sitemap'
 
 export const dynamic = 'force-dynamic'
 

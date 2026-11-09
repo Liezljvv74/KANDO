@@ -5,8 +5,8 @@ import { useState } from 'react'
 import { useCustomMutation, useGetIdentity, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Alert, Button, Descriptions, Input, InputNumber, Radio, Space, Tag } from 'antd'
-import { money, statusLabel, when } from '../../../../../components/admin/booking-text'
-import { useAdminLang, useAt } from '../../../../../lib/admin/t'
+import { money, statusLabel, when } from '@/components/admin/booking-text'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Decision = 'full-payout' | 'partial' | 'full-refund'
 type Dispute = {

@@ -6,8 +6,8 @@ import { Show } from '@refinedev/antd'
 import { Button, DatePicker, Descriptions, Image, Input, Space } from 'antd'
 import type { Dayjs } from 'dayjs'
 import { LOCALE } from '@kando/i18n'
-import { RemovePhotoButton } from '../../../../../lib/admin/RemovePhotoButton'
-import { useAdminLang, useAt } from '../../../../../lib/admin/t'
+import { RemovePhotoButton } from '@/lib/admin/RemovePhotoButton'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type User = { id: string; email: string; firstName: string | null; lastName: string | null; address: { street: string | null; postcode: string; city: string | null; country: string } | null; photoUrl: string | null; photoId: string | null; staffRole: string | null; suspendedUntil: string | null; suspendedReason: string | null; createdAt: string }
 

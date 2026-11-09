@@ -1,7 +1,7 @@
 import { ProviderMoneyQuerySchema, parseQuery } from '@kando/contract'
 import { db } from '@kando/db'
 import { ownProvider, providerMoney } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 /** The provider's money strip (ProviderMoneySchema): net amounts, read on the owner connection after the own-provider check; 403 for a customer-only account. */
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user, request }) => {

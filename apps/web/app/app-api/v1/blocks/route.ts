@@ -1,6 +1,6 @@
 import { BlockInputSchema, parseBody, parseQuery } from '@kando/contract'
 import { blockUser, listBlocks, unblockUser } from '@kando/domain'
-import { appRequest } from '../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user }) => Response.json({ docs: await listBlocks(tx, user!.id) }))
 

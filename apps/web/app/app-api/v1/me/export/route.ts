@@ -1,5 +1,5 @@
 import { exportCsv, exportMyData } from '@kando/domain'
-import { appRequest } from '../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 // ?format=json (default) or csv: both come from the same export object.
 export const GET = appRequest({ auth: 'required' }, async ({ tx, user, request }) => {

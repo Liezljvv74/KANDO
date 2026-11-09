@@ -1,6 +1,7 @@
 import { pool } from '@kando/db'
 import { TERMS_VERSION, BookingSchema, QuoteSchema, RequestSchema, type Booking, type BookingRequest, type Quote } from '@kando/contract'
-import type { Storage } from '@kando/domain'
+import { COMMISSION_RATE, type Storage } from '@kando/domain'
+import { randomUUID } from 'node:crypto'
 
 // Fake session: cookie "uid=<id>:<email>" is a confirmed session, plus "verified=0" an unconfirmed one and "name=<name>"
 // the account name (each test file mocks lib/auth/server with `fakeSession`).
@@ -253,12 +254,54 @@ export async function makeAwaitingPayment(o: Parameters<typeof makeQuote>[0] & {
 }
 
 /**
+ * A booking in any state, written straight through the owner connection in the shape the product creates: the customer's
+ * request (booked), the provider's quote (accepted) and the booking naming that quote (the bookings_fill_amount trigger
+ * copies request, amount and currency from it). `cols` are the other booking columns (snake_case, plain values); the amount
+ * of the quote is `cols.amount`, else `amount`, else 100. A `parent_booking_id` makes the request an additional task's.
+ * Returns the booking id. Use makeAwaitingPayment instead when the real routes are cheap enough for the test.
+ */
+export async function seedBooking(o: { customerId: string; providerId: string; amount?: number; cols?: Record<string, unknown> }): Promise<string> {
+  const cols = { ...(o.cols ?? {}) }
+  const amount = (cols.amount as number | undefined) ?? o.amount ?? 100
+  delete cols.amount
+  const parent = (cols.parent_booking_id as string | undefined) ?? null
+  const day = 86_400_000
+  let quoteId = cols.quote_id as string | undefined // a test that made its own quote names it
+  if (!quoteId) {
+    const r = await pool.query(
+      "INSERT INTO requests (customer_id, provider_id, service_id, description, status, answer_by, parent_booking_id) VALUES ($1, $2, $3, 'Test job', 'booked', now() + interval '7 days', $4) RETURNING id",
+      [o.customerId, o.providerId, (cols.service_id as string | undefined) ?? null, parent],
+    )
+    const q = await pool.query(
+      "INSERT INTO quotes (request_id, provider_id, amount, scope, status, expires_at) VALUES ($1, $2, $3, 'Test job', 'accepted', $4) RETURNING id",
+      [r.rows[0].id, o.providerId, amount, new Date(Date.now() + 30 * day)],
+    )
+    quoteId = q.rows[0].id as string
+  }
+  const all: Record<string, unknown> = { customer_id: o.customerId, provider_id: o.providerId, quote_id: quoteId, status: 'confirmed', start_at: new Date(Date.now() + 5 * day), duration_min: 60, ...cols }
+  const names = Object.keys(all)
+  const b = await pool.query(`INSERT INTO bookings (${names.join(', ')}) VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`, Object.values(all))
+  return b.rows[0].id
+}
+
+/** A paid booking (seedBooking with the payment columns set: paid two days before the start, a payment reference, the commission rate). */
+export function seedPaidBooking(o: { customerId: string; providerId: string; startAt: string | Date; ref?: string; rate?: number; amount?: number; cols?: Record<string, unknown> }): Promise<string> {
+  const start = new Date(o.startAt)
+  const paid = new Date(start.getTime() - 2 * 86_400_000)
+  return seedBooking({
+    customerId: o.customerId,
+    providerId: o.providerId,
+    amount: o.amount,
+    cols: { start_at: start, pay_by: paid, paid_at: paid, payment_ref: o.ref ?? `pi_${randomUUID()}`, commission_rate: o.rate ?? COMMISSION_RATE, ...o.cols },
+  })
+}
+
+/**
  * Tests that legitimately create many requests or bookings for one customer call this first: it closes the customer's open
- * requests and moves their earlier requests and direct bookings out of the 24-hour window, so the abuse limits (abuse-limits.int.spec.ts) stay out of the way.
+ * requests and moves their earlier requests out of the 24-hour window, so the abuse limits (abuse-limits.int.spec.ts) stay out of the way.
  */
 export async function relaxLimits(uid: string): Promise<void> {
   await pool.query("UPDATE requests SET status = CASE WHEN status IN ('open','quoted') THEN 'withdrawn' ELSE status END, created_at = created_at - interval '2 days' WHERE customer_id = $1 AND created_at > now() - interval '1 day'", [uid])
-  await pool.query("UPDATE bookings SET created_at = created_at - interval '2 days' WHERE customer_id = $1 AND source = 'direct' AND created_at > now() - interval '1 day'", [uid])
 }
 
 /** The chat of a request, as one of its parties sees it (the thread opens with the request). */

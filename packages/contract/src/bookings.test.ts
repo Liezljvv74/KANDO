@@ -38,10 +38,10 @@ describe('AcceptQuoteInputSchema', () => {
 })
 
 describe('BookingSchema', () => {
-  it('carries the request id (null for a direct booking) and never the payment internals', () => {
+  it('carries the request id and never the payment internals', () => {
     const keys = Object.keys(BookingSchema.shape)
     expect(keys).toContain('requestId')
-    expect(BookingSchema.shape.requestId.safeParse(null).success).toBe(true)
+    expect(BookingSchema.shape.requestId.safeParse(null).success).toBe(false)
     for (const k of ['commissionRate', 'paymentRef', 'checkoutRef', 'paidAt', 'releasedAt', 'bookedAt']) expect(keys).not.toContain(k)
   })
 })

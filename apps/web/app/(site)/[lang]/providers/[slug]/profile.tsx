@@ -13,8 +13,8 @@ import {
 } from '@kando/domain'
 import { formatPrice, t, type Key, type Lang } from '@kando/i18n'
 import { TranslateLink } from './translate-link'
-import { LangSwitch } from '../../../../../components/lang-switch'
-import { alternates, langPath, pageLang } from '../../../../../lib/site'
+import { LangSwitch } from '@/components/lang-switch'
+import { alternates, langPath, pageLang } from '@/lib/site'
 
 // The provider page and its translated version (?translate=1, which the proxy sends to ./translated).
 // Read under the anonymous RLS context: what an anonymous app user sees, nothing more.

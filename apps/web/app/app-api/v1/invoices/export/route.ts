@@ -1,5 +1,5 @@
 import { exportInvoices, yearOf } from '@kando/domain'
-import { appRequest } from '../../../../../lib/app-request'
+import { appRequest } from '@/lib/app-request'
 
 /**
  * The provider's invoices of one calendar year as CSV (?year=YYYY, default this year in the app's time zone); 400 BAD_YEAR

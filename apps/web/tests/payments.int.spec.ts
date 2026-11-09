@@ -5,7 +5,7 @@ import { appPool } from '@kando/db/src/client'
 import { PayLinkSchema } from '@kando/contract'
 import { AmountTooSmallError, clearOutbox, COMMISSION_RATE, createPayLink, handleGatewayEvent, runDueTimers, type GatewayEvent } from '@kando/domain'
 import { outboxForTests, setGatewayForTests } from '@kando/domain/src/testing'
-import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits, seedBase, seedProvider, seedUser } from './helpers'
+import { call, cleanupUsers, EMAIL, makeAwaitingPayment, makeQuote, relaxLimits, seedBase, seedBooking, seedProvider, seedUser } from './helpers'
 import { fakeGateway, type FakeGateway } from './fake-gateway'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -50,13 +50,11 @@ const nextStart = () => new Date(Date.now() + 10 * DAY + ++slot * 3 * HOUR)
 async function awaiting(o: { payBy?: Date; startAt?: Date; customer?: string; status?: string; provider?: string; service?: string } = {}): Promise<{ id: string; startAt: Date }> {
   const startAt = o.startAt ?? nextStart()
   const payBy = o.payBy ?? new Date(Date.now() + 40 * HOUR)
-  const id = (
-    await pool.query(
-      `INSERT INTO bookings (customer_id, provider_id, service_id, source, status, start_at, duration_min, pay_by, accepted_at)
-       VALUES ($1, $2, $3, 'direct', $4, $5, 60, $6, $6::timestamptz - interval '1 hour') RETURNING id`,
-      [o.customer ?? U.cust, o.provider ?? providerId, o.service ?? serviceId, o.status ?? 'awaiting-payment', startAt, payBy],
-    )
-  ).rows[0].id as string
+  const id = await seedBooking({
+    customerId: o.customer ?? U.cust,
+    providerId: o.provider ?? providerId,
+    cols: { service_id: o.service ?? serviceId, status: o.status ?? 'awaiting-payment', start_at: startAt, pay_by: payBy, accepted_at: new Date(payBy.getTime() - 3_600_000) },
+  })
   return { id, startAt }
 }
 const row = async (id: string) => (await pool.query('SELECT status, paid_at, payment_ref, commission_rate, checkout_ref FROM bookings WHERE id = $1', [id])).rows[0]

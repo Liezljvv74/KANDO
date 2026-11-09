@@ -18,7 +18,7 @@ A service marketplace for Germany: households find, request and book document-ch
 ## Where things are
 - `apps/mobile` Expo app (expo-router, SDK 58); `apps/web` Next.js app (website, `/admin`, `app-api/v1/*` routes); `packages/db` (Drizzle schema, `rls.ts`, migrations), `packages/domain` (business rules), `packages/contract` (zod input rules shared with the app), `packages/i18n` (texts).
 - Every API route uses `appRequest(...)` (session, origin, body size, row-level-security transaction); domain functions take `tx` and check who may do what; writes the app role may not make run on the owner connection after the checks. Never lock a row on the request connection and write it on the owner connection (deadlock).
-- Plans: `docs/superpowers/plans/` (Flow 1 is the current one); designs: `docs/specs/`, `docs/superpowers/specs/`. Reports: `Reports/` (test reports, review reports, MVP completion tasks).
+- Plans: `docs/superpowers/plans/` (the job-page plan and `2026-11-09-feedback-and-help.md` are the current ones; Flow 1 is built and merged); designs: `docs/specs/`, `docs/superpowers/specs/`. Reports: `Reports/` (test reports, review reports, MVP completion tasks).
 - Project agents, commands and skills used to build this: `.claude/README.md`.
 
 ## Commands

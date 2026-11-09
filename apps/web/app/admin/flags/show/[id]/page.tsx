@@ -5,7 +5,7 @@ import { useCustomMutation, useGetIdentity, useShow } from '@refinedev/core'
 import { Show } from '@refinedev/antd'
 import { Button, Descriptions, List, Tag } from 'antd'
 import { LOCALE } from '@kando/i18n'
-import { useAdminLang, useAt } from '../../../../../lib/admin/t'
+import { useAdminLang, useAt } from '@/lib/admin/t'
 
 type Flag = {
   id: string
