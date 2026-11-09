@@ -45,3 +45,6 @@ export type CommissionInvoice = z.infer<typeof CommissionInvoiceSchema>
 export const CommissionInvoiceListSchema = z.object({ docs: z.array(CommissionInvoiceSchema) })
 /** GET /commission-invoices/:id/pdf: a signed download link (600 seconds). */
 export const CommissionInvoicePdfSchema = PayLinkSchema
+
+/** The platform commission: 15% including Stripe's payment fees, provisional, to be reviewed after research. The one constant (the server re-exports it from domain/payments/rules.ts); no text may type the rate. */
+export const COMMISSION_RATE = 0.15

@@ -1,5 +1,6 @@
-/** 15% including Stripe's payment fees, provisional, to be reviewed after research. Copied to bookings.commission_rate at payment. */
-export const COMMISSION_RATE = 0.15
+// COMMISSION_RATE (15% including Stripe's payment fees, provisional, to be reviewed after research; copied to bookings.commission_rate at payment)
+// lives in @kando/contract so the phone shows the same rate; this is still the one place the server reads it from.
+export { COMMISSION_RATE } from '@kando/contract'
 
 /** Real money needs a reviewed code change after the lawyer clears spec section 9: only Stripe test keys are accepted. */
 export const LIVE_PAYMENTS_ALLOWED = false

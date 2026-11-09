@@ -17,6 +17,7 @@ import { headerDate } from '@/lib/job-header'
 import { pastPage, type JobSection } from '@/lib/jobs'
 import { stateText } from '@/lib/job-state-text'
 import { InvoicesFold } from '@/screens/jobs/invoices-fold'
+import { MoneyStrip } from '@/screens/jobs/money-strip'
 
 const open = (row: JobRow) => go(`/bookings/request/${row.id}`) // the job page
 /** The small tag on a search result: the section the job sits in. */
@@ -115,6 +116,7 @@ export default function JobsScreen() {
           ))}
         </View>
       )}
+      {role === 'provider' && <MoneyStrip />}
       <Field
         label={t('jobs.search')}
         placeholder={t('jobs.searchHint')}

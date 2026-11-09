@@ -1,4 +1,4 @@
-import { parseAmount, parseAmountOrZero } from './amount'
+import { parseAmount, parseAmountOrZero, receiveFrom } from './amount'
 
 test('plain amounts with a comma or dot decimal parse', () => {
   expect(parseAmount('90')).toBe(90)
@@ -14,4 +14,9 @@ test('an amount that may be nothing (a stop amount, a material part) also takes 
   for (const zero of ['0', '0,00', '0.0', ' 00 ']) expect(parseAmountOrZero(zero)).toBe(0)
   expect(parseAmountOrZero('12,5')).toBe(12.5)
   for (const bad of ['', '-1', '0,001', 'abc']) expect(parseAmountOrZero(bad)).toBeNull()
+})
+
+test('receiveFrom: what the provider keeps', () => {
+  expect(receiveFrom('120', 0.15)).toBe(102)
+  expect(receiveFrom('x', 0.15)).toBeNull()
 })
