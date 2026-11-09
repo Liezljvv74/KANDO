@@ -104,24 +104,9 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
  * and Active come whole (Active: problems and delays first). A search covers all sections of the role: number, title, other party.
  */
 export async function listJobs(tx: Tx, userId: string, q: JobsQueryInput, now = new Date()): Promise<JobsPage> {
-  // `settled` is a hand-made twin of deriveJobState. A row it calls past that derives otherwise ("drift") is logged once (ids only,
-  // so the rule gets fixed); the list is worked out ONE more time with those rows derived in code (they then show in the section
-  // their state says, and the counters agree). No state outlives the call. If the second pass still finds drift (it cannot, the ids
-  // are no longer in the settled set) those rows are left out of the page rather than shown in the wrong section.
-  let drifted: string[] = []
-  for (let attempt = 0; ; attempt++) {
-    const out = await listJobsOnce(tx, userId, q, now, drifted, attempt > 0)
-    if (!out.drift.length) return out.page
-    if (attempt === 0) console.warn(`[jobs] settled rule drifted from deriveJobState: ${out.drift.map((r) => `${r.id}=${r.jobState.key}`).join(', ')}`)
-    if (attempt > 0) return out.page
-    drifted = out.drift.map((r) => r.id)
-  }
-}
-
-async function listJobsOnce(tx: Tx, userId: string, q: JobsQueryInput, now: Date, drifted: string[], last: boolean): Promise<{ page: JobsPage; drift: JobRow[] }> {
   const mine = q.role === 'customer' ? eq(requests.customerId, userId) : eq(requests.providerId, (await ownProvider(tx, userId))?.id ?? NO_ID)
   const jobsOf = and(mine, isNull(requests.parentBookingId)) // an additional task is part of its job, not a row
-  const derived = [...new Set([...(await alwaysDerived(tx, userId, now)), ...drifted])]
+  const derived = await alwaysDerived(tx, userId, now)
   const open = await tx.select(columns).from(requests).where(and(jobsOf, or(not(settled(now)), derived.length ? inArray(requests.id, derived) : undefined))).orderBy(...newestFirst)
   const openRows = await rowsOf(tx, userId, q.role, open, now)
   const openList = open.flatMap((f) => openRows.get(f.id) ?? [])
@@ -141,13 +126,13 @@ async function listJobsOnce(tx: Tx, userId: string, q: JobsQueryInput, now: Date
     const hits = all.filter((_, i) => { const j = refs[i]; return !!j && `${taskNumber(j.number, 1)} ${j.title} ${j.otherParty}`.toLowerCase().includes(needle) })
     const { rows, next } = pageOf(hits.slice(0, LIST_PAGE + 1))
     const known = await rowsOf(tx, userId, q.role, rows.filter((f) => !openRows.has(f.id)), now)
-    return { page: { items: rows.flatMap((f) => openRows.get(f.id) ?? known.get(f.id) ?? []), ...(next && { next }), counts }, drift: [] }
+    return { items: rows.flatMap((f) => openRows.get(f.id) ?? known.get(f.id) ?? []), ...(next && { next }), counts }
   }
 
   if (q.section !== 'past') {
     const items = openList.filter((r) => r.jobState.section === q.section)
     if (q.section === 'active') items.sort((a, b) => Number(b.jobState.tone === 'bad') - Number(a.jobState.tone === 'bad')) // stable: newest first within
-    return { page: { items, counts }, drift: [] }
+    return { items, counts }
   }
 
   const fromDb = await tx
@@ -159,7 +144,11 @@ async function listJobsOnce(tx: Tx, userId: string, q: JobsQueryInput, now: Date
   const fromOpen = open.filter((f) => openRows.get(f.id)?.jobState.section === 'past').filter(afterCursor(q.cursor))
   const { rows, next } = pageOf([...fromDb, ...fromOpen].sort(byKeyDesc).slice(0, LIST_PAGE + 1))
   const settledRows = await rowsOf(tx, userId, q.role, rows.filter((f) => !openRows.has(f.id)), now)
+  // `settled` is a hand-made twin of deriveJobState and decides the section (membership of Past), so a job is in exactly one list and
+  // the counters equal the lists. A row it calls past that derives otherwise would be a bug in the rule: it stays visible in Past (never
+  // dropped) and is logged once per call (ids only) so the rule gets fixed. Inputs the SQL cannot see (unread messages, money flags,
+  // live tasks) are not drift: alwaysDerived moves those jobs to the code-derived set before `settled` is applied.
   const drift = [...settledRows.values()].filter((r) => r.jobState.section !== 'past')
-  const drifting = new Set(drift.map((r) => r.id))
-  return { page: { items: rows.flatMap((f) => (drifting.has(f.id) && last ? [] : openRows.get(f.id) ?? settledRows.get(f.id) ?? [])), ...(next && { next }), counts }, drift }
+  if (drift.length) console.error(`[jobs] settled rule drifted from deriveJobState: ${drift.map((r) => `${r.id}=${r.jobState.key}`).join(', ')}`)
+  return { items: rows.flatMap((f) => openRows.get(f.id) ?? settledRows.get(f.id) ?? []), ...(next && { next }), counts }
 }
