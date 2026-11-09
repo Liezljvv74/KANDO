@@ -10,6 +10,7 @@ import { docText, t } from '@/i18n'
 import { serviceDocNote, type DocumentRow } from '@/lib/documents'
 import { servicesComplete } from '@/lib/completeness'
 import { formatPrice } from '@/lib/format'
+import { color } from '@/theme'
 
 /** Services; adding and editing happen on their own screens. */
 export function ServicesCard({ services, docRows }: { services: OwnService[]; docRows: DocumentRow[] }) {
@@ -44,8 +45,8 @@ export function ServicesCard({ services, docRows }: { services: OwnService[]; do
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  status: { fontSize: 14, color: '#4F4E7D' },
+  name: { fontSize: 17, fontWeight: '700', color: color.ink },
+  status: { fontSize: 14, color: color.inkMuted },
   waiting: { fontSize: 14, fontWeight: '600', color: '#8A5A00' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowText: { flex: 1 },

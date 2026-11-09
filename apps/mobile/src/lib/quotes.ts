@@ -1,5 +1,5 @@
 import type { QuoteListItem } from '@kando/contract'
 
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 
-export const price = (q: Pick<QuoteListItem, 'amount' | 'currency'>) => formatPrice({ priceType: 'fixed', price: q.amount, currency: q.currency })
+export const price = (q: Pick<QuoteListItem, 'amount' | 'currency'>) => formatAmount(q.amount, q.currency)

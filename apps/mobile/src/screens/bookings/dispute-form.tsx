@@ -10,8 +10,8 @@ import { useLoad } from '@/hooks/use-load'
 import { useSubmit } from '@/hooks/use-submit'
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
-import { formatPrice } from '@/lib/format'
-import { font } from '@/theme'
+import { formatAmount } from '@/lib/format'
+import { color, font } from '@/theme'
 
 /** A written text for our team or the other side: a reported problem, an objection to a no-show report, an additional task. */
 export function DescriptionForm({ label, hint, submitLabel, onSubmit, onDone }: { label: string; hint?: string; submitLabel: string; onSubmit: (text: string) => Promise<unknown>; onDone: () => void }) {
@@ -39,7 +39,7 @@ export function DisputeInfo({ booking }: { booking: Booking }) {
       <Info text={t((d.reason === 'problem' && d.openedBy === 'provider' ? 'dispute.reason.problemProvider' : `dispute.reason.${d.reason}`) as Key)} />
       {!!d.description && <Text style={styles.quote}>{d.description}</Text>}
       {d.decision ? (
-        <Info text={t(`dispute.decision.${d.decision}` as Key, { amount: formatPrice({ priceType: 'fixed', price: d.providerShare ?? 0, currency: booking.currency }) })} />
+        <Info text={t(`dispute.decision.${d.decision}` as Key, { amount: formatAmount(d.providerShare ?? 0, booking.currency) })} />
       ) : (
         <Info text={t('dispute.decideBy', { date: formatWhen(d.decideBy) })} />
       )}
@@ -49,6 +49,6 @@ export function DisputeInfo({ booking }: { booking: Booking }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
-  quote: { fontSize: 15, color: '#4F4E7D', fontStyle: 'italic' },
+  title: { fontSize: 18, fontFamily: font.heading, color: color.ink },
+  quote: { fontSize: 15, color: color.inkMuted, fontStyle: 'italic' },
 })

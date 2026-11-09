@@ -2,7 +2,7 @@ import { DAY, FREE_CANCEL_HOURS, HOUR, LATE_CANCEL_SHARE, STOP_ANSWER_DAYS, type
 
 import { t, type Key } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 
 export type Viewer = 'customer' | 'provider'
 type JobButton = JobStateDto['buttons'][number]
@@ -23,7 +23,7 @@ export type BookingAction =
   | 'answerStop'
 
 const ms = (iso: string | null) => (iso ? new Date(iso).getTime() : NaN)
-const money = (b: Pick<Booking, 'currency'>, cents: number) => formatPrice({ priceType: 'fixed', price: cents / 100, currency: b.currency })
+const money = (b: Pick<Booking, 'currency'>, cents: number) => formatAmount(cents / 100, b.currency)
 const cents = (x: number) => Math.round(x * 100)
 
 /** Whole days left until `iso` (a started day counts), never below 0: the confirmation countdown. */

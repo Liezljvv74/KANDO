@@ -2,10 +2,11 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '@/components/auth-ui'
 import { errorText, t } from '@/i18n'
+import { color } from '@/theme'
 
 export const Loading = () => (
   <View style={styles.box}>
-    <ActivityIndicator size="large" color="#34328A" />
+    <ActivityIndicator size="large" color={color.indigo} />
   </View>
 )
 
@@ -26,5 +27,5 @@ export const ErrorRetry = ({ code, onRetry }: { code: string; onRetry: () => voi
 
 const styles = StyleSheet.create({
   box: { padding: 16, gap: 12, alignItems: 'stretch', justifyContent: 'center' },
-  text: { fontSize: 16, color: '#1D1C4A', textAlign: 'center' },
+  text: { fontSize: 16, color: color.ink, textAlign: 'center' },
 })

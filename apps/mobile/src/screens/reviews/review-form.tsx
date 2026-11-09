@@ -11,7 +11,7 @@ import { useSubmit } from '@/hooks/use-submit'
 import { t } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
 import { reviewView } from '@/lib/review-state'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 
 const starLabel = (n: number) => (n === 1 ? t('review.star.one') : t('review.star.other', { n }))
 const stars = (n: number) => `${'★'.repeat(n)}${'☆'.repeat(5 - n)}`
@@ -92,11 +92,11 @@ export function ReviewPanel({ booking }: { booking: Booking }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
-  label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
-  text: { fontSize: 16, color: '#1D1C4A' },
+  title: { fontSize: 18, fontFamily: font.heading, color: color.ink },
+  label: { fontSize: 14, fontWeight: '600', color: color.ink },
+  text: { fontSize: 16, color: color.ink },
   starRow: { flexDirection: 'row' },
-  stars: { fontSize: 20, color: '#34328A' },
+  stars: { fontSize: 20, color: color.indigo },
   star: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  starText: { fontSize: 28, color: '#34328A' },
+  starText: { fontSize: 28, color: color.indigo },
 })

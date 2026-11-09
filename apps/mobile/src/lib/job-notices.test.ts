@@ -1,10 +1,10 @@
 import type { Notification } from '@kando/contract'
 
-import { categoryOf, isJobPageNotice } from './correspondence'
+import { categoryOf, isJobPageNotice } from './job-notices'
 
 const n = (kind: string, over: Partial<Notification> = {}) => ({ id: kind, kind, payload: { bookingId: 'b', quoteId: 'q' }, createdAt: 'x', seenAt: null, dismissedAt: null, ...over }) as Notification
 
-describe('correspondence', () => {
+describe('job notices', () => {
   it('sorts notifications into the three lists', () => {
     expect(categoryOf(n('message-received', { payload: { url: 'https://x.test/t', threadId: 't' } }))).toBe('messages')
     expect(categoryOf(n('quote-received'))).toBe('quotes')

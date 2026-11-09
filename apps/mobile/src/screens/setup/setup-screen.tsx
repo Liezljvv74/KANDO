@@ -12,7 +12,7 @@ import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
 import { loadMe, markNotificationsSeen, useMe } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
-import { categoryOf } from '@/lib/correspondence'
+import { categoryOf } from '@/lib/job-notices'
 import { documentRows } from '@/lib/documents'
 import { createSaveGuard, freshOr } from '@/lib/save-guard'
 import { InvoicesCard } from '../invoices/invoices-card'
@@ -24,6 +24,7 @@ import { PayoutCard } from './payout-card'
 import { PublishBar } from './publish-bar'
 import { ReferencesCard } from './references-card'
 import { ServicesCard } from './services-card'
+import { color } from '@/theme'
 
 /** The one-page "My service profile". */
 export default function SetupScreen() {
@@ -101,8 +102,8 @@ export default function SetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  status: { fontSize: 14, color: '#4F4E7D' },
+  name: { fontSize: 17, fontWeight: '700', color: color.ink },
+  status: { fontSize: 14, color: color.inkMuted },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowText: { flex: 1 },
 })

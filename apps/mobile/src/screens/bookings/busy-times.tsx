@@ -6,6 +6,7 @@ import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { t } from '@/i18n'
 import { formatWhen } from '@/lib/booking-time'
+import { color } from '@/theme'
 
 const DAYS = 30
 
@@ -32,6 +33,6 @@ export function BusyTimes({ slug }: { slug: string }) {
 
 const styles = StyleSheet.create({
   box: { gap: 4 },
-  title: { fontSize: 16, fontWeight: '700', color: '#34328A' },
-  text: { fontSize: 14, color: '#1D1C4A' },
+  title: { fontSize: 16, fontWeight: '700', color: color.indigo },
+  text: { fontSize: 14, color: color.ink },
 })

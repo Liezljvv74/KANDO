@@ -15,7 +15,7 @@ import { actionLabel, BUTTON_ACTION, bookingStatusText, daysLeft, type BookingAc
 import { confirmDanger } from '@/lib/confirm'
 import { doQuoteStep } from '@/lib/do-quote-step'
 import { formatWhen } from '@/lib/booking-time'
-import { formatPrice } from '@/lib/format'
+import { formatAmount } from '@/lib/format'
 import { go, goReplace } from '@/lib/go'
 import { bookingStateCtx, stateText } from '@/lib/job-state-text'
 import { openSupport } from '@/lib/support'
@@ -30,7 +30,7 @@ import { StopSheet } from '@/screens/bookings/stop-sheet'
 import { OpenChat } from '@/screens/chat/open-chat'
 import { BookingInvoiceRow } from '@/screens/invoices/invoice-list'
 import { ReviewPanel } from '@/screens/reviews/review-form'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 
 /** Actions that open a form or statement below the buttons before anything is sent. */
 type Sheet = 'finish' | 'cancel' | 'dispute' | 'objectNoShow' | 'additionalTask' | 'stateStopAmount' | 'answerStop'
@@ -71,7 +71,7 @@ export function BookingSection({ view, showTitle }: { view: BookingView; showTit
         {showTitle && <Text style={styles.small}>{bookingTitle(view).title}</Text>}
         {/* the start time stored for an awaiting-time booking is only a stand-in: never shown */}
         {b.status !== 'awaiting-time' && <Text style={styles.text}>{`${t('booking.when')}: ${formatWhen(b.startAt)} (${b.durationMin} min)`}</Text>}
-        <Text style={styles.text}>{`${t('booking.amount')}: ${formatPrice({ priceType: 'fixed', price: b.amount, currency: b.currency })}`}</Text>
+        <Text style={styles.text}>{`${t('booking.amount')}: ${formatAmount(b.amount, b.currency)}`}</Text>
         <Text style={styles.text}>{`${t('booking.mode')}: ${placeText(b.onSite, b.address)}`}</Text>
         {!!b.note && <Text style={styles.small}>{b.note}</Text>}
         {!!b.parentBookingId && <Text style={styles.small}>{t('additionalTask.explainer')}</Text>}
@@ -210,8 +210,8 @@ export default function BookingDetail() {
 }
 
 const styles = StyleSheet.create({
-  status: { fontSize: 18, fontFamily: font.heading, color: '#34328A' },
-  text: { fontSize: 16, color: '#1D1C4A' },
-  small: { fontSize: 14, color: '#4F4E7D' },
+  status: { fontSize: 18, fontFamily: font.heading, color: color.indigo },
+  text: { fontSize: 16, color: color.ink },
+  small: { fontSize: 14, color: color.inkMuted },
   sheet: { gap: 8 },
 })

@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { getLang, t } from '@/i18n'
 import { suggestedWhen } from '@/lib/when-where'
+import { color } from '@/theme'
 
 /**
  * A date or a time of day chosen with the phone's own picker (a dialog on Android, a spinner under the field on iPhone, closed with
@@ -67,12 +68,12 @@ export function DateTimeField({
 
 const styles = StyleSheet.create({
   field: { gap: 4 },
-  label: { fontSize: 14, fontWeight: '600', color: '#1D1C4A' },
-  input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: '#7B7AB8', paddingHorizontal: 12, justifyContent: 'center', backgroundColor: '#fff' },
-  value: { fontSize: 16, color: '#1D1C4A' },
-  placeholder: { fontSize: 16, color: '#5E5D90' },
+  label: { fontSize: 14, fontWeight: '600', color: color.ink },
+  input: { minHeight: 44, borderRadius: 4, borderWidth: 1, borderColor: color.border, paddingHorizontal: 12, justifyContent: 'center', backgroundColor: color.surface },
+  value: { fontSize: 16, color: color.ink },
+  placeholder: { fontSize: 16, color: color.placeholder },
   pressed: { opacity: 0.6 },
   disabled: { opacity: 0.5 },
   done: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  doneLabel: { color: '#34328A', fontSize: 16, fontWeight: '700' },
+  doneLabel: { color: color.indigo, fontSize: 16, fontWeight: '700' },
 })

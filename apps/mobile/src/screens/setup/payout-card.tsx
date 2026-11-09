@@ -13,6 +13,7 @@ import { useMe, useQuoteSteps } from '@/hooks/use-me'
 import { openPayoutSetup, payoutOpened, saveQuoteField } from '@/lib/do-quote-step'
 import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { payoutState, saveSwitch } from '@/lib/payouts'
+import { color } from '@/theme'
 
 /** "Set up payouts": the status and the Stripe link. `useLoad` re-checks the status on focus and when the app returns to the front (no polling). `onSaved` gets the profile a save answered with. */
 export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile; onSaved: (p: MyProfile) => void; taxAsked: number }) {
@@ -127,9 +128,9 @@ function InvoicingFields({ initial, onSaved, taxAsked }: { initial: MyProfile; o
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 17, fontWeight: '700', color: '#1D1C4A' },
-  text: { fontSize: 16, color: '#1D1C4A' },
-  small: { fontSize: 14, color: '#4F4E7D' },
+  title: { fontSize: 17, fontWeight: '700', color: color.ink },
+  text: { fontSize: 16, color: color.ink },
+  small: { fontSize: 14, color: color.inkMuted },
   toggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44 },
-  toggleText: { fontSize: 15, fontWeight: '600', color: '#34328A' },
+  toggleText: { fontSize: 15, fontWeight: '600', color: color.indigo },
 })

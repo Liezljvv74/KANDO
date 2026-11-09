@@ -18,6 +18,7 @@ import { compulsory } from '@/lib/compulsory'
 import { documentRows, serviceDocNote, type DocumentRow } from '@/lib/documents'
 import { parsePrice } from '@/lib/profile-form'
 import { createSerial } from '@/lib/serial-create'
+import { color } from '@/theme'
 
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
 const priceLabel = (p: string) => (p === 'on-request' ? t('price.onRequest') : t(`pt.${p}` as 'pt.fixed'))
@@ -165,7 +166,7 @@ function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows
 }
 
 const styles = StyleSheet.create({
-  hint: { fontSize: 14, color: '#4F4E7D' },
+  hint: { fontSize: 14, color: color.inkMuted },
   waiting: { fontSize: 14, fontWeight: '600', color: '#8A5A00' },
   multi: { minHeight: 72, paddingTop: 10, textAlignVertical: 'top' },
 })

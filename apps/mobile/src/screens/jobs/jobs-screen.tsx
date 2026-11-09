@@ -18,6 +18,7 @@ import { pastPage, type JobSection } from '@/lib/jobs'
 import { stateText } from '@/lib/job-state-text'
 import { InvoicesFold } from '@/screens/jobs/invoices-fold'
 import { MoneyStrip } from '@/screens/jobs/money-strip'
+import { color } from '@/theme'
 
 const open = (row: JobRow) => go(`/bookings/request/${row.id}`) // the job page
 /** The small tag on a search result: the section the job sits in. */
@@ -174,13 +175,13 @@ export default function JobsScreen() {
 
 const styles = StyleSheet.create({
   switch: { flexDirection: 'row', gap: 8 },
-  side: { flex: 1, minHeight: 48, borderRadius: 4, borderWidth: 2, borderColor: '#34328A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  sideOn: { backgroundColor: '#19C3B8' },
-  sideOff: { backgroundColor: '#fff' },
-  sideText: { fontSize: 16, fontWeight: '600', color: '#34328A', textAlign: 'center' },
-  sideTextOn: { fontWeight: '800', color: '#1D1C4A' },
-  text: { fontSize: 16, color: '#1D1C4A' },
-  small: { fontSize: 14, color: '#4F4E7D' },
-  unread: { fontSize: 14, fontWeight: '700', color: '#34328A' },
-  pastLine: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#CFE6DC' },
+  side: { flex: 1, minHeight: 48, borderRadius: 4, borderWidth: 2, borderColor: color.indigo, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  sideOn: { backgroundColor: color.teal },
+  sideOff: { backgroundColor: color.surface },
+  sideText: { fontSize: 16, fontWeight: '600', color: color.indigo, textAlign: 'center' },
+  sideTextOn: { fontWeight: '800', color: color.ink },
+  text: { fontSize: 16, color: color.ink },
+  small: { fontSize: 14, color: color.inkMuted },
+  unread: { fontSize: 14, fontWeight: '700', color: color.indigo },
+  pastLine: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.divider },
 })

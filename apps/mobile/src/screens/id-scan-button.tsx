@@ -7,6 +7,7 @@ import { Button, ErrorText } from '@/components/auth-ui'
 import { errorText, t, useLang } from '@/i18n'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from '@/screens/my-profile/denied-notice'
+import { color } from '@/theme'
 
 /**
  * "Scan your ID card to fill in your details": the camera or a photo from the library, one upload to POST /me/id-scan, and the
@@ -62,6 +63,6 @@ export function IdScanButton({ onResult, onBusy, disabled }: { onResult: (r: IdS
 
 const styles = StyleSheet.create({
   box: { gap: 8 },
-  note: { color: '#4F4E7D', fontSize: 13 },
-  done: { color: '#1D1C4A', fontSize: 14, fontWeight: '600' },
+  note: { color: color.inkMuted, fontSize: 13 },
+  done: { color: color.ink, fontSize: 14, fontWeight: '600' },
 })

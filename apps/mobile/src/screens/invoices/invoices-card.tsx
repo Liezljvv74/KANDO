@@ -11,7 +11,7 @@ import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { clampYear, exportYears, invoiceEntries } from '@/lib/invoices'
 import { downloadText } from '@/lib/save-file'
-import { font } from '@/theme'
+import { color, font } from '@/theme'
 
 /** Account tab: invoices and receipts for everyone; commission invoices and the yearly CSV export (share sheet) for providers. */
 export function InvoicesCard({ me }: { me: { isProvider: boolean } | null }) {
@@ -76,6 +76,6 @@ function HeaderLink({ label, onPress }: { label: string; onPress: () => void }) 
 }
 
 const styles = StyleSheet.create({
-  arrow: { fontSize: 18, fontFamily: font.heading, color: '#1D1C4A' },
-  text: { fontSize: 15, lineHeight: 21, color: '#1D1C4A' },
+  arrow: { fontSize: 18, fontFamily: font.heading, color: color.ink },
+  text: { fontSize: 15, lineHeight: 21, color: color.ink },
 })

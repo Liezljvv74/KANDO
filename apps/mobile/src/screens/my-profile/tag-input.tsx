@@ -4,6 +4,7 @@ import { Field, Info } from '@/components/auth-ui'
 import { IconButton } from '@/components/form-ui'
 import { t } from '@/i18n'
 import { withItem } from '@/lib/profile-form'
+import { color } from '@/theme'
 
 /**
  * A short list (skills, strengths): type, then "+" or the keyboard's Done; each tag shows as a chip, tap to remove.
@@ -81,6 +82,6 @@ const styles = StyleSheet.create({
   add: { paddingBottom: 2 },
   addWithError: { paddingBottom: 26 }, // keeps the + level with the field when its error shows below it
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 4, backgroundColor: '#CFE6DC', justifyContent: 'center' },
-  chipText: { color: '#1D1C4A', fontSize: 14 },
+  chip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 4, backgroundColor: color.divider, justifyContent: 'center' },
+  chipText: { color: color.ink, fontSize: 14 },
 })

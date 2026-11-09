@@ -11,6 +11,7 @@ import { errorText, t } from '@/i18n'
 import { hasEntries } from '@/lib/completeness'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
+import { color } from '@/theme'
 
 export const MAX_PORTFOLIO_PHOTOS = 12 // mirrors MAX_PORTFOLIO_PHOTOS on the server
 
@@ -82,7 +83,7 @@ export function PortfolioCard({ photos, name, onChanged }: { photos: OwnPhoto[];
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   cell: { width: 72 },
-  thumb: { width: 72, height: 72, borderRadius: 6, backgroundColor: '#7B7AB8' },
+  thumb: { width: 72, height: 72, borderRadius: 6, backgroundColor: color.border },
   // The remove icon sits on the photo's top-right corner.
   remove: { position: 'absolute', top: -12, right: -12 },
 })

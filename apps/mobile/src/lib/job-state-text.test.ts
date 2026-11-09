@@ -6,7 +6,7 @@ import { bookingStateCtx, requestStateCtx, stateText } from './job-state-text'
 let mockLang: Lang = 'de'
 jest.mock('@/i18n', () => ({ t: (key: string, p?: Record<string, string | number>) => jest.requireActual('@kando/i18n/app').t(mockLang, key, p) }))
 jest.mock('@/lib/booking-time', () => ({ formatWhen: (iso: string) => `WHEN(${iso})` }))
-jest.mock('@/lib/format', () => ({ formatPrice: (s: { price: number }) => `EUR ${s.price}` }))
+jest.mock('@/lib/format', () => ({ formatAmount: (n: number) => `EUR ${n}` }))
 
 const st = (key: string, extra: Partial<JobStateDto> = {}) => ({ key, section: 'active', tone: 'info', buttons: [], countsForMe: false, ...extra }) as unknown as JobStateDto
 const ctx = { amount: 100, net: 88, currency: 'EUR', date: '2027-01-05T10:00:00Z', startAt: '2027-01-04T09:00:00Z', number: 1042 }

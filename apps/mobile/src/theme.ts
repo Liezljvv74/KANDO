@@ -11,6 +11,7 @@ export const color = {
   danger: '#B3261E',
   success: '#08674F',
   onIndigoMuted: '#B3B2F5',
+  placeholder: '#5E5D90', // placeholder text in inputs
 } as const
 
 /** Old-times shop type: a warm serif for headlines, a typewriter face for stamps and tags. */
