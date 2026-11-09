@@ -19,7 +19,7 @@ it('the owner-connection check catches a bypass (negative fixture)', () => {
 })
 
 // Stripe and translation routes hand the owner connection to an after-transaction answer, which runs with no request transaction open (the domain functions check ownership themselves).
-const OWNER_AFTER_TRANSACTION = ['bookings/[id]/pay', 'payouts/setup', 'payouts/status', 'provider-money', 'providers/[slug]/translation'].map((r) => `app-api/v1/${r}/route.ts`)
+const OWNER_AFTER_TRANSACTION = ['bookings/[id]/pay', 'payouts/setup', 'payouts/status', 'provider-money', 'providers/[slug]/translation', 'feedback'].map((r) => `app-api/v1/${r}/route.ts`)
 const root = join(__dirname, '../app/app-api')
 const routes = (dir: string): string[] =>
   readdirSync(dir).flatMap((n) => {

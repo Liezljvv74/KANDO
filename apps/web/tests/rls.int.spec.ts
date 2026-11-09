@@ -40,6 +40,13 @@ it('app_user can neither read nor write translation_requests and cannot insert t
   await asUser('x', (tx) => tx.execute(sql`SELECT * FROM translations LIMIT 1`))
 })
 
+it('app_user can neither read nor write feedback_attempts', async () => {
+  const denied = (q: ReturnType<typeof sql>) => expect(asUser('x', (tx) => tx.execute(q))).rejects.toMatchObject({ cause: { message: expect.stringContaining('permission denied') } })
+  await denied(sql`SELECT * FROM feedback_attempts`)
+  await denied(sql`INSERT INTO feedback_attempts (ip_hash) VALUES ('x')`)
+  await denied(sql`DELETE FROM feedback_attempts`)
+})
+
 const ids = ['rl-cust', 'rl-other', 'rl-na', 'rl-nb']
 const cleanupPeople = async () => {
   await pool.query('DELETE FROM notifications WHERE user_id = ANY($1)', [ids])

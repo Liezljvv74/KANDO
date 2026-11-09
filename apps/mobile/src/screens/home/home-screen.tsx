@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { HelpFeedbackButtons } from '@/components/help-feedback-buttons'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { ErrorText } from '@/components/auth-ui'
@@ -81,6 +82,9 @@ export default function HomeScreen() {
             <Text style={styles.headlineRest}>{head[1]}</Text>
           </Text>
           <Stamp label={t('home.stamp')} />
+          <View style={styles.heroButtons}>
+            <HelpFeedbackButtons />
+          </View>
         </View>
         {choices.map(({ title, text, onPress, main, tone }, i) => (
           <Rise key={title} index={i}>
@@ -117,6 +121,7 @@ const styles = StyleSheet.create({
   link: { fontSize: 15, fontWeight: '700', color: color.bg, textDecorationLine: 'underline' },
   hero: { backgroundColor: color.indigo, borderRadius: 8, padding: 20, gap: 16 },
   heroOut: { gap: 16, marginTop: 16, marginBottom: 8 },
+  heroButtons: { alignSelf: 'flex-end' },
   headline: { fontFamily: font.display, fontSize: 40, lineHeight: 43, color: color.bg },
   headlineRest: { color: color.teal },
   main: { borderStyle: 'solid', borderColor: color.teal, backgroundColor: color.bg },
