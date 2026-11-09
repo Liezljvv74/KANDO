@@ -168,7 +168,7 @@ export const PUBLISHED_READ_TABLES: Record<string, string> = {
 }
 
 // Readable by app_user, written only by staff (owner connection).
-export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'translations']
+export const PUBLIC_REFERENCE_TABLES: string[] = ['countries', 'currencies', 'postcodes', 'categories', 'category_texts', 'translations', 'help_topics']
 
 // Tables app requests never touch: all privileges revoked.
 export const STAFF_ONLY_TABLES: string[] = ['pending_object_deletes', 'retained_records', 'staff_flags', 'contact_attempts', 'staff_access_log', 'ledger_entries', 'stripe_events', 'invoice_counters', 'translation_requests', 'document_ai_checks', 'feedback_attempts']

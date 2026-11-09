@@ -1,4 +1,4 @@
-import { type AnyPgColumn, customType, index, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, boolean, check, customType, index, integer, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const point = customType<{ data: { lng: number; lat: number }; driverData: string }>({
@@ -49,4 +49,26 @@ export const categoryTexts = pgTable(
     name: text().notNull(),
   },
   (t) => [primaryKey({ columns: [t.categoryId, t.lang] })],
+)
+
+// Help topics shown in the app. Staff-written content, readable by everyone, written only on the owner connection. `approved = false` hides a topic from the route.
+// The six groups are HELP_GROUPS in @kando/contract (the check below repeats them; the db package cannot import the contract).
+export const helpTopics = pgTable(
+  'help_topics',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    slug: text().notNull().unique(),
+    sort: integer().notNull(),
+    group: text().notNull(),
+    titleDe: text('title_de').notNull(),
+    bodyDe: text('body_de').notNull(),
+    titleEn: text('title_en').notNull(),
+    bodyEn: text('body_en').notNull(),
+    approved: boolean().notNull().default(false),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('help_topics_group_check', sql`${t.group} IN ('using-the-app', 'booking-and-paying', 'providers', 'money-and-fees', 'safety-and-rules', 'your-data')`),
+    check('help_topics_text_check', sql`btrim(${t.titleDe}) <> '' AND btrim(${t.bodyDe}) <> '' AND btrim(${t.titleEn}) <> '' AND btrim(${t.bodyEn}) <> ''`),
+  ],
 )
