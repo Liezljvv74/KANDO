@@ -55,7 +55,6 @@ export type InvoiceInput = {
     parentBookingId: string | null
     status: string
     amount: number
-    materialAmount: number
     providerShare: number
     startAt: Date
     title: string
@@ -81,7 +80,7 @@ const day = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numer
 /**
  * The invoice (or receipt) for one booking group, or null when nothing was paid out to the provider.
  * Money is computed in integer cents, half up, so every amount has clean cents:
- * - material = round(materialAmount * share / amount), at most the share; labour = share - material; fee lines have neither.
+ * - One amount per line (labour = the share, material 0; fee lines have neither). Old stored drafts may carry a material part.
  * - VAT from gross per line: net = round(gross / (1 + rate)), vat = gross - net (119.00 -> 100.00 + 19.00); totals are
  *   the sums of the lines, so they always match. Labour and material are gross amounts (what section 35a EStG asks for).
  */
@@ -107,9 +106,7 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
       : b.cancelledBy === 'customer' ? 'late-cancel-fee'
       : b.parentBookingId ? 'additional-task'
       : 'job'
-    const amount = toCents(b.amount)
     const fee = kind === 'no-show-fee' || kind === 'late-cancel-fee'
-    const material = fee || amount === 0 ? 0 : Math.min(share, Math.round(Number(((toCents(b.materialAmount) * share) / amount).toPrecision(15))))
     const net = Math.round(Number((share / (1 + lineRate)).toPrecision(15)))
     lines.push({
       bookingId: b.id,
@@ -117,8 +114,8 @@ export function buildInvoice(input: InvoiceInput): InvoiceDraft | null {
       description: b.title,
       serviceDate: day.format(b.startAt),
       ...(b.task && { task: b.task }),
-      labour: eur(fee ? 0 : share - material),
-      material: eur(material),
+      labour: eur(fee ? 0 : share),
+      material: 0,
       net: eur(net),
       vat: eur(share - net),
       gross: eur(share),
@@ -175,11 +172,11 @@ export function invoiceLines(draft: InvoiceDraft, lang: Lang): string[] {
   ]
   for (const l of draft.lines) {
     out.push(`${KIND_LABEL[l.kind]}${l.kind !== 'job' && l.task ? ` ${l.task}` : ''}: ${l.description}, Leistungsdatum (Service date): ${date(l.serviceDate)}`)
-    if (l.labour || l.material) out.push(`  Arbeitskosten (Labour): ${m(l.labour)}, Material (Material): ${m(l.material)}`)
+    if (l.material) out.push(`  Arbeitskosten (Labour): ${m(l.labour)}, Material (Material): ${m(l.material)}`)
     out.push(vat ? `  Netto (Net): ${m(l.net)}, ${ust}: ${m(l.vat)}, Brutto (Gross): ${m(l.gross)}` : `  Betrag (Amount): ${m(l.gross)}`)
   }
   const tt = draft.totals
   out.push(vat ? `Summe netto (Total net): ${m(tt.net)}, ${ust}: ${m(tt.vat)}, Summe brutto (Total gross): ${m(tt.gross)}` : `Summe (Total): ${m(tt.gross)}`)
-  out.push(`Arbeitskosten (Labour): ${m(tt.labour)}, Material (Material): ${m(tt.material)}`)
+  if (tt.material) out.push(`Arbeitskosten (Labour): ${m(tt.labour)}, Material (Material): ${m(tt.material)}`)
   return [...out, ...draft.notes]
 }

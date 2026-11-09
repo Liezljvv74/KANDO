@@ -12,7 +12,7 @@ const money = (n: number) => n.toFixed(2)
 
 /**
  * The provider's issued invoices of one calendar year (in TIME_ZONE) as CSV with a byte order mark (columns number, date,
- * customer, labour, material, net, vat, gross, currency, kind). Amounts and the customer name come from the stored draft, so
+ * customer, labour, net, vat, gross, currency, kind). Amounts and the customer name come from the stored draft, so
  * they equal the PDF. A person who is not a provider gets the header only. A year outside 2020..next year is 400.
  */
 export async function exportInvoices(tx: Tx, userId: string, year: number): Promise<string> {
@@ -25,7 +25,7 @@ export async function exportInvoices(tx: Tx, userId: string, year: number): Prom
     .map((r) => {
       const d = r.draft as InvoiceDraft
       const x = d.totals
-      return [r.number, day.format(r.issuedAt), noFormula(d.recipient.name), money(x.labour), money(x.material), money(x.net), money(x.vat), money(x.gross), r.currency, r.kind]
+      return [r.number, day.format(r.issuedAt), noFormula(d.recipient.name), money(x.labour), money(x.net), money(x.vat), money(x.gross), r.currency, r.kind]
     })
-  return '\uFEFF' + [['number', 'date', 'customer', 'labour', 'material', 'net', 'vat', 'gross', 'currency', 'kind'], ...lines].map((l) => l.map(quote).join(',')).join('\r\n') + '\r\n'
+  return '\uFEFF' + [['number', 'date', 'customer', 'labour', 'net', 'vat', 'gross', 'currency', 'kind'], ...lines].map((l) => l.map(quote).join(',')).join('\r\n') + '\r\n'
 }

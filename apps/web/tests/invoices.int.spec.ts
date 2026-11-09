@@ -71,7 +71,7 @@ const readyNotices = async (bookingId: string) => (await pool.query("SELECT user
 const year = (d = new Date()) => Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric' }).format(d))
 const pdfOf = (inv: { file_key: string }) => store.objects.get(`documents/${inv.file_key}`)
 
-it('a released booking gets one invoice with one line and a PDF that starts with %PDF-', async () => {
+it('a released booking gets one invoice with one line for the full amount (a stored material part and a stopped share are ignored) and a PDF that starts with %PDF-', async () => {
   const p = await provider()
   const b = await paid(p.id, { material: 20 })
   expect(await tryRelease(db, b, U.cust, new Date())).toBe(true)
@@ -79,7 +79,7 @@ it('a released booking gets one invoice with one line and a PDF that starts with
   expect(more).toEqual([])
   expect(inv).toMatchObject({ root_booking_id: b, customer_id: U.cust, number: `${p.prefix}-${year()}-0001`, kind: 'receipt', currency: 'EUR', total: '100.00', file_key: `invoices/${p.id}/${p.prefix}-${year()}-0001.pdf` })
   const draft = inv.draft as InvoiceDraft
-  expect(draft.lines).toEqual([expect.objectContaining({ bookingId: b, kind: 'job', gross: 100, material: 20, labour: 80 })])
+  expect(draft.lines).toEqual([expect.objectContaining({ bookingId: b, kind: 'job', gross: 100, material: 0, labour: 100 })])
   expect(draft.recipient).toEqual({ name: 'Zoë Łukasz', address: 'Hauptstr. 1, 10115 Berlin', taxId: null })
   expect(pdfOf(inv)!.subarray(0, 5).toString()).toBe('%PDF-')
   expect(store.types.get(`documents/${inv.file_key}`)).toBe('application/pdf')

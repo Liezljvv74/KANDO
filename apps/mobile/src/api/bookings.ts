@@ -6,7 +6,6 @@ import type {
   BookingView,
   BusyTime,
   Dispute,
-  FinishInput,
   Quote,
   QuoteInput,
   RequestInput,
@@ -39,8 +38,8 @@ export const getBusyTimes = async (slug: string, from: Date, to: Date) =>
 
 // The endings of a paid booking (plan 2d). Each returns the booking as the server now has it.
 const bk = (id: string, path = '') => `${BASE}/bookings/${encodeURIComponent(id)}${path}`
-/** The route needs a JSON body: `{}` when no material amount is given. */
-export const finishJob = (id: string, input: FinishInput) => api<Booking>(bk(id, '/finish'), json('POST', input))
+/** The route needs a JSON body: `{}`. */
+export const finishJob = (id: string) => api<Booking>(bk(id, '/finish'), json('POST', {}))
 export const confirmJob = (id: string) => api<Booking>(bk(id, '/confirm'), json('POST'))
 export const cancelBooking = (id: string) => api<Booking>(bk(id, '/cancel'), json('POST'))
 export const reportNoShow = (id: string) => api<Booking>(bk(id, '/no-show'), json('POST'))

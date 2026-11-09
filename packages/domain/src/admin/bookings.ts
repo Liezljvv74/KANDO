@@ -289,7 +289,6 @@ async function bookingSummary(exec: Exec, b: Row) {
     onSite: b.onSite,
     amount: Number(b.amount),
     currency: b.currency,
-    materialAmount: Number(b.materialAmount),
     paid: await paidAmount(exec, b.id),
     customerId: b.customerId,
     customerEmail: c?.email ?? null,

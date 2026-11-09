@@ -23,7 +23,7 @@ async function add(pid: string, number: string, issuedAt: string, d: InvoiceDraf
   )
 }
 const body = async (res: Response) => (await res.text()).replace(/^\uFEFF/, '').split('\r\n').filter(Boolean)
-const HEAD = 'number,date,customer,labour,material,net,vat,gross,currency,kind'
+const HEAD = 'number,date,customer,labour,net,vat,gross,currency,kind'
 
 beforeAll(async () => {
   await cleanupUsers()
@@ -48,7 +48,7 @@ it('the provider gets this year\'s invoices only, totals match the PDFs', async 
   expect([...new Uint8Array(await res.clone().arrayBuffer()).slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf])
   const lines = await body(res)
   expect(lines[0]).toBe(HEAD)
-  expect(lines[1]).toBe('A-2025-0001,2025-06-01,Zoë Müller,80.00,20.00,100.00,19.00,119.00,EUR,invoice')
+  expect(lines[1]).toBe('A-2025-0001,2025-06-01,Zoë Müller,80.00,100.00,19.00,119.00,EUR,invoice')
   expect(lines.some((l) => l.includes('B-2025-0001') || l.includes('Not Mine'))).toBe(false) // another provider's never
 })
 
@@ -63,7 +63,7 @@ it('year boundaries use the app time zone', async () => {
 
 it('quotes commas and quotes, keeps plain decimals', async () => {
   const l = (await body(await get(U.mine, '?year=2025'))).find((x) => x.startsWith('A-2025-0002'))
-  expect(l).toBe('A-2025-0002,2025-12-31,"Sylvester, ""Sly"" Stallone",10.50,0.00,10.50,0.00,10.50,EUR,receipt')
+  expect(l).toBe('A-2025-0002,2025-12-31,"Sylvester, ""Sly"" Stallone",10.50,10.50,0.00,10.50,EUR,receipt')
 })
 
 it('a formula in a customer name is neutralised', async () => {

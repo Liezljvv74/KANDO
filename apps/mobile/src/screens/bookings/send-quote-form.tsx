@@ -87,7 +87,7 @@ export function SendQuoteForm({ request, onSent }: { request: BookingRequest; on
     <>
       <Field label={t('booking.quoteAmount')} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" editable={!busy} />
       {receiveFrom(amount, COMMISSION_RATE) !== null && <Info text={t('money.quotePreview', { amount: formatPrice({ priceType: 'fixed', price: receiveFrom(amount, COMMISSION_RATE)!, currency: 'EUR' }), rate: Math.round(COMMISSION_RATE * 100) })} />}
-      <Field label={t('booking.quoteScope')} value={scope} onChangeText={setScope} multiline editable={!busy} />
+      <Field label={t('booking.quoteScope')} hint={t('booking.quoteScopeHint')} value={scope} onChangeText={setScope} multiline editable={!busy} />
       <SwitchRow label={t('booking.timeConfirmed')} value={confirmed} onChange={setConfirmed} />
       {confirmed ? <WhenWhereFields value={when} onChange={setWhen} canRemote={false} withDetails={false} disabled={busy} /> : <Info text={t('booking.timeToBeConfirmed')} />}
       <ErrorText text={error} />

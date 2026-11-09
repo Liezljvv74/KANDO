@@ -59,8 +59,7 @@ test('busy times pass the range as ISO dates and return the list', async () => {
 
 test('the endings use their routes, methods and bodies', async () => {
   const calls: [() => Promise<unknown>, string, unknown][] = [
-    [() => finishJob('b1', {}), '/app-api/v1/bookings/b1/finish', {}], // the route needs a JSON body, even an empty one
-    [() => finishJob('b1', { materialAmount: 12.5 }), '/app-api/v1/bookings/b1/finish', { materialAmount: 12.5 }],
+    [() => finishJob('b1'), '/app-api/v1/bookings/b1/finish', {}],
     [() => confirmJob('b1'), '/app-api/v1/bookings/b1/confirm', undefined],
     [() => cancelBooking('b1'), '/app-api/v1/bookings/b1/cancel', undefined],
     [() => reportNoShow('b1'), '/app-api/v1/bookings/b1/no-show', undefined],

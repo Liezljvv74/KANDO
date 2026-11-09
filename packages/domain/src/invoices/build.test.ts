@@ -24,7 +24,6 @@ const booking = (over: Partial<B> = {}): B => ({
   parentBookingId: null,
   status: 'completed',
   amount: 100,
-  materialAmount: 0,
   providerShare: 100,
   startAt: new Date('2026-11-02T09:00:00Z'),
   title: 'Wand streichen',
@@ -99,34 +98,28 @@ describe('buildInvoice', () => {
     expect(d.legalStatus).toBe('private')
   })
 
-  it('material 20 of 100 with a share of 50 gives material 10 and labour 40', () => {
-    const d = build([booking({ materialAmount: 20, providerShare: 50, status: 'stopped' })])!
-    expect(d.lines[0]).toMatchObject({ kind: 'job', material: 10, labour: 40, gross: 50 })
-    const total = (lang: 'de' | 'en') => `Arbeitskosten (Labour): ${formatMoney(40, 'EUR', lang)}, Material (Material): ${formatMoney(10, 'EUR', lang)}`
-    for (const lang of ['de', 'en'] as const) {
-      const text = invoiceLines(d, lang)
-      expect(text).toContain(total(lang))
-      expect(text.join('\n').split('Arbeitskosten').length - 1).toBe(2) // once on the line, once in the totals
-      expect(text.join('\n')).not.toContain(formatMoney(40, 'EUR', lang === 'de' ? 'en' : 'de'))
-    }
-    expect(d.notes.some((n) => n.includes('Arbeitskosten'))).toBe(false)
+  it('invoice build produces one line for the full amount', () => {
+    const d = build([booking({ providerShare: 50, status: 'stopped' })])!
+    expect(d.lines[0]).toMatchObject({ kind: 'job', material: 0, labour: 50, gross: 50 })
+    for (const lang of ['de', 'en'] as const) expect(invoiceLines(d, lang).join('\n')).not.toContain('Material (Material)')
   })
 
-  it('material greater than the share clamps to the share', () => {
-    const d = build([booking({ amount: 100, materialAmount: 150, providerShare: 50, status: 'stopped' })])!
-    expect(d.lines[0]).toMatchObject({ material: 50, labour: 0 })
+  it('already issued invoices keep their stored lines: an old line with a material part still renders', () => {
+    const d = build([booking({ providerShare: 50, status: 'stopped' })])!
+    const old = { ...d, lines: [{ ...d.lines[0]!, material: 10, labour: 40 }], totals: { ...d.totals, material: 10, labour: 40 } }
+    const text = invoiceLines(old, 'de').join('\n')
+    expect(text).toContain(`Arbeitskosten (Labour): ${formatMoney(40, 'EUR', 'de')}, Material (Material): ${formatMoney(10, 'EUR', 'de')}`)
   })
 
   it('rounding: odd cents and a 33.33% share give clean cents and totals equal the lines', () => {
     const d = build([
-      booking({ amount: 99.99, materialAmount: 33.33, providerShare: 33.33, status: 'stopped' }),
-      booking({ id: 'k1', parentBookingId: 'root', amount: 10.01, providerShare: 10.01, materialAmount: 3.33 }),
+      booking({ amount: 99.99, providerShare: 33.33, status: 'stopped' }),
+      booking({ id: 'k1', parentBookingId: 'root', amount: 10.01, providerShare: 10.01 }),
     ])!
-    // material 33.33 * 33.33 / 99.99 = 11.11; 3.33 * 10.01 / 10.01 = 3.33
-    expect(d.lines.map((l) => [l.material, l.labour])).toEqual([[11.11, 22.22], [3.33, 6.68]])
+    expect(d.lines.map((l) => [l.material, l.labour])).toEqual([[0, 33.33], [0, 10.01]])
     // VAT per line from gross, half up: 33.33/1.19 = 28.0084 -> 28.01; 10.01/1.19 = 8.4118 -> 8.41
     expect(d.lines.map((l) => [l.net, l.vat])).toEqual([[28.01, 5.32], [8.41, 1.6]])
-    expect(d.totals).toEqual({ net: 36.42, vat: 6.92, gross: 43.34, labour: 28.9, material: 14.44 })
+    expect(d.totals).toEqual({ net: 36.42, vat: 6.92, gross: 43.34, labour: 43.34, material: 0 })
     for (const l of d.lines) expect(Math.round(l.net * 100) + Math.round(l.vat * 100)).toBe(Math.round(l.gross * 100))
   })
 
@@ -134,11 +127,11 @@ describe('buildInvoice', () => {
     const d = build([
       booking(),
       booking({ id: 'k1', parentBookingId: 'root', status: 'refunded', providerShare: 0, title: 'Tür' }),
-      booking({ id: 'k2', parentBookingId: 'root', amount: 30, providerShare: 30, materialAmount: 10, title: 'Fenster' }),
+      booking({ id: 'k2', parentBookingId: 'root', amount: 30, providerShare: 30, title: 'Fenster' }),
     ])!
     expect(d.lines.map((l) => [l.bookingId, l.kind])).toEqual([['root', 'job'], ['k2', 'additional-task']])
     expect(d.totals.gross).toBe(130)
-    expect(d.totals.material).toBe(10)
+    expect(d.totals.material).toBe(0)
   })
 
   it('a refunded status has no line even with a share', () => {
@@ -152,12 +145,12 @@ describe('buildInvoice', () => {
   })
 
   it('a late customer cancellation is a fee line with no labour or material', () => {
-    const d = build([booking({ status: 'cancelled', cancelledBy: 'customer', providerShare: 50, materialAmount: 20 })])!
+    const d = build([booking({ status: 'cancelled', cancelledBy: 'customer', providerShare: 50 })])!
     expect(d.lines[0]).toMatchObject({ kind: 'late-cancel-fee', gross: 50, labour: 0, material: 0 })
   })
 
   it('a customer no-show is a fee line with the full share', () => {
-    const d = build([booking({ status: 'cancelled', noShow: 'customer', providerShare: 100, materialAmount: 20 })])!
+    const d = build([booking({ status: 'cancelled', noShow: 'customer', providerShare: 100 })])!
     expect(d.lines[0]).toMatchObject({ kind: 'no-show-fee', gross: 100, labour: 0, material: 0 })
   })
 
@@ -206,14 +199,13 @@ describe('buildInvoice', () => {
 describe('invoiceLines', () => {
   it('has German labels with English in brackets and no undefined or NaN', () => {
     const d = build([
-      booking({ materialAmount: 20 }),
+      booking(),
       booking({ id: 'k1', parentBookingId: 'root', amount: 30, providerShare: 30, title: 'Fenster' }),
     ])!
     for (const lang of ['de', 'en'] as const) {
       const text = invoiceLines(d, lang).join('\n')
       expect(text).toContain('Rechnung (Invoice)')
       expect(text).toContain('Zusatzauftrag (Additional task)')
-      expect(text).toContain('Arbeitskosten (Labour)')
       expect(text).toContain('(VAT 19')
       expect(text).not.toMatch(/undefined|NaN|null/)
     }
