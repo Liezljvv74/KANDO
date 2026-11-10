@@ -308,6 +308,8 @@ export const de = {
   'home.metaDescription':
     'Finde Helfer in deiner Nähe - oder neue Kunden für dein Können. Keine Leadgebühren. Bezahlung in der App kommt bald.',
   'home.soon': 'Bald verfügbar',
+  'home.tryApp': 'KANDO auf dem Handy testen',
+  'home.androidOnly': 'Die App ist derzeit nur für Android-Handys verfügbar.',
   'home.ctaTitle': 'Bereit? Hol dir die App.',
   'home.ctaText': 'Bald für iPhone und Android.',
   'welcome.logInRegister': 'Anmelden/Registrieren',

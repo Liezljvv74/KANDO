@@ -309,6 +309,8 @@ export const en: Record<AppKey, string> = {
   'home.metaDescription':
     'Find helpers near you - or new customers for your skills. No lead fees. In-app payment coming soon.',
   'home.soon': 'Coming soon',
+  'home.tryApp': 'Try KANDO on your phone',
+  'home.androidOnly': 'The app is currently only available for Android phones.',
   'home.ctaTitle': 'Ready? Get the app.',
   'home.ctaText': 'Coming soon for iPhone and Android.',
   'welcome.logInRegister': 'Log in/Register',

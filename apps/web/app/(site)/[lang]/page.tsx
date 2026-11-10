@@ -19,20 +19,17 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
   }
 }
 
-// The store links do not exist until the app is published.
+// No store listing yet: the Android test build is installed from the Expo build page (change the address here when a newer build is the one to share).
+const ANDROID_BUILD_URL = 'https://expo.dev/accounts/liezljvv74/projects/skilled/builds/91eaac9c-f1ea-497f-8857-421c8b771b07'
+
 function StoreButtons({ lang, inverted }: { lang: Lang; inverted?: boolean }) {
   const cls = inverted ? 'bg-white text-brand' : 'bg-brand text-white'
   return (
-    <div className="flex flex-wrap gap-3">
-      {['App Store', 'Google Play'].map((store) => (
-        <span
-          key={store}
-          className={`${cls} rounded-xl px-4 py-2.5 text-sm font-semibold`}
-          title={t(lang, 'home.soon')}
-        >
-          {store} · {t(lang, 'home.soon')}
-        </span>
-      ))}
+    <div className="flex flex-col items-start gap-2">
+      <a href={ANDROID_BUILD_URL} target="_blank" rel="noopener noreferrer" className={`${cls} rounded-xl px-4 py-2.5 text-sm font-semibold`}>
+        {t(lang, 'home.tryApp')}
+      </a>
+      <p className="text-sm">{t(lang, 'home.androidOnly')}</p>
     </div>
   )
 }
