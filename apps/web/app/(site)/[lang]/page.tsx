@@ -19,15 +19,13 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
   }
 }
 
-// No store listing yet: the Android test build is installed from the Expo build page (change the address here when a newer build is the one to share).
-const ANDROID_BUILD_URL = 'https://expo.dev/accounts/liezljvv74/projects/skilled/builds/91eaac9c-f1ea-497f-8857-421c8b771b07'
-
+// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts).
 function StoreButtons({ lang }: { lang: Lang }) {
   const cls = 'bg-teal text-ink' // the one primary action, on light and on indigo
   return (
     <div className="flex flex-col items-start gap-2">
-      <a href={ANDROID_BUILD_URL} target="_blank" rel="noopener noreferrer" className={`${cls} rounded-md px-5 py-3 text-base font-bold`}>
-        {t(lang, 'home.tryApp')}
+      <a href="/KANDO.apk" download="KANDO.apk" className={`${cls} rounded-md px-5 py-3 text-base font-bold`}>
+        {t(lang, 'home.install')}
       </a>
       <p className="text-sm">{t(lang, 'home.androidOnly')}</p>
     </div>
