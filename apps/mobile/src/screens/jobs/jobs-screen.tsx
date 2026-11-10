@@ -37,11 +37,11 @@ function JobCard({ row, role, tag }: { row: JobRow; role: Role; tag?: boolean })
         <Text style={styles.small}>{[state, tag && t(TAG[row.jobState.section])].filter(Boolean).join(' · ')}</Text>
         {row.unread > 0 &&
           (row.threadId ? (
-            <Pressable accessibilityRole="button" onPress={() => go(`/threads/${row.threadId}`)}>
+            <Pressable accessibilityRole="button" onPress={() => go(`/threads/${row.threadId}`)} style={styles.unreadBox}>
               <Text style={styles.unread}>{t('jobs.unread')}</Text>
             </Pressable>
           ) : (
-            <Text style={styles.unread}>{t('jobs.unread')}</Text>
+            <Text style={[styles.unread, styles.unreadBox]}>{t('jobs.unread')}</Text>
           ))}
       </Card>
     </Pressable>
@@ -182,6 +182,7 @@ const styles = StyleSheet.create({
   sideTextOn: { fontWeight: '800', color: color.ink },
   text: { fontSize: 16, color: color.ink },
   small: { fontSize: 14, color: color.inkMuted },
-  unread: { fontSize: 14, fontWeight: '700', color: color.indigo },
+  unread: { fontSize: 14, fontWeight: '700', color: color.danger }, // the design system's red: a waiting message is easy to miss in the indigo
+  unreadBox: { alignSelf: 'flex-end', minHeight: 32, justifyContent: 'center' }, // bottom right of the card
   pastLine: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.divider },
 })
