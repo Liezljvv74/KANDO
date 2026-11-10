@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
   }
 }
 
-// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts).
+// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts, file in the media bucket).
 function StoreButtons({ lang, inverted }: { lang: Lang; inverted?: boolean }) {
   const cls = inverted ? 'bg-white text-brand' : 'bg-brand text-white'
   return (
