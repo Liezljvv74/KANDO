@@ -20,11 +20,11 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
 }
 
 // No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts, file in the media bucket).
-function StoreButtons({ lang, inverted }: { lang: Lang; inverted?: boolean }) {
-  const cls = inverted ? 'bg-white text-brand' : 'bg-brand text-white'
+function StoreButtons({ lang }: { lang: Lang }) {
+  const cls = 'bg-teal text-ink' // the one primary action, on light and on indigo
   return (
     <div className="flex flex-col items-start gap-2">
-      <a href="/KANDO.apk" download="KANDO.apk" className={`${cls} rounded-xl px-4 py-2.5 text-sm font-semibold`}>
+      <a href="/KANDO.apk" download="KANDO.apk" className={`${cls} rounded-md px-5 py-3 text-base font-bold`}>
         {t(lang, 'home.install')}
       </a>
       <p className="text-sm">{t(lang, 'home.androidOnly')}</p>
@@ -55,12 +55,12 @@ export default async function HomePage({ params }: Args) {
 
   return (
     <main>
-      <section className="bg-mint-50">
+      <section className="bg-brand text-white">
         <div className="mx-auto max-w-5xl px-4 py-12">
           <div className="flex justify-end">
             <LangSwitch lang={lang} path="/" />
           </div>
-          <h1 className="mt-6 text-4xl font-extrabold leading-tight md:text-5xl">
+          <h1 className="mt-6 text-4xl font-black leading-tight md:text-5xl">
             {tt('home.headline')}
           </h1>
           <p className="mt-4 max-w-xl text-lg leading-relaxed">{tt('home.intro')}</p>
@@ -69,7 +69,7 @@ export default async function HomePage({ params }: Args) {
           </div>
           <div className="mt-10 grid gap-3 text-sm sm:grid-cols-3">
             {BADGES.map(([title, text]) => (
-              <div key={title} className="rounded-2xl border border-mint-200 bg-white p-4">
+              <div key={title} className="rounded-md border-2 border-dashed border-brand bg-white p-4 text-ink">
                 <b>{tt(title)}</b>
                 <br />
                 {tt(text)}
@@ -81,14 +81,14 @@ export default async function HomePage({ params }: Args) {
 
       <section>
         <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="text-3xl font-extrabold">{tt('home.howTitle')}</h2>
+          <h2 className="text-3xl font-black">{tt('home.howTitle')}</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-2">
             {(Object.keys(STEPS) as (keyof typeof STEPS)[]).map((who) => {
               const [title, ...steps] = STEPS[who]
               return (
                 <div
                   key={who}
-                  className={`rounded-2xl p-6 ${who === 'customer' ? 'bg-mint-50' : 'bg-sand'}`}
+                  className="rounded-md border-2 border-dashed border-brand bg-white p-6"
                 >
                   <h3 className="text-xl font-bold">{tt(title)}</h3>
                   <ol className="mt-3 list-decimal space-y-2 pl-5">
@@ -103,14 +103,14 @@ export default async function HomePage({ params }: Args) {
         </div>
       </section>
 
-      <section className="bg-mint-50">
+      <section>
         <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="mb-4 text-3xl font-extrabold">{tt('home.categoriesTitle')}</h2>
+          <h2 className="mb-4 text-3xl font-black">{tt('home.categoriesTitle')}</h2>
           <ul className="flex flex-wrap gap-3">
             {categories.map((c) => (
               <li
                 key={c.id}
-                className="rounded-full border border-mint-200 bg-white px-4 py-2 font-semibold"
+                className="font-tag rounded-md border-2 border-dashed border-brand bg-white px-4 py-2 font-bold text-brand"
               >
                 {c.name}
               </li>
@@ -121,7 +121,7 @@ export default async function HomePage({ params }: Args) {
 
       <section>
         <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="text-3xl font-extrabold">{tt('home.safetyTitle')}</h2>
+          <h2 className="text-3xl font-black">{tt('home.safetyTitle')}</h2>
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             {SAFETY.map(([title, text]) => (
               <div key={title}>
@@ -133,19 +133,19 @@ export default async function HomePage({ params }: Args) {
         </div>
       </section>
 
-      <section className="bg-sand">
+      <section className="bg-white">
         <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="text-3xl font-extrabold">{tt('home.providersTitle')}</h2>
+          <h2 className="text-3xl font-black">{tt('home.providersTitle')}</h2>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed">{tt('home.providersText')}</p>
         </div>
       </section>
 
       <section className="bg-brand text-white">
         <div className="mx-auto max-w-5xl px-4 py-14 text-center">
-          <h2 className="text-3xl font-extrabold">{tt('home.ctaTitle')}</h2>
+          <h2 className="text-3xl font-black">{tt('home.ctaTitle')}</h2>
           <p className="mt-2 opacity-90">{tt('home.ctaText')}</p>
           <div className="mt-6 flex justify-center">
-            <StoreButtons lang={lang} inverted />
+            <StoreButtons lang={lang} />
           </div>
         </div>
       </section>

@@ -15,7 +15,7 @@ try {
 
 export default defineConfig({
   // The auth package imports next/headers without an extension, which plain Node ESM cannot resolve.
-  resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)), 'next/headers': 'next/headers.js', 'next/server': 'next/server.js' } },
+  resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)), 'next/font/google': fileURLToPath(new URL('./tests/stubs/next-font-google.ts', import.meta.url)), 'next/headers': 'next/headers.js', 'next/server': 'next/server.js' } },
   test: {
     include: ['tests/**/*.int.spec.ts'],
     globalSetup: ['../../packages/db/src/test/setup.ts'],
