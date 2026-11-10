@@ -26,5 +26,5 @@ export function proxy(request: NextRequest) {
 
 // Everything but the API routes, Next's own files, robots.txt, the app file KANDO.apk and the sitemaps (*.xml).
 export const config = {
-  matcher: ['/((?!api/|app-api/|_next/|favicon.ico|robots.txt|KANDO\.apk$|[^/]+\\.xml$).*)'],
+  matcher: ['/((?!api/|app-api/|_next/|favicon.ico|robots.txt|KANDO[.]apk$|[^/]+\\.xml$).*)'],
 }
