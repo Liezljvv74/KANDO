@@ -111,7 +111,7 @@ function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows
             await servicesApi.remove(idRef.current)
             router.back()
           } catch (e) {
-            setCode((c) => ({ ...c, remove: e instanceof ApiError ? e.code : 'network' }))
+            setCode((c) => ({ ...c, remove: e instanceof ApiError ? (e.code === 'Profile incomplete' ? 'last-service' : e.code) : 'network' })) // a live profile must keep one service
           }
         },
       },

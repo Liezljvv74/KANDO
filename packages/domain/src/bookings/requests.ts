@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
+import { bookings, db, notifications, providers, quotes, requestAppInsert, requests, services, type Tx } from '@kando/db'
 import { DAY, type AcceptQuoteInput, type Booking, type BookingRequest, type LapseReason, type Quote, type QuoteInput, type RequestInput, type TimeProposal } from '@kando/contract'
 import type { AfterCommit } from '../app-request'
 import { currencyOfCountry } from '../country-currency'
@@ -286,7 +286,7 @@ async function ownRequest(tx: Tx, userId: string, id: string) {
   return row
 }
 
-/** One request with its chat, for one of its parties. Reads only: no thread is created. */
+/** One request with its chat, for one of its parties. No thread is created. Opening the job marks the provider's "booking paid" notice of it seen (the Jobs tab count and the card's "Quote accepted" go away). */
 export async function getRequest(tx: Tx, userId: string, id: string, now = new Date()): Promise<BookingRequest> {
   const row = await ownRequest(tx, userId, id)
   const base = toRequest(row, now, (await lapsedRoots(tx, [row.id], now)).get(row.id))
@@ -295,6 +295,8 @@ export async function getRequest(tx: Tx, userId: string, id: string, now = new D
   const tasks = row.parentBookingId ? [] : (await taskRequestsOf(tx, [row.id])).map((t) => toRequest(t.r, now))
   const states = await jobStates(tx, userId, [base, ...tasks].map((r) => requestItem(r, userId)), now)
   const s = states.get(row.id)!
+  if (s.quoteAccepted && s.bookingIds.length)
+    await tx.update(notifications).set({ seenAt: now }).where(and(eq(notifications.userId, userId), eq(notifications.kind, 'booking-paid'), isNull(notifications.seenAt), inArray(sql`${notifications.payload}->>'bookingId'`, s.bookingIds)))
   const otherParty = (await jobsForNotices(tx, userId, [{ requestId: row.id }]))[0]?.otherParty
   const taskItems = tasks.map((t) => { const ts = states.get(t.id); return { id: t.id, ...(ts && { jobState: toJobStateDto(ts) }) } })
   const job = { bookingIds: s.bookingIds, currentBookingId: s.currentBookingId, ...(otherParty !== undefined && { otherParty }), ...(!row.parentBookingId && { tasks: taskItems }) }
