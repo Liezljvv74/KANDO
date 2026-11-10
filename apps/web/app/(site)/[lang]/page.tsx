@@ -19,20 +19,15 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
   }
 }
 
-// The store links do not exist until the app is published.
+// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts, file in the media bucket).
 function StoreButtons({ lang, inverted }: { lang: Lang; inverted?: boolean }) {
   const cls = inverted ? 'bg-white text-brand' : 'bg-brand text-white'
   return (
-    <div className="flex flex-wrap gap-3">
-      {['App Store', 'Google Play'].map((store) => (
-        <span
-          key={store}
-          className={`${cls} rounded-xl px-4 py-2.5 text-sm font-semibold`}
-          title={t(lang, 'home.soon')}
-        >
-          {store} · {t(lang, 'home.soon')}
-        </span>
-      ))}
+    <div className="flex flex-col items-start gap-2">
+      <a href="/KANDO.apk" download="KANDO.apk" className={`${cls} rounded-xl px-4 py-2.5 text-sm font-semibold`}>
+        {t(lang, 'home.install')}
+      </a>
+      <p className="text-sm">{t(lang, 'home.androidOnly')}</p>
     </div>
   )
 }
