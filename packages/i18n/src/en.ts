@@ -29,7 +29,7 @@ export const en: Record<AppKey, string> = {
   'error.invalidPostcode': 'This postcode is not written correctly. Please check it and enter it the usual way, for example 10115.',
   'error.unknownPostcode': 'We do not know this postcode yet, so we cannot place it on the map. Please check for typos or try a nearby postcode.',
   'error.unknownCategory': 'This category no longer exists, probably because the list was updated. Please go back and choose another one.',
-  'error.lastService': 'A live profile needs at least one service. Add another service first, or switch your profile off, then remove this one.',
+  'error.lastService': 'A live profile needs at least one complete service (a category and a price type, and a price if it is fixed). Removing this one would leave none. Complete or add another service first, or switch your profile off.',
   'error.profileIncomplete': 'Your profile is not complete yet, so it cannot go live. Fill in the fields marked with *, then try again.',
   'error.profileSuspended': 'Your profile is suspended, so this is not possible right now. Please read the email we sent you or write to {contact}.',
   'error.createProfileFirst': 'This needs a service profile and you do not have one yet. Open "Offer services" in Account to create it.',
