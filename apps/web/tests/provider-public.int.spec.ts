@@ -40,13 +40,12 @@ it('a published provider page: contract shape, place, photo urls, only offerable
   for (const key of ['id', 'ownerId', 'owner_id', 'basePostcode', 'base_postcode', 'location', 'status', 'suspended']) {
     expect(Object.keys(raw), key).not.toContain(key)
   }
-  expect(text).not.toContain('10115')
   expect(text).not.toMatch(/"(owner\w*|location|status|suspended|base_?[pP]ostcode)":/)
   const p = ProviderDetailSchema.parse(raw)
   expect(p).toMatchObject({
     slug: 'pp-a-slug',
     publicName: 'Anna H.',
-    place: 'Berlin',
+    postcode: '10115',
     photoUrl: 'https://media.test/users/pp-a/profile.jpg',
     translatable: true,
     checkedDocuments: [],

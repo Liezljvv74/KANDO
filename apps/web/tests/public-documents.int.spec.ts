@@ -70,7 +70,7 @@ it('a suspended or unpublished provider still has no profile', async () => {
 
 it('an older cached response without the field still parses (empty list)', () => {
   const { checkedDocuments: _, ...old } = ProviderDetailSchema.parse({
-    slug: 's', publicName: 'n', photoUrl: null, place: null, categories: [], services: [], references: [], photos: [], isNew: true, translatable: false,
+    slug: 's', publicName: 'n', photoUrl: null, postcode: null, categories: [], services: [], references: [], photos: [], isNew: true, translatable: false,
   })
   expect(ProviderDetailSchema.parse(old).checkedDocuments).toEqual([])
   expect(ProviderDetailSchema.parse(old).providerId).toBeUndefined() // an older response without the provider id parses too
