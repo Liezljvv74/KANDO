@@ -5,6 +5,7 @@ import { t } from '@kando/i18n'
 
 process.env.NEXT_PUBLIC_SERVER_URL = 'https://kando.example'
 const { default: HomePage, generateMetadata } = await import('../app/(site)/[lang]/page')
+const { default: HowItWorksPage } = await import('../app/(site)/[lang]/how-it-works/page')
 const { default: Layout, metadata } = await import('../app/(site)/[lang]/layout')
 
 const stamp = Date.now()
@@ -30,7 +31,11 @@ const render = async (lang?: string) => renderToStaticMarkup(await HomePage(para
 describe('home page', () => {
   it('is German by default: headline, categories, store badges without links, no forbidden words', async () => {
     const html = await render()
-    expect(html).toContain('Endlich jemand, der’s kann')
+    expect(html).toContain('ENDLICH')
+    expect(html).toContain('jemand, der’s KANN')
+    expect(html).toContain('href="#install"')
+    expect(html).toContain('/how-it-works')
+    expect(html).not.toContain('Sicher für beide Seiten') // moved to the How it works page
     expect(html).toContain(`Gassi ${stamp}`)
     expect(html).toContain('Installieren')
     expect(html).toContain('Die App ist derzeit nur für Android-Handys verfügbar.')
@@ -44,11 +49,20 @@ describe('home page', () => {
 
   it('switches to English with /en; an unknown language is 404', async () => {
     const en = await render('en')
-    expect(en).toContain(t('en', 'home.headline'))
+    expect(en).toContain('FINALLY')
+    expect(en).not.toContain(t('en', 'home.safetyTitle'))
     expect(en).toContain(`Dog walking ${stamp}`)
     expect(en).toContain(t('en', 'home.install'))
     expect(en).not.toContain('Endlich jemand')
     await expect(render('fr')).rejects.toThrow()
+  })
+
+  it('the How it works page holds the steps and Safe for both sides, with a way to Install', async () => {
+    const html = renderToStaticMarkup(await HowItWorksPage(params('en')))
+    expect(html).toContain(t('en', 'welcome.howTitle'))
+    expect(html).toContain(t('en', 'home.customer1'))
+    expect(html).toContain(t('en', 'home.safetyTitle'))
+    expect(html).toContain('#install')
   })
 
   it('has per-language metadata with canonical and hreflang for every language', async () => {
