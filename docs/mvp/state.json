@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-11-05 00-10",
+  "stamp": "2026-11-10 14-13",
   "steps": {
     "0.1": "Done",
     "0.2": "Done",
@@ -34,7 +34,12 @@
     "7.4": "Done",
     "1.10": "Waiting for owner",
     "3.1": "In progress",
-    "3.2": "Waiting for owner"
+    "3.2": "Waiting for owner",
+    "8.1": "Done",
+    "8.2": "Done",
+    "8.3": "In progress",
+    "8.4": "In progress",
+    "4.2": "In progress"
   },
   "tasks": {
     "1": "Done",
@@ -59,7 +64,8 @@
     "34": "In progress",
     "12": "Waiting for owner",
     "8": "In progress",
-    "9": "Waiting for owner"
+    "9": "Waiting for owner",
+    "22": "In progress"
   },
   "log": [
     {
@@ -426,6 +432,61 @@
       "steps": [
         "step 4.1 Done"
       ]
+    },
+    {
+      "when": "2026-11-10 14:13",
+      "commit": "e1a199e",
+      "note": "Merged #86 to #92: PR 85 resume and audit (#86), security fixes street leak and sharp 0.35.5 (#87), drop currencies.minor_units migration 0034 (#88), one-off script removed (#89), documents in two groups (#90), phone test script (#91), UX test report 6 Nov (#92).",
+      "steps": [
+        "step 3.1 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-10 14:13",
+      "commit": "e1a199e",
+      "note": "Job page series merged: Live checklist and quote gate (#93), job number and title rule (#94), derived job state and refund counted once (#95), Jobs list and job page (#97), provider money and commission 15 percent (#99); design and handover documents (#96, #98). New phase 8.",
+      "steps": [
+        "step 8.1 Done"
+      ]
+    },
+    {
+      "when": "2026-11-10 14:13",
+      "commit": "e1a199e",
+      "note": "Cleanup refactors and categories: #100 to #108 (money rules one copy, bookings only through a quote 0037, import alias, theme, currency locale time zone, categories alphabetical 0038, README rewrite, website plan).",
+      "steps": [
+        "step 8.2 Done"
+      ]
+    },
+    {
+      "when": "2026-11-10 14:13",
+      "commit": "e1a199e",
+      "note": "Texts, feedback and Help: #109, #110 content truth audit, #111 feedback form (0039), #112, #113, #114 Help with 28 topics (0040). Help search 7b built on feat/help-search, not merged.",
+      "steps": [
+        "step 8.3 In progress",
+        "step 8.4 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-10 14:13",
+      "commit": "e1a199e",
+      "note": "Production and security 10 Nov: migrations through 0040 on production, production DB password rotated, security scans no critical or high (report in a separate PR), Android build 5d1df1b6, test report 10 Nov (PR #116 docs only). Production data reduced to admin user and reference data.",
+      "steps": [
+        "step 1.9 Done",
+        "step 1.10 Waiting for owner",
+        "step 3.2 Waiting for owner",
+        "step 4.2 In progress",
+        "task 22 In progress",
+        "task 23 Done",
+        "task 35 Done",
+        "task 26 In progress",
+        "task 34 In progress"
+      ]
+    },
+    {
+      "when": "2026-11-10 14:13",
+      "commit": "e1a199e",
+      "note": "MVP workbook brought up to date to 10 November 2026 (statuses checked against README, merged PRs #86 to #114, Reports and docs). Not Done without evidence: phone walk-through, recorded review, live deletion, demo data, deck, showcase.",
+      "steps": []
     }
   ],
   "mergesSinceWorkbook": [],
