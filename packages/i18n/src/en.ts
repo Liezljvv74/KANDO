@@ -154,7 +154,7 @@ export const en: Record<AppKey, string> = {
   'setup.noPrice': 'No price yet',
   'setup.aboutEmpty': 'Tell customers who you are.',
   'setup.aboutStrengths': 'Strengths: {n}',
-  'setup.documentsExtra': 'Consider submitting additional documents, as proposed below to improve your marketability. Our team checks your documents, with the help of an automated check. Customers only see which documents you submitted, never the documents themselves.',
+  'setup.documentsExtra': 'Consider submitting additional documents, as proposed below to improve your marketability. Our team checks your documents. Customers only see which documents you submitted, never the documents themselves.',
   'missing.photo': 'Profile picture',
   'setup.share': 'Share',
   'setup.shareText': 'Find me on {brand}: {url}',
