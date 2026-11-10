@@ -18,6 +18,8 @@ export { AiUnavailable, openRouterChecker, SYSTEM_PROMPT as DOCUMENT_CHECK_PROMP
 export * from './search'
 export * from './public-profile'
 export * from './categories'
+export * from './help/help'
+export { helpTopics, type HelpTopicSeed } from './help/topics'
 export * from './translate'
 export * from './pages'
 export * from './notifications'

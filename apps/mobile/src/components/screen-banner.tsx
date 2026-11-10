@@ -7,10 +7,10 @@ import { color, font } from '@/theme'
 
 /**
  * The banner at the top of every screen except Home: the page header on one line, with the Help and Feedback buttons at the
- * bottom right (Feedback opens the feedback form; Help is a "Coming soon" placeholder until the Help screen is built).
+ * bottom right (Help opens the Help screen, Feedback the feedback form; `hideHelp` leaves Help out, on the Help screen itself).
  * It also fills the space under the status bar, so a screen using it does not add the top inset itself.
  */
-export function ScreenBanner({ title }: { title: string }) {
+export function ScreenBanner({ title, hideHelp }: { title: string; hideHelp?: boolean }) {
   useLang()
   const top = useSafeAreaInsets().top
   return (
@@ -18,7 +18,7 @@ export function ScreenBanner({ title }: { title: string }) {
       <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
         {title}
       </Text>
-      <HelpFeedbackButtons />
+      <HelpFeedbackButtons hideHelp={hideHelp} />
     </View>
   )
 }
