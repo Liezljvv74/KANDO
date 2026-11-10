@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { asUser } from '@kando/db'
 import { listCategories } from '@kando/domain'
 import { t, type Key, type Lang } from '@kando/i18n'
 import { LangSwitch } from '@/components/lang-switch'
-import { alternates, pageLang } from '@/lib/site'
+import { alternates, langPath, pageLang } from '@/lib/site'
 
 type Args = { params: Promise<{ lang: string }> }
 
@@ -19,12 +20,11 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
   }
 }
 
-// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts, file in the media bucket).
-function StoreButtons({ lang }: { lang: Lang }) {
-  const cls = 'bg-teal text-ink' // the one primary action, on light and on indigo
+// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts).
+function InstallButton({ lang }: { lang: Lang }) {
   return (
     <div className="flex flex-col items-start gap-2">
-      <a href="/KANDO.apk" download="KANDO.apk" className={`${cls} rounded-md px-5 py-3 text-base font-bold`}>
+      <a href="/KANDO.apk" download="KANDO.apk" className="rounded-md bg-teal px-5 py-3 text-base font-bold text-ink">
         {t(lang, 'home.install')}
       </a>
       <p className="text-sm">{t(lang, 'home.androidOnly')}</p>
@@ -32,86 +32,62 @@ function StoreButtons({ lang }: { lang: Lang }) {
   )
 }
 
-const BADGES: [Key, Key][] = [
-  ['home.badgeVerified', 'home.badgeVerifiedText'],
-  ['home.payment', 'home.paymentBadgeText'],
-  ['home.badgeNoFees', 'home.badgeNoFeesText'],
-]
-const SAFETY: [Key, Key][] = [
-  ['home.payment', 'home.paymentText'],
-  ['home.safetyVerified', 'home.safetyVerifiedText'],
-  ['home.safetyReviews', 'home.safetyReviewsText'],
-  ['home.safetyEu', 'home.safetyEuText'],
-]
-const STEPS: Record<'customer' | 'provider', [Key, Key, Key, Key]> = {
-  customer: ['home.customerTitle', 'home.customer1', 'home.customer2', 'home.customer3'],
-  provider: ['home.providerTitle', 'home.provider1', 'home.provider2', 'home.provider3'],
+/** "Finally\nSomeone who CAN" -> ["FINALLY", "Someone who CAN"]: the first word in capitals and mint, the rest in teal (as on the app's Home). */
+const splitHeadline = (s: string): [string, string] => {
+  const i = s.indexOf('\n')
+  return i < 0 ? [s.toUpperCase(), ''] : [s.slice(0, i).toUpperCase(), s.slice(i + 1)]
 }
+
+// The app's three Home choices, with the app's colours: the first two lead to Install, the third to How it works.
+const CHOICES: { title: Key; text: Key; to: 'install' | 'how'; style: string }[] = [
+  { title: 'welcome.needHelp', text: 'welcome.needHelpText', to: 'install', style: 'border-teal bg-mint-50' },
+  { title: 'welcome.offer', text: 'welcome.offerText', to: 'install', style: 'border-brand bg-white' },
+  { title: 'welcome.learn', text: 'welcome.learnText', to: 'how', style: 'border-teal bg-[#d3f3f0]' },
+]
 
 export default async function HomePage({ params }: Args) {
   const lang = await pageLang(params)
   const categories = await asUser(null, (tx) => listCategories(tx, lang))
   const tt = (key: Key) => t(lang, key)
+  const head = splitHeadline(tt('home.heroHeadline'))
 
   return (
     <main>
       <section className="bg-brand text-white">
-        <div className="mx-auto max-w-5xl px-4 py-12">
+        <div className="mx-auto max-w-3xl px-4 py-10">
           <div className="flex justify-end">
             <LangSwitch lang={lang} path="/" />
           </div>
-          <h1 className="mt-6 text-4xl font-black leading-tight md:text-5xl">
-            {tt('home.headline')}
+          <h1 className="mt-4 whitespace-pre-line text-5xl font-black leading-[1.05] md:text-6xl">
+            <span className="text-mint-50">{head[0]}</span>
+            {'\n'}
+            <span className="text-teal">{head[1]}</span>
           </h1>
-          <p className="mt-4 max-w-xl text-lg leading-relaxed">{tt('home.intro')}</p>
-          <div className="mt-6">
-            <StoreButtons lang={lang} />
-          </div>
-          <div className="mt-10 grid gap-3 text-sm sm:grid-cols-3">
-            {BADGES.map(([title, text]) => (
-              <div key={title} className="rounded-md border-2 border-dashed border-brand bg-white p-4 text-ink">
-                <b>{tt(title)}</b>
-                <br />
-                {tt(text)}
-              </div>
+          <p className="font-tag mt-6 inline-block -rotate-2 border-2 border-teal px-3 py-1 text-sm tracking-wider text-teal">{tt('home.stamp')}</p>
+          <div className="mt-8 grid gap-3">
+            {CHOICES.map(({ title, text, to, style }) => (
+              <Link
+                key={title}
+                href={to === 'install' ? '#install' : langPath('/how-it-works', lang)}
+                className={`block rounded-md border-2 p-4 text-ink hover:opacity-90 ${style}`}
+              >
+                <span className="flex justify-between text-xl font-bold" style={{ fontFamily: 'var(--font-heading), Georgia, serif' }}>
+                  <span>{tt(title)}</span>
+                  <span aria-hidden="true">→</span>
+                </span>
+                <span className="mt-1 block text-base leading-snug text-ink-muted">{t(lang, text, { brand: tt('brand.name') })}</span>
+              </Link>
             ))}
           </div>
         </div>
       </section>
 
       <section>
-        <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="text-3xl font-black">{tt('home.howTitle')}</h2>
-          <div className="mt-6 grid gap-5 md:grid-cols-2">
-            {(Object.keys(STEPS) as (keyof typeof STEPS)[]).map((who) => {
-              const [title, ...steps] = STEPS[who]
-              return (
-                <div
-                  key={who}
-                  className="rounded-md border-2 border-dashed border-brand bg-white p-6"
-                >
-                  <h3 className="text-xl font-bold">{tt(title)}</h3>
-                  <ol className="mt-3 list-decimal space-y-2 pl-5">
-                    {steps.map((s) => (
-                      <li key={s}>{tt(s)}</li>
-                    ))}
-                  </ol>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="mx-auto max-w-5xl px-4 py-12">
+        <div className="mx-auto max-w-3xl px-4 py-10">
           <h2 className="mb-4 text-3xl font-black">{tt('home.categoriesTitle')}</h2>
           <ul className="flex flex-wrap gap-3">
             {categories.map((c) => (
-              <li
-                key={c.id}
-                className="font-tag rounded-md border-2 border-dashed border-brand bg-white px-4 py-2 font-bold text-brand"
-              >
+              <li key={c.id} className="font-tag rounded-md border-2 border-dashed border-brand bg-white px-4 py-2 font-bold text-brand">
                 {c.name}
               </li>
             ))}
@@ -119,33 +95,11 @@ export default async function HomePage({ params }: Args) {
         </div>
       </section>
 
-      <section>
-        <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="text-3xl font-black">{tt('home.safetyTitle')}</h2>
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            {SAFETY.map(([title, text]) => (
-              <div key={title}>
-                <h3 className="font-bold">{tt(title)}</h3>
-                <p className="mt-1 leading-relaxed">{tt(text)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-12">
-          <h2 className="text-3xl font-black">{tt('home.providersTitle')}</h2>
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed">{tt('home.providersText')}</p>
-        </div>
-      </section>
-
-      <section className="bg-brand text-white">
-        <div className="mx-auto max-w-5xl px-4 py-14 text-center">
+      <section id="install" className="bg-brand text-white">
+        <div className="mx-auto max-w-3xl px-4 py-12">
           <h2 className="text-3xl font-black">{tt('home.ctaTitle')}</h2>
-          <p className="mt-2 opacity-90">{tt('home.ctaText')}</p>
-          <div className="mt-6 flex justify-center">
-            <StoreButtons lang={lang} />
+          <div className="mt-6">
+            <InstallButton lang={lang} />
           </div>
         </div>
       </section>
