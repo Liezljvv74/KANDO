@@ -164,7 +164,7 @@ describe('translate', () => {
   })
 
   it('the global daily cap refuses every caller, and only counts the last 24 hours', async () => {
-    const total = async () => (await pool.query("SELECT count(*)::int AS n FROM translation_requests WHERE created_at > now() - interval '24 hours'")).rows[0].n as number
+    const total = async () => (await pool.query("SELECT count(*)::int AS n FROM translation_requests WHERE client_key NOT LIKE 'help-search:%' AND created_at > now() - interval '24 hours'")).rows[0].n as number
     vi.stubEnv('TRANSLATE_GLOBAL_LIMIT_PER_DAY', String((await total()) + 1))
     const f = answer(echo('DE: '))
     await translate(texts({ bio: en('global-0') }), 'de', client('global-a')) // the last call under the cap
@@ -173,6 +173,19 @@ describe('translate', () => {
     expect(f).not.toHaveBeenCalled()
     expect(await counted(client('global-b'))).toBe(0)
     expect(TRANSLATE_GLOBAL_LIMIT_PER_DAY).toBe(2000)
+  })
+
+  it('Help search rows in the counter do not use up the daily translation cap', async () => {
+    const total = async () => (await pool.query("SELECT count(*)::int AS n FROM translation_requests WHERE client_key NOT LIKE 'help-search:%' AND created_at > now() - interval '24 hours'")).rows[0].n as number
+    vi.stubEnv('TRANSLATE_GLOBAL_LIMIT_PER_DAY', String((await total()) + 2))
+    await pool.query("INSERT INTO translation_requests (client_key) SELECT 'help-search:ip:cap-test' FROM generate_series(1, 5)")
+    try {
+      const f = answer(echo('DE: '))
+      await translate(texts({ bio: en('helpcap') }), 'de', client('helpcap'))
+      expect(f).toHaveBeenCalledTimes(1)
+    } finally {
+      await pool.query("DELETE FROM translation_requests WHERE client_key = 'help-search:ip:cap-test'")
+    }
   })
 
   it('the limit boundary: the 30th call passes, the 31st is refused', async () => {

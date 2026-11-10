@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { HelpTopicSchema, type HelpTopic } from '@kando/contract'
 import { isLang } from '@kando/i18n'
@@ -108,6 +109,16 @@ export async function candidatesFor(exec: Exec, q: string, lang: string): Promis
   }))
 }
 
+/** The vector of the query: from `help_search_cache` when this question was asked before (per language and model), else from the model and then stored. Only a hash of the text is stored. */
+async function cachedQueryVector(exec: Exec, q: string, lang: string, embed: Embedder): Promise<number[] | null> {
+  const key = createHash('sha256').update(q.toLowerCase()).digest('hex')
+  const hit = await exec.execute<{ embedding: number[] }>(sql`SELECT embedding FROM help_search_cache WHERE key = ${key} AND lang = ${lang} AND model = ${EMBEDDING_MODEL}`)
+  if (hit.rows[0] && Array.isArray(hit.rows[0].embedding)) return hit.rows[0].embedding
+  const vector = (await embed([q]))[0] ?? null
+  if (vector) await exec.execute(sql`INSERT INTO help_search_cache (key, lang, model, embedding) VALUES (${key}, ${lang}, ${EMBEDDING_MODEL}, ${JSON.stringify(vector)}::jsonb) ON CONFLICT DO NOTHING`)
+  return vector
+}
+
 /**
  * Searches the approved Help topics (title and body of the language asked for): keyword and meaning together, at most 6, never an
  * unapproved one. The text is never stored or logged. Counts the search per `clientKey` (rows of `translation_requests`, prefixed
@@ -133,7 +144,7 @@ export async function searchHelp(exec: Exec, input: { q: string; lang: string; c
   const embed = input.embed === undefined ? defaultEmbedder() : input.embed
   if (embed && embedBudget && candidates.some((c) => c.vector)) {
     try {
-      queryVector = (await embed([q]))[0] ?? null
+      queryVector = await cachedQueryVector(exec, q, input.lang, embed)
     } catch {
       console.error('[help-search] embedding unavailable: keyword results only')
     }

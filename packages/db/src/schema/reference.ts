@@ -53,6 +53,20 @@ export const categoryTexts = pgTable(
 
 // Help topics shown in the app. Staff-written content, readable by everyone, written only on the owner connection. `approved = false` hides a topic from the route.
 // The six group names are repeated in three places: HELP_GROUPS (packages/contract/src/help.ts), the CHECK below and migration 0040_help_topics.sql. Change all three together.
+// Search vectors of Help search queries already asked, so the same question is not sent to the embedding model again. Key = sha256 of the
+// normalised query text (the text itself is never stored), per language and model. Owner connection only; rows older than 30 days are deleted by the daily clean-up.
+export const helpSearchCache = pgTable(
+  'help_search_cache',
+  {
+    key: text().notNull(),
+    lang: text().notNull(),
+    model: text().notNull(),
+    embedding: jsonb().$type<number[]>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.lang, t.model] })],
+)
+
 export const helpTopics = pgTable(
   'help_topics',
   {

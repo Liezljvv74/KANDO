@@ -30,3 +30,6 @@ What the code does (so the lines below are true): the text typed into the Help s
 - "Delete my data": nothing about the search text is stored, so there is nothing to delete for it. The counter rows of a signed-in person (`translation_requests`, key `help-search:user:<id>`) are deleted with the account (tested in `account-delete.int.spec.ts`); anonymous rows hold only a salted hash and disappear after 24 hours.
 - Article 50 label: the search returns our own Help texts, so no "AI-written" label is shown; the DPIA review decides whether that stays so.
 - Before launch: confirm OpenRouter's and the model provider's data use and region (the same open point as for translation).
+
+## Note on the stored search vectors (added 10 November 2026)
+To avoid asking the embedding model the same question twice, `help_search_cache` keeps, per language and model, a sha256 hash of the lower-cased query and its vector (list of numbers). The query text itself is not stored and the row has no user or address. Rows older than 30 days are deleted by the daily clean-up. Nothing in it is linked to a person, so the account deletion does not need to touch it; the lawyer to confirm that a hash and a vector of a short query are not personal data.

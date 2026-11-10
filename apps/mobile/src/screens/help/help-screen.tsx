@@ -98,7 +98,8 @@ export default function HelpScreen() {
 function useHelpSearch(lang: Lang) {
   const [text, setText] = useState('')
   const [query, setQuery] = useState<string | null>(null)
-  const [state, setState] = useState<{ loading: boolean; error: string | null; topics: HelpTopic[] | null }>({ loading: false, error: null, topics: null })
+  const [answer, setState] = useState<{ q: string | null; loading: boolean; error: string | null; topics: HelpTopic[] | null }>({ q: null, loading: false, error: null, topics: null })
+  const state = answer.q === query ? answer : { loading: true, error: null, topics: null } // an answer for an older query is not shown for the new one
   const [attempt, setAttempt] = useState(0)
   const setQueryLater = useMemo(() => debounce(setQuery, SEARCH_DEBOUNCE_MS), [])
   useEffect(() => {
@@ -110,10 +111,10 @@ function useHelpSearch(lang: Lang) {
   useEffect(() => {
     if (!query) return
     let live = true
-    setState({ loading: true, error: null, topics: null })
+    setState({ q: query, loading: true, error: null, topics: null })
     searchHelpTopics(query, getLang())
-      .then((topics) => live && setState({ loading: false, error: null, topics }))
-      .catch((e) => live && setState({ loading: false, error: e instanceof ApiError ? e.code : 'network', topics: null }))
+      .then((topics) => live && setState({ q: query, loading: false, error: null, topics }))
+      .catch((e) => live && setState({ q: query, loading: false, error: e instanceof ApiError ? e.code : 'network', topics: null }))
     return () => {
       live = false
     }

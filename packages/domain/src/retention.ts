@@ -21,5 +21,6 @@ export async function pruneOldRows(exec: typeof db, now: Date): Promise<{ notifi
   const e = await exec.execute(sql`DELETE FROM stripe_events WHERE received_at < ${before(STRIPE_EVENT_KEEP_DAYS)}`)
   const p = await exec.execute(sql`DELETE FROM push_tokens WHERE last_seen_at < ${before(PUSH_TOKEN_KEEP_DAYS)}`)
   const f = await exec.execute(sql`DELETE FROM feedback_attempts WHERE created_at < ${before(FEEDBACK_ATTEMPT_KEEP_DAYS)}`)
+  await exec.execute(sql`DELETE FROM help_search_cache WHERE created_at < ${before(30)}`)
   return { notifications: n.rowCount ?? 0, stripeEvents: e.rowCount ?? 0, pushTokens: p.rowCount ?? 0, feedbackAttempts: f.rowCount ?? 0 }
 }

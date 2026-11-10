@@ -155,7 +155,7 @@ async function askModel(exec: Exec, sent: Record<string, string>, lang: Lang, cl
   )
   if (rows[0]!.n >= limit) throw new TranslationUnavailable('Rate limit reached')
   const globalLimit = Number(process.env.TRANSLATE_GLOBAL_LIMIT_PER_DAY) || TRANSLATE_GLOBAL_LIMIT_PER_DAY
-  const day = await exec.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM translation_requests WHERE created_at > now() - interval '24 hours'`)
+  const day = await exec.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM translation_requests WHERE client_key NOT LIKE 'help-search:%' AND created_at > now() - interval '24 hours'`)
   if (day.rows[0]!.n >= globalLimit) throw new TranslationUnavailable('Global rate limit reached')
   await exec.execute(sql`INSERT INTO translation_requests (client_key) VALUES (${clientKey})`)
 

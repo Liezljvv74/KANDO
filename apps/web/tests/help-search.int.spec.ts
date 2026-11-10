@@ -31,6 +31,7 @@ const insert = (slug: string, approved: boolean, de: [string, string], en: [stri
 const clean = async () => {
   await pool.query('DELETE FROM help_topics WHERE slug LIKE $1', [`${P}%`])
   await pool.query("DELETE FROM translation_requests WHERE client_key LIKE 'help-search:%'")
+  await pool.query('DELETE FROM help_search_cache')
 }
 
 beforeAll(async () => {
@@ -101,6 +102,17 @@ it('related wording with no shared word is found by meaning; unrelated text retu
   expect(embedCalls).toHaveBeenCalledWith(['when do I get my money back'])
   expect((await search('Wann bekomme ich mein Geld zurück', { lang: 'de' })).mine).toEqual(['meaning'])
   expect((await search('pizza recipe', { lang: 'en' })).mine).toEqual([])
+})
+
+it('the same question asked again (any capitals) is answered from the stored vector: one embedding call, no text stored', async () => {
+  await pool.query('DELETE FROM help_search_cache')
+  await search('when do I get my Money Back', { lang: 'en' })
+  const second = await search('when do i get my money back', { lang: 'en' })
+  expect(second.mine).toEqual(['meaning'])
+  expect(embedCalls).toHaveBeenCalledTimes(1)
+  const { rows } = await pool.query('SELECT * FROM help_search_cache')
+  expect(rows).toHaveLength(1)
+  expect(JSON.stringify(rows)).not.toContain('money')
 })
 
 it('a missing key or a failing embedding call gives the keyword results, not an error', async () => {
