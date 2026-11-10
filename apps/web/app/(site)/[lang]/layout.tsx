@@ -1,10 +1,15 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { Courier_Prime, Fraunces } from 'next/font/google'
 import Link from 'next/link'
 import { t } from '@kando/i18n'
 import { Footer } from '@/components/footer'
 import { langPath, pageLang, siteUrl } from '@/lib/site'
 import '../../globals.css'
+
+// The app's two type faces (Fraunces for headlines, Courier Prime for stamps).
+const heading = Fraunces({ subsets: ['latin'], weight: ['700', '900'], variable: '--font-heading', display: 'swap' })
+const tag = Courier_Prime({ subsets: ['latin'], weight: '700', variable: '--font-tag', display: 'swap' })
 
 export const metadata: Metadata = { metadataBase: new URL(siteUrl()) }
 
@@ -23,12 +28,14 @@ export default async function SiteLayout({
 }) {
   const lang = await pageLang(params)
   return (
-    <html lang={lang}>
-      <body className="flex min-h-screen flex-col bg-white">
-        <header className="mx-auto w-full max-w-5xl px-4 py-6">
-          <Link href={langPath('/', lang)} className="text-xl font-extrabold">
-            {t(lang, 'brand.name')}
-          </Link>
+    <html lang={lang} className={`${heading.variable} ${tag.variable}`}>
+      <body className="flex min-h-screen flex-col bg-mint-50">
+        <header className="bg-brand">
+          <div className="mx-auto w-full max-w-5xl px-4 py-4">
+            <Link href={langPath('/', lang)} className="font-heading text-2xl font-black text-teal" style={{ fontFamily: 'var(--font-heading), Georgia, serif' }}>
+              {t(lang, 'brand.name')}
+            </Link>
+          </div>
         </header>
         {children}
         <Footer lang={lang} />
