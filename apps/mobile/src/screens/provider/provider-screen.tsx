@@ -202,7 +202,7 @@ export default function ProviderScreen() {
         </Section>
       )}
 
-      {canRequest && (waitlist ? <NotifyMe slug={slug} watching={!!p.watching} /> : <RequestButton provider={p} />)}
+      {canRequest && (waitlist ? <NotifyMe slug={slug} watching={!!p.watching} /> : p.services.length === 0 && <RequestButton provider={p} />)}
       </ScrollView>
     </View>
   )
