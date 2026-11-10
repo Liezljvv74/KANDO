@@ -34,7 +34,7 @@ function JobCard({ row, role, tag }: { row: JobRow; role: Role; tag?: boolean })
           {row.title}
         </Text>
         <Text style={styles.small}>{[`#${row.number}`, row.otherParty, headerDate(row.date, getLang())].filter(Boolean).join(' · ')}</Text>
-        <Text style={styles.small}>{[state, tag && t(TAG[row.jobState.section])].filter(Boolean).join(' · ')}</Text>
+        <Text style={[styles.small, row.jobState.key === 'request_sent' && styles.bold]}>{[state, tag && t(TAG[row.jobState.section])].filter(Boolean).join(' · ')}</Text>
         {!!row.quoteAccepted && <Text style={[styles.accepted, styles.unreadBox]}>{t('jobs.quoteAccepted')}</Text>}
         {row.unread > 0 &&
           (row.threadId ? (
@@ -184,6 +184,7 @@ const styles = StyleSheet.create({
   text: { fontSize: 16, color: color.ink },
   small: { fontSize: 14, color: color.inkMuted },
   unread: { fontSize: 14, fontWeight: '700', color: color.danger }, // the design system's red: a waiting message is easy to miss in the indigo
+  bold: { fontWeight: '700' }, // "Request sent" is easy to miss
   accepted: { fontSize: 14, fontWeight: '700', color: color.success }, // the design system's green (teal is never text on a light ground)
   unreadBox: { alignSelf: 'flex-end', minHeight: 32, justifyContent: 'center' }, // bottom right of the card
   pastLine: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.divider },
