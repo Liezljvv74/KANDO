@@ -5,7 +5,7 @@ How KANDO is deployed. As of 28 October 2026 the steps below are done: the site 
 ## Pieces
 
 - **Website, back office and API:** one Next.js app in `apps/web`, on Vercel, region `fra1` (Frankfurt; set in `apps/web/vercel.json`).
-- **Daily check:** Vercel Cron (`crons` in `apps/web/vercel.json`) calls `/api/cron/suspensions` at 06:00 UTC with `Authorization: Bearer $CRON_SECRET`; it ends suspensions whose date has passed and sends the "published again" email. Vercel runs crons on the Production deployment only, so `CRON_SECRET` is needed for Production (Preview never runs the check).
+- **Daily jobs:** Vercel Cron (`crons` in `apps/web/vercel.json`) calls four routes every day with `Authorization: Bearer $CRON_SECRET`: `/api/cron/bookings` (03:00 UTC), `/api/cron/money` (04:00), `/api/cron/invoices` (05:00) and `/api/cron/suspensions` (06:00). What each does: `bookings` expires old requests and quotes and sends reminders; `money` runs the money steps (including the automatic release after 7 days); `invoices` creates the documents; `suspensions` ends suspensions that are over (and sends the "published again" email) and does the clean-ups (pending file deletes, retained records, old rows, contact attempts, ID images, interrupted AI checks). Vercel runs crons on the Production deployment only, so `CRON_SECRET` is needed for Production (Preview never runs them). Each route answers 401 without it. In the Vercel project (Settings, Cron Jobs) all four must be listed.
 - **Database, login and files:** Neon project `SkillWeb` in AWS Frankfurt (Postgres, Neon Auth, Object Storage).
 - **Branches:** `kando-dev` exists now (endpoint `ep-steep-scene-b9p4f2v6`). `kando-main` is created at cutover. The old `main` and `dev` branches belong to the old app and stay untouched until then.
 
@@ -19,7 +19,7 @@ How KANDO is deployed. As of 28 October 2026 the steps below are done: the site 
 
 ## Environment variables
 
-Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitive in Vercel.
+Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitive in Vercel. **Scope (security scan 10 November 2026):** Preview must hold only the dev values (the `kando-dev` database strings, test Stripe keys, a separate capped AI key), never a production database string, a live key, `CRON_SECRET` or the production email key; the repository is public, so a fork build is a real path to Preview variables. After a rotation, check that the "updated" date of both database variables is the rotation date.
 
 | Variable | Secret | Used by | What it is |
 | --- | --- | --- | --- |
@@ -48,6 +48,12 @@ Secret means: never in git, never in a `NEXT_PUBLIC_` variable, mark it Sensitiv
 | `RESEND_API_KEY` | yes | web | Approval, rejection, suspension and "profile is live" emails. Required in production: without it no email is sent, only one line is logged. |
 | `DELETE_RETENTION_MONTHS` | no | web | Months the documents and basic trader details of a deleted provider are kept (default 6; 0 = delete at once, no record). |
 | `CRON_SECRET` | yes | cron route | Vercel sends it as `Authorization: Bearer` to the daily check that ends suspensions (06:00 UTC, `/api/cron/suspensions`). Without it the route answers 401. Production only (crons do not run on Preview). |
+| `STRIPE_SECRET_KEY` | yes | web | Stripe key, server only. **Test key (`sk_test_`) only** while payments are in test mode. Production only; Preview gets its own test key. |
+| `STRIPE_WEBHOOK_SECRET` | yes | web | Signing secret of the Stripe webhook endpoint for payments of this deployment. |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | yes | web | Signing secret of the Stripe webhook endpoint for connected accounts (providers). |
+| `PAYMENTS_ENABLED` | no | web | Must be exactly `true` for any Stripe call; otherwise the payment gateway refuses. |
+| `EXPO_ACCESS_TOKEN` | yes | web | Expo push service token for push notifications. Production only. |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | yes | Stripe smoke script only | The Preview's Protection Bypass for Automation secret, only for `stripe-smoke.ts`. Never on Production. |
 | `NEXT_PUBLIC_SERVER_URL` | no | web | Public address of the site (links, sitemaps, canonical). |
 | `VERCEL_PROJECT_PRODUCTION_URL` | no | web | Set by Vercel itself; do not add it by hand. |
 | `ALLOW_PRODUCTION` | no | seeds only | Never set on Vercel. See Seeds. |
