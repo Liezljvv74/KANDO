@@ -53,8 +53,8 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
   ])
   const reviewed = new Set(reviewedRows.map((r) => r.id))
   // the provider's unseen "booking paid" notice (the quote was accepted and paid): the job counts on the Jobs tab and its card says so until the job page is opened
-  const paidNotices = bookingIds.length
-    ? await x.select({ b: sql<string>`${notifications.payload}->>'bookingId'` }).from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.kind, 'booking-paid'), isNull(notifications.seenAt), isNull(notifications.dismissedAt), sql`${notifications.payload}->>'bookingId' IN (${sql.join(bookingIds.map((id) => sql`${id}`), sql`, `)})`))
+  const paidNotices = bookingIds.length && items.some((i) => i.viewer === 'provider')
+    ? await x.select({ b: sql<string>`${notifications.payload}->>'bookingId'` }).from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.kind, 'booking-paid'), isNull(notifications.seenAt), isNull(notifications.dismissedAt), inArray(sql`${notifications.payload}->>'bookingId'`, bookingIds)))
     : []
   const paidNew = new Set(paidNotices.map((n) => n.b))
   const flagged = new Set(flags.map((r) => r.ref))
