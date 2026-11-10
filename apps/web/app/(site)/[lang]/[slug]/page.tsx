@@ -24,7 +24,7 @@ export default async function Page({ params }: Args) {
   const page = await load(slug, lang)
   if (!page) notFound()
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10">
+    <main className="mx-auto w-full max-w-5xl px-4 py-10 md:px-8">
       <LangSwitch lang={lang} path={`/${slug}`} />
       <h1 className="mt-4 mb-6 text-4xl font-extrabold">{page.title}</h1>
       {/* renderMarkdown escapes raw HTML and drops unsafe links */}
