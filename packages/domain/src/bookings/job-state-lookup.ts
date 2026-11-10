@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, max, or, sql } from 'drizzle-orm'
-import { bookings, db, providers, quotes, reviews, staffFlags, type Tx } from '@kando/db'
+import { bookings, db, notifications, providers, quotes, reviews, staffFlags, type Tx } from '@kando/db'
 import type { JobStateDto } from '@kando/contract'
 import { threadsOf } from '../chat/threads'
 import { readRef } from '../payments/rules'
@@ -14,7 +14,7 @@ type BookingRow = typeof bookings.$inferSelect
  * A state with what the lookup found on the way: unread, the job's chat thread (null: none yet), the item's bookings (oldest
  * first, created_at then id) and the current one (currentBookingOf). Only the state itself leaves the server (toJobStateDto).
  */
-export type JobStateOf = JobState & { unread: boolean; threadId: string | null; bookingIds: string[]; currentBookingId: string | null }
+export type JobStateOf = JobState & { unread: boolean; quoteAccepted: boolean; threadId: string | null; bookingIds: string[]; currentBookingId: string | null }
 
 /** One DTO to give a state: `key` is how the caller finds it again (request id or booking id). */
 export type JobStateItem = { key: string; viewer: JobViewer; providerId: string; requestId: string | null; bookingId?: string; /** a request item: the booking an additional task adds to (its chat is that booking's) */ parentBookingId?: string | null; request: JobRequestInput }
@@ -52,6 +52,11 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
     bookingIds.length ? db.select({ id: reviews.bookingId }).from(reviews).where(and(inArray(reviews.bookingId, bookingIds), eq(reviews.authorId, userId))) : [],
   ])
   const reviewed = new Set(reviewedRows.map((r) => r.id))
+  // the provider's unseen "booking paid" notice (the quote was accepted and paid): the job counts on the Jobs tab and its card says so until the job page is opened
+  const paidNotices = bookingIds.length
+    ? await x.select({ b: sql<string>`${notifications.payload}->>'bookingId'` }).from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.kind, 'booking-paid'), isNull(notifications.seenAt), isNull(notifications.dismissedAt), sql`${notifications.payload}->>'bookingId' IN (${sql.join(bookingIds.map((id) => sql`${id}`), sql`, `)})`))
+    : []
+  const paidNew = new Set(paidNotices.map((n) => n.b))
   const flagged = new Set(flags.map((r) => r.ref))
   const ready = new Set(readyRows.map((r) => r.id))
 
@@ -76,8 +81,10 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
     const inputs: JobBookingInput[] = mine.map((r) => ({ ...r, ...(() => { const c = readRef(r.checkoutRef); return { checkoutStartedAt: c?.startedAt ? new Date(c.startedAt) : null, checkoutExpiresAt: c?.expiresAt ? new Date(c.expiresAt) : null } })(), noShowObjectBy: noShowObjectBy(r.noShowReportedAt), reviewedByViewer: reviewed.has(r.id) }))
     const current = currentBookingOf(inputs)
     const unread = (!!i.requestId && !i.bookingId && unreadKey(`r:${i.requestId}`)) || mine.some((r) => unreadKey(r.id))
+    const quoteAccepted = i.viewer === 'provider' && mine.some((r) => paidNew.has(r.id))
     out.set(i.key, {
       unread,
+      quoteAccepted,
       threadId: threadOf.get(i.bookingId ?? `r:${i.requestId}`)?.id ?? null,
       bookingIds: mine.map((r) => r.id),
       currentBookingId: current?.id ?? null,
@@ -88,6 +95,7 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
         delayedFlag: !!current && flagged.has(current.id),
         providerPayoutReady: ready.has(i.providerId),
         unread,
+        quoteAccepted,
         now,
       }),
     })
@@ -96,4 +104,4 @@ export async function jobStates(x: Db, userId: string, items: JobStateItem[], no
 }
 
 /** The state as the API sends it (dates as ISO text). */
-export const toJobStateDto = ({ paidOutAt, startAt, unread: _u, threadId: _t, bookingIds: _b, currentBookingId: _c, ...s }: JobState & Partial<Omit<JobStateOf, keyof JobState>>): JobStateDto => ({ ...s, ...(paidOutAt && { paidOutAt: paidOutAt.toISOString() }), ...(startAt && { startAt: startAt.toISOString() }) })
+export const toJobStateDto = ({ paidOutAt, startAt, unread: _u, quoteAccepted: _q, threadId: _t, bookingIds: _b, currentBookingId: _c, ...s }: JobState & Partial<Omit<JobStateOf, keyof JobState>>): JobStateDto => ({ ...s, ...(paidOutAt && { paidOutAt: paidOutAt.toISOString() }), ...(startAt && { startAt: startAt.toISOString() }) })

@@ -481,3 +481,20 @@ it('a completed job stays under Needs you for each side until that side has writ
   expect((await as('jb-rowner', 'provider')).row).toMatchObject({ section: 'past' })
   expect(await settledNow()).toBe(true)
 })
+
+it('a paid quote counts for the provider until they open the job: card flag and Jobs tab count', async () => {
+  const b = await makeAwaitingPayment({ customerId: U.c6, ownerId: U.owner, providerId, serviceId, startAt: day(55) })
+  await pool.query("UPDATE bookings SET status = 'confirmed', paid_at = now(), payment_ref = 'pi_jb_' || gen_random_uuid() WHERE id = $1", [b.id])
+  const before = (await list(U.owner, { role: 'provider' })).counts.needsYou
+  await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ($1, 'booking-paid', $2)", [U.owner, JSON.stringify({ bookingId: b.id })])
+  const active = await list(U.owner, { role: 'provider', section: 'active' })
+  expect(active.items.find((i) => i.id === b.requestId)).toMatchObject({ quoteAccepted: 1, jobState: { section: 'active', countsForMe: true } })
+  expect(active.counts.needsYou).toBe(before + 1)
+  // the customer never sees it
+  expect((await list(U.c6)).items.find((i) => i.id === b.requestId)?.quoteAccepted ?? 0).toBe(0)
+  // opening the job page clears it
+  expect((await page(U.owner, b.requestId!)).status).toBe(200)
+  const cleared = await list(U.owner, { role: 'provider', section: 'active' })
+  expect(cleared.items.find((i) => i.id === b.requestId)).toMatchObject({ quoteAccepted: 0, jobState: { countsForMe: false } })
+  expect(cleared.counts.needsYou).toBe(before)
+})

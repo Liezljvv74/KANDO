@@ -91,6 +91,7 @@ export const en: Record<AppKey, string> = {
   'invoice.heading': 'Invoices',
   'invoice.openShort': 'Open PDF',
   'jobs.unread': 'New message',
+  'jobs.quoteAccepted': 'Quote accepted',
   'jobs.tag.active': 'Active',
   'jobs.tag.past': 'Past',
   'common.save': 'Save',

@@ -86,6 +86,8 @@ export function deriveJobState(i: {
   viewer: JobViewer
   /** The viewer has an unread message in the job's chat. */
   unread?: boolean
+  /** The provider has not yet opened a job whose quote was accepted and paid: it counts on the Jobs tab. */
+  quoteAccepted?: boolean
   request: JobRequestInput
   bookings: JobBookingInput[]
   delayedFlag: boolean
@@ -95,7 +97,7 @@ export function deriveJobState(i: {
   const s = baseState(i)
   const stays = s.key === 'problem_reported' || s.key === 'delayed'
   const section = i.unread && !stays ? 'needs_you' : s.section
-  return { ...s, section, countsForMe: section === 'needs_you' || !!i.unread }
+  return { ...s, section, countsForMe: section === 'needs_you' || !!i.unread || !!i.quoteAccepted }
 }
 
 /**

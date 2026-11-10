@@ -92,7 +92,7 @@ async function rowsOf(tx: Tx, userId: string, role: JobsQueryInput['role'], foun
     const j = refs[i]
     if (!root || !j) return
     const s = leadState(root, tasks.flatMap((t) => (t.root === r.id ? states.get(t.r.id) ?? [] : [])))
-    out.set(r.id, { id: r.id, number: j.number, title: j.title, otherParty: j.otherParty, date: new Date(ts).toISOString(), jobState: toJobStateDto(s), unread: s.unread ? 1 : 0, threadId: root.threadId ?? null })
+    out.set(r.id, { id: r.id, number: j.number, title: j.title, otherParty: j.otherParty, date: new Date(ts).toISOString(), jobState: toJobStateDto(s), unread: s.unread ? 1 : 0, quoteAccepted: s.quoteAccepted ? 1 : 0, threadId: root.threadId ?? null })
   })
   return out
 }

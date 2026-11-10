@@ -90,6 +90,7 @@ export const de = {
   'invoice.heading': 'Rechnungen',
   'invoice.openShort': 'PDF öffnen',
   'jobs.unread': 'Neue Nachricht',
+  'jobs.quoteAccepted': 'Angebot angenommen',
   'jobs.tag.active': 'Laufend',
   'jobs.tag.past': 'Vergangen',
   'common.save': 'Speichern',

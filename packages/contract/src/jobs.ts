@@ -26,6 +26,8 @@ export const JobRowSchema = z.object({
   jobState: JobStateSchema,
   /** 1 when the job's chat has an unread message (per job, not per message). */
   unread: z.number().int().min(0),
+  /** 1 on the provider's side while a quote was accepted and paid and the job page was not opened yet; optional so an older server still parses. */
+  quoteAccepted: z.number().int().min(0).optional(),
   /** The job's chat, so the list can open it directly (null: none yet; optional so an older server still parses). */
   threadId: z.string().nullish(),
 })
