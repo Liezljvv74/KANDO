@@ -1,14 +1,19 @@
-// The Android app file under the site's own address: https://skillweb.space/KANDO.apk. The file itself is the EAS build artifact, streamed
-// through (the visitor never sees where it is stored). Set ANDROID_APK_URL in Vercel, or change the default below, when a newer build is the one to share.
-const DEFAULT_APK_URL = ''
+import { photoUrl } from '@kando/domain'
+
+// The Android app file under the site's own address: https://skillweb.space/KANDO.apk. The file is `app/KANDO.apk` in the public media bucket
+// (uploaded by the owner's team after each Android build) and is streamed through, so the visitor never sees where it is stored.
+const KEY = 'app/KANDO.apk'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const source = process.env.ANDROID_APK_URL || DEFAULT_APK_URL
-  if (!source) return new Response('Not available yet', { status: 404 })
-  const upstream = await fetch(source)
-  if (!upstream.ok || !upstream.body) return new Response('Not available right now', { status: 502 })
+  let upstream: Response | undefined
+  try {
+    upstream = await fetch(photoUrl(KEY))
+  } catch {
+    // storage not configured or not reachable: answered below
+  }
+  if (!upstream?.ok || !upstream.body) return new Response('Not available right now', { status: 404 })
   const headers: Record<string, string> = {
     'Content-Type': 'application/vnd.android.package-archive',
     'Content-Disposition': 'attachment; filename="KANDO.apk"',
