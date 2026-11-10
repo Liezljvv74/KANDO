@@ -28,6 +28,7 @@ export const de = {
   'error.invalidPostcode': 'Diese Postleitzahl ist nicht richtig geschrieben. Bitte prüfe sie und gib sie wie üblich ein, zum Beispiel 10115.',
   'error.unknownPostcode': 'Diese Postleitzahl kennen wir noch nicht, deshalb können wir sie nicht auf der Karte finden. Bitte prüfe auf Tippfehler oder nimm eine Postleitzahl in der Nähe.',
   'error.unknownCategory': 'Diese Kategorie gibt es nicht mehr, wahrscheinlich wurde die Liste geändert. Geh bitte zurück und wähle eine andere.',
+  'error.lastService': 'Ein veröffentlichtes Profil braucht mindestens eine Leistung. Lege zuerst eine weitere Leistung an oder schalte dein Profil aus, dann kannst du diese entfernen.',
   'error.profileIncomplete': 'Dein Profil ist noch nicht vollständig und kann deshalb nicht online gehen. Fülle die mit * markierten Felder aus und versuche es dann noch einmal.',
   'error.profileSuspended': 'Dein Profil ist gesperrt, deshalb geht das gerade nicht. Bitte lies die E-Mail, die wir dir geschickt haben, oder schreib an {contact}.',
   'error.createProfileFirst': 'Dafür brauchst du ein Leistungsprofil, das du noch nicht hast. Lege es unter „Leistungen anbieten“ im Konto an.',

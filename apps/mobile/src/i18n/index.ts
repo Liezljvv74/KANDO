@@ -53,6 +53,7 @@ export const errorKeys: Record<string, Key> = {
   'Invalid postcode': 'error.invalidPostcode',
   'Unknown category': 'error.unknownCategory',
   'Profile incomplete': 'error.profileIncomplete',
+  'last-service': 'error.lastService',
   'Profile suspended': 'error.profileSuspended',
   SUSPENDED: 'error.accountSuspended',
   'Create your profile first': 'error.createProfileFirst',
