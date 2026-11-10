@@ -129,6 +129,7 @@ export const errorKeys: Record<string, Key> = {
   CONTACT_DETAILS: 'chat.contactBlocked',
   BLOCKED: 'chat.blocked',
   MESSAGE_LIMIT: 'chat.sendLimit',
+  RATE_LIMITED: 'help.search.limited', // the Help search (the only route that answers it to a reader; feedback maps 429 itself)
   LENGTH_REQUIRED: 'error.generic', // an upload sent without Content-Length (the app always sends it)
   // Auth server (`code`)
   INVALID_EMAIL_OR_PASSWORD: 'error.invalidLogin',

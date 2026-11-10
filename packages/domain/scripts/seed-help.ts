@@ -9,5 +9,6 @@ if (!isDevTarget(process.env) && process.env.ALLOW_PRODUCTION !== '1') {
 const { pool } = await import('@kando/db')
 const { seedHelpTopics } = await import('../src/help/help')
 const r = await seedHelpTopics()
-console.log(`seeded ${r.upserted} help topics, removed ${r.removed} retired ones; DELETE_RETENTION_MONTHS used: ${r.months} (run this again after changing a rule constant or DELETE_RETENTION_MONTHS)`)
+console.log(`seeded ${r.upserted} help topics, removed ${r.removed} retired ones; DELETE_RETENTION_MONTHS used: ${r.months} (run this again after changing a rule constant or DELETE_RETENTION_MONTHS)
+search vectors: ${r.embedNote}; ${r.embedded} topics embedded`)
 await pool.end()

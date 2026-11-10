@@ -186,7 +186,7 @@ export async function deleteAccount(userId: string, afterCommit: AfterCommit): P
     await tx.delete(providerReferences).where(sql`${providerReferences.providerId} IN ${own}`)
     await tx.delete(services).where(sql`${services.providerId} IN ${own}`)
     await tx.delete(providers).where(eq(providers.ownerId, userId))
-    await tx.execute(sql`DELETE FROM translation_requests WHERE client_key = ${`user:${userId}`}`)
+    await tx.execute(sql`DELETE FROM translation_requests WHERE client_key IN (${`user:${userId}`}, ${`help-search:user:${userId}`})`)
     await tx.delete(users).where(eq(users.id, userId))
     await deleteAuthRecords(tx, userId, user.email)
     const owed = [
