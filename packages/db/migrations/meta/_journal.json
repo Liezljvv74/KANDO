@@ -288,6 +288,13 @@
       "when": 1794256655243,
       "tag": "0040_help_topics",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794307098594,
+      "tag": "0041_help_topic_embeddings",
+      "breakpoints": true
     }
   ]
 }

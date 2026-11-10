@@ -40,7 +40,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs())
 afterAll(async () => {
   setStorageForTests(undefined)
-  await pool.query("DELETE FROM translation_requests WHERE client_key LIKE 'user:ad%'")
+  await pool.query("DELETE FROM translation_requests WHERE client_key LIKE 'user:ad%' OR client_key LIKE 'help-search:user:ad%'")
   await pool.query('DELETE FROM pending_object_deletes')
   await cleanupUsers()
   for (const t of ['account', 'session', 'member', 'invitation', 'verification', 'user']) await pool.query(`DELETE FROM neon_auth."${t}"`)
@@ -93,6 +93,7 @@ async function fullPerson(uid: string, lang = 'en') {
   await pool.query("INSERT INTO documents (owner_id, requirement, key) VALUES ($1, 'permit', $2)", [uid, keys.doc])
   await pool.query("INSERT INTO notifications (user_id, kind, payload) VALUES ($1, 'profile-live', '{}')", [uid])
   await pool.query('INSERT INTO translation_requests (client_key) VALUES ($1)', [`user:${uid}`])
+  await pool.query('INSERT INTO translation_requests (client_key) VALUES ($1)', [`help-search:user:${uid}`])
   for (const t of ['account', 'session', 'member']) await pool.query(`INSERT INTO neon_auth.${t} ("userId") VALUES ($1)`, [uid])
   await pool.query('INSERT INTO neon_auth.invitation ("inviterId") VALUES ($1)', [uid])
   for (const id of [...otpIdentifiers(EMAIL(uid)), ...lookalikes(EMAIL(uid))]) await pool.query('INSERT INTO neon_auth.verification (identifier) VALUES ($1)', [id])
@@ -110,7 +111,7 @@ async function rowsOf(uid: string, providerId: string) {
     files: await count('SELECT count(*) n FROM private_files WHERE owner_id = $1', [uid]),
     documents: await count('SELECT count(*) n FROM documents WHERE owner_id = $1', [uid]),
     notifications: await count('SELECT count(*) n FROM notifications WHERE user_id = $1', [uid]),
-    requests: await count('SELECT count(*) n FROM translation_requests WHERE client_key = $1', [`user:${uid}`]),
+    requests: await count('SELECT count(*) n FROM translation_requests WHERE client_key = ANY($1)', [[`user:${uid}`, `help-search:user:${uid}`]]),
     authUser: await count('SELECT count(*) n FROM neon_auth."user" WHERE id = $1', [uid]),
     authAccount: await count('SELECT count(*) n FROM neon_auth.account WHERE "userId" = $1', [uid]),
     authSession: await count('SELECT count(*) n FROM neon_auth.session WHERE "userId" = $1', [uid]),

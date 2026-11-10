@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { asUser, db, pool } from '@kando/db'
 import { HELP_GROUPS, HelpTopicSchema } from '@kando/contract'
-import { helpTopics, seedHelpTopics } from '@kando/domain'
+import { EMBEDDING_MODEL, helpTopics, seedHelpTopics } from '@kando/domain'
 import { sql } from 'drizzle-orm'
 
 vi.mock('../lib/auth/server', async () => ({ sessionFromRequest: (await import('./helpers')).fakeSession }))
@@ -75,16 +75,16 @@ it('the seed (rolled back): inserts every topic, is idempotent, keeps approval, 
       const q = async (text: string, params: unknown[] = []) => (await tx.execute(sql.raw(text.replace(/\$(\d)/g, (_, i) => `'${String(params[Number(i) - 1]).replaceAll("'", "''")}'`)))).rows
       await tx.execute(sql`DELETE FROM help_topics`)
       await tx.execute(sql`INSERT INTO help_topics (slug, sort, "group", title_de, body_de, title_en, body_en) VALUES ('retired-topic', 1, 'your-data', 'a', 'b', 'c', 'd')`)
-      const first = await seedHelpTopics(tx as never)
+      const first = await seedHelpTopics(tx as never, null)
       expect(first).toMatchObject({ upserted: codeSlugs.length, removed: 1 })
       expect(first.months).toBeGreaterThanOrEqual(0)
       expect(await q('SELECT slug FROM help_topics ORDER BY slug')).toHaveLength(codeSlugs.length)
       const before = await q('SELECT slug, updated_at FROM help_topics ORDER BY slug')
-      expect(await seedHelpTopics(tx as never)).toMatchObject({ removed: 0 })
+      expect(await seedHelpTopics(tx as never, null)).toMatchObject({ removed: 0 })
       expect(await q('SELECT slug, updated_at FROM help_topics ORDER BY slug')).toEqual(before) // matching rows are not touched
       await tx.execute(sql`UPDATE help_topics SET approved = true WHERE slug = 'where-the-money-is-kept'`)
       await tx.execute(sql`UPDATE help_topics SET approved = false, title_en = 'old' WHERE slug = 'finding-providers'`)
-      await seedHelpTopics(tx as never)
+      await seedHelpTopics(tx as never, null)
       expect(await q("SELECT slug, approved, title_en FROM help_topics WHERE slug IN ('where-the-money-is-kept', 'finding-providers') ORDER BY slug")).toEqual([
         { slug: 'finding-providers', approved: false, title_en: 'Finding providers' },
         { slug: 'where-the-money-is-kept', approved: true, title_en: 'Where the money is kept' },
@@ -96,4 +96,42 @@ it('the seed (rolled back): inserts every topic, is idempotent, keeps approval, 
       if (e !== ROLLBACK) throw e
     })
   await result
+})
+
+it('the seed (rolled back) writes search vectors with the model name, skips unchanged topics, rebuilds on a changed text or model, and still seeds without an embedder', async () => {
+  const ROLLBACK = new Error('rollback')
+  const codeSlugs = helpTopics().map((t) => t.slug)
+  const calls: number[] = []
+  const fake = async (texts: string[]) => {
+    calls.push(texts.length)
+    return texts.map(() => [1, 2, 3])
+  }
+  await db
+    .transaction(async (tx) => {
+      const q = async (text: string) => (await tx.execute(sql.raw(text))).rows
+      await tx.execute(sql`DELETE FROM help_topics`)
+      expect(await seedHelpTopics(tx as never, null)).toMatchObject({ embedded: 0, embedNote: 'no embeddings (no key)' }) // topics are written without vectors
+      expect(await q('SELECT slug FROM help_topics WHERE embedding_de IS NOT NULL')).toEqual([])
+      expect(await seedHelpTopics(tx as never, fake)).toMatchObject({ embedded: codeSlugs.length })
+      expect(calls).toEqual([codeSlugs.length * 2])
+      expect(await q(`SELECT count(*)::int AS n FROM help_topics WHERE embedding_de = '[1,2,3]' AND embedding_en = '[1,2,3]' AND embedding_model = '${EMBEDDING_MODEL}'`)).toEqual([{ n: codeSlugs.length }])
+      expect(await seedHelpTopics(tx as never, fake)).toMatchObject({ embedded: 0, embedNote: 'all embeddings up to date' })
+      expect(calls).toHaveLength(1) // nothing changed: no second call
+      await tx.execute(sql`UPDATE help_topics SET body_de = 'old', embedding_model = 'other-model' WHERE slug = 'quotes'`)
+      await tx.execute(sql`UPDATE help_topics SET title_en = 'old' WHERE slug = 'paying'`)
+      expect(await seedHelpTopics(tx as never, async () => {
+        throw new Error('down')
+      })).toMatchObject({ embedded: 0, embedNote: 'no embeddings (the embedding call failed)' })
+      // changed text lost its vector of that language; the other language keeps it
+      expect(await q("SELECT slug, embedding_de IS NULL AS de_null, embedding_en IS NULL AS en_null FROM help_topics WHERE slug IN ('quotes', 'paying') ORDER BY slug")).toEqual([
+        { slug: 'paying', de_null: false, en_null: true },
+        { slug: 'quotes', de_null: true, en_null: false },
+      ])
+      expect(await seedHelpTopics(tx as never, fake)).toMatchObject({ embedded: 2 })
+      expect(await q("SELECT count(*)::int AS n FROM help_topics WHERE embedding_de IS NULL OR embedding_en IS NULL OR embedding_model <> '" + EMBEDDING_MODEL + "'")).toEqual([{ n: 0 }])
+      throw ROLLBACK
+    })
+    .catch((e) => {
+      if (e !== ROLLBACK) throw e
+    })
 })

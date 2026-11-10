@@ -1,4 +1,4 @@
-import { type AnyPgColumn, boolean, check, customType, index, integer, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, boolean, check, customType, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const point = customType<{ data: { lng: number; lat: number }; driverData: string }>({
@@ -65,6 +65,10 @@ export const helpTopics = pgTable(
     titleEn: text('title_en').notNull(),
     bodyEn: text('body_en').notNull(),
     approved: boolean().notNull().default(false),
+    // The search vectors of title + body per language (arrays of numbers) and the model that made them; null until the seed ran with a key.
+    embeddingDe: jsonb('embedding_de').$type<number[]>(),
+    embeddingEn: jsonb('embedding_en').$type<number[]>(),
+    embeddingModel: text('embedding_model'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
