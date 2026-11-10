@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-/** The headings of the Help screen, in the order they are shown. */
+/** The headings of the Help screen, in the order they are shown. Also in the CHECK of `help_topics` (packages/db/src/schema/reference.ts) and in migration 0040_help_topics.sql: change all three together. */
 export const HELP_GROUPS = ['using-the-app', 'booking-and-paying', 'providers', 'money-and-fees', 'safety-and-rules', 'your-data'] as const
 export type HelpGroup = (typeof HELP_GROUPS)[number]
 

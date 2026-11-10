@@ -1,3 +1,4 @@
+-- the six group names are also HELP_GROUPS (packages/contract/src/help.ts) and the CHECK in packages/db/src/schema/reference.ts: change all three together
 CREATE TABLE "help_topics" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"slug" text NOT NULL,

@@ -52,7 +52,7 @@ export const categoryTexts = pgTable(
 )
 
 // Help topics shown in the app. Staff-written content, readable by everyone, written only on the owner connection. `approved = false` hides a topic from the route.
-// The six groups are HELP_GROUPS in @kando/contract (the check below repeats them; the db package cannot import the contract).
+// The six group names are repeated in three places: HELP_GROUPS (packages/contract/src/help.ts), the CHECK below and migration 0040_help_topics.sql. Change all three together.
 export const helpTopics = pgTable(
   'help_topics',
   {
@@ -68,6 +68,7 @@ export const helpTopics = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // keep in step with HELP_GROUPS (contract) and migration 0040_help_topics.sql
     check('help_topics_group_check', sql`${t.group} IN ('using-the-app', 'booking-and-paying', 'providers', 'money-and-fees', 'safety-and-rules', 'your-data')`),
     check('help_topics_text_check', sql`btrim(${t.titleDe}) <> '' AND btrim(${t.bodyDe}) <> '' AND btrim(${t.titleEn}) <> '' AND btrim(${t.bodyEn}) <> ''`),
   ],
