@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { lookupPostcode, notSuspendedSql, type Tx } from '@kando/db'
+import { notSuspendedSql, type Tx } from '@kando/db'
 import { DOCUMENT_TYPES, type ProviderDetail } from '@kando/contract'
 import { offerableServiceIds } from './providers/eligibility'
 import { canTransact, paymentsEnabled } from './payments/rules'
@@ -60,7 +60,6 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     ORDER BY year DESC NULLS LAST, created_at DESC, id`)
   const photos = await tx.execute<{ id: string; key: string; alt: string | null }>(sql`
     SELECT id, key, alt FROM photos WHERE provider_id = ${p.id} AND kind = 'portfolio' ORDER BY sort, created_at, id`)
-  const place = p.base_postcode ? await lookupPostcode(p.country, p.base_postcode, tx) : null
   const checked = await tx.execute<{ docs: string[] }>(sql`SELECT public_checked_documents(${p.id}) AS docs`) // SECURITY DEFINER: type keys only
   const reliability = await tx.execute<{ n: number }>(sql`SELECT provider_reliability(${p.id}) AS n`) // SECURITY DEFINER: a count only
   const ratings = await ratingsOf(tx, [p.owner_id], 'customer') // shown reviews only (RLS and the filter agree)
@@ -83,7 +82,7 @@ export async function getPublicProfile(tx: Tx, slug: string, lang: Lang): Promis
     experience: p.experience,
     worksRemotely: p.works_remotely,
     photoUrl: p.photo_key ? photoUrl(p.photo_key) : null,
-    place: place?.place ?? null,
+    postcode: p.base_postcode ?? null,
     categories: [...new Set(services.rows.map((s) => s.category))],
     services: services.rows.map((s) => ({
       id: s.id,

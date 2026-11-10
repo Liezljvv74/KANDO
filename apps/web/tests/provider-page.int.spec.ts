@@ -73,15 +73,14 @@ const render = async (slug: string, q: Q = {}) =>
 const generateMetadata = (slug: string, q: Q = {}) => pageFor(q).generateMetadata(args(slug, q))
 
 describe('public provider page', () => {
-  it('German default: public name heading, category, price "ab 80,00 €", on request, place', async () => {
+  it('German default: public name heading, category, price "ab 80,00 €", on request, postcode', async () => {
     const html = await render(deSlug)
     expect(html).toContain('Anna Hübsch')
     expect(html).toContain('>Anna Hübsch</h1>')
     expect(html).toContain(`Foto ${stamp}`)
     expect(html).toMatch(/ab\s80,00\s€/)
     expect(html).toContain('Preis auf Anfrage')
-    expect(html).toContain('Berlin')
-    expect(html).not.toContain('10115')
+    expect(html).toContain('10115')
     expect(html).toContain(t('de', 'web.getApp'))
   })
 

@@ -70,7 +70,7 @@ export const ProviderDetailSchema = z.object({
   experience: z.string().nullish(),
   worksRemotely: z.boolean().nullish(),
   photoUrl: z.string().nullable(),
-  place: z.string().nullable(),
+  postcode: z.string().nullable(),
   categories: z.array(z.string()),
   services: z.array(ProviderServiceSchema),
   references: z.array(ProviderReferenceSchema),

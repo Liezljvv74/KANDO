@@ -1,6 +1,6 @@
 import type { ProviderDetail, TranslatableTexts } from '@kando/contract'
 
-/** The provider with the translated texts swapped in; names, prices, place, categories and photos stay. Unknown ids are left as they are. */
+/** The provider with the translated texts swapped in; names, prices, postcode, categories and photos stay. Unknown ids are left as they are. */
 export function applyTexts(p: ProviderDetail, t: TranslatableTexts): ProviderDetail {
   const services = new Map(t.services.map((s) => [s.id, s]))
   const references = new Map(t.references.map((r) => [r.id, r]))

@@ -10,7 +10,7 @@ const base: ProviderDetail = {
   skills: ['Fenster'],
   experience: 'Zehn Jahre',
   photoUrl: 'https://x.test/a.jpg',
-  place: 'Berlin',
+  postcode: '10115',
   categories: ['cleaning'],
   services: [
     { id: 's1', category: 'cleaning', title: 'Fenster', description: 'Innen', priceType: 'fixed', price: 20, currency: 'EUR' },
@@ -35,7 +35,7 @@ test('applyTexts swaps only the translatable fields and keeps names, prices and 
   const r = applyTexts(base, texts)
   expect(r).toMatchObject({ bio: 'Hello', strengths: 'Punctual', experience: 'Ten years', skills: ['Windows'] })
   expect(r.publicName).toBe('Anna H.')
-  expect(r.place).toBe('Berlin')
+  expect(r.postcode).toBe('10115')
   expect(r.categories).toEqual(['cleaning'])
   expect(r.photos).toEqual(base.photos)
   expect(r.services[0]).toMatchObject({ title: 'Windows', description: 'Inside', price: 20, priceType: 'fixed', category: 'cleaning' })

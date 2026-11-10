@@ -135,7 +135,7 @@ export async function renderProfile({ params }: Args, translate: boolean) {
         <div>
           {/* publicName is the business name or "Anna H." */}
           <h1 className="text-3xl font-bold">{p.publicName}</h1>
-          {p.place && <p className="opacity-70">{p.place}</p>}
+          {p.postcode && <p className="opacity-70">{p.postcode}</p>}
           <p className="opacity-70">{categoryNames.join(' · ')}</p>
           {p.rating && (
             <p className="text-sm">

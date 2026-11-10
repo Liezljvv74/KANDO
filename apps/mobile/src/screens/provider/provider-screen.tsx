@@ -86,7 +86,7 @@ export default function ProviderScreen() {
             {!p.rating && <Text style={styles.badge}>{ratingBadge(p.rating)}</Text>}
             {!!p.verified && <Text style={styles.badge}>{t('provider.verified')}</Text>}
           </View>
-          {!!p.place && <Text style={styles.text}>{p.place}</Text>}
+          {!!p.postcode && <Text style={styles.text}>{p.postcode}</Text>}
           <Text style={styles.text}>{p.categories.map((s) => names.get(s) ?? s).join(' · ')}</Text>
           {!!p.rating && <Text style={styles.small}>{t('provider.rating', { average: p.rating.average.toLocaleString(getLang()), count: p.rating.count })}</Text>}
           {/* Late cancellations and no-shows in the last 12 months; nothing is shown while there are none. */}
