@@ -17,7 +17,7 @@ test('provider yes: goes to /my-profile', () => {
   buttons()[0].onPress()
   expect(goReplace).toHaveBeenCalledWith('/my-profile')
 })
-test('provider no: goes to /my-profile with { publish: 1 }', () => {
+test('provider no: goes to /my-profile with { publish: '1' }', () => {
   finishFlow('provider')
   buttons()[1].onPress()
   expect(goReplace).toHaveBeenCalledWith('/my-profile', { publish: '1' })

@@ -12,7 +12,13 @@ export async function runDone(d: { isProvider: boolean; missing: () => Key[]; co
   const fields = d.missing()
   if (fields.length) return { type: 'missing', fields }
   const wasOpen = await d.loadNext().then((s) => s !== null, () => true)
-  if (!(await d.commit())) return { type: 'failed' }
+  let ok = false
+  try {
+    ok = await d.commit()
+  } catch {
+    ok = false
+  }
+  if (!ok) return { type: 'failed' }
   let step: NextStep | null
   try {
     step = await d.loadNext()

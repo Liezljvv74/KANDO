@@ -40,3 +40,7 @@ test('createOnce ignores a second call while the first runs', async () => {
   await once()
   expect(fn).toHaveBeenCalledTimes(2)
 })
+
+test('commit that rejects: failed', async () => {
+  expect(await runDone({ ...base, commit: () => Promise.reject(new Error('x')), loadNext: async () => step })).toEqual({ type: 'failed' })
+})
