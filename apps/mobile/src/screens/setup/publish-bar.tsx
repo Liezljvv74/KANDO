@@ -26,7 +26,7 @@ import { color } from '@/theme'
  * The Live switch at the top of the page: on publishes, off takes the profile offline (after a question), driven by the server's
  * `missing` list of the latest profile response; `docRows` adds a "needs action" row per rejected required document. `onChanged` reloads the profile afterwards.
  */
-export function PublishBar({ profile, services, docRows, onChanged, onSaved, onTaxId }: { profile: MyProfile; services: OwnService[]; docRows: DocumentRow[]; onChanged: () => void; onSaved: (p: MyProfile) => void; onTaxId?: () => void }) {
+export function PublishBar({ profile, services, docRows, onChanged, onSaved, onTaxId, highlight }: { highlight?: boolean; profile: MyProfile; services: OwnService[]; docRows: DocumentRow[]; onChanged: () => void; onSaved: (p: MyProfile) => void; onTaxId?: () => void }) {
   const { categories } = useCategories()
   const { steps } = useQuoteSteps()
   const [busy, setBusy] = useState(false)
@@ -85,6 +85,7 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
   const checking = rows.filter((r) => r.state === 'checking')
   return (
     <>
+    <View style={highlight ? styles.highlight : undefined}>
     <Card>
       <SwitchRow label={t('setup.live')} value={live} onChange={change} disabled={busy || locked} />
       {locked ? <Text style={styles.hint}>{t('setup.liveLocked')}</Text> : null}
@@ -117,12 +118,14 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
       )}
       <ErrorText text={problem} />
     </Card>
+    </View>
     {quoteBlocked(later) && <QuoteGate steps={later} onDo={doStep} heading={t('setup.bookableHeading')} note={t('setup.bookableNote')} />}
     </>
   )
 }
 
 const styles = StyleSheet.create({
+  highlight: { borderWidth: 3, borderColor: color.indigo, borderRadius: 18 },
   live: { fontSize: 16, fontWeight: '700', color: color.indigo },
   hint: { fontSize: 14, color: color.inkMuted },
   heading: { fontSize: 17, fontWeight: '700', color: color.ink },
