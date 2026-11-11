@@ -140,6 +140,7 @@ export const en: Record<AppKey, string> = {
   'setup.documents.required': 'Required documents',
   'setup.documents.optional': 'Optional documents',
   'setup.liveMessage': 'Your profile is live. Tell people about it.',
+  'flow.missing': 'Almost there! Please fill in: {fields}',
   'setup.pendingMessage': 'Your profile is live. Your {category} service goes live once we have checked your document.',
   'ph.category': 'The kind of work you offer',
   'ph.priceType': 'How you charge',

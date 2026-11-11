@@ -139,6 +139,7 @@ export const de = {
   'setup.documents.optional': 'Optionale Nachweise',
   'setup.documents.add': 'Hinzufügen',
   'setup.liveMessage': 'Dein Profil ist online. Erzähl es weiter.',
+  'flow.missing': 'Fast geschafft! Bitte noch ausfüllen: {fields}',
   'setup.pendingMessage': 'Dein Profil ist online. Deine Leistung {category} geht online, sobald wir dein Dokument geprüft haben.',
   'ph.category': 'Die Art der Arbeit, die du anbietest',
   'ph.priceType': 'Wie du abrechnest',
