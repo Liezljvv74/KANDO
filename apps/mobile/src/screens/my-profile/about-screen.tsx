@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { AppState, StyleSheet, View } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
 
@@ -95,8 +95,10 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
       return Promise.all(jobs)
     }
     const off = registerPendingTags(flushTyped)
+    const sub = AppState.addEventListener('change', (s) => s !== 'active' && void flushTyped()) // the app goes to the background
     return () => {
       off()
+      sub.remove()
       void flushTyped() // the card is going away
     }
     // runs once: reads the latest values through `typed`, the setters are stable

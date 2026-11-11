@@ -27,6 +27,15 @@ test('two quick changes become one request with the last value', async () => {
   expect(seen.at(-1)).toBe('saved')
 })
 
+test('flushNow (the app going to the background) sends the pending value at once', async () => {
+  const save = jest.fn(async (_: string) => {})
+  const { saver } = setup(save)
+  saver.set('x')
+  await saver.flushNow()
+  expect(save).toHaveBeenCalledWith('x')
+  expect(save).toHaveBeenCalledTimes(1)
+})
+
 test('flush saves immediately and nothing is sent twice', async () => {
   const save = jest.fn(async (_: string) => {})
   const { saver } = setup(save)

@@ -1,7 +1,7 @@
 import type { IdScan, Me, Photo, PushSettings } from '@kando/contract'
 import { openBrowserAsync } from 'expo-web-browser'
-import { useCallback, useEffect, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -21,6 +21,7 @@ import { useDone } from '@/hooks/use-done'
 import { loadMe, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
+import { shouldAutosave } from '@/lib/account-autosave'
 import { accountMissing } from '@/lib/required-fields'
 import { showProfileTab } from '@/lib/profile-tab'
 import { registerForPush } from '@/lib/push'
@@ -45,6 +46,9 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const running = useRef<Promise<void>>(Promise.resolve()) // the request in flight (Done and the autosave never send at once)
+  const sending = useRef(false)
+  const lastSaved = useRef<string | null>(null) // the body last known to be on the server
   const [open, setOpen] = useState<boolean | null>(null) // the details form: null = by itself (open until the compulsory details are saved), else the person's choice
 
   const load = useCallback(async () => {
@@ -52,6 +56,7 @@ export default function AccountScreen() {
       const m = await loadMe()
       setLoadError(null)
       setMe(m)
+      lastSaved.current = JSON.stringify({ firstName: (m.firstName ?? '').trim(), lastName: (m.lastName ?? '').trim(), address: m.address ? toAddress({ street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' }, m.address.country) : null, birthDate: m.birthDate ?? null })
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
       setBirthDate(fromIsoDay(m.birthDate))
@@ -94,32 +99,61 @@ export default function AccountScreen() {
   }
 
   /** Saves the details; true on success, false on a validation or server error (the error text stays in the card). */
-  async function save(): Promise<boolean> {
-    if (busy || scanning) return false
+  async function save(silent = false): Promise<boolean> {
+    if (!silent) await running.current // an autosave that is still sending finishes first
+    if (!silent && (busy || scanning)) return false
     const addr = toAddress(address, me?.address?.country)
-    if (!firstName.trim() || !lastName.trim()) return setError(t('auth.fillAll')), false
-    if (addr === undefined) return setError(t('auth.addressIncomplete')), false
-    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return setError(t('error.invalidBirthDate')), false
-    setBusy(true)
-    setError(null)
+    if (!firstName.trim() || !lastName.trim()) return !silent && setError(t('auth.fillAll')), false
+    if (addr === undefined) return !silent && setError(t('auth.addressIncomplete')), false
+    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return !silent && setError(t('error.invalidBirthDate')), false
+    if (!silent) {
+      setBusy(true)
+      setError(null)
+    }
+    const body = { firstName: firstName.trim(), lastName: lastName.trim(), address: addr, birthDate: birthDate ? toIsoDay(birthDate) : null }
     let ok = false
     try {
-      await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr, birthDate: birthDate ? toIsoDay(birthDate) : null })
+      const request = updateMe(body)
+      sending.current = true
+      running.current = request.then(() => {}, () => {}).finally(() => void (sending.current = false))
+      await request
+      lastSaved.current = JSON.stringify(body)
+      if (silent) return true // left the screen or the app: no reload, no flash, no message
       await load()
       setOpen(null) // saved: the card folds again once the compulsory details are in
       ok = true
     } catch (e) {
+      if (silent) return false
       setError(e instanceof ApiError && e.code === 'Invalid input' && e.fields?.some((f) => f.startsWith('birthDate')) ? t('error.invalidBirthDate') : errorText(e instanceof ApiError ? e.code : ''))
     }
     setBusy(false)
     return ok
   }
 
+  // Leaving the screen or the app: valid, changed details are saved quietly with the same call as Done (never twice at once).
+  const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, country: undefined as string | undefined, save })
+  latest.current = { firstName, lastName, address, birthDate, loaded: !!me, country: me?.address?.country, save }
+  useEffect(() => {
+    const autosave = () => {
+      const v = latest.current
+      if (!v.loaded || !shouldAutosave(v)) return
+      const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
+      if (sending.current || body === lastSaved.current) return // nothing changed since the last successful save
+      void v.save(true)
+    }
+    const sub = AppState.addEventListener('change', (s) => s !== 'active' && autosave())
+    return () => {
+      sub.remove()
+      autosave()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const isProvider = showProfileTab(shared ?? me)
   const done = useDone({
     isProvider,
     missing: () => accountMissing({ firstName, lastName, postcode: address.postcode, hasBirthDate: !!birthDate, isProvider }),
-    commit: save,
+    commit: () => save(),
   })
   // compulsory: the name and the postcode (a provider's date of birth too); with those saved the details card folds
   const complete = !!me && !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)

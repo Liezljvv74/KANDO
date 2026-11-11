@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { AppState } from 'react-native'
 
 export type SaveStatus = 'saved' | 'saving' | 'error'
 
@@ -43,6 +44,8 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
       timer = setTimeout(flush, delayMs)
     },
     flush,
+    /** The app is leaving the front: same as flush, named for its caller. */
+    flushNow: flush,
     /** Like flush, but resends a value whose last save failed, and says whether the last save worked. */
     async commit(): Promise<boolean> {
       if (!lastOk) dirty = true
@@ -70,7 +73,14 @@ export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>
   saveRef.current = save
   const saver = useRef<ReturnType<typeof createFieldSaver<V>>>(null)
   saver.current ??= createFieldSaver<V>((v) => saveRef.current(v), delayMs, setStatus)
-  useEffect(() => () => saver.current?.dispose(), [])
+  useEffect(() => {
+    // Nothing typed waits for the 600 ms timer when the app goes to the background.
+    const sub = AppState.addEventListener('change', (s) => s !== 'active' && void saver.current?.flushNow())
+    return () => {
+      sub.remove()
+      saver.current?.dispose()
+    }
+  }, [])
   return {
     value,
     setValue: (v: V) => {
