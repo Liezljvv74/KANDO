@@ -14,7 +14,7 @@ import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fi
 import { DateTimeField } from '@/components/date-time-field'
 import { Button, ErrorText, Field, KEYBOARD_GAP } from '@/components/auth-ui'
 import { DoneBar } from '@/components/done-bar'
-import { SwitchRow } from '@/components/form-ui'
+import { DONE_BAR_SPACE, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useDone } from '@/hooks/use-done'
@@ -181,7 +181,7 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('tab.account')} />
-      <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP + (me ? DONE_BAR_SPACE : 0)} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           {user && <Text style={styles.email}>{user.email}</Text>}
           <Button label={t('auth.logOut')} onPress={signOut} />

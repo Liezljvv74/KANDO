@@ -120,8 +120,9 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         providerType: type.value,
         businessName: businessName.value,
         impressum: impressum.value,
-        strengths: strengths.value.length ? strengths.value : strengthText.trim() ? [strengthText] : [],
-        skills: skills.value.length ? skills.value : skillText.trim() ? [skillText] : [],
+        // typed text counts only when it would really be added (not too long, not a duplicate, not over the maximum)
+        strengths: strengths.value.length ? strengths.value : (typedTag(strengths.value, strengthText, MAX_SKILLS, MAX_SKILL_LENGTH, MAX_STRENGTHS_TEXT).list ?? []),
+        skills: skills.value.length ? skills.value : (typedTag(skills.value, skillText, MAX_SKILLS, MAX_SKILL_LENGTH, Infinity).list ?? []),
         postcode: postcode.value,
         radiusValid: validRadius(radius.value),
       }),

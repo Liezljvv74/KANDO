@@ -12,6 +12,7 @@ import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
 import { docText, errorText, t, useLang } from '@/i18n'
 import { continueAfterAutoStep } from '@/lib/flow-state'
+import { isOpenDocument } from '@/lib/next-step'
 import { DOC_COLORS, deleteBodyKey, docTone, documentRows, submittedDocs, type DocumentRow } from '@/lib/documents'
 import { pickDocument, pickPhoto, tooLarge, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
@@ -42,7 +43,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
     alive.current = true
     return () => void (alive.current = false)
   }, [])
-  const wasOpen = row.state === 'none' || row.state === 'rejected' // an open step: after its upload the flow goes on by itself
+  const wasOpen = isOpenDocument(row) // an open step: after its upload the flow goes on by itself
 
   async function submit(pick: () => Promise<PickedFile | null | 'denied'>) {
     if (busy) return
