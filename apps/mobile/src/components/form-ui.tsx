@@ -11,7 +11,7 @@ import { t } from '@/i18n'
 import { color, font } from '@/theme'
 
 /** `scrollRef`: lets a screen scroll to one of its sections (y from that section's onLayout; sections are direct children). */
-export function FormScreen({ title, children, back = true, scrollRef }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>> }) {
+export function FormScreen({ title, children, back = true, scrollRef, footer }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>>; footer?: React.ReactNode }) {
   const router = useRouter()
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
@@ -20,6 +20,7 @@ export function FormScreen({ title, children, back = true, scrollRef }: { title:
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         {children}
       </KeyboardAwareScrollView>
+      {footer}
     </SafeAreaView>
   )
 }
