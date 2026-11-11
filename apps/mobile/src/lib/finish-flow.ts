@@ -17,7 +17,7 @@ export function finishFlow(role: 'customer' | 'provider'): void {
       text: t('flow.noContinue'),
       onPress: () => {
         Alert.alert(t('flow.toPublish'))
-        goReplace('/my-profile', { publish: '1' })
+        goReplace('/my-profile', { publish: String(Date.now()) }) // a new value each time, so the highlight runs again
       },
     },
   ])

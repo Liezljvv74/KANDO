@@ -142,7 +142,7 @@ export const en: Record<AppKey, string> = {
   'setup.liveMessage': 'Your profile is live. Share it now so customers can find you.',
   'flow.missing': 'Almost there! Please fill in: {fields}',
   'flow.allDone': 'Everything is done',
-  'flow.customerDone': 'Everything is done. You can now look for help.',
+  'flow.customerDone': 'You can now look for help.',
   'flow.question': 'Do you want to change or add something?',
   'flow.yesChange': 'Yes, change or add',
   'flow.noContinue': 'No, continue',

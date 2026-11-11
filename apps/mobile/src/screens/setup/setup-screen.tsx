@@ -71,7 +71,7 @@ export default function SetupScreen() {
   const scrollRef = useRef<ComponentRef<typeof KeyboardAwareScrollView>>(null)
   const [highlight, setHighlight] = useState(false)
   useEffect(() => {
-    if (params.publish !== '1' || !done) return
+    if (!params.publish || !done) return
     scrollRef.current?.scrollTo({ y: 0, animated: true })
     setHighlight(true)
     const timer = setTimeout(() => setHighlight(false), 2500)

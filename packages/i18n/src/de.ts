@@ -141,7 +141,7 @@ export const de = {
   'setup.liveMessage': 'Dein Profil ist online. Teile es jetzt, damit Kunden dich finden.',
   'flow.missing': 'Fast geschafft! Bitte noch ausfüllen: {fields}',
   'flow.allDone': 'Alles erledigt',
-  'flow.customerDone': 'Alles erledigt. Du kannst jetzt Hilfe suchen.',
+  'flow.customerDone': 'Du kannst jetzt Hilfe suchen.',
   'flow.question': 'Möchtest du etwas ändern oder ergänzen?',
   'flow.yesChange': 'Ja, ändern oder ergänzen',
   'flow.noContinue': 'Nein, weiter',

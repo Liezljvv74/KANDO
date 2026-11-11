@@ -1,4 +1,5 @@
 import type { IdScan, Me, Photo, PushSettings } from '@kando/contract'
+import { useFocusEffect } from 'expo-router'
 import { openBrowserAsync } from 'expo-web-browser'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -12,7 +13,7 @@ import { API_URL, ApiError, updateMe } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { DateTimeField } from '@/components/date-time-field'
-import { Button, ErrorText, Field, KEYBOARD_GAP } from '@/components/auth-ui'
+import { Button, Field, KEYBOARD_GAP } from '@/components/auth-ui'
 import { DoneBar } from '@/components/done-bar'
 import { DONE_BAR_SPACE, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
@@ -145,14 +146,16 @@ export default function AccountScreen() {
   // Leaving the screen or the app: valid, changed details are saved quietly with the same call as Done (never twice at once).
   const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, signedIn: false, country: undefined as string | undefined, save })
   latest.current = { firstName, lastName, address, birthDate, loaded: !!me, signedIn: !!user, country: me?.address?.country, save }
+  const autosave = () => {
+    const v = latest.current
+    if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
+    const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
+    if (sending.current || body === lastSaved.current) return // nothing changed since the last successful save
+    void v.save(true)
+  }
+  // Account is a mounted tab: leaving it (focus lost) saves too, not only unmounting.
+  useFocusEffect(useCallback(() => () => autosave(), [])) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const autosave = () => {
-      const v = latest.current
-      if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
-      const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
-      if (sending.current || body === lastSaved.current) return // nothing changed since the last successful save
-      void v.save(true)
-    }
     const sub = AppState.addEventListener('change', (s) => s !== 'active' && autosave())
     return () => {
       sub.remove()
@@ -193,17 +196,16 @@ export default function AccountScreen() {
             <>
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
               <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
-              <ErrorText text={error} />
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setOpen(!showDetails)}>
                 <Text style={styles.fold}>{`${showDetails ? '▾' : '▸'} ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trim()}</Text>
               </Pressable>
               {showDetails && (
                 <>
                   <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
-                  <Field label={t('auth.firstName')} value={firstName} onChangeText={setFirstName} autoComplete="given-name" editable={!busy && !scanning} />
-                  <Field label={t('auth.lastName')} value={lastName} onChangeText={setLastName} autoComplete="family-name" editable={!busy && !scanning} />
-                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={setBirthDate} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
-                  <AddressFields value={address} onChange={setAddress} disabled={busy || scanning} />
+                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), setError(null))} autoComplete="given-name" editable={!busy && !scanning} />
+                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), setError(null))} autoComplete="family-name" editable={!busy && !scanning} />
+                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), setError(null))} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
+                  <AddressFields value={address} onChange={(a) => (setAddress(a), setError(null))} disabled={busy || scanning} />
                   <LanguageSwitch />
                 </>
               )}
