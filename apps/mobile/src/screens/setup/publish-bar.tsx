@@ -13,6 +13,7 @@ import { canShare, type DocumentRow } from '@/lib/documents'
 import { errorText, getLang, t } from '@/i18n'
 import { liveLocked } from '@/lib/compulsory'
 import { go } from '@/lib/go'
+import { continueAfterAutoStep } from '@/lib/flow-state'
 import { allSet, checklistHeading, checklistItems, openItems, rejectedItems } from '@/lib/live-checklist'
 import { paymentsProblem } from '@/lib/payments-off'
 import { doQuoteStep } from '@/lib/do-quote-step'
@@ -66,13 +67,18 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
   // Switched off and greyed out while the profile is incomplete; the starred fields say what is needed.
   const locked = liveLocked(profile, refused)
   const later = steps ?? []
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => void (alive.current = false)
+  }, [])
   const stepping = useRef(false) // a double tap must not start Stripe or save twice
   const doStep = async (step: (typeof later)[number]) => {
     if (stepping.current) return
     stepping.current = true
     setProblem(null)
     try {
-      const saved = await doQuoteStep(step, onTaxId) // the step updates /me itself; only a save's answer is handed up (no list reload)
+      const saved = await doQuoteStep(step, onTaxId, () => alive.current && void continueAfterAutoStep()) // the step updates /me itself; only a save's answer is handed up (no list reload)
       if (saved) onSaved(saved)
     } catch (e) {
       setProblem(paymentsProblem(e))

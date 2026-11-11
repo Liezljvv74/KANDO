@@ -25,6 +25,11 @@ export async function goToStep(step: NextStep, followUp = true): Promise<void> {
   if (step.kind !== 'payout') return goReplace(step.path)
   const status = await openPayoutSetup().catch(() => null)
   if (!status?.ready || !followUp) return goReplace('/my-profile')
+  return continueAfterAutoStep()
+}
+
+/** After a step finished by itself (a document uploaded, payouts ready): the next open step, the end of the flow, or My profile when it cannot be read. Never opens Stripe again (no loop). */
+export async function continueAfterAutoStep(): Promise<void> {
   let next: NextStep | null
   try {
     next = await loadNextStep()

@@ -13,7 +13,7 @@ const mockFinish = jest.fn()
 jest.mock('@/lib/finish-flow', () => ({ finishFlow: (...a: unknown[]) => mockFinish(...a) }))
 jest.mock('@/lib/go', () => ({ goReplace: (...a: unknown[]) => mockReplace(...a) }))
 
-import { goToStep, loadNextStep } from './flow-state'
+import { continueAfterAutoStep, goToStep, loadNextStep } from './flow-state'
 
 const fullMe = { isProvider: true, firstName: 'A', lastName: 'B', birthDate: '1990-01-01', address: { postcode: '10115' } }
 beforeEach(() => {
@@ -67,5 +67,24 @@ test('ready payout but the server still lists payout: My profile, no loop', asyn
   mockProfile.mockResolvedValue({ missing: [], quoteSteps: ['payout'] })
   await goToStep({ kind: 'payout' })
   expect(mockOpenPayout).toHaveBeenCalledTimes(1)
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile')
+})
+
+test('continueAfterAutoStep: a next step opens it, none ends the flow, a load error goes to My profile', async () => {
+  mockProfile.mockResolvedValue({ missing: ['service'], quoteSteps: [] })
+  await continueAfterAutoStep()
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile/service/new')
+  mockReplace.mockReset()
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: [] })
+  await continueAfterAutoStep()
+  expect(mockFinish).toHaveBeenCalledWith('provider')
+  mockLoadMe.mockRejectedValue(new Error('x'))
+  await continueAfterAutoStep()
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile')
+})
+test('continueAfterAutoStep never opens Stripe again', async () => {
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: ['payout'] })
+  await continueAfterAutoStep()
+  expect(mockOpenPayout).not.toHaveBeenCalled()
   expect(mockReplace).toHaveBeenCalledWith('/my-profile')
 })

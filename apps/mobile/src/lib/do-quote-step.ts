@@ -35,9 +35,11 @@ export async function saveQuoteField(body: object) {
 }
 
 /** Runs one missing step with the existing flows: payout opens Stripe, consent is one save (its saved profile is returned), the tax number opens its field (`onTaxId`, on My business) or My business. */
-export async function doQuoteStep(step: NonNullable<MyProfile['quoteSteps']>[number], onTaxId?: () => void): Promise<MyProfile | undefined> {
+export async function doQuoteStep(step: NonNullable<MyProfile['quoteSteps']>[number], onTaxId?: () => void, onPayoutReady?: () => void): Promise<MyProfile | undefined> {
   if (step === 'consent') return saveQuoteField({ invoiceConsent: true })
-  if (step === 'payout') await openPayoutSetup()
+  if (step === 'payout') {
+    if ((await openPayoutSetup())?.ready) onPayoutReady?.()
+  }
   else if (onTaxId) onTaxId()
   else go('/my-profile')
 }

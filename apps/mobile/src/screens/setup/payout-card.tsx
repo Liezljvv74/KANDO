@@ -10,6 +10,7 @@ import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t } from '@/i18n'
 import { useMe, useQuoteSteps } from '@/hooks/use-me'
+import { continueAfterAutoStep } from '@/lib/flow-state'
 import { openPayoutSetup, payoutOpened, saveQuoteField } from '@/lib/do-quote-step'
 import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { payoutState, saveSwitch } from '@/lib/payouts'
@@ -21,6 +22,11 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
   const { steps, reload } = useQuoteSteps()
   const fetch = useCallback(() => payoutStatus(), [])
   const { data, error, retry, update } = useLoad(fetch)
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => void (alive.current = false)
+  }, [])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const state = payoutState(data?.ready, payoutOpened())
@@ -39,6 +45,7 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
       const status = await openPayoutSetup()
       if (status && data) update(() => status) // nothing held yet (the first load failed): update would drop it, so load again
       else retry()
+      if (status?.ready && alive.current) void continueAfterAutoStep() // payouts ready: on to the next open step
     } catch (e) {
       setProblem(paymentsProblem(e))
     }

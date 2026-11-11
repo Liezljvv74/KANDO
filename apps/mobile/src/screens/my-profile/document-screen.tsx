@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 
 import type { Document } from '@kando/contract'
@@ -11,6 +11,7 @@ import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
 import { docText, errorText, t, useLang } from '@/i18n'
+import { continueAfterAutoStep } from '@/lib/flow-state'
 import { DOC_COLORS, deleteBodyKey, docTone, documentRows, submittedDocs, type DocumentRow } from '@/lib/documents'
 import { pickDocument, pickPhoto, tooLarge, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
@@ -36,6 +37,12 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
   const [busy, setBusy] = useState(false) // one submit at a time
   const [problem, setProblem] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => void (alive.current = false)
+  }, [])
+  const wasOpen = row.state === 'none' || row.state === 'rejected' // an open step: after its upload the flow goes on by itself
 
   async function submit(pick: () => Promise<PickedFile | null | 'denied'>) {
     if (busy) return
@@ -49,6 +56,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
       else if (file) {
         await documentsApi.submit(file, requirement)
         onChanged()
+        if (wasOpen && alive.current) void continueAfterAutoStep()
       }
     } catch (e) {
       setProblem(errorText(uploadErrorCode(e)))
