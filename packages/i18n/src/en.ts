@@ -249,6 +249,7 @@ export const en: Record<AppKey, string> = {
   'home.headline': 'Finally, someone who can',
   'home.heroHeadline': 'Finally\nSomeone who CAN',
   'home.stamp': 'Checked',
+  'home.getApp': 'Get the app',
   'home.intro': 'Find helpers near you - or new customers for your skills.',
   'home.badgeVerified': 'Documents checked',
   'home.badgeVerifiedText': 'Photo ID and documents',
