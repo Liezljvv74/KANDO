@@ -8,11 +8,11 @@ What the code does: the public website (not `/admin`) loads Vercel Web Analytics
 
 ### English
 
-| Visit statistics and page speed on our website (page address, referrer, country, device and browser type, load times; no cookies, no IP address stored, no profile of you across days) | Understand how the website is used and keep it fast | Art. 6(1)(f) legitimate interest in running and improving the service |
+| Visit statistics and page speed on our website (page address, referrer, country, device and browser type, load times; no cookies, no IP address stored, no profile of you across days) [CONFIRM with Vercel's documentation and DPA: no cookies, no IP address stored, no tracking across days; remove this note when done] | Understand how the website is used and keep it fast | Art. 6(1)(f) legitimate interest in running and improving the service |
 
 ### Deutsch
 
-| Besuchsstatistik und Ladegeschwindigkeit auf unserer Website (Seitenadresse, Herkunftsseite, Land, Geräte- und Browsertyp, Ladezeiten; keine Cookies, keine gespeicherte IP-Adresse, kein tagesübergreifendes Profil von dir) | Verstehen, wie die Website genutzt wird, und sie schnell halten | Art. 6(1)(f) berechtigtes Interesse am Betrieb und an der Verbesserung des Dienstes |
+| Besuchsstatistik und Ladegeschwindigkeit auf unserer Website (Seitenadresse, Herkunftsseite, Land, Geräte- und Browsertyp, Ladezeiten; keine Cookies, keine gespeicherte IP-Adresse, kein tagesübergreifendes Profil von dir) [PRÜFEN laut Vercel-Dokumentation und AVV: keine Cookies, keine IP-Adresse gespeichert, kein Tracking über Tage; Hinweis danach entfernen] | Verstehen, wie die Website genutzt wird, und sie schnell halten | Art. 6(1)(f) berechtigtes Interesse am Betrieb und an der Verbesserung des Dienstes |
 
 ## Privacy policy, section 2: replace the sentence under the table
 
@@ -20,11 +20,11 @@ Old: "We do not use advertising, tracking or analytics cookies. We use only what
 
 ### English
 
-We do not use advertising cookies or tracking cookies, and we do not set cookies for statistics. The website uses Vercel's own visit statistics and speed measurement, which work without cookies and without storing anything on your device. The only cookies are those needed to keep you logged in. The back office (staff only) has no statistics.
+We do not use advertising cookies or tracking cookies, and we do not set cookies for statistics. The website uses Vercel's own visit statistics and speed measurement, which work without cookies and without storing anything on your device [CONFIRM with Vercel]. The only cookies are those needed to keep you logged in. The back office (staff only) has no statistics.
 
 ### Deutsch
 
-Wir verwenden keine Werbe- oder Tracking-Cookies und setzen keine Cookies für Statistiken. Die Website nutzt die Besuchsstatistik und die Geschwindigkeitsmessung von Vercel, die ohne Cookies und ohne Speicherung auf deinem Gerät arbeiten. Cookies gibt es nur, soweit sie nötig sind, damit du angemeldet bleibst. Das Back Office (nur für Mitarbeitende) hat keine Statistik.
+Wir verwenden keine Werbe- oder Tracking-Cookies und setzen keine Cookies für Statistiken. Die Website nutzt die Besuchsstatistik und die Geschwindigkeitsmessung von Vercel, die ohne Cookies und ohne Speicherung auf deinem Gerät arbeiten [PRÜFEN bei Vercel]. Cookies gibt es nur, soweit sie nötig sind, damit du angemeldet bleibst. Das Back Office (nur für Mitarbeitende) hat keine Statistik.
 
 ## Privacy policy, section 3: Vercel line
 

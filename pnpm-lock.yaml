@@ -175,10 +175,10 @@ importers:
         specifier: 5.105.0
         version: 5.105.0(@types/react@19.3.0)(react@19.3.0)
       '@vercel/analytics':
-        specifier: ^2.0.1
+        specifier: 2.0.1
         version: 2.0.1(next@16.4.3(@types/node@24.19.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
       '@vercel/speed-insights':
-        specifier: ^2.1.0
+        specifier: 2.1.0
         version: 2.1.0(next@16.4.3(@types/node@24.19.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
       antd:
         specifier: 5.29.3
