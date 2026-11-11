@@ -49,9 +49,9 @@ it('sitemaps and robots.txt are not rewritten', () => {
     unstable_doesMiddlewareMatch({ config, url: `http://localhost${path}` })
   for (const p of ['/robots.txt', '/pages-sitemap.xml', '/providers-sitemap.xml'])
     expect(matches(p), p).toBe(false)
-  for (const p of ['/api/x', '/app-api/v1/x', '/_next/static/x.js', '/favicon.ico'])
+  for (const p of ['/api/x', '/app-api/v1/x', '/_next/static/x.js', '/favicon.ico', '/icon.png'])
     expect(matches(p), p).toBe(false)
-  for (const p of ['/', '/impressum', '/providers/anna', '/admin', '/xml-guide'])
+  for (const p of ['/', '/impressum', '/providers/anna', '/admin', '/xml-guide', '/icon.png-guide'])
     expect(matches(p), p).toBe(true)
 })
 
