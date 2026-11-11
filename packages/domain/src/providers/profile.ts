@@ -30,6 +30,7 @@ const toMyProfile = (r: Row, missing: Missing[], underCheck: string[]): MyProfil
   taxNumber: r.taxNumber,
   invoiceConsent: r.invoiceConsentAt !== null,
   quoteSteps: quoteSteps(r),
+  payoutStarted: r.stripeAccountId !== null,
 })
 
 /** The caller's provider row (RLS also shows published rows of others; the owner filter picks the caller's). */

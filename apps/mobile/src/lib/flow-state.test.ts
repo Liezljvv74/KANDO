@@ -108,3 +108,18 @@ test('a payout form already sent (Stripe still checking) is not an open step', a
   expect(await loadNextStep()).toBeNull()
   mockSent.mockReturnValue(false)
 })
+
+test('the server says the payout form was started: not open, even in a fresh session', async () => {
+  mockSent.mockReturnValue(false)
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: ['payout'], payoutStarted: true })
+  expect(await loadNextStep()).toBeNull()
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: ['payout'], payoutStarted: false })
+  expect(await loadNextStep()).toEqual({ kind: 'payout' })
+})
+test('an older server (no flag) falls back to the local marker', async () => {
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: ['payout'] })
+  expect(await loadNextStep()).toEqual({ kind: 'payout' })
+  mockSent.mockReturnValue(true)
+  expect(await loadNextStep()).toBeNull()
+  mockSent.mockReturnValue(false)
+})

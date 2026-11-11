@@ -17,7 +17,7 @@ export async function loadNextStep(): Promise<NextStep | null> {
   const accountComplete = !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)
   if (!isProvider) return accountComplete ? null : nextStep({ isProvider, accountComplete, profile: null, docRows: [] })
   const [profile, services, verifications, categories] = await Promise.all([getMyProfile(), servicesApi.list(), documentsApi.list(), getCategories(getLang())])
-  return nextStep({ isProvider, accountComplete, profile, docRows: documentRows(services, categories, verifications), payoutSent: payoutOpened() })
+  return nextStep({ isProvider, accountComplete, profile, docRows: documentRows(services, categories, verifications), payoutSent: profile?.payoutStarted === true || payoutOpened() }) // the server's flag lasts; the local marker covers a form just opened and an older server
 }
 
 /** Opens the screen of a step; replace, so back does not return to the finished screen. `followUp`: after a ready payout, one more step may follow, never a second payout (no loop). */
