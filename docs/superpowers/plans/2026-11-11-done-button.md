@@ -21,6 +21,7 @@
 - Provider order of required steps: account details, About you, Service, required documents (never uploaded or rejected), payouts. A document under check is not open.
 - First press with something open = flow (next step / end of flow). A press when nothing was open before = edit: "Saved" and back (`goBack`), never Search or the Publish prompt.
 - Per `CLAUDE.md`: one branch (`feat/done-button`) and one PR; the owner merges; no AI co-author lines; per task run only the affected tests and `tsc`; full mobile suite once at the end; update `README.md`; no database change.
+- **Leave anytime (owner, 11 Nov):** the person can stop, press back, or close the app at any point and what was entered stays saved so they can continue later (the My business checklist shows what is still open). Done is never required to keep data; it only gives confirmation and guidance. See Task 12.
 - Run mobile tests with `pnpm --filter mobile test -- <path>`; typecheck with `pnpm --filter mobile typecheck`.
 
 ## Review Focus
@@ -153,9 +154,18 @@
 - [ ] **Step 1: Failing test** for `continueAfterAutoStep` (mocked `loadNextStep`): next step present → routes; null → `finishFlow('provider')`; throws → `/my-profile`.
 - [ ] **Step 2:** Run the test; FAIL. **Step 3:** Implement; call it after a successful document upload (the add flow in `document-screen.tsx`) only when this document was open before the upload, and after `openPayoutSetup()` returns a ready status. **Step 4:** Test PASS and `typecheck`. **Step 5:** Commit `feat: documents and payouts continue the flow by themselves`.
 
+### Task 12: Nothing is lost when the person leaves
+
+**Files:** Modify `hooks/use-field-save.ts` (+ its test), `screens/account-screen.tsx`, `screens/my-profile/about-screen.tsx`, `screens/my-profile/service-screen.tsx`; Test `src/hooks/use-field-save.test.ts`, `src/lib/pending-tags.test.ts` if it exists.
+
+**Interfaces:** Consumes `createFieldSaver`, `AppState`. Produces: each `useFieldSave` also flushes immediately (no 600 ms wait) when the app goes to `background`/`inactive` (`AppState` listener in the hook) and on unmount (already via `dispose`); typed-but-not-added tags (`lib/pending-tags.ts`) are flushed on unmount and on background too; Account details saves the valid values when the screen is left or the app is backgrounded, quietly (no "Saved" flash, no error alert; an invalid value, e.g. a half-typed postcode, is simply not sent), using the same save call as Done.
+
+- [ ] **Step 1: Failing tests:** `createFieldSaver` exposes `flushNow()` equal to `flush` semantics that a hook calls on background; `dispose with a dirty value sends it` (already true; keep the test); account silent-save helper (pure function in `lib/account-autosave.ts`: `shouldAutosave(values) -> boolean`, false for invalid postcode or empty required names, true otherwise) with those cases.
+- [ ] **Step 2:** Run the tests; FAIL. **Step 3:** Implement the AppState listener in `useFieldSave`, the pending-tags flush on unmount/background, and the Account silent save (unmount + background) guarded by `shouldAutosave`. **Step 4:** Tests PASS; `pnpm --filter mobile typecheck`. **Step 5:** Commit `feat: nothing entered is lost when the person leaves a screen`.
+
 ### Task 11: Checks, docs, hand-over
 
 - [ ] **Step 1:** `pnpm --filter mobile test` (whole mobile suite) and `pnpm --filter mobile typecheck` and `pnpm --filter @kando/i18n test`; expect all PASS.
-- [ ] **Step 2:** Manual check in the browser harness or on a phone (fresh provider account, then a fresh customer account): each Done shows "Saved", moves to the next step in the order above, the last step shows the question, "No" lands on the Publish switch; a complete screen's Done shows "Saved" and goes back; the bar stays above the keyboard. Record what was and was not checked.
+- [ ] **Step 2:** Also check: type in a field, press back or close the app at once, reopen: the value is there, and My business still lists what is open. Manual check in the browser harness or on a phone (fresh provider account, then a fresh customer account): each Done shows "Saved", moves to the next step in the order above, the last step shows the question, "No" lands on the Publish switch; a complete screen's Done shows "Saved" and goes back; the bar stays above the keyboard. Record what was and was not checked.
 - [ ] **Step 3:** Update `README.md` ("State of the product"; note that the Android app needs a new build) and commit `docs: README, the Done button`.
 - [ ] **Step 4:** Open the pull request in both repositories only when the owner asks; run `/code-review --comment` before the merge.
