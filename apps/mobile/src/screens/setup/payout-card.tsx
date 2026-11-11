@@ -45,7 +45,7 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
       const status = await openPayoutSetup()
       if (status && data) update(() => status) // nothing held yet (the first load failed): update would drop it, so load again
       else retry()
-      if (status?.ready && alive.current) void continueAfterAutoStep() // payouts ready: on to the next open step
+      if (status?.ready && alive.current) void continueAfterAutoStep(() => alive.current) // payouts ready: on to the next open step
     } catch (e) {
       setProblem(paymentsProblem(e))
     }

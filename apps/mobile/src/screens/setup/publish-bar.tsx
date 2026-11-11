@@ -78,7 +78,9 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
     stepping.current = true
     setProblem(null)
     try {
-      const saved = await doQuoteStep(step, onTaxId, () => alive.current && void continueAfterAutoStep()) // the step updates /me itself; only a save's answer is handed up (no list reload)
+      const saved = await doQuoteStep(step, onTaxId, () => {
+        if (alive.current) void continueAfterAutoStep(() => alive.current)
+      }) // the step updates /me itself; only a save's answer is handed up (no list reload)
       if (saved) onSaved(saved)
     } catch (e) {
       setProblem(paymentsProblem(e))

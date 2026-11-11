@@ -56,7 +56,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
       else if (file) {
         await documentsApi.submit(file, requirement)
         onChanged()
-        if (wasOpen && alive.current) void continueAfterAutoStep()
+        if (wasOpen && alive.current) void continueAfterAutoStep(() => alive.current)
       }
     } catch (e) {
       setProblem(errorText(uploadErrorCode(e)))

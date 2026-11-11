@@ -21,22 +21,25 @@ export async function loadNextStep(): Promise<NextStep | null> {
 }
 
 /** Opens the screen of a step; replace, so back does not return to the finished screen. `followUp`: after a ready payout, one more step may follow, never a second payout (no loop). */
-export async function goToStep(step: NextStep, followUp = true): Promise<void> {
+export async function goToStep(step: NextStep, followUp = true, stillHere: () => boolean = () => true): Promise<void> {
   if (step.kind !== 'payout') return goReplace(step.path)
   const status = await openPayoutSetup().catch(() => null)
+  if (!stillHere()) return // the screen was left during the Stripe round trip
   if (!status?.ready || !followUp) return goReplace('/my-profile')
-  return continueAfterAutoStep()
+  return continueAfterAutoStep(stillHere)
 }
 
-/** After a step finished by itself (a document uploaded, payouts ready): the next open step, the end of the flow, or My profile when it cannot be read. Never opens Stripe again (no loop). */
-export async function continueAfterAutoStep(): Promise<void> {
+/** After a step finished by itself (`stillHere`: false once the screen was left, then nothing navigates) (a document uploaded, payouts ready): the next open step, the end of the flow, or My profile when it cannot be read. Never opens Stripe again (no loop). */
+export async function continueAfterAutoStep(stillHere: () => boolean): Promise<void> {
   let next: NextStep | null
   try {
     next = await loadNextStep()
   } catch {
-    return goReplace('/my-profile')
+    if (stillHere()) goReplace('/my-profile')
+    return
   }
+  if (!stillHere()) return // the person left the screen while this loaded: nothing opens
   if (!next) return finishFlow('provider')
   if (next.kind === 'payout') return goReplace('/my-profile')
-  return goToStep(next, false)
+  return goToStep(next, false, stillHere)
 }

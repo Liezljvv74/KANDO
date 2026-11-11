@@ -18,7 +18,7 @@ import { SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useDone } from '@/hooks/use-done'
-import { loadMe, useMe } from '@/hooks/use-me'
+import { loadMe, signOutGeneration, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { shouldAutosave } from '@/lib/account-autosave'
@@ -48,6 +48,8 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState(false)
   const running = useRef<Promise<void>>(Promise.resolve()) // the request in flight (Done and the autosave never send at once)
   const sending = useRef(false)
+  const doneSaving = useRef(false)
+  const generation = useRef(signOutGeneration()) // a sign-out (or account deletion) changes it: nothing is sent for the old account
   const lastSaved = useRef<string | null>(null) // the body last known to be on the server
   const [open, setOpen] = useState<boolean | null>(null) // the details form: null = by itself (open until the compulsory details are saved), else the person's choice
 
@@ -100,8 +102,18 @@ export default function AccountScreen() {
 
   /** Saves the details; true on success, false on a validation or server error (the error text stays in the card). */
   async function save(silent = false): Promise<boolean> {
-    if (!silent) await running.current // an autosave that is still sending finishes first
-    if (!silent && (busy || scanning)) return false
+    if (!silent) {
+      if (doneSaving.current || busy || scanning) return false // a second press while the first runs
+      doneSaving.current = true
+    }
+    try {
+      if (!silent) await running.current // an autosave that is still sending finishes first
+      return await saveNow(silent)
+    } finally {
+      if (!silent) doneSaving.current = false
+    }
+  }
+  async function saveNow(silent: boolean): Promise<boolean> {
     const addr = toAddress(address, me?.address?.country)
     if (!firstName.trim() || !lastName.trim()) return !silent && setError(t('auth.fillAll')), false
     if (addr === undefined) return !silent && setError(t('auth.addressIncomplete')), false
@@ -131,12 +143,12 @@ export default function AccountScreen() {
   }
 
   // Leaving the screen or the app: valid, changed details are saved quietly with the same call as Done (never twice at once).
-  const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, country: undefined as string | undefined, save })
-  latest.current = { firstName, lastName, address, birthDate, loaded: !!me, country: me?.address?.country, save }
+  const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, signedIn: false, country: undefined as string | undefined, save })
+  latest.current = { firstName, lastName, address, birthDate, loaded: !!me, signedIn: !!user, country: me?.address?.country, save }
   useEffect(() => {
     const autosave = () => {
       const v = latest.current
-      if (!v.loaded || !shouldAutosave(v)) return
+      if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
       const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
       if (sending.current || body === lastSaved.current) return // nothing changed since the last successful save
       void v.save(true)
