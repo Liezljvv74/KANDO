@@ -1,6 +1,7 @@
 import { t, type Key } from '@/i18n'
 
 import { COMPULSORY } from './compulsory'
+import { parsePrice } from './profile-form'
 
 const empty = (s: string) => !s.trim()
 const L = (f: keyof typeof COMPULSORY) => COMPULSORY[f].label
@@ -35,7 +36,7 @@ export const serviceMissing = (v: { category: string | null; priceType: string |
   const k: Key[] = []
   if (!v.category) k.push(L('category'))
   if (!v.priceType) k.push(L('priceType'))
-  if (v.priceType !== 'on-request' && empty(v.price)) k.push(L('price'))
+  if (v.priceType !== 'on-request' && parsePrice(v.price) === null) k.push(L('price')) // empty or not a valid amount
   return k
 }
 

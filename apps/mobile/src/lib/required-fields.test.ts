@@ -15,6 +15,10 @@ test('about: everything empty', () => {
 test('service: on-request needs no price', () => {
   expect(serviceMissing({ category: 'cleaning', priceType: 'on-request', price: '' })).toEqual([])
 })
+test('service: a price that is not an amount counts as missing', () => {
+  expect(serviceMissing({ category: 'cleaning', priceType: 'fixed', price: 'abc' })).toEqual(['s.price'])
+  expect(serviceMissing({ category: 'cleaning', priceType: 'fixed', price: '25,50' })).toEqual([])
+})
 test('service: fixed needs a price', () => {
   expect(serviceMissing({ category: 'cleaning', priceType: 'fixed', price: '' })).toEqual(['s.price'])
   expect(serviceMissing({ category: null, priceType: null, price: '' })).toEqual(['search.category', 's.priceType', 's.price'])

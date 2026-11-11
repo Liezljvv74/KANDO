@@ -154,8 +154,8 @@ export default function AccountScreen() {
               {showDetails && (
                 <>
                   <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
-                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => setFirstName} autoComplete="given-name" editable={!busy && !scanning} />
-                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => setLastName} autoComplete="family-name" editable={!busy && !scanning} />
+                  <Field label={t('auth.firstName')} value={firstName} onChangeText={setFirstName} autoComplete="given-name" editable={!busy && !scanning} />
+                  <Field label={t('auth.lastName')} value={lastName} onChangeText={setLastName} autoComplete="family-name" editable={!busy && !scanning} />
                   <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={setBirthDate} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
                   <AddressFields value={address} onChange={setAddress} disabled={busy || scanning} />
                   <LanguageSwitch />
@@ -179,7 +179,7 @@ export default function AccountScreen() {
           </Text>
         )}
       </KeyboardAwareScrollView>
-      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={done.message} />}
+      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? done.message} />}
     </SafeAreaView>
   )
 }

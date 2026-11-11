@@ -83,6 +83,7 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
     return p === null ? null : { price: p }
   })
 
+  const choosing = useRef<Promise<void>>(Promise.resolve())
   async function chooseCategory(categoryId: string) {
     setCategory(categoryId)
     setBusy(true)
@@ -129,7 +130,7 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
     isProvider: true,
     missing: () => serviceMissing({ category, priceType: priceType.value, price: price.value }),
     commit: async () => {
-      while (serial.creating()) await new Promise((r) => setTimeout(r, 50)) // ponytail: polls; serial has no promise to await
+      await choosing.current // a category choice (create or update) still running
       if (!idRef.current) return false // the create failed: nothing to save into
       const all = await Promise.all([title, description, priceType, price].map((f) => f.commit()))
       return all.every(Boolean)
@@ -140,7 +141,7 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
   return (
     <FormScreen title={screenTitle} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
     <Card>
-      <Select {...compulsory('category')} value={category} onChange={chooseCategory} options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} searchable />
+      <Select {...compulsory('category')} value={category} onChange={(c) => void (choosing.current = chooseCategory(c))} options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} searchable />
       <ErrorText text={code.category ? errorText(code.category) : null} />
       {waitingFor.length > 0 && (
         <Text style={styles.waiting}>
