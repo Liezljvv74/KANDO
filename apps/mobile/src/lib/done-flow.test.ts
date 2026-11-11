@@ -2,7 +2,7 @@ import type { NextStep } from './next-step'
 import { createOnce, runDone } from './done-flow'
 
 const step: NextStep = { kind: 'about', path: '/my-profile/about' }
-const base = { isProvider: true, missing: () => [], commit: async () => true }
+const base = { isProvider: true, wasOpen: true, missing: () => [], commit: async () => true }
 
 test('missing fields: no commit', async () => {
   const commit = jest.fn(async () => true)
@@ -12,25 +12,19 @@ test('missing fields: no commit', async () => {
 test('commit false: failed', async () => {
   expect(await runDone({ ...base, commit: async () => false, loadNext: async () => step })).toEqual({ type: 'failed' })
 })
-test('nothing open before or after: edit', async () => {
-  expect(await runDone({ ...base, loadNext: async () => null })).toEqual({ type: 'edit' })
+test('nothing open at focus or after: edit', async () => {
+  expect(await runDone({ ...base, wasOpen: false, loadNext: async () => null })).toEqual({ type: 'edit' })
 })
-test('open before, next after: next', async () => {
-  expect(await runDone({ ...base, loadNext: async () => step })).toEqual({ type: 'next', step })
+test('next after: next', async () => {
+  expect(await runDone({ ...base, wasOpen: true, loadNext: async () => step })).toEqual({ type: 'next', step })
+  expect(await runDone({ ...base, wasOpen: false, loadNext: async () => step })).toEqual({ type: 'next', step })
 })
-test('open before, nothing after: end', async () => {
-  const seq = [step, null]
-  expect(await runDone({ ...base, loadNext: async () => seq.shift() ?? null })).toEqual({ type: 'end', role: 'provider' })
-  const seq2 = [step, null]
-  expect(await runDone({ ...base, isProvider: false, loadNext: async () => seq2.shift() ?? null })).toEqual({ type: 'end', role: 'customer' })
+test('open at focus, nothing after: end', async () => {
+  expect(await runDone({ ...base, wasOpen: true, loadNext: async () => null })).toEqual({ type: 'end', role: 'provider' })
+  expect(await runDone({ ...base, wasOpen: true, isProvider: false, loadNext: async () => null })).toEqual({ type: 'end', role: 'customer' })
 })
-test('loadNext throws after a good commit: edit', async () => {
-  const seq = [step]
-  expect(await runDone({ ...base, loadNext: async () => seq.shift() ?? Promise.reject(new Error('x')) })).toEqual({ type: 'edit' })
-})
-test('loadNext throws before the save: treated as flow', async () => {
-  let n = 0
-  expect(await runDone({ ...base, loadNext: async () => (n++ ? null : Promise.reject(new Error('x'))) })).toEqual({ type: 'end', role: 'provider' })
+test('open at focus and the look after the save throws: edit', async () => {
+  expect(await runDone({ ...base, wasOpen: true, loadNext: () => Promise.reject(new Error('x')) })).toEqual({ type: 'edit' })
 })
 test('createOnce ignores a second call while the first runs', async () => {
   const fn = jest.fn(() => new Promise<void>((r) => setTimeout(r, 10)))

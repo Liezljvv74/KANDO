@@ -5,13 +5,12 @@ import type { NextStep } from './next-step'
 export type DoneOutcome = { type: 'missing'; fields: Key[] } | { type: 'failed' } | { type: 'edit' } | { type: 'next'; step: NextStep } | { type: 'end'; role: 'customer' | 'provider' }
 
 /**
- * What the Done button does. "edit" means nothing was open before the press (a plain edit of a finished profile);
- * if something was open and now nothing is, the flow has ended. A failed look at what is open before the save counts as open.
+ * What the Done button does. `wasOpen` is the snapshot taken when the screen gained focus (fields auto-save, so the press itself
+ * is too late to ask): false = a plain edit of a finished profile; true and nothing open now = the flow has ended.
  */
-export async function runDone(d: { isProvider: boolean; missing: () => Key[]; commit: () => Promise<boolean>; loadNext: () => Promise<NextStep | null> }): Promise<DoneOutcome> {
+export async function runDone(d: { isProvider: boolean; wasOpen: boolean; missing: () => Key[]; commit: () => Promise<boolean>; loadNext: () => Promise<NextStep | null> }): Promise<DoneOutcome> {
   const fields = d.missing()
   if (fields.length) return { type: 'missing', fields }
-  const wasOpen = await d.loadNext().then((s) => s !== null, () => true)
   let ok = false
   try {
     ok = await d.commit()
@@ -26,7 +25,7 @@ export async function runDone(d: { isProvider: boolean; missing: () => Key[]; co
     return { type: 'edit' }
   }
   if (step) return { type: 'next', step }
-  return wasOpen ? { type: 'end', role: d.isProvider ? 'provider' : 'customer' } : { type: 'edit' }
+  return d.wasOpen ? { type: 'end', role: d.isProvider ? 'provider' : 'customer' } : { type: 'edit' }
 }
 
 /** Ignores calls while the previous one has not finished (double-tap guard). */

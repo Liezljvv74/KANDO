@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Key } from '@/i18n'
 import { errorText } from '@/i18n'
@@ -19,6 +20,13 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
   const [saved, showSaved, hideSaved] = useFlash(PAUSE_MS + 500)
   const cfgRef = useRef(cfg)
   cfgRef.current = cfg
+  // What was open when the screen gained focus (a failed look counts as open): taken before any field auto-saves.
+  const snapshot = useRef<Promise<boolean>>(Promise.resolve(true))
+  useFocusEffect(
+    useCallback(() => {
+      snapshot.current = loadNextStep().then((s) => s !== null, () => true)
+    }, []),
+  )
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const alive = useRef(true)
   useEffect(() => {
@@ -35,7 +43,8 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
         setBusy(true)
         setMessage(null)
         hideSaved()
-        const out = await runDone({ isProvider: cfgRef.current.isProvider, missing: () => cfgRef.current.missing(), commit: () => cfgRef.current.commit(), loadNext: loadNextStep })
+        const wasOpen = await snapshot.current
+        const out = await runDone({ isProvider: cfgRef.current.isProvider, wasOpen, missing: () => cfgRef.current.missing(), commit: () => cfgRef.current.commit(), loadNext: loadNextStep })
         if (!alive.current) return // the person left while it ran: nothing more to show or open
         if (out.type === 'missing' || out.type === 'failed') {
           setBusy(false)
@@ -46,7 +55,7 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
         if (!alive.current) return
         try {
           if (out.type === 'edit') goBack()
-          else if (out.type === 'next') await goToStep(out.step)
+          else if (out.type === 'next') await goToStep(out.step, true, () => alive.current)
           else finishFlow(out.role)
         } finally {
           if (alive.current) setBusy(false)

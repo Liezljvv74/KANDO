@@ -3,7 +3,7 @@ import { getCategories } from '@/api/providers'
 import { loadMe } from '@/hooks/use-me'
 import { getLang } from '@/i18n'
 
-import { openPayoutSetup } from './do-quote-step'
+import { openPayoutSetup, payoutOpened } from './do-quote-step'
 import { documentRows } from './documents'
 import { finishFlow } from './finish-flow'
 import { goReplace } from './go'
@@ -17,7 +17,7 @@ export async function loadNextStep(): Promise<NextStep | null> {
   const accountComplete = !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)
   if (!isProvider) return accountComplete ? null : nextStep({ isProvider, accountComplete, profile: null, docRows: [] })
   const [profile, services, verifications, categories] = await Promise.all([getMyProfile(), servicesApi.list(), documentsApi.list(), getCategories(getLang())])
-  return nextStep({ isProvider, accountComplete, profile, docRows: documentRows(services, categories, verifications) })
+  return nextStep({ isProvider, accountComplete, profile, docRows: documentRows(services, categories, verifications), payoutSent: payoutOpened() })
 }
 
 /** Opens the screen of a step; replace, so back does not return to the finished screen. `followUp`: after a ready payout, one more step may follow, never a second payout (no loop). */

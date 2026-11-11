@@ -1,5 +1,5 @@
 import type { DocumentRow } from './documents'
-import { nextStep, openSteps } from './next-step'
+import { isOpenDocument, nextStep, openSteps } from './next-step'
 
 const doc = (state: DocumentRow['state'], optional = false): DocumentRow => ({ requirement: 'photo-id', optional, state, note: null })
 const base = { isProvider: true, accountComplete: true, profile: { missing: [], quoteSteps: [] }, docRows: [] as DocumentRow[] }
@@ -35,5 +35,20 @@ describe('openSteps', () => {
     expect(openSteps({ ...base, profile: { missing: [], quoteSteps: ['consent', 'taxId'] } })).toEqual([])
     expect(openSteps({ ...base, profile: null })).toEqual([])
     expect(nextStep({ ...base, profile: null })).toBeNull()
+  })
+})
+
+describe('payout and documents', () => {
+  it('payout never started is open; a form already sent is finished', () => {
+    const profile = { missing: [], quoteSteps: ['payout' as const] }
+    expect(openSteps({ ...base, profile })).toEqual([{ kind: 'payout' }])
+    expect(openSteps({ ...base, profile, payoutSent: true })).toEqual([])
+  })
+  it('isOpenDocument: required none or rejected only', () => {
+    expect(isOpenDocument(doc('none'))).toBe(true)
+    expect(isOpenDocument(doc('rejected'))).toBe(true)
+    expect(isOpenDocument(doc('none', true))).toBe(false)
+    expect(isOpenDocument(doc('rejected', true))).toBe(false)
+    expect(isOpenDocument(doc('pending'))).toBe(false)
   })
 })
