@@ -20,7 +20,14 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
   const cfgRef = useRef(cfg)
   cfgRef.current = cfg
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(timer.current), [])
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      clearTimeout(timer.current)
+    }
+  }, [])
 
   const run = useMemo(
     () =>
@@ -29,17 +36,25 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
         setMessage(null)
         hideSaved()
         const out = await runDone({ isProvider: cfgRef.current.isProvider, missing: () => cfgRef.current.missing(), commit: () => cfgRef.current.commit(), loadNext: loadNextStep })
-        setBusy(false)
-        if (out.type === 'missing') return setMessage(missingMessage(out.fields))
-        if (out.type === 'failed') return setMessage(errorText(''))
-        showSaved()
+        if (!alive.current) return // the person left while it ran: nothing more to show or open
+        if (out.type === 'missing' || out.type === 'failed') {
+          setBusy(false)
+          return setMessage(out.type === 'missing' ? missingMessage(out.fields) : errorText(''))
+        }
+        showSaved() // lasts a little longer than the pause, so "Saved" is seen until the screen changes
         await new Promise<void>((resolve) => (timer.current = setTimeout(resolve, PAUSE_MS)))
-        if (out.type === 'edit') goBack()
-        else if (out.type === 'next') void goToStep(out.step)
-        else finishFlow(out.role)
+        if (!alive.current) return
+        try {
+          if (out.type === 'edit') goBack()
+          else if (out.type === 'next') await goToStep(out.step)
+          else finishFlow(out.role)
+        } finally {
+          if (alive.current) setBusy(false)
+        }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
-  return { onDone: () => void run(), busy, saved, message }
+  // the data is saved: a failed move just leaves the person on the screen
+  return { onDone: () => void run().catch(() => {}), busy, saved, message }
 }

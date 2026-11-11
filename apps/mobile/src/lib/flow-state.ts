@@ -20,12 +20,18 @@ export async function loadNextStep(): Promise<NextStep | null> {
   return nextStep({ isProvider, accountComplete, profile, docRows: documentRows(services, categories, verifications) })
 }
 
-/** Opens the screen of a step; replace, so back does not return to the finished screen. */
-export async function goToStep(step: NextStep): Promise<void> {
+/** Opens the screen of a step; replace, so back does not return to the finished screen. `followUp`: after a ready payout, one more step may follow, never a second payout (no loop). */
+export async function goToStep(step: NextStep, followUp = true): Promise<void> {
   if (step.kind !== 'payout') return goReplace(step.path)
   const status = await openPayoutSetup().catch(() => null)
-  if (!status?.ready) return goReplace('/my-profile')
-  const next = await loadNextStep().catch(() => null)
-  if (next) return goToStep(next)
-  finishFlow('provider')
+  if (!status?.ready || !followUp) return goReplace('/my-profile')
+  let next: NextStep | null
+  try {
+    next = await loadNextStep()
+  } catch {
+    return goReplace('/my-profile')
+  }
+  if (!next) return finishFlow('provider')
+  if (next.kind === 'payout') return goReplace('/my-profile')
+  return goToStep(next, false)
 }

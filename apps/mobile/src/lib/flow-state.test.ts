@@ -9,13 +9,15 @@ jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...
 jest.mock('@/api/my-profile', () => ({ getMyProfile: (...a: unknown[]) => mockProfile(...a), servicesApi: { list: (...a: unknown[]) => mockList(...a) }, documentsApi: { list: (...a: unknown[]) => mockDocs(...a) } }))
 jest.mock('@/api/providers', () => ({ getCategories: (...a: unknown[]) => mockCats(...a) }))
 jest.mock('@/lib/do-quote-step', () => ({ openPayoutSetup: (...a: unknown[]) => mockOpenPayout(...a) }))
+const mockFinish = jest.fn()
+jest.mock('@/lib/finish-flow', () => ({ finishFlow: (...a: unknown[]) => mockFinish(...a) }))
 jest.mock('@/lib/go', () => ({ goReplace: (...a: unknown[]) => mockReplace(...a) }))
 
 import { goToStep, loadNextStep } from './flow-state'
 
 const fullMe = { isProvider: true, firstName: 'A', lastName: 'B', birthDate: '1990-01-01', address: { postcode: '10115' } }
 beforeEach(() => {
-  for (const m of [mockLoadMe, mockProfile, mockList, mockDocs, mockCats, mockOpenPayout, mockReplace]) m.mockReset()
+  for (const m of [mockLoadMe, mockProfile, mockList, mockDocs, mockCats, mockOpenPayout, mockReplace, mockFinish]) m.mockReset()
   mockLoadMe.mockResolvedValue(fullMe)
   mockList.mockResolvedValue([])
   mockDocs.mockResolvedValue([])
@@ -44,5 +46,26 @@ test('payout step: ready goes on to the next open step, not ready goes to My pro
   expect(mockReplace).not.toHaveBeenCalled()
   mockOpenPayout.mockResolvedValue({ ready: false })
   await goToStep({ kind: 'payout' })
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile')
+})
+
+test('ready payout and nothing else open: the flow ends for a provider', async () => {
+  mockOpenPayout.mockResolvedValue({ ready: true })
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: [] })
+  await goToStep({ kind: 'payout' })
+  expect(mockFinish).toHaveBeenCalledWith('provider')
+})
+test('ready payout and the reload fails: My profile, not the end', async () => {
+  mockOpenPayout.mockResolvedValue({ ready: true })
+  mockLoadMe.mockRejectedValue(new Error('x'))
+  await goToStep({ kind: 'payout' })
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile')
+  expect(mockFinish).not.toHaveBeenCalled()
+})
+test('ready payout but the server still lists payout: My profile, no loop', async () => {
+  mockOpenPayout.mockResolvedValue({ ready: true })
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: ['payout'] })
+  await goToStep({ kind: 'payout' })
+  expect(mockOpenPayout).toHaveBeenCalledTimes(1)
   expect(mockReplace).toHaveBeenCalledWith('/my-profile')
 })
