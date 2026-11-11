@@ -9,14 +9,17 @@ import { documentsApi, servicesApi } from '@/api/my-profile'
 import { ErrorText, Field } from '@/components/auth-ui'
 import { Card, FormScreen, SmallButton } from '@/components/form-ui'
 import { Select } from '@/components/select'
+import { DoneBar } from '@/components/done-bar'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
+import { useDone } from '@/hooks/use-done'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { useLoad } from '@/hooks/use-load'
 import { docText, errorText, t, useLang } from '@/i18n'
 import { compulsory } from '@/lib/compulsory'
 import { documentRows, serviceDocNote, type DocumentRow } from '@/lib/documents'
 import { parsePrice } from '@/lib/profile-form'
+import { serviceMissing } from '@/lib/required-fields'
 import { createSerial } from '@/lib/serial-create'
 import { color } from '@/theme'
 
@@ -31,15 +34,11 @@ export default function ServiceScreen({ id }: { id?: string }) {
   const { categories } = useCategories()
   const { done, data, error, retry } = useLoad(loadAll)
   const existing = id == null ? undefined : data?.services.find((s) => s.id === id)
+  const title = t(id == null ? 's.new' : 's.edit')
+  if (done && !(id != null && !existing)) return <ServiceForm title={title} initial={existing ?? null} docRows={documentRows(data!.services, categories ?? [], data!.verifications)} />
   return (
-    <FormScreen title={t(id == null ? 's.new' : 's.edit')}>
-      {!done ? (
-        error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />
-      ) : id != null && !existing ? (
-        <Empty text={t('error.notFound')} />
-      ) : (
-        <ServiceForm initial={existing ?? null} docRows={documentRows(data!.services, categories ?? [], data!.verifications)} />
-      )}
+    <FormScreen title={title}>
+      {!done ? error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading /> : <Empty text={t('error.notFound')} />}
     </FormScreen>
   )
 }
@@ -48,7 +47,7 @@ export default function ServiceScreen({ id }: { id?: string }) {
  * One service. It is created on the server when its category is chosen; every other field saves on its own.
  * `initial` is read once; `docRows` only feeds the "waiting for a document" note.
  */
-function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows: DocumentRow[] }) {
+function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; initial: OwnService | null; docRows: DocumentRow[] }) {
   const router = useRouter()
   const { categories } = useCategories()
   const [id, setId] = useState(initial?.id ?? null)
@@ -125,9 +124,21 @@ function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows
       </View>
     ) : null
   const categoryName = categories?.find((c) => c.id === category)?.name
+  // Done: wait for a running category create, then commit every field (true only if all saved).
+  const done = useDone({
+    isProvider: true,
+    missing: () => serviceMissing({ category, priceType: priceType.value, price: price.value }),
+    commit: async () => {
+      while (serial.creating()) await new Promise((r) => setTimeout(r, 50)) // ponytail: polls; serial has no promise to await
+      if (!idRef.current) return false // the create failed: nothing to save into
+      const all = await Promise.all([title, description, priceType, price].map((f) => f.commit()))
+      return all.every(Boolean)
+    },
+  })
   const priceInvalid = price.value.trim() !== '' && parsePrice(price.value) === null
 
   return (
+    <FormScreen title={screenTitle} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
     <Card>
       <Select {...compulsory('category')} value={category} onChange={chooseCategory} options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} searchable />
       <ErrorText text={code.category ? errorText(code.category) : null} />
@@ -162,6 +173,7 @@ function ServiceForm({ initial, docRows }: { initial: OwnService | null; docRows
       <ErrorText text={code.remove ? errorText(code.remove) : null} />
       <SmallButton label={t('setup.removeService')} onPress={remove} disabled={busy} />
     </Card>
+    </FormScreen>
   )
 }
 

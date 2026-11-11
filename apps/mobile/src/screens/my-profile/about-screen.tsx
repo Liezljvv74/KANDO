@@ -9,12 +9,15 @@ import { ensureDraft, getMyProfile, saveMyProfile } from '@/api/my-profile'
 import { ErrorText, Field } from '@/components/auth-ui'
 import { Card, FormScreen, SmallButton, SwitchRow } from '@/components/form-ui'
 import { Select } from '@/components/select'
+import { DoneBar } from '@/components/done-bar'
 import { ErrorRetry, Loading } from '@/components/state-view'
+import { useDone } from '@/hooks/use-done'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { useLoad } from '@/hooks/use-load'
 import { errorText, t, useLang } from '@/i18n'
 import { compulsory } from '@/lib/compulsory'
-import { registerPendingTags } from '@/lib/pending-tags'
+import { flushPendingTags, registerPendingTags } from '@/lib/pending-tags'
+import { aboutMissing } from '@/lib/required-fields'
 import { MAX_SKILLS, MAX_SKILL_LENGTH, radiusBody, typedTag, validRadius } from '@/lib/profile-form'
 import { TagInput } from './tag-input'
 
@@ -29,7 +32,8 @@ export default function AboutScreen() {
   useLang()
   const { field } = useLocalSearchParams<{ field?: string }>()
   const { data, error, retry } = useLoad(loadProfile)
-  return <FormScreen title={t('setup.aboutYou')}>{data ? <AboutForm initial={data} focus={field} /> : error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
+  if (data) return <AboutForm initial={data} focus={field} />
+  return <FormScreen title={t('setup.aboutYou')}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
 }
 
 /**
@@ -106,9 +110,29 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         <SmallButton label={t('common.retry')} onPress={f.retry} />
       </View>
     ) : null
+  // Done: typed-but-not-added tags are added and saved first, then every field is committed (true only if all saved).
+  const done = useDone({
+    isProvider: true,
+    missing: () =>
+      aboutMissing({
+        providerType: type.value,
+        businessName: businessName.value,
+        impressum: impressum.value,
+        strengths: strengths.value.length ? strengths.value : strengthText.trim() ? [strengthText] : [],
+        skills: skills.value.length ? skills.value : skillText.trim() ? [skillText] : [],
+        postcode: postcode.value,
+        radiusValid: validRadius(radius.value),
+      }),
+    commit: async () => {
+      await flushPendingTags()
+      const all = await Promise.all([type, businessName, impressum, bio, strengths, skills, experience, postcode, radius, remote].map((f) => f.commit()))
+      return all.every(Boolean)
+    },
+  })
   const unknownPostcode = postcode.status === 'error' && code.basePostcode === 'Unknown postcode'
 
   return (
+    <FormScreen title={t('setup.aboutYou')} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
     <Card>
       <Select
         {...compulsory('providerType')}
@@ -200,6 +224,7 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
       />
       {problem('worksRemotely', remote)}
     </Card>
+    </FormScreen>
   )
 }
 
