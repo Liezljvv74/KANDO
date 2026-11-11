@@ -20,11 +20,23 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
   }
 }
 
-// No store listing yet: "Install" downloads the Android app from our own address (app/KANDO.apk/route.ts).
+// No store listing yet: both install buttons download the Android app from our own address (app/KANDO.apk/route.ts) and look the same (one style, two sizes).
+const BUTTON_LOOK =
+  'inline-flex items-center gap-1.5 rounded-md bg-teal font-bold text-ink shadow-[0_3px_0_#0e7f77] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:translate-y-0.5 active:shadow-none'
+
+function DownloadIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-current" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 3v10m0 0-4-4m4 4 4-4M4 17h12" />
+    </svg>
+  )
+}
+
 function InstallButton({ lang }: { lang: Lang }) {
   return (
     <div className="flex flex-col items-start gap-2">
-      <a href="/KANDO.apk" download="KANDO.apk" className="rounded-md bg-teal px-5 py-3 text-base font-bold text-ink">
+      <a href="/KANDO.apk" download="KANDO.apk" className={`${BUTTON_LOOK} h-11 px-5 text-base`}>
+        <DownloadIcon />
         {t(lang, 'home.install')}
       </a>
       <p className="text-sm">{t(lang, 'home.androidOnly')}</p>
@@ -63,7 +75,18 @@ export default async function HomePage({ params }: Args) {
             {'\n'}
             <span className="text-teal">{head[1]}</span>
           </h1>
-          <p className="font-tag mt-6 inline-block -rotate-2 border-2 border-teal px-3 py-1 text-sm tracking-wider text-teal">{tt('home.stamp')}</p>
+          {/* One row, both 32 px high (the stamp: 20 px line + 8 px padding + 4 px border): the stamp on the left, the install button on the right. */}
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <p className="font-tag -rotate-2 border-2 border-teal px-3 py-1 text-sm tracking-wider text-teal">{tt('home.stamp')}</p>
+            <a
+              href="/KANDO.apk"
+              download="KANDO.apk"
+              className={`${BUTTON_LOOK} get-app-nudge relative h-8 px-3 text-sm after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-['']`}
+            >
+              <DownloadIcon />
+              {tt('home.getApp')}
+            </a>
+          </div>
           <div className="mt-8 grid gap-3">
             {CHOICES.map(({ title, text, to, style }) => (
               <Link

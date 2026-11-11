@@ -248,6 +248,7 @@ export const de = {
   'home.headline': 'Endlich jemand, der’s kann',
   'home.heroHeadline': 'Endlich\njemand, der’s KANN',
   'home.stamp': 'Geprüft',
+  'home.getApp': 'App holen',
   'home.intro': 'Finde Helfer in deiner Nähe - oder neue Kunden für dein Können.',
   'home.badgeVerified': 'Nachweise geprüft',
   'home.badgeVerifiedText': 'Ausweis und Nachweise',

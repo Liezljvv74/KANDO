@@ -27,3 +27,28 @@ h3 {
 .font-tag {
   font-family: var(--font-tag), 'Courier New', monospace;
 }
+
+/* The "Get the app" button on the home page: a short hop three times after the page opens, then still. Off for visitors who ask their device for less motion. */
+@keyframes get-app-nudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-7px);
+  }
+  60% {
+    transform: translateY(0);
+  }
+  78% {
+    transform: translateY(-3px);
+  }
+}
+.get-app-nudge {
+  animation: get-app-nudge 0.9s ease-in-out 0.8s 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .get-app-nudge {
+    animation: none;
+  }
+}

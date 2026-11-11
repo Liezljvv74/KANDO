@@ -40,6 +40,8 @@ describe('home page', () => {
     expect(html).toContain('Installieren')
     expect(html).toContain('Die App ist derzeit nur für Android-Handys verfügbar.')
     expect(html).toContain('href="/KANDO.apk"')
+    expect(html).toContain('App holen') // the button above the cards; same download as the one at the bottom
+    expect(html.split('href="/KANDO.apk"')).toHaveLength(3)
     expect(html).not.toContain('expo')
     expect(html).not.toContain('App Store')
     expect(html).not.toContain('apps.apple.com')
@@ -53,6 +55,7 @@ describe('home page', () => {
     expect(en).not.toContain(t('en', 'home.safetyTitle'))
     expect(en).toContain(`Dog walking ${stamp}`)
     expect(en).toContain(t('en', 'home.install'))
+    expect(en).toContain('Get the app')
     expect(en).not.toContain('Endlich jemand')
     await expect(render('fr')).rejects.toThrow()
   })
