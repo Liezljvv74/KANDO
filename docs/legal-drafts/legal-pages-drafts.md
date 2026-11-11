@@ -121,7 +121,7 @@ Amplivine, [address], Germany. Email: info@skillweb.space. [Data protection offi
 | Provider texts sent to the translation function, and the translations we store | Translate public profile texts when a visitor presses the translate button (see section 4). Stored translations are not linked to your account | Art. 6(1)(f) |
 | Feedback you send from the app: your email address, your message and, if you are signed in, your user id and app language | Read your feedback and answer you | Art. 6(1)(f) legitimate interest in improving the service (and Art. 6(1)(b) where you contact us about your account) |
 
-We do not use advertising, tracking or analytics cookies. We use only what is needed to keep you logged in. [Confirm when the website gets analytics: then add a consent banner.]
+We do not use advertising, tracking or analytics cookies. We use only what is needed to keep you logged in. [The website now has Vercel Web Analytics and Speed Insights (cookie-free): the replacement wording, the table row and the consent-banner question are in `docs/legal-drafts/web-analytics-legal-text.md`.]
 
 **3. Who sees your data**
 - **Public:** the published profile (public name, picture, texts, photos, services, prices, service area, references).

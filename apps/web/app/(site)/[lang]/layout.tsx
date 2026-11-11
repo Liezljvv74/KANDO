@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Courier_Prime, Fraunces } from 'next/font/google'
 import Link from 'next/link'
+import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { t } from '@kando/i18n'
 import { Footer } from '@/components/footer'
 import { langPath, pageLang, siteUrl } from '@/lib/site'
@@ -39,6 +41,9 @@ export default async function SiteLayout({
         </header>
         {children}
         <Footer lang={lang} />
+        {/* Vercel's own page-view and speed measuring: the only analytics on the site. Not in the back office (app/admin). */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
