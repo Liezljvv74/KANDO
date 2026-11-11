@@ -6,6 +6,7 @@
   --color-ink-muted: #4f4e7d;
   --color-brand: #34328a; /* the app's indigo */
   --color-teal: #19c3b8; /* primary action; its label is ink, never teal as text on a light ground */
+  --color-teal-deep: #0e7f77; /* the edge under the primary buttons */
   --color-mint-50: #e3f6ee; /* the app's background */
   --color-mint-200: #cfe6dc; /* the app's divider */
   --color-sand: #ffffff;

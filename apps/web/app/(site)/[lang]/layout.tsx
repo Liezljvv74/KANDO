@@ -40,8 +40,8 @@ export default async function SiteLayout({
             <Link href={langPath('/', lang)} className="inline-flex flex-col gap-2 font-heading text-2xl font-black text-teal" style={{ fontFamily: 'var(--font-heading), Georgia, serif' }}>
               {t(lang, 'brand.name')}
               {/* The logo under the word, as wide as the word: this box has no width of its own (the picture is placed inside it), so the word sets the width. Decorative: the word is the link's name. */}
-              <span className="relative block w-full" style={{ aspectRatio: '480 / 509' }}>
-                <Image src={logo} alt="" fill sizes="120px" priority className="object-contain" />
+              <span className="relative block w-full" style={{ aspectRatio: `${logo.width} / ${logo.height}` }}>
+                <Image src={logo} alt="" fill sizes="100px" priority className="object-contain" />
               </span>
             </Link>
           </div>
