@@ -38,7 +38,22 @@ test('data of a signed-out account is not used', () => {
   mockGeneration++
   expect(nextStepHeld('about')).toBe('unknown')
 })
-test('data noted for an older generation (a load that ran over a sign-out) is not used', () => {
-  flowCache.note(data(), mockGeneration - 1)
+test('data of a load that ran over a sign-out is not used', () => {
+  const start = flowCache.begin()
+  mockGeneration++
+  flowCache.note(data(), start)
   expect(nextStepHeld('about')).toBe('unknown')
+})
+test('two loads answering in reverse order: the later-started one wins', () => {
+  const older = flowCache.begin()
+  const newer = flowCache.begin()
+  flowCache.note(data({ profile: { missing: [], quoteSteps: [] } }), newer)
+  flowCache.note(data(), older) // still lists About you as open
+  expect(nextStepHeld('service')).toBeNull()
+})
+test('the first data noted keeps a step trusted before it', () => {
+  const untrust = flowCache.trust('about')
+  flowCache.note(data())
+  expect(nextStepHeld('service')).toEqual({ kind: 'payout' })
+  untrust()
 })

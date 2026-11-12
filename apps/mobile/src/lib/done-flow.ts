@@ -2,7 +2,7 @@ import type { Key } from '@/i18n'
 
 import { finishFlow } from './finish-flow'
 import { flowCache, nextStepHeld, type Step } from './flow-cache'
-import { goToStep, loadNextStep, payoutNotReady } from './flow-state'
+import { loadNextStep, payoutNotReady } from './flow-state'
 import { goBack, goReplace } from './go'
 import type { NextStep } from './next-step'
 
@@ -45,15 +45,19 @@ export function runDone(d: {
   return d.wasOpen ? { type: 'end', role: d.isProvider ? 'provider' : 'customer' } : { type: 'edit' }
 }
 
-/** One press of Done on the screen of `step`: the outcome, and the screen it opens (in the same tick). After the send the held data is refreshed in the background. */
-export function pressDone(c: { isProvider: boolean; step: Step; missing: () => Key[]; invalid?: () => string | null; flush: () => unknown }, wasOpen: boolean, alive: () => boolean): DoneOutcome {
+/**
+ * One press of Done on the screen of `step`: the outcome, and the screen it opens (in the same tick). Payouts are never
+ * started from Done (Stripe would hold the screen): My business opens, where the checklist and the payout card show it.
+ * After the send the held data is refreshed in the background.
+ */
+export function pressDone(c: { isProvider: boolean; step: Step; missing: () => Key[]; invalid?: () => string | null; flush: () => unknown }, wasOpen: boolean): DoneOutcome {
   let untrust = () => {}
   const out = runDone({ ...c, wasOpen, next: () => nextStepHeld(c.step), onSent: () => void loadNextStep().then(() => untrust(), () => {}) })
   if (out.type === 'missing' || out.type === 'invalid') return out
   untrust = flowCache.trust(c.step)
   if (out.type === 'edit') goBack()
   else if (out.type === 'myBusiness') goReplace('/my-profile')
-  else if (out.type === 'next') void goToStep(out.step, true, alive).catch(() => {})
+  else if (out.type === 'next') goReplace(out.step.kind === 'payout' ? '/my-profile' : out.step.path)
   else finishFlow(out.role, out.role === 'provider' && payoutNotReady())
   return out
 }

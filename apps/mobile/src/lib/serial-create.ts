@@ -23,6 +23,17 @@ export function createBody(prev: Pick<PendingEntry, 'body'> | undefined, categor
   return { categoryId, known, tried: p ? [...(p.tried ?? []), p.categoryId] : [] }
 }
 
+/** The category change of an existing service: a 'service-field' entry like the other fields, so it is kept and retried. */
+export const categoryEntry = (serviceId: string, accountId: string, categoryId: string) => ({
+  key: `service:${serviceId}:category`,
+  kind: 'service-field' as const,
+  accountId,
+  body: { categoryId },
+  serviceRef: serviceId,
+  route: `/my-profile/service/${serviceId}`,
+  field: 'category',
+})
+
 /** A refused create of this account: a new-service screen opens on it, so the person can choose another category. */
 export const refusedCreate = (accountId: string) => listEntries(accountId).find((e) => e.kind === 'service-create' && e.state === 'refused' && !!e.serviceRef?.startsWith('tmp:'))
 

@@ -24,7 +24,7 @@ import { sendNow } from '@/lib/pending-runner'
 import { dropService, putEntry, subscribe, usePendingEntry } from '@/lib/pending-saves'
 import { parsePrice } from '@/lib/profile-form'
 import { serviceMissing } from '@/lib/required-fields'
-import { createBody, createdService, refusedCreate } from '@/lib/serial-create'
+import { categoryEntry, createBody, createdService, refusedCreate } from '@/lib/serial-create'
 import { color } from '@/theme'
 
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
@@ -65,7 +65,10 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
   const id = initial?.id ?? created?.id ?? null
   const idRef = useRef(id)
   idRef.current = id
-  const [category, setCategory] = useState(initial?.category ?? (refused?.body as { categoryId?: string } | undefined)?.categoryId ?? null)
+  const categoryKept = usePendingEntry(id ? `service:${id}:category` : '') // a kept category change of an existing service
+  const [category, setCategory] = useState(
+    (categoryKept?.body as { categoryId?: string } | undefined)?.categoryId ?? initial?.category ?? (refused?.body as { categoryId?: string } | undefined)?.categoryId ?? null,
+  )
   const [waitingFor, setWaitingFor] = useState(initial?.waitingFor ?? [])
   const [code, setCode] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -104,8 +107,12 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
     setBusy(true)
     setCode((c) => ({ ...c, category: '' }))
     try {
-      if (idRef.current) onService(await servicesApi.update(idRef.current, { categoryId }))
-      else {
+      const sid = idRef.current
+      if (sid) {
+        // Kept and sent like the other fields: a failure after the screen is left is retried and shown by the banner.
+        putEntry(categoryEntry(sid, accountId, categoryId))
+        if ((await sendNow(`service:${sid}:category`)) === 'ok') servicesApi.list().then((l) => { const s = l.find((x) => x.id === sid); if (s) onService(s) }, () => {})
+      } else {
         // Kept on the phone and sent by the 'service-create' sender (choosing again before it succeeds replaces it); the
         // fields wait for it and are then sent with the real id.
         putEntry({ key: createKey, kind: 'service-create', accountId, body: createBody(createEntry, categoryId, knownIds), serviceRef: tmpRef, route: '/my-profile/service/new', field: 'category' })
@@ -117,7 +124,8 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
     }
     setBusy(false)
   }
-  const categoryError = code.category || (createEntry?.attempts ? (createEntry.state === 'refused' ? (createEntry.reason ?? 'network') : 'network') : '')
+  const kept = createEntry ?? categoryKept
+  const categoryError = code.category || (kept?.attempts ? (kept.state === 'refused' ? (kept.reason ?? 'network') : 'network') : '')
 
   const remove = () =>
     Alert.alert(t('s.deleteConfirm'), undefined, [
@@ -149,13 +157,11 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
       </View>
     ) : null
   const categoryName = categories?.find((c) => c.id === category)?.name
-  // Done: every unsaved field is sent (never awaited); while the create is queued they are kept and follow it. A category
-  // change of an existing service that failed is not kept, so Done stays and shows it.
+  // Done: every unsaved field is sent (never awaited); while the create is queued they are kept and follow it.
   const done = useDone({
     isProvider: true,
     step: 'service',
     missing: () => serviceMissing({ category, priceType: priceType.value, price: price.value }),
-    invalid: () => (code.category ? errorText(code.category) : null),
     flush: () => Promise.all([title, description, priceType, price].map((f) => f.flush())),
   })
   const priceInvalid = price.value.trim() !== '' && parsePrice(price.value) === null

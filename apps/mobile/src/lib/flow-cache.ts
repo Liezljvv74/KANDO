@@ -13,9 +13,11 @@ export type FlowData = {
   payoutSent?: boolean
 }
 
-let held: { data: FlowData; generation: number } | null = null
+type Start = { generation: number; n: number }
+let held: { data: FlowData; generation: number; n: number } | null = null
 const trusted = new Map<Step, number>()
 let seq = 0
+let loads = 0
 
 /** Every open step of this data, in order (the rules of `next-step`). Same account rule as the account screen: name and postcode, a provider's date of birth too. */
 export function stepsOf({ me, profile, docRows, payoutSent }: FlowData): NextStep[] {
@@ -26,10 +28,13 @@ export function stepsOf({ me, profile, docRows, payoutSent }: FlowData): NextSte
 
 /** The newest server data for the Done flow, so Done picks the next step without a request. */
 export const flowCache = {
-  /** `generation`: the sign-out generation when the load started; a load that ran over a sign-out is never used. */
-  note(data: FlowData, generation = signOutGeneration()) {
-    if (held?.generation !== generation) trusted.clear()
-    held = { data, generation }
+  /** Taken when a load starts: its data is noted only if no later-started load was noted first (the newest request wins). */
+  begin: (): Start => ({ generation: signOutGeneration(), n: ++loads }),
+  /** A load that ran over a sign-out, or one older than the data held, is never used. */
+  note(data: FlowData, start: Start = flowCache.begin()) {
+    if (held && start.n < held.n) return
+    if (held && held.generation !== start.generation) trusted.clear()
+    held = { data, ...start }
   },
   /** A step whose Done passed the local check counts as finished until the returned function is called (its refresh landed). */
   trust(step: Step): () => void {

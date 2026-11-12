@@ -1,6 +1,6 @@
 import { documentsApi, getMyProfile, servicesApi } from '@/api/my-profile'
 import { getCategories } from '@/api/providers'
-import { currentMe, loadMe, signOutGeneration } from '@/hooks/use-me'
+import { currentMe, loadMe } from '@/hooks/use-me'
 import { getLang } from '@/i18n'
 
 import { openPayoutSetup, payoutOpened } from './do-quote-step'
@@ -15,14 +15,14 @@ export const payoutNotReady = () => currentMe()?.quoteSteps?.includes('payout') 
 
 /** The next open step, from fresh server data; the data is also kept for an instant Done. A customer's account is the only thing that can be open for them. */
 export async function loadNextStep(): Promise<NextStep | null> {
-  const generation = signOutGeneration()
+  const start = flowCache.begin()
   const me = await loadMe()
   let data: FlowData = { me, profile: null, docRows: [] }
   if (me.isProvider === true) {
     const [profile, services, verifications, categories] = await Promise.all([getMyProfile(), servicesApi.list(), documentsApi.list(), getCategories(getLang())])
     data = { me, profile, docRows: documentRows(services, categories, verifications), payoutSent: profile?.payoutStarted === true || payoutOpened() } // the server's flag lasts; the local marker covers a form just opened and an older server
   }
-  flowCache.note(data, generation)
+  flowCache.note(data, start)
   return stepsOf(data)[0] ?? null
 }
 

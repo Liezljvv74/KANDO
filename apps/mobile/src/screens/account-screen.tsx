@@ -232,7 +232,7 @@ export default function AccountScreen() {
           </Text>
         )}
       </KeyboardAwareScrollView>
-      {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null) ?? done.message} />}
+      {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? done.message ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null)} />}
     </SafeAreaView>
   )
 }

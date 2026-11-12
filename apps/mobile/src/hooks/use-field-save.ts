@@ -17,7 +17,6 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
   let dirty = false
   let running: Promise<void> | null = null // the loop below: one request at a time, until nothing is dirty
   let timer: ReturnType<typeof setTimeout> | undefined
-  let lastOk = true // did the most recent save work (true when nothing was ever sent)
 
   const run = async (): Promise<void> => {
     while (dirty) {
@@ -28,10 +27,8 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
           if (!q.accountId || (await sendNow(q.key)) !== 'ok') throw new Error('not saved') // signed out: nothing can be kept or sent
 
         } else await save(latest)
-        lastOk = true
         if (!dirty) onStatus('saved')
       } catch {
-        lastOk = false
         onStatus('error') // the value stays; `retry` resends it (or a newer change does)
       }
     }
@@ -68,12 +65,6 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
     flush,
     /** The app is leaving the front: same as flush, named for its caller. */
     flushNow: flush,
-    /** Like flush, but resends a value whose last save failed, and says whether the last save worked. */
-    async commit(): Promise<boolean> {
-      if (!lastOk) dirty = true
-      await flush()
-      return lastOk
-    },
     retry() {
       dirty = true
       onStatus('saving')
@@ -118,7 +109,5 @@ export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>
     retry: () => void saver.current!.retry(),
     /** Resolves when nothing is dirty and nothing is in flight. */
     flush: () => saver.current!.flush(),
-    /** Resolves true only when the last save worked (a failed value is resent first). */
-    commit: () => saver.current!.commit(),
   }
 }

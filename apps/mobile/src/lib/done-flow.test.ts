@@ -1,9 +1,8 @@
 const mockGeneration = 1
 jest.mock('@/hooks/use-me', () => ({ signOutGeneration: () => mockGeneration }))
 const mockLoadNext = jest.fn(async () => null)
-const mockGoToStep = jest.fn(async () => {})
 const mockPayoutNotReady = jest.fn(() => false)
-jest.mock('./flow-state', () => ({ loadNextStep: () => mockLoadNext(), goToStep: (...a: unknown[]) => mockGoToStep(...(a as [])), payoutNotReady: () => mockPayoutNotReady() }))
+jest.mock('./flow-state', () => ({ loadNextStep: () => mockLoadNext(), payoutNotReady: () => mockPayoutNotReady() }))
 const mockBack = jest.fn()
 const mockReplace = jest.fn()
 jest.mock('./go', () => ({ goBack: () => mockBack(), goReplace: (...a: unknown[]) => mockReplace(...a) }))
@@ -21,7 +20,7 @@ const me = { isProvider: true, firstName: 'A', lastName: 'B', birthDate: '1990-0
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
 beforeEach(() => {
-  for (const m of [mockLoadNext, mockGoToStep, mockBack, mockReplace, mockFinish]) m.mockClear()
+  for (const m of [mockLoadNext, mockBack, mockReplace, mockFinish]) m.mockClear()
   mockPayoutNotReady.mockReturnValue(false)
   flowCache.clear()
 })
@@ -73,47 +72,53 @@ const cfg = (over = {}) => ({ isProvider: true, step: 'about' as const, missing:
 
 test('pressDone: held data and an open step: that step opens at once, no request, no pause', () => {
   flowCache.note({ me, profile: { missing: ['skills', 'service'], quoteSteps: [] }, docRows: [] })
-  const out = pressDone(cfg(), true, () => true)
+  const out = pressDone(cfg(), true)
   expect(out).toEqual({ type: 'next', step })
-  expect(mockGoToStep).toHaveBeenCalledWith(step, true, expect.any(Function)) // in the same tick: no timer, no "Saved"
+  expect(mockReplace).toHaveBeenCalledWith(step.path) // in the same tick: no timer, no "Saved"
   expect(mockLoadNext).not.toHaveBeenCalled()
 })
 test('pressDone: after About you the next step is never About you', () => {
   flowCache.note({ me, profile: { missing: ['skills'], quoteSteps: [] }, docRows: [] })
-  pressDone(cfg(), true, () => true)
-  expect(mockGoToStep).not.toHaveBeenCalled()
+  pressDone(cfg(), true)
+  expect(mockReplace).not.toHaveBeenCalled()
   expect(mockFinish).toHaveBeenCalledWith('provider', false)
 })
 test('pressDone: a refused change still pending does not change where Done goes', () => {
   flowCache.note({ me, profile: { missing: ['service'], quoteSteps: [] }, docRows: [] })
-  expect(pressDone(cfg({ flush: () => Promise.resolve(false) }), true, () => true)).toEqual({ type: 'next', step })
+  expect(pressDone(cfg({ flush: () => Promise.resolve(false) }), true)).toEqual({ type: 'next', step })
 })
 test('pressDone: nothing held opens My business', () => {
-  expect(pressDone(cfg(), true, () => true)).toEqual({ type: 'myBusiness' })
+  expect(pressDone(cfg(), true)).toEqual({ type: 'myBusiness' })
   expect(mockReplace).toHaveBeenCalledWith('/my-profile')
 })
 test('pressDone: a plain edit goes back', () => {
   flowCache.note({ me, profile: { missing: [], quoteSteps: [] }, docRows: [] })
-  pressDone(cfg(), false, () => true)
+  pressDone(cfg(), false)
   expect(mockBack).toHaveBeenCalledTimes(1)
 })
 test('pressDone: the end of the flow keeps the payout-not-ready message', () => {
   flowCache.note({ me, profile: { missing: [], quoteSteps: [] }, docRows: [] })
   mockPayoutNotReady.mockReturnValue(true)
-  pressDone(cfg(), true, () => true)
+  pressDone(cfg(), true)
   expect(mockFinish).toHaveBeenCalledWith('provider', true)
 })
 test('pressDone: missing fields: nothing opens', () => {
-  expect(pressDone(cfg({ missing: () => ['s.price'] }), true, () => true)).toEqual({ type: 'missing', fields: ['s.price'] })
+  expect(pressDone(cfg({ missing: () => ['s.price'] }), true)).toEqual({ type: 'missing', fields: ['s.price'] })
   expect(mockReplace).not.toHaveBeenCalled()
-  expect(mockGoToStep).not.toHaveBeenCalled()
+  expect(mockFinish).not.toHaveBeenCalled()
+  expect(mockBack).not.toHaveBeenCalled()
+})
+test('pressDone: payout next opens My business at once, the payout is not started from Done', () => {
+  flowCache.note({ me, profile: { missing: [], quoteSteps: ['payout'] }, docRows: [] })
+  expect(pressDone(cfg(), true)).toEqual({ type: 'next', step: { kind: 'payout' } })
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile')
 })
 test('pressDone: after the send the held data is refreshed; the finished step counts as done until then', async () => {
   flowCache.note({ me, profile: { missing: ['skills', 'service'], quoteSteps: [] }, docRows: [] })
   let sent!: () => void
-  pressDone(cfg({ flush: () => new Promise<void>((r) => (sent = r)) }), true, () => true)
-  mockGoToStep.mockClear()
-  pressDone(cfg({ step: 'service' }), true, () => true) // the next screen's Done before the first send answered
+  pressDone(cfg({ flush: () => new Promise<void>((r) => (sent = r)) }), true)
+  mockReplace.mockClear()
+  pressDone(cfg({ step: 'service' }), true) // the next screen's Done before the first send answered
   expect(mockFinish).toHaveBeenCalledWith('provider', false) // About you is not opened again
   expect(mockLoadNext).not.toHaveBeenCalled()
   sent()

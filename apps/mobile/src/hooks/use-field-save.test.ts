@@ -142,56 +142,6 @@ test('flush waits for the request in flight and the follow-up with the newest va
   expect(done).toBe(true)
 })
 
-test('commit resolves true after a successful save', async () => {
-  const save = jest.fn(async (_: string) => {})
-  const { saver } = setup(save)
-  saver.set('a')
-  const p = saver.commit()
-  await flushPromises()
-  await expect(p).resolves.toBe(true)
-  expect(save).toHaveBeenCalledWith('a')
-})
-
-test('commit resolves false when the save rejects', async () => {
-  const save = jest.fn().mockRejectedValue(new Error('x'))
-  const { saver } = setup(save)
-  saver.set('a')
-  const p = saver.commit()
-  await flushPromises()
-  await expect(p).resolves.toBe(false)
-})
-
-test('commit resends a value whose last save failed and resolves true when the resend works', async () => {
-  const save = jest.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(undefined)
-  const { saver, seen } = setup(save)
-  saver.set('typed')
-  await saver.flush()
-  expect(seen.at(-1)).toBe('error')
-  const p = saver.commit()
-  await flushPromises()
-  await expect(p).resolves.toBe(true)
-  expect(save).toHaveBeenCalledTimes(2)
-  expect(save).toHaveBeenLastCalledWith('typed')
-})
-
-test('a new change after a failed save, once saved, makes commit true', async () => {
-  const save = jest.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(undefined)
-  const { saver } = setup(save)
-  saver.set('a')
-  await saver.flush()
-  saver.set('ab')
-  await expect(saver.commit()).resolves.toBe(true)
-  expect(save).toHaveBeenLastCalledWith('ab')
-  expect(save).toHaveBeenCalledTimes(2)
-})
-
-test('commit resolves true when nothing was typed', async () => {
-  const save = jest.fn(async (_: string) => {})
-  const { saver } = setup(save)
-  await expect(saver.commit()).resolves.toBe(true)
-  expect(save).not.toHaveBeenCalled()
-})
-
 test('flush still resolves without a value (unchanged)', async () => {
   const save = jest.fn(async (_: string) => {})
   const { saver } = setup(save)

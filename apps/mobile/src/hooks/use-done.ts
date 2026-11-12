@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 import type { Key } from '@/i18n'
 import { pressDone, pressGuard } from '@/lib/done-flow'
@@ -16,14 +16,9 @@ export function useDone(cfg: { isProvider: boolean; step: Step; missing: () => K
   const cfgRef = useRef(cfg)
   cfgRef.current = cfg
   const wasOpen = useRef(true) // something was open when the screen was shown; unknown counts as open
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => void (alive.current = false)
-  }, [])
   const [guard] = useState(() =>
     pressGuard(() => {
-      const out = pressDone(cfgRef.current, wasOpen.current, () => alive.current)
+      const out = pressDone(cfgRef.current, wasOpen.current)
       if (out.type === 'missing') setMessage(missingMessage(out.fields))
       else if (out.type === 'invalid') setMessage(out.text)
       else setMessage(null)
