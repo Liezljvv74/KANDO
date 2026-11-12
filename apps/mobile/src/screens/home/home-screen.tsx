@@ -57,7 +57,7 @@ export default function HomeScreen() {
         { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn'), tone: 'teal' },
       ]
     : [
-        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { void setAfterLogin('/search'); router.push('/sign-up') }, main: true },
+        { title: 'welcome.browse', text: 'welcome.browseText', onPress: () => router.navigate('/search'), main: true },
         { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') }, tone: 'indigo' },
         { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') }, tone: 'teal' },
       ]

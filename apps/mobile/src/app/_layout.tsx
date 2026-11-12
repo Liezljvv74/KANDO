@@ -48,10 +48,8 @@ export default function RootLayout() {
     <KeyboardProvider>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
-        {/* SDK 58 sends a closed guard to "/" by default, which only exists while logged in: logout showed "Unmatched Route". */}
-        <Stack.Protected guard={!!user} redirectTo="/welcome">
-          <Stack.Screen name="(tabs)" />
-        </Stack.Protected>
+        {/* The tabs are open to everyone (a signed-out person browses; private screens ask for a login). The auth screens are for signed-out people only. */}
+        <Stack.Screen name="(tabs)" />
         <Stack.Protected guard={!user}>
           <Stack.Screen name="(auth)" />
         </Stack.Protected>

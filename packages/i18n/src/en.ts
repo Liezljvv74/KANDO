@@ -322,6 +322,8 @@ export const en: Record<AppKey, string> = {
   'home.ctaTitle': 'Ready? Get the app.',
   'home.ctaText': 'Coming soon for iPhone and Android.',
   'welcome.logInRegister': 'Log in/Register',
+  'welcome.browse': 'Browse services',
+  'welcome.browseText': 'Look through providers near you and see what they offer.',
   'welcome.needHelp': 'I need help',
   'welcome.needHelpText': 'Describe what you need for free and ask a provider near you for a quote.',
   'welcome.offer': 'I offer my skills',
