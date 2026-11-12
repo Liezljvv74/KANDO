@@ -102,6 +102,7 @@ export default function AccountScreen() {
     if (r.lastName) setLastName(r.lastName)
     if (r.birthDate) setBirthDate(fromIsoDay(r.birthDate))
     if (r.postcode || r.street || r.city) setAddress((a) => ({ street: r.street ?? a.street, postcode: r.postcode ?? a.postcode, city: r.city ?? a.city }))
+    if (r.firstName || r.lastName || r.birthDate || r.postcode || r.street || r.city) touch()
   }
 
   async function stop() {
