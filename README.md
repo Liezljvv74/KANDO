@@ -113,6 +113,32 @@ Copy `.env.example` to `.env.local` (every variable is listed there). `DATABASE_
 
 The owner merges each; migration 0037 runs on dev and then production BEFORE PR C's code is deployed (README "Migrating production").
 
+### RESUME HERE (written 12 November 2026: "instant Done and saves that are never lost"; read this first, the 11 November block below still holds where it does not disagree)
+
+**What changed on branch `feat/done-button` (local only, not pushed):**
+- **A store of unsaved changes** (`apps/mobile/src/lib/pending-saves.ts`) and a **runner** that retries them (`pending-runner.ts`). A change a person makes (About you fields, service fields, the account details, a new service) is written to the phone first, then sent. If the send fails (no signal, server busy, signed out) it stays and is retried, also after leaving the screen and after the app is closed and opened again. Entries older than 7 days are dropped.
+- **A banner over every screen** (`components/pending-banner.tsx`) says why a change is not saved yet. When the server refuses a change (for example an invalid postcode) the banner names the field and the reason; tapping it opens the field with the error; "Discard change" asks first and then removes it.
+- **Instant Done:** Done no longer waits for the server and there is no "Saved" message. It queues the changes and moves straight on to the next step.
+- **A new service is queued too:** it can be created without signal; its later field changes wait for it and follow it once it exists.
+- **The service title is filled at Publish:** it stays empty until the provider publishes, then it becomes the category name. A title the provider typed is kept.
+- **Sign-out question:** log out with unsaved changes asks "Some changes are not saved yet. Sign out anyway?" ("Sign out" / "Stay"). "Sign out" drops that account's unsaved changes, then signs out; other accounts' entries stay. With nothing unsaved, log out works as before (`lib/confirm-sign-out.ts`). A 401 during a retry keeps the entry (state "auth") until the person signs in again. "Delete my data" also drops the account's entries.
+
+**What the owner must test (phone, or the browser preview):**
+1. No signal while leaving a screen: change a field, switch off the network, go back; the banner shows; switch the network on; the change is saved.
+2. Close the app with a pending change, open it again: the banner is back and the change is saved once online.
+3. Invalid postcode: the banner names the problem; tap it, the field shows the error; correct it, the banner goes.
+4. Create a new service without signal; it appears and saves when the signal returns.
+5. Sign out with a pending change: the question appears; "Stay" does nothing; "Sign out" signs out and the change is gone.
+6. Done with and without signal: instant, no "Saved", moves on.
+7. After the payout step, the next screen is My business.
+8. The title is empty until Publish, then it is the category name; a typed title survives.
+
+**Not yet run:** the web integration specs for the title change (`publish-flow`, `services-references`, `quotes-side-by-side`) need Docker Postgres, which was not running. The manual phone test has not been done.
+
+**Known limits:** the document step can be skipped when Done is pressed quickly or offline; two rare double-create cases for a new service; the account details are saved on blur or when leaving, not on every keystroke.
+
+**Next steps:** 1) the owner tests the list above; 2) `/code-review --comment` on #134, fix findings, remind the owner to submit a GitHub review (Approve); 3) the security audit and the Cloudflare Turnstile plan; 4) restart the browser preview after #134, #135 and #136 are merged.
+
 ### RESUME HERE (written the evening of 11 November 2026; read this first, it replaces the older notes below where they disagree)
 
 **What changed on 11 November 2026 (all merged and live unless marked):**
