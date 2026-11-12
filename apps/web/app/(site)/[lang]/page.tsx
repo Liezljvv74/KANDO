@@ -52,7 +52,7 @@ const splitHeadline = (s: string): [string, string] => {
 
 // The app's three Home choices, with the app's colours: the first two lead to Install, the third to How it works.
 const CHOICES: { title: Key; text: Key; to: 'install' | 'how'; style: string }[] = [
-  { title: 'welcome.needHelp', text: 'welcome.needHelpText', to: 'install', style: 'border-teal bg-mint-50' },
+  { title: 'welcome.browse', text: 'welcome.browseText', to: 'install', style: 'border-teal bg-mint-50' },
   { title: 'welcome.offer', text: 'welcome.offerText', to: 'install', style: 'border-brand bg-white' },
   { title: 'welcome.learn', text: 'welcome.learnText', to: 'how', style: 'border-teal bg-[#d3f3f0]' },
 ]

@@ -326,8 +326,6 @@ export const en: Record<AppKey, string> = {
   'welcome.logInRegister': 'Log in/Register',
   'welcome.browse': 'Browse services',
   'welcome.browseText': 'Look through providers near you and see what they offer.',
-  'welcome.needHelp': 'I need help',
-  'welcome.needHelpText': 'Describe what you need for free and ask a provider near you for a quote.',
   'welcome.offer': 'I offer my skills',
   'welcome.offerText': 'Create your profile and find new customers. No lead fees, no subscription.',
   'welcome.learn': 'Learn more',

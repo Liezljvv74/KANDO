@@ -325,8 +325,6 @@ export const de = {
   'welcome.logInRegister': 'Anmelden/Registrieren',
   'welcome.browse': 'Dienste durchsuchen',
   'welcome.browseText': 'Stöbere durch Anbieter in deiner Nähe und sieh, was sie anbieten.',
-  'welcome.needHelp': 'Ich brauche Hilfe',
-  'welcome.needHelpText': 'Beschreibe kostenlos, was du brauchst, und frage einen Anbieter in deiner Nähe nach einem Angebot.',
   'welcome.offer': 'Ich biete mein Können an',
   'welcome.offerText': 'Erstelle dein Profil und finde neue Kunden. Ohne Leadgebühren, ohne Abo.',
   'welcome.learn': 'Mehr erfahren',
