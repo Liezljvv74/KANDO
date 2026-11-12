@@ -64,5 +64,5 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
     [],
   )
   // the data is saved: a failed move just leaves the person on the screen
-  return { onDone: () => void run().catch(() => {}), busy, saved, message }
+  return { onDone: () => void run().catch(() => alive.current && setBusy(false)), busy, saved, message }
 }

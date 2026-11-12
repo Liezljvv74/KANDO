@@ -84,8 +84,10 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
   })
 
   const choosing = useRef<Promise<void>>(Promise.resolve())
+  const categoryFailed = useRef(false) // the last category choice was refused or lost: Done must not report "Saved"
   async function chooseCategory(categoryId: string) {
     setCategory(categoryId)
+    categoryFailed.current = false
     setBusy(true)
     setCode((c) => ({ ...c, category: '' }))
     try {
@@ -94,6 +96,7 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
       setId(s.id)
       onService(s)
     } catch (e) {
+      categoryFailed.current = true
       setCode((c) => ({ ...c, category: e instanceof ApiError ? e.code : 'network' }))
     }
     setBusy(serial.creating())
@@ -131,7 +134,7 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
     missing: () => serviceMissing({ category, priceType: priceType.value, price: price.value }),
     commit: async () => {
       await choosing.current // a category choice (create or update) still running
-      if (!idRef.current) return false // the create failed: nothing to save into
+      if (categoryFailed.current || !idRef.current) return false // the category save failed (the error text shows) or the create failed: nothing to save into
       const all = await Promise.all([title, description, priceType, price].map((f) => f.commit()))
       return all.every(Boolean)
     },

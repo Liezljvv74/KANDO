@@ -8,6 +8,7 @@ export const de = {
   'auth.logIn': 'Anmelden',
   'auth.signUp': 'Konto erstellen',
   'auth.logOut': 'Abmelden',
+  'account.busyWait': 'Einen Moment bitte, wir arbeiten noch an deiner letzten Anfrage. Dann drücke noch einmal Fertig.',
   'account.admin': 'Admin-Bereich (nur Testversion)',
   'auth.forgot': 'Passwort vergessen?',
   'auth.noAccount': 'Noch kein Konto? Registrieren',

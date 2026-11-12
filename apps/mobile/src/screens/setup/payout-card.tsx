@@ -39,13 +39,14 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
 
   // The same Stripe round trip as a checklist row: it reads the status once and reloads /me itself; its status answer is shown here as it is.
   async function open() {
+    const wasOpen = state !== 'ready' // a ready payout reopened to change bank details is a plain edit: the flow does not start again
     setBusy(true)
     setProblem(null)
     try {
       const status = await openPayoutSetup()
       if (status && data) update(() => status) // nothing held yet (the first load failed): update would drop it, so load again
       else retry()
-      if (status?.ready && alive.current) void continueAfterAutoStep(() => alive.current) // payouts ready: on to the next open step
+      if (wasOpen && status?.ready && alive.current) void continueAfterAutoStep(() => alive.current) // payouts ready: on to the next open step
     } catch (e) {
       setProblem(paymentsProblem(e))
     }

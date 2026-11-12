@@ -23,8 +23,11 @@ test('open at focus, nothing after: end', async () => {
   expect(await runDone({ ...base, wasOpen: true, loadNext: async () => null })).toEqual({ type: 'end', role: 'provider' })
   expect(await runDone({ ...base, wasOpen: true, isProvider: false, loadNext: async () => null })).toEqual({ type: 'end', role: 'customer' })
 })
-test('open at focus and the look after the save throws: edit', async () => {
-  expect(await runDone({ ...base, wasOpen: true, loadNext: () => Promise.reject(new Error('x')) })).toEqual({ type: 'edit' })
+test('in the flow and the look after the save throws: failed (stay on the screen, press Done again)', async () => {
+  expect(await runDone({ ...base, wasOpen: true, loadNext: () => Promise.reject(new Error('x')) })).toEqual({ type: 'failed' })
+})
+test('a plain edit and the look after the save throws: edit (it was saved, there is nothing to continue)', async () => {
+  expect(await runDone({ ...base, wasOpen: false, loadNext: () => Promise.reject(new Error('x')) })).toEqual({ type: 'edit' })
 })
 test('createOnce ignores a second call while the first runs', async () => {
   const fn = jest.fn(() => new Promise<void>((r) => setTimeout(r, 10)))

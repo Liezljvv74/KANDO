@@ -104,7 +104,8 @@ export default function AccountScreen() {
   /** Saves the details; true on success, false on a validation or server error (the error text stays in the card). */
   async function save(silent = false): Promise<boolean> {
     if (!silent) {
-      if (doneSaving.current || busy || scanning) return false // a second press while the first runs
+      if (doneSaving.current) return false // a second press while the first runs
+      if (busy || scanning) return setError(t('account.busyWait')), false // the ID scan or the provider switch is still working: say so, not a vague error
       doneSaving.current = true
     }
     try {

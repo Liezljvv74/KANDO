@@ -10,6 +10,7 @@ export const en: Record<AppKey, string> = {
   'auth.logIn': 'Log in',
   'auth.signUp': 'Create account',
   'auth.logOut': 'Log out',
+  'account.busyWait': 'Please wait a moment, we are still working on your last request. Then press Done again.',
   'account.admin': 'Admin panel (test version only)',
   'auth.forgot': 'Forgot password?',
   'auth.noAccount': 'No account yet? Sign up',

@@ -22,7 +22,7 @@ export async function runDone(d: { isProvider: boolean; wasOpen: boolean; missin
   try {
     step = await d.loadNext()
   } catch {
-    return { type: 'edit' }
+    return d.wasOpen ? { type: 'failed' } : { type: 'edit' } // saved; in the flow the person stays and presses Done again, a plain edit simply ends
   }
   if (step) return { type: 'next', step }
   return d.wasOpen ? { type: 'end', role: d.isProvider ? 'provider' : 'customer' } : { type: 'edit' }
