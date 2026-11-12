@@ -425,7 +425,6 @@ export const en: Record<AppKey, string> = {
   'home.pictureNudge': 'Add your picture so providers can recognise you. It keeps both sides safer.',
   'home.pictureAdd': 'Add picture',
   'home.pictureDismiss': 'Dismiss',
-  'account.saved': 'Saved',
   'idScan.button': 'Scan your ID card to fill in your details',
   'idScan.source': 'Photo of your ID card',
   'idScan.note': 'An AI service reads the photo once to suggest your name, date of birth and address. The photo is not saved. You check every field and tap Save. You can also type everything in yourself.',

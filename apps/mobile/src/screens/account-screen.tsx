@@ -24,7 +24,7 @@ import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { accountEntryBody, shouldAutosave, unchangedSinceSave } from '@/lib/account-autosave'
 import { sendNow } from '@/lib/pending-runner'
-import { listEntries, putEntry, usePendingEntry, type PendingEntry } from '@/lib/pending-saves'
+import { putEntry, usePendingEntry, type PendingEntry } from '@/lib/pending-saves'
 import { accountMissing } from '@/lib/required-fields'
 import { showProfileTab } from '@/lib/profile-tab'
 import { registerForPush } from '@/lib/push'
@@ -49,9 +49,7 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const running = useRef<Promise<void>>(Promise.resolve()) // the request in flight (Done and the autosave never send at once)
   const sending = useRef(false)
-  const doneSaving = useRef(false)
   const generation = useRef(signOutGeneration()) // a sign-out (or account deletion) changes it: nothing is sent for the old account
   const pendingNow = usePendingEntry('account')
   const stored = pendingNow && pendingNow.accountId === user?.id ? pendingNow : undefined // kept changes of this account fill the form first
@@ -126,50 +124,26 @@ export default function AccountScreen() {
     setBusy(false)
   }
 
-  /** Saves the details; true on success, false on a validation or server error (the error text stays in the card). */
-  async function save(silent = false): Promise<boolean> {
-    if (!silent) {
-      if (doneSaving.current) return false // a second press while the first runs
-      if (busy || scanning) return setError(t('account.busyWait')), false // the ID scan or the provider switch is still working: say so, not a vague error
-      doneSaving.current = true
-    }
-    try {
-      if (!silent) await running.current // an autosave that is still sending finishes first
-      return await saveNow(silent)
-    } finally {
-      if (!silent) doneSaving.current = false
-    }
+  /** Why the details cannot be kept as they are (Done shows it), null when they can. */
+  function invalid(): string | null {
+    if (scanning) return t('account.busyWait') // the ID scan is still working: say so, not a vague error
+    if (toAddress(address, me?.address?.country) === undefined) return t('auth.addressIncomplete')
+    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return t('error.invalidBirthDate')
+    return null
   }
-  async function saveNow(silent: boolean): Promise<boolean> {
+
+  /** Keeps the details and sends them (Done and leaving never wait for it); true once the server took them. A failure is kept and shown by the banner and the stored entry. */
+  async function save(): Promise<boolean> {
     const addr = toAddress(address, me?.address?.country)
-    if (!firstName.trim() || !lastName.trim()) return !silent && setError(t('auth.fillAll')), false
-    if (addr === undefined) return !silent && setError(t('auth.addressIncomplete')), false
-    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return !silent && setError(t('error.invalidBirthDate')), false
-    if (!silent) {
-      setBusy(true)
-      setError(null)
-    }
+    if (!firstName.trim() || !lastName.trim() || addr === undefined || invalid()) return false
+    if (!user) return false // nothing can be kept or sent without an account
     const body = accountEntryBody({ firstName, lastName, address: addr, birthDate })
-    let ok = false
-    try {
-      if (!user) throw new ApiError(401, 'Unauthorized') // nothing can be kept or sent without an account
-      pendingUsed.current = true
-      setEdited(false)
-      putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
-      const request = sendNow('account')
-      sending.current = true
-      running.current = request.then(() => {}, () => {}).finally(() => void (sending.current = false))
-      if ((await request) !== 'ok') throw new Error('not saved')
-      lastSaved.current = JSON.stringify(body)
-      if (silent) return true // left the screen or the app: no reload, no flash, no message
-      await load()
-      setOpen(null) // saved: the card folds again once the compulsory details are in
-      ok = true
-    } catch {
-      if (silent) return false
-      setError(failureText(listEntries().find((x) => x.key === 'account')))
-    }
-    setBusy(false)
+    pendingUsed.current = true
+    setEdited(false)
+    putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
+    sending.current = true
+    const ok = (await sendNow('account').finally(() => void (sending.current = false))) === 'ok'
+    if (ok) lastSaved.current = JSON.stringify(body)
     return ok
   }
 
@@ -181,7 +155,7 @@ export default function AccountScreen() {
     if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
     const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
     if (sending.current || unchangedSinceSave(body, lastSaved.current, !!storedRef.current)) return // a kept entry is replaced by the form's values even when they equal the server's
-    void v.save(true)
+    void v.save()
   }
   // Account is a mounted tab: leaving it (focus lost) saves too, not only unmounting.
   useFocusEffect(useCallback(() => () => autosave(), []))
@@ -196,8 +170,10 @@ export default function AccountScreen() {
   const isProvider = showProfileTab(shared ?? me)
   const done = useDone({
     isProvider,
+    step: 'account',
     missing: () => accountMissing({ firstName, lastName, postcode: address.postcode, hasBirthDate: !!birthDate, isProvider }),
-    commit: () => save(),
+    invalid,
+    flush: save,
   })
   // compulsory: the name and the postcode (a provider's date of birth too); with those saved the details card folds
   const complete = !!me && !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)
@@ -256,7 +232,7 @@ export default function AccountScreen() {
           </Text>
         )}
       </KeyboardAwareScrollView>
-      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null) ?? done.message} />}
+      {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null) ?? done.message} />}
     </SafeAreaView>
   )
 }

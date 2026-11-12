@@ -6,7 +6,7 @@ const mockCats = jest.fn()
 const mockOpenPayout = jest.fn()
 const mockReplace = jest.fn()
 const mockHeldMe = jest.fn(() => ({ quoteSteps: [] as string[] }))
-jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...a), currentMe: () => mockHeldMe() }))
+jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...a), currentMe: () => mockHeldMe(), signOutGeneration: () => 0 }))
 jest.mock('@/api/my-profile', () => ({ getMyProfile: (...a: unknown[]) => mockProfile(...a), servicesApi: { list: (...a: unknown[]) => mockList(...a) }, documentsApi: { list: (...a: unknown[]) => mockDocs(...a) } }))
 jest.mock('@/api/providers', () => ({ getCategories: (...a: unknown[]) => mockCats(...a) }))
 const mockSent = jest.fn(() => false)
@@ -15,6 +15,7 @@ const mockFinish = jest.fn()
 jest.mock('@/lib/finish-flow', () => ({ finishFlow: (...a: unknown[]) => mockFinish(...a) }))
 jest.mock('@/lib/go', () => ({ goReplace: (...a: unknown[]) => mockReplace(...a) }))
 
+import { flowCache, nextStepHeld } from './flow-cache'
 import { continueAfterAutoStep, goToStep, loadNextStep } from './flow-state'
 
 const fullMe = { isProvider: true, firstName: 'A', lastName: 'B', birthDate: '1990-01-01', address: { postcode: '10115' } }
@@ -29,6 +30,12 @@ beforeEach(() => {
 test('a provider with a service missing goes to the service first', async () => {
   mockProfile.mockResolvedValue({ missing: ['service'], quoteSteps: ['payout'] })
   expect(await loadNextStep()).toEqual({ kind: 'service', path: '/my-profile/service/new' })
+})
+test('the loaded data is held for an instant Done', async () => {
+  flowCache.clear()
+  mockProfile.mockResolvedValue({ missing: ['skills', 'service'], quoteSteps: [] })
+  await loadNextStep()
+  expect(nextStepHeld('about')).toEqual({ kind: 'service', path: '/my-profile/service/new' })
 })
 test('everything done: null', async () => {
   mockProfile.mockResolvedValue({ missing: [], quoteSteps: [] })

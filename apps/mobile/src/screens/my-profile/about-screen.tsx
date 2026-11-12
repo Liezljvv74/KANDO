@@ -114,9 +114,10 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         <SmallButton label={t('common.retry')} onPress={f.retry} />
       </View>
     ) : null
-  // Done: typed-but-not-added tags are added and saved first, then every field is committed (true only if all saved).
+  // Done: typed-but-not-added tags are added, then every unsaved field is sent (never awaited).
   const done = useDone({
     isProvider: true,
+    step: 'about',
     missing: () =>
       aboutMissing({
         providerType: type.value,
@@ -128,16 +129,12 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         postcode: postcode.value,
         radiusValid: validRadius(radius.value),
       }),
-    commit: async () => {
-      await flushPendingTags()
-      const all = await Promise.all([type, businessName, impressum, bio, strengths, skills, experience, postcode, radius, remote].map((f) => f.commit()))
-      return all.every(Boolean)
-    },
+    flush: () => Promise.all([flushPendingTags(), ...[type, businessName, impressum, bio, strengths, skills, experience, postcode, radius, remote].map((f) => f.flush())]),
   })
   const unknownPostcode = postcode.status === 'error' && postcode.errorCode === 'Unknown postcode'
 
   return (
-    <FormScreen title={t('setup.aboutYou')} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
+    <FormScreen title={t('setup.aboutYou')} footer={<DoneBar onPress={done.onDone} message={done.message} />}>
     <Card>
       <Select
         {...compulsory('providerType')}

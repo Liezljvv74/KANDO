@@ -19,6 +19,7 @@ import { useSession } from '@/hooks/use-session'
 import { docText, errorText, t, useLang } from '@/i18n'
 import { compulsory } from '@/lib/compulsory'
 import { documentRows, serviceDocNote, type DocumentRow } from '@/lib/documents'
+import { loadNextStep } from '@/lib/flow-state'
 import { sendNow } from '@/lib/pending-runner'
 import { dropService, putEntry, subscribe, usePendingEntry } from '@/lib/pending-saves'
 import { parsePrice } from '@/lib/profile-form'
@@ -98,11 +99,8 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
     return p === null ? null : { price: p }
   }, (b) => String(b.price).replace('.', ','))
 
-  const choosing = useRef<Promise<void>>(Promise.resolve())
-  const categoryFailed = useRef(false) // the last category choice was refused or lost: Done must not report "Saved"
   async function chooseCategory(categoryId: string) {
     setCategory(categoryId)
-    categoryFailed.current = false
     setBusy(true)
     setCode((c) => ({ ...c, category: '' }))
     try {
@@ -113,8 +111,8 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
         putEntry({ key: createKey, kind: 'service-create', accountId, body: createBody(createEntry, categoryId, knownIds), serviceRef: tmpRef, route: '/my-profile/service/new', field: 'category' })
         await sendNow(createKey)
       }
+      void loadNextStep().catch(() => {}) // the category may ask for a document: Done reads the next step from held data
     } catch (e) {
-      categoryFailed.current = true
       setCode((c) => ({ ...c, category: e instanceof ApiError ? e.code : 'network' }))
     }
     setBusy(false)
@@ -151,23 +149,21 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
       </View>
     ) : null
   const categoryName = categories?.find((c) => c.id === category)?.name
-  // Done: wait for a running category create, then commit every field (true only if all saved).
+  // Done: every unsaved field is sent (never awaited); while the create is queued they are kept and follow it. A category
+  // change of an existing service that failed is not kept, so Done stays and shows it.
   const done = useDone({
     isProvider: true,
+    step: 'service',
     missing: () => serviceMissing({ category, priceType: priceType.value, price: price.value }),
-    commit: async () => {
-      await choosing.current // a category choice (create or update) still running
-      if (categoryFailed.current || !idRef.current) return false // the category save failed (the error text shows) or the create failed: nothing to save into
-      const all = await Promise.all([title, description, priceType, price].map((f) => f.commit()))
-      return all.every(Boolean)
-    },
+    invalid: () => (code.category ? errorText(code.category) : null),
+    flush: () => Promise.all([title, description, priceType, price].map((f) => f.flush())),
   })
   const priceInvalid = price.value.trim() !== '' && parsePrice(price.value) === null
 
   return (
-    <FormScreen title={screenTitle} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
+    <FormScreen title={screenTitle} footer={<DoneBar onPress={done.onDone} message={done.message} />}>
     <Card>
-      <Select {...compulsory('category')} value={category} onChange={(c) => void (choosing.current = chooseCategory(c))} options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} searchable />
+      <Select {...compulsory('category')} value={category} onChange={(c) => void chooseCategory(c)} options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} searchable />
       <ErrorText text={categoryError ? errorText(categoryError) : null} />
       {waitingFor.length > 0 && (
         <Text style={styles.waiting}>

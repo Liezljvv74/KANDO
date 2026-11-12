@@ -424,7 +424,6 @@ export const de = {
   'home.pictureNudge': 'Füge dein Foto hinzu, damit Anbieter dich erkennen. Das macht es für beide Seiten sicherer.',
   'home.pictureAdd': 'Foto hinzufügen',
   'home.pictureDismiss': 'Schließen',
-  'account.saved': 'Gespeichert',
   'idScan.button': 'Ausweis scannen und Angaben ausfüllen',
   'idScan.source': 'Foto deines Ausweises',
   'idScan.note': 'Ein KI-Dienst liest das Foto einmal und schlägt Name, Geburtsdatum und Adresse vor. Das Foto wird nicht gespeichert. Du prüfst jedes Feld und tippst auf Speichern. Du kannst auch alles selbst eingeben.',

@@ -1,43 +1,139 @@
+const mockGeneration = 1
+jest.mock('@/hooks/use-me', () => ({ signOutGeneration: () => mockGeneration }))
+const mockLoadNext = jest.fn(async () => null)
+const mockGoToStep = jest.fn(async () => {})
+const mockPayoutNotReady = jest.fn(() => false)
+jest.mock('./flow-state', () => ({ loadNextStep: () => mockLoadNext(), goToStep: (...a: unknown[]) => mockGoToStep(...(a as [])), payoutNotReady: () => mockPayoutNotReady() }))
+const mockBack = jest.fn()
+const mockReplace = jest.fn()
+jest.mock('./go', () => ({ goBack: () => mockBack(), goReplace: (...a: unknown[]) => mockReplace(...a) }))
+const mockFinish = jest.fn()
+jest.mock('./finish-flow', () => ({ finishFlow: (...a: unknown[]) => mockFinish(...a) }))
+
+import { pressDone, pressGuard, runDone } from './done-flow'
+import { flowCache, type FlowData } from './flow-cache'
 import type { NextStep } from './next-step'
-import { createOnce, runDone } from './done-flow'
 
-const step: NextStep = { kind: 'about', path: '/my-profile/about' }
-const base = { isProvider: true, wasOpen: true, missing: () => [], commit: async () => true }
+const step: NextStep = { kind: 'service', path: '/my-profile/service/new' }
+const never = () => new Promise<void>(() => {})
+const base = { isProvider: true, wasOpen: true, missing: () => [], flush: () => {}, next: () => step }
+const me = { isProvider: true, firstName: 'A', lastName: 'B', birthDate: '1990-01-01', address: { postcode: '10115' } } as FlowData['me']
+const flush = () => new Promise((r) => setTimeout(r, 0))
 
-test('missing fields: no commit', async () => {
-  const commit = jest.fn(async () => true)
-  expect(await runDone({ ...base, missing: () => ['s.price'], commit, loadNext: async () => step })).toEqual({ type: 'missing', fields: ['s.price'] })
-  expect(commit).not.toHaveBeenCalled()
+beforeEach(() => {
+  for (const m of [mockLoadNext, mockGoToStep, mockBack, mockReplace, mockFinish]) m.mockClear()
+  mockPayoutNotReady.mockReturnValue(false)
+  flowCache.clear()
 })
-test('commit false: failed', async () => {
-  expect(await runDone({ ...base, commit: async () => false, loadNext: async () => step })).toEqual({ type: 'failed' })
+
+test('missing fields: missing, nothing is sent', () => {
+  const sent = jest.fn()
+  expect(runDone({ ...base, missing: () => ['s.price'], flush: sent })).toEqual({ type: 'missing', fields: ['s.price'] })
+  expect(sent).not.toHaveBeenCalled()
 })
-test('nothing open at focus or after: edit', async () => {
-  expect(await runDone({ ...base, wasOpen: false, loadNext: async () => null })).toEqual({ type: 'edit' })
+test('a value the screen rejects (not a missing field): its text, nothing is sent', () => {
+  const sent = jest.fn()
+  expect(runDone({ ...base, invalid: () => 'bad', flush: sent })).toEqual({ type: 'invalid', text: 'bad' })
+  expect(sent).not.toHaveBeenCalled()
 })
-test('next after: next', async () => {
-  expect(await runDone({ ...base, wasOpen: true, loadNext: async () => step })).toEqual({ type: 'next', step })
-  expect(await runDone({ ...base, wasOpen: false, loadNext: async () => step })).toEqual({ type: 'next', step })
+test('a send that never answers does not hold Done back', () => {
+  const sent = jest.fn(never)
+  expect(runDone({ ...base, flush: sent })).toEqual({ type: 'next', step })
+  expect(sent).toHaveBeenCalledTimes(1)
 })
-test('open at focus, nothing after: end', async () => {
-  expect(await runDone({ ...base, wasOpen: true, loadNext: async () => null })).toEqual({ type: 'end', role: 'provider' })
-  expect(await runDone({ ...base, wasOpen: true, isProvider: false, loadNext: async () => null })).toEqual({ type: 'end', role: 'customer' })
+test('a flush that throws or rejects does not stop Done', async () => {
+  expect(runDone({ ...base, flush: () => { throw new Error('x') } })).toEqual({ type: 'next', step })
+  expect(runDone({ ...base, flush: () => Promise.reject(new Error('x')) })).toEqual({ type: 'next', step })
+  await flush()
 })
-test('in the flow and the look after the save throws: failed (stay on the screen, press Done again)', async () => {
-  expect(await runDone({ ...base, wasOpen: true, loadNext: () => Promise.reject(new Error('x')) })).toEqual({ type: 'failed' })
+test('nothing held: My business', () => {
+  expect(runDone({ ...base, next: () => 'unknown' })).toEqual({ type: 'myBusiness' })
 })
-test('a plain edit and the look after the save throws: edit (it was saved, there is nothing to continue)', async () => {
-  expect(await runDone({ ...base, wasOpen: false, loadNext: () => Promise.reject(new Error('x')) })).toEqual({ type: 'edit' })
+test('nothing open: the end in the flow, a plain edit goes back', () => {
+  expect(runDone({ ...base, next: () => null })).toEqual({ type: 'end', role: 'provider' })
+  expect(runDone({ ...base, wasOpen: false, next: () => null })).toEqual({ type: 'edit' })
+  expect(runDone({ ...base, wasOpen: false })).toEqual({ type: 'next', step })
 })
-test('createOnce ignores a second call while the first runs', async () => {
-  const fn = jest.fn(() => new Promise<void>((r) => setTimeout(r, 10)))
-  const once = createOnce(fn)
-  await Promise.all([once(), once()])
+test('a customer has nothing after the account: no held data needed', () => {
+  expect(runDone({ ...base, isProvider: false, next: () => 'unknown' })).toEqual({ type: 'end', role: 'customer' })
+  expect(runDone({ ...base, isProvider: false, wasOpen: false, next: () => 'unknown' })).toEqual({ type: 'edit' })
+})
+test('onSent runs once the send settled, never while it is out', async () => {
+  const onSent = jest.fn()
+  let done!: () => void
+  runDone({ ...base, flush: () => new Promise<void>((r) => (done = r)), onSent })
+  await flush()
+  expect(onSent).not.toHaveBeenCalled()
+  done()
+  await flush()
+  expect(onSent).toHaveBeenCalledTimes(1)
+})
+
+const cfg = (over = {}) => ({ isProvider: true, step: 'about' as const, missing: () => [], flush: never, ...over })
+
+test('pressDone: held data and an open step: that step opens at once, no request, no pause', () => {
+  flowCache.note({ me, profile: { missing: ['skills', 'service'], quoteSteps: [] }, docRows: [] })
+  const out = pressDone(cfg(), true, () => true)
+  expect(out).toEqual({ type: 'next', step })
+  expect(mockGoToStep).toHaveBeenCalledWith(step, true, expect.any(Function)) // in the same tick: no timer, no "Saved"
+  expect(mockLoadNext).not.toHaveBeenCalled()
+})
+test('pressDone: after About you the next step is never About you', () => {
+  flowCache.note({ me, profile: { missing: ['skills'], quoteSteps: [] }, docRows: [] })
+  pressDone(cfg(), true, () => true)
+  expect(mockGoToStep).not.toHaveBeenCalled()
+  expect(mockFinish).toHaveBeenCalledWith('provider', false)
+})
+test('pressDone: a refused change still pending does not change where Done goes', () => {
+  flowCache.note({ me, profile: { missing: ['service'], quoteSteps: [] }, docRows: [] })
+  expect(pressDone(cfg({ flush: () => Promise.resolve(false) }), true, () => true)).toEqual({ type: 'next', step })
+})
+test('pressDone: nothing held opens My business', () => {
+  expect(pressDone(cfg(), true, () => true)).toEqual({ type: 'myBusiness' })
+  expect(mockReplace).toHaveBeenCalledWith('/my-profile')
+})
+test('pressDone: a plain edit goes back', () => {
+  flowCache.note({ me, profile: { missing: [], quoteSteps: [] }, docRows: [] })
+  pressDone(cfg(), false, () => true)
+  expect(mockBack).toHaveBeenCalledTimes(1)
+})
+test('pressDone: the end of the flow keeps the payout-not-ready message', () => {
+  flowCache.note({ me, profile: { missing: [], quoteSteps: [] }, docRows: [] })
+  mockPayoutNotReady.mockReturnValue(true)
+  pressDone(cfg(), true, () => true)
+  expect(mockFinish).toHaveBeenCalledWith('provider', true)
+})
+test('pressDone: missing fields: nothing opens', () => {
+  expect(pressDone(cfg({ missing: () => ['s.price'] }), true, () => true)).toEqual({ type: 'missing', fields: ['s.price'] })
+  expect(mockReplace).not.toHaveBeenCalled()
+  expect(mockGoToStep).not.toHaveBeenCalled()
+})
+test('pressDone: after the send the held data is refreshed; the finished step counts as done until then', async () => {
+  flowCache.note({ me, profile: { missing: ['skills', 'service'], quoteSteps: [] }, docRows: [] })
+  let sent!: () => void
+  pressDone(cfg({ flush: () => new Promise<void>((r) => (sent = r)) }), true, () => true)
+  mockGoToStep.mockClear()
+  pressDone(cfg({ step: 'service' }), true, () => true) // the next screen's Done before the first send answered
+  expect(mockFinish).toHaveBeenCalledWith('provider', false) // About you is not opened again
+  expect(mockLoadNext).not.toHaveBeenCalled()
+  sent()
+  await flush()
+  expect(mockLoadNext).toHaveBeenCalledTimes(1)
+})
+test('pressGuard: a second press after one that moved on is ignored until the screen shows again', () => {
+  const fn = jest.fn(() => true)
+  const g = pressGuard(fn)
+  g.press()
+  g.press()
   expect(fn).toHaveBeenCalledTimes(1)
-  await once()
+  g.reset()
+  g.press()
   expect(fn).toHaveBeenCalledTimes(2)
 })
-
-test('commit that rejects: failed', async () => {
-  expect(await runDone({ ...base, commit: () => Promise.reject(new Error('x')), loadNext: async () => step })).toEqual({ type: 'failed' })
+test('pressGuard: a press that showed a message does not block the next one', () => {
+  const fn = jest.fn(() => false)
+  const g = pressGuard(fn)
+  g.press()
+  g.press()
+  expect(fn).toHaveBeenCalledTimes(2)
 })
