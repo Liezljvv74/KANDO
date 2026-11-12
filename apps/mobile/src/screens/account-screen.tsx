@@ -155,14 +155,13 @@ export default function AccountScreen() {
     void v.save(true)
   }
   // Account is a mounted tab: leaving it (focus lost) saves too, not only unmounting.
-  useFocusEffect(useCallback(() => () => autosave(), [])) // eslint-disable-line react-hooks/exhaustive-deps
+  useFocusEffect(useCallback(() => () => autosave(), []))
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => s !== 'active' && autosave())
     return () => {
       sub.remove()
       autosave()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const isProvider = showProfileTab(shared ?? me)
