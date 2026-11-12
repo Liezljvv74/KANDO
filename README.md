@@ -113,6 +113,15 @@ Copy `.env.example` to `.env.local` (every variable is listed there). `DATABASE_
 
 The owner merges each; migration 0037 runs on dev and then production BEFORE PR C's code is deployed (README "Migrating production").
 
+### RESUME HERE 12 November 2026: "browse without login" is built on a local branch (not pushed, no pull request)
+
+- **Branch `feat/browse-without-login`** in the worktree `KANDO-browse`, stacked on `feat/done-button` (merge the Done button first, then this one is rebased). Plan: `docs/superpowers/plans/2026-11-12-browse-without-login.md` (all six tasks built; Task 6's manual check in the browser preview is NOT done).
+- **What it does:** signed-out people open all tabs and browse Search and provider pages; Jobs, My business, Account and the screens under bookings, invoices and threads show "Log in or sign up to use this" with a button; Request, Book and "notify me" send them to log in or sign up and bring them back to the same provider page (`lib/after-login.ts` now keeps `/search` or `/provider/<slug>`). The Welcome card "I need help" is "Browse services" (signed out only; signed-in Home is unchanged). A line with Terms, Privacy and Legal notice (website pages in the browser) shows on Welcome, Login, Sign-up and Account only. The server was already open for browsing; `apps/web/tests/signed-out.int.spec.ts` (static) proves no write route works without a session (only the feedback form).
+- **Owner testing feedback, 12 November:** a new customer landed on Home after the email code; now a customer goes to the stored provider page or Search (`afterVerifyTarget`), a person who offers services is led by the offering flow as before.
+- **Tests at the last run:** mobile 80 suites / 486 tests, i18n 18, contract 49, typecheck clean. NOT run: the full web suite (needs the Docker test database).
+- **Found on the Done-button branch (not fixed here):** `pnpm lint` fails with 3 errors, `eslint-disable react-hooks/exhaustive-deps` in `hooks/use-done.ts` and `screens/account-screen.tsx` (the rule is not configured). Fix before that pull request.
+- **Still to do:** the manual check of Task 6 (browser preview; the harness commits are on `test/web-harness-done`, a preview of this branch needs them cherry-picked), then push and pull requests only when the owner says so.
+
 ### RESUME HERE (written the evening of 11 November 2026; read this first, it replaces the older notes below where they disagree)
 
 **What changed on 11 November 2026 (all merged and live unless marked):**
