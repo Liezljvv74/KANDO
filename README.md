@@ -113,6 +113,22 @@ Copy `.env.example` to `.env.local` (every variable is listed there). `DATABASE_
 
 The owner merges each; migration 0037 runs on dev and then production BEFORE PR C's code is deployed (README "Migrating production").
 
+### RESUME HERE, TO DO LIST (written the night of 12 November 2026; read this first, it comes before the blocks below)
+
+**State:** `feat/done-button` (#134, base `main`) is pushed (latest commit: account details also save when a field is left). `feat/browse-without-login` (#135, base `feat/done-button`) is pushed and has the Home language button (DE/ENG under Log in/Register, the language card and the sign-in language list are gone). `feat/back-forward-arrows` (#136) is unchanged (the local copy differs from GitHub only by a rebase; leave it). Nothing is merged. #135 does not yet contain the newest #134 commits, so it needs a rebase after #134 merges (conflicts in the root layout, `use-done.ts`, `home-screen.tsx` and the README were already resolved once in the throwaway preview branch `test/web-harness-all`, worktree `KANDO-lang`; never push that branch).
+
+**Owner decisions made on 12 November:** the account screen saves when a field is left (done), the category stays editable, finishing a payout step with Done goes to My business, the language is changed with the small DE/ENG button on Home only.
+
+**Still to do, in this order:**
+1. **Owner tests** the web simulation (`KANDO-lang`: `pnpm --filter mobile exec node web-harness/start.js`, open http://localhost:8082; needs Docker `db` up) and the phone; the test list is in the block below. Tell her "the Done button branch is ready for review" only after her testing and changes.
+2. `/code-review --comment` on #134, #135 and #136 (none has comments yet), fix findings, remind her to submit a GitHub review (Approve). She merges #134, #135, #136 in that order.
+3. After the merges: rebase/retarget the stacked branches, update and restart the preview, then push and open the PR in the Turing College repo (remote `submission`), only after code review, fixes and her merge, and only with her say-so.
+4. **Security work** (plan: `docs/superpowers/plans/2026-11-12-security-audit-and-bot-challenge.md`, from the 12 November audit). **Turn it into branches, one PR each, in this order, after her read of the plan:** C) rate limits and scraping limits (Neon counter table, about 2.5 days); B) Cloudflare Turnstile on sign-up and the email-code step (checked in the `/api/auth` route, hosted challenge page in a WebView, fail open with strict limits, German and English texts, DPIA note, about 4 days); A) sensitive screens (no screenshots on ID/document, payout and account screens, cover in the app switcher, secure storage for account saves, Android backup off; screen readers are never blocked; about 2.5 days).
+5. **Owner dashboard checks (no code):** in the Neon console: attempts allowed per email code, code expiry, resend cooldown, minimum password length, lock-out; in Vercel: a firewall rate rule on `/app-api/v1/providers*` and `/api/auth/*`, a log alert on denied requests. Also: confirm `owner_id` is not in the public search result (`packages/domain/src/search.ts:15`), rate-limit account deletion per user, cache `GET /providers` briefly, add a warning log at the 401/403 returns, and consider a breached-password check (only if the Neon sign-up endpoint can also be covered).
+6. **Workbook:** update `Reports/MVP Completion Tasks.xlsx` (due: #131 and #133 merged since the last update; rule is after every 2 merged code PRs).
+7. **Small leftovers:** the website "Browse services" card still links to the Install page; the minor items listed in the 12 November block below ("Known limits"); delete the scratch folder `.superpowers/sdd/2026-11-12-instant-done-and-safe-saves`; do not restart the old harness in `KANDO-done-preview` (stale).
+8. Leave alone: the untracked files in the main `KANDO` folder and the untracked `docs/superpowers/plans/2026-11-12-browse-without-login.md` ("not meant to be in a PR").
+
 ### RESUME HERE (written 12 November 2026: "instant Done and saves that are never lost"; read this first, the 11 November block below still holds where it does not disagree)
 
 **What changed on branch `feat/done-button` (local only, not pushed):**
