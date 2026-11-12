@@ -8,7 +8,7 @@ import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { COMPULSORY } from '@/lib/compulsory'
 import { bannerState, discardPlan, shouldClearGone } from '@/lib/pending-banner-state'
-import { removeKey, usePendingEntries } from '@/lib/pending-saves'
+import { listEntries, removeKey, usePendingEntries } from '@/lib/pending-saves'
 import { color } from '@/theme'
 
 const RETRY_TEXT: Record<'network' | 'busy' | 'auth' | 'waiting', Key> = {
@@ -61,7 +61,7 @@ export function PendingBanner({ children }: { children: ReactNode }) {
     onDiscard = () =>
       Alert.alert(t('pending.discardAsk'), undefined, [
         { text: t('pending.discardKeep'), style: 'cancel' },
-        { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, all).forEach(removeKey) },
+        { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, listEntries(first.accountId)).forEach(removeKey) },
       ])
   } else if (state) {
     text = t(RETRY_TEXT[state.reason])

@@ -20,8 +20,16 @@ describe('discardPlan', () => {
   const create = e({ key: 'c', kind: 'service-create', serviceRef: 'tmp:1', state: 'refused' })
   const field = e({ key: 'f', kind: 'service-field', serviceRef: 'tmp:1' })
   const other = e({ key: 'o', kind: 'service-field', serviceRef: 'tmp:2' })
-  it('a single refused entry removes only itself', () => expect(discardPlan(e({ key: 'x', state: 'refused' }), [e({ key: 'x' })])).toEqual(['x']))
+  it('a single refused entry removes only itself', () => expect(discardPlan(e({ key: 'x', state: 'refused' }), [e({ key: 'x', state: 'refused' })])).toEqual(['x']))
   it('a refused service-create takes its field entries along', () => expect(discardPlan(create, [create, field, other])).toEqual(['c', 'f']))
+  it('another account with the same serviceRef is left alone', () => {
+    const foreign = e({ key: 'z', accountId: 'b', serviceRef: 'tmp:1' })
+    expect(discardPlan(create, [create, foreign])).toEqual(['c'])
+  })
+  it('an entry edited again meanwhile (new version) or gone is kept', () => {
+    expect(discardPlan(create, [{ ...create, version: 2, state: 'retry' }, field])).toEqual([])
+    expect(discardPlan(create, [field])).toEqual([])
+  })
   it('a refused field entry removes only its key', () => expect(discardPlan({ ...field, state: 'refused' }, [create, field, other])).toEqual(['f']))
 })
 
