@@ -147,7 +147,7 @@ export default function AccountScreen() {
     return ok
   }
 
-  // Leaving the screen or the app: valid, changed details are saved quietly with the same call as Done (never twice at once).
+  // Leaving a field, the screen or the app: valid, changed details are saved quietly with the same call as Done (never twice at once).
   const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, signedIn: false, country: undefined as string | undefined, save })
   latest.current = { firstName, lastName, address, birthDate, loaded: !!me, signedIn: !!user, country: me?.address?.country, save }
   const autosave = () => {
@@ -207,10 +207,10 @@ export default function AccountScreen() {
               {showDetails && (
                 <>
                   <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
-                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), touch())} autoComplete="given-name" editable={!busy && !scanning} />
-                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), touch())} autoComplete="family-name" editable={!busy && !scanning} />
+                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), touch())} autoComplete="given-name" onBlur={autosave} editable={!busy && !scanning} />
+                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), touch())} autoComplete="family-name" onBlur={autosave} editable={!busy && !scanning} />
                   <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), touch())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
-                  <AddressFields value={address} onChange={(a) => (setAddress(a), touch())} disabled={busy || scanning} />
+                  <AddressFields value={address} onChange={(a) => (setAddress(a), touch())} disabled={busy || scanning} onBlur={autosave} />
                   <LanguageSwitch />
                 </>
               )}
