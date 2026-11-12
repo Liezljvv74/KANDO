@@ -23,6 +23,7 @@ import { loadMe, signOutGeneration, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { accountEntryBody, shouldAutosave, unchangedSinceSave } from '@/lib/account-autosave'
+import { confirmSignOut } from '@/lib/confirm-sign-out'
 import { sendNow } from '@/lib/pending-runner'
 import { putEntry, usePendingEntry, type PendingEntry } from '@/lib/pending-saves'
 import { accountMissing } from '@/lib/required-fields'
@@ -192,7 +193,7 @@ export default function AccountScreen() {
       <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP + (me ? DONE_BAR_SPACE : 0)} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           {user && <Text style={styles.email}>{user.email}</Text>}
-          <Button label={t('auth.logOut')} onPress={signOut} />
+          <Button label={t('auth.logOut')} onPress={() => confirmSignOut(user?.id, signOut)} />
         </View>
         <PictureNudge />
         <View style={styles.card}>
