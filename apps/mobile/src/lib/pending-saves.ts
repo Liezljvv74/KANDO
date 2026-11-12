@@ -82,7 +82,7 @@ async function persist() {
 
 export function putEntry(e: Omit<PendingEntry, 'version' | 'attempts' | 'state' | 'createdAt' | 'status' | 'reason'>): number {
   const to = e.serviceRef && renamed.get(e.serviceRef)
-  if (to) e = { ...e, key: e.key.split(`service:${e.serviceRef}:`).join(`service:${to}:`), serviceRef: to }
+  if (to) e = { ...e, key: e.key.split(`service:${e.serviceRef}:`).join(`service:${to}:`), serviceRef: to, route: routeFor(e.route, to) }
   const now = Date.now()
   lastVersion = Math.max(lastVersion + 1, now)
   entries.set(idOf(e.accountId, e.key), { ...e, version: lastVersion, state: 'retry', attempts: 0, createdAt: now })
@@ -131,6 +131,8 @@ export function dropService(serviceRef: string) {
   for (const e of snapshot) if (e.serviceRef === serviceRef) removeKey(e.key, e.accountId)
 }
 
+const routeFor = (route: string, serviceId: string) => (route === '/my-profile/service/new' ? `/my-profile/service/${serviceId}` : route)
+
 export function replaceServiceRef(from: string, to: string) {
   if (from.startsWith('tmp:')) renamed.set(from, to)
   let any = false
@@ -140,7 +142,7 @@ export function replaceServiceRef(from: string, to: string) {
     const key = e.key.split(`service:${from}:`).join(`service:${to}:`)
     const id = idOf(e.accountId, key)
     const other = entries.get(id)
-    if (!other || other.version < e.version) entries.set(id, { ...e, key, serviceRef: to })
+    if (!other || other.version < e.version) entries.set(id, { ...e, key, serviceRef: to, route: routeFor(e.route, to) })
     any = true
   }
   if (any) changed()

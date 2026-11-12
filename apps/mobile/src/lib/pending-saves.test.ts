@@ -234,6 +234,18 @@ describe('pending-saves', () => {
     expect(s.listEntries().map((e) => e.key)).toEqual(['ok'])
   })
 
+  it('replaceServiceRef points a new-service route at the created service', () => {
+    put('service:tmp:1:title', { kind: 'service-field', serviceRef: 'tmp:1', route: '/my-profile/service/new' })
+    put('service:s2:title', { kind: 'service-field', serviceRef: 's2', route: '/my-profile/service/s2' })
+    s.replaceServiceRef('tmp:1', 's1')
+    put('service:tmp:1:price', { kind: 'service-field', serviceRef: 'tmp:1', route: '/my-profile/service/new' })
+    expect(s.listEntries().map((e) => [e.key, e.route])).toEqual([
+      ['service:s1:title', '/my-profile/service/s1'],
+      ['service:s2:title', '/my-profile/service/s2'],
+      ['service:s1:price', '/my-profile/service/s1'],
+    ])
+  })
+
   it('replaceServiceRef treats $ in the id literally', () => {
     put('service:tmp:1:name', { kind: 'service-field', serviceRef: 'tmp:1' })
     s.replaceServiceRef('tmp:1', 'a$&b')
