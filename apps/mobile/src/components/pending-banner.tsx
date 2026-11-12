@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useSession } from '@/hooks/use-session'
@@ -69,6 +69,10 @@ export function PendingBanner({ children }: { children: ReactNode }) {
     text = t('pending.serviceGone')
     onPress = () => setGone(false)
   }
+
+  useEffect(() => {
+    if (text) AccessibilityInfo.announceForAccessibility(text)
+  }, [text])
 
   // One tree whether or not the bar shows: the children keep their place, so the stack is never remounted.
   // While the bar fills the space under the status bar, the screens below get no top inset of their own.
