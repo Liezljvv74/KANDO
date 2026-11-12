@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AppState } from 'react-native'
-import { sendNow } from '@/lib/pending-runner'
+import { isHeld, sendNow } from '@/lib/pending-runner'
 import { putEntry, removeKey, usePendingEntry, type SaveKind } from '@/lib/pending-saves'
 
 export type SaveStatus = 'saved' | 'saving' | 'error'
@@ -24,8 +24,11 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
       try {
         if (queue) {
           const q = queue()
-          if (!q.accountId || (await sendNow(q.key, q.accountId)) !== 'ok') throw new Error('not saved') // signed out: nothing can be kept or sent
-
+          if (!q.accountId) throw new Error('not saved') // signed out: nothing can be kept or sent
+          if ((await sendNow(q.key, q.accountId)) !== 'ok') {
+            if (isHeld(q.key, q.accountId)) continue // kept; sent after its service is created
+            throw new Error('not saved')
+          }
         } else await save(latest)
         if (!dirty) onStatus('saved')
       } catch {

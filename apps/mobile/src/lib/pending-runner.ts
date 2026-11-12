@@ -103,6 +103,12 @@ function held(e: PendingEntry): boolean {
   return e.kind !== 'service-create' && !!e.serviceRef?.startsWith('tmp:') && listEntries(e.accountId).some((x) => x.kind === 'service-create' && x.serviceRef === e.serviceRef)
 }
 
+/** True while this field waits for its service to be created: the banner explains it, the field shows no error of its own. */
+export function isHeld(key: string, accountId: string): boolean {
+  const e = listEntries(accountId).find((x) => x.key === key)
+  return !!e && held(e)
+}
+
 function eligible(e: PendingEntry, everything: boolean): boolean {
   if (!senders.has(e.kind) || e.accountId !== getAccountId?.() || e.state === 'refused' || held(e)) return false
   if (everything) return true
