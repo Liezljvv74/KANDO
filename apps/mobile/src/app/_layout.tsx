@@ -8,12 +8,13 @@ import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
-import { ApiError } from '@/api/client'
+import { ApiError, updateMe } from '@/api/client'
 import { saveMyProfile, servicesApi } from '@/api/my-profile'
 import { Button } from '@/components/auth-ui'
 import { TermsReaccept } from '@/components/terms-reaccept'
 import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
+import { refusedField } from '@/lib/account-autosave'
 import { go } from '@/lib/go'
 import { registerSender, startRunner, wake } from '@/lib/pending-runner'
 import { pushRoute } from '@/lib/push'
@@ -30,6 +31,7 @@ registerSender('service-field', async (e) => {
   if (!e.serviceRef || e.serviceRef.startsWith('tmp:')) throw new ApiError(0, 'service not created yet') // never against a temporary id
   await servicesApi.update(e.serviceRef, e.body as object)
 })
+registerSender('account', async (e) => void (await updateMe(e.body as Parameters<typeof updateMe>[0])), (err) => (err instanceof ApiError ? refusedField(err) : undefined))
 registerSender('service-create', serviceCreateSender(servicesApi))
 
 export default function RootLayout() {

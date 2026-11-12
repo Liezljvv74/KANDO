@@ -91,6 +91,13 @@ describe('pending-runner', () => {
     expect(send).toHaveBeenCalledTimes(7)
   })
 
+  it('stores the field a sender names for a refused entry', async () => {
+    r.registerSender('about', jest.fn().mockRejectedValue(new ApiError(400, 'Invalid postcode')), () => 'postcode')
+    put('k')
+    await start()
+    expect(s.listEntries().find((x) => x.key === 'k')).toMatchObject({ state: 'refused', field: 'postcode' })
+  })
+
   it('stops retrying a refused entry until it is replaced', async () => {
     const send = jest.fn().mockRejectedValue(new ApiError(400, 'bad'))
     r.registerSender('about', send)

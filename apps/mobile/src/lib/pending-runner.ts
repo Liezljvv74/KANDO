@@ -6,8 +6,10 @@ const RETRY_SECONDS = [2, 5, 15, 45, 60]
 const SEND_LIMIT_MS = 30_000
 
 type Sender = (e: PendingEntry) => Promise<void>
+type FieldFor = (err: unknown) => string | undefined
 
 const senders = new Map<SaveKind, Sender>()
+const fieldFors = new Map<SaveKind, FieldFor>()
 const locks = new Map<string, Promise<unknown>>()
 const running = new Set<string>()
 const nextAt = new Map<string, { version: number; at: number }>()
@@ -16,8 +18,10 @@ const timers = new Set<ReturnType<typeof setTimeout>>()
 let getAccountId: (() => string | null) | null = null
 let onServiceGone: ((serviceRef: string) => void) | undefined
 
-export function registerSender(kind: SaveKind, send: Sender): void {
+/** `fieldFor` names the field of a failure for the stored error text (the entry keeps its own field when it returns nothing). */
+export function registerSender(kind: SaveKind, send: Sender, fieldFor?: FieldFor): void {
   senders.set(kind, send)
+  if (fieldFor) fieldFors.set(kind, fieldFor)
 }
 
 async function withLimit(send: Promise<void>): Promise<void> {
@@ -47,7 +51,7 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
     if (e.kind === 'service-create' && ref && ref !== e.serviceRef) void runGroup(ref, true) // the fields, now under the real id
     return 'ok'
   } catch (err) {
-    markFailed(key, e.version, err)
+    markFailed(key, e.version, err, fieldFors.get(e.kind)?.(err))
     if (err instanceof ApiError && err.status === 404 && e.serviceRef) {
       dropService(e.serviceRef)
       try {

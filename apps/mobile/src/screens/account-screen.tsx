@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { ScreenBanner } from '@/components/screen-banner'
 
 import { stopOffering } from '@/api/account'
-import { API_URL, ApiError, updateMe } from '@/api/client'
+import { API_URL, ApiError } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { DateTimeField } from '@/components/date-time-field'
@@ -22,7 +22,9 @@ import { useDone } from '@/hooks/use-done'
 import { loadMe, signOutGeneration, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
-import { shouldAutosave } from '@/lib/account-autosave'
+import { accountEntryBody, shouldAutosave } from '@/lib/account-autosave'
+import { sendNow } from '@/lib/pending-runner'
+import { listEntries, putEntry, usePendingEntry, type PendingEntry } from '@/lib/pending-saves'
 import { accountMissing } from '@/lib/required-fields'
 import { showProfileTab } from '@/lib/profile-tab'
 import { registerForPush } from '@/lib/push'
@@ -51,6 +53,11 @@ export default function AccountScreen() {
   const sending = useRef(false)
   const doneSaving = useRef(false)
   const generation = useRef(signOutGeneration()) // a sign-out (or account deletion) changes it: nothing is sent for the old account
+  const pendingNow = usePendingEntry('account')
+  const stored = pendingNow && pendingNow.accountId === user?.id ? pendingNow : undefined // kept changes of this account fill the form first
+  const storedRef = useRef(stored)
+  storedRef.current = stored
+  const pendingUsed = useRef(false)
   const lastSaved = useRef<string | null>(null) // the body last known to be on the server
   const [open, setOpen] = useState<boolean | null>(null) // the details form: null = by itself (open until the compulsory details are saved), else the person's choice
 
@@ -64,6 +71,7 @@ export default function AccountScreen() {
       setLastName(m.lastName ?? '')
       setBirthDate(fromIsoDay(m.birthDate))
       setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
+      if (storedRef.current) applyStored(storedRef.current)
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.code : '') // the form stays hidden behind a retry
     }
@@ -71,6 +79,20 @@ export default function AccountScreen() {
   useEffect(() => {
     load()
   }, [load])
+
+  /** Once per visit: the kept (not yet saved or refused) values replace the server's in the form. */
+  function applyStored(p: PendingEntry) {
+    if (pendingUsed.current) return
+    pendingUsed.current = true
+    const b = p.body as ReturnType<typeof accountEntryBody>
+    setFirstName(b.firstName)
+    setLastName(b.lastName)
+    setBirthDate(fromIsoDay(b.birthDate))
+    setAddress(b.address ? { street: b.address.street ?? '', postcode: b.address.postcode, city: b.address.city ?? '' } : EMPTY_ADDRESS)
+  }
+  useEffect(() => {
+    if (stored && me) applyStored(stored) // the store finished loading after the server answer
+  }, [stored, me])
 
   /** The suggestions from an ID card scan fill the form (only what was read); nothing is saved until the person presses Done. */
   function applyScan(r: IdScan) {
@@ -124,21 +146,24 @@ export default function AccountScreen() {
       setBusy(true)
       setError(null)
     }
-    const body = { firstName: firstName.trim(), lastName: lastName.trim(), address: addr, birthDate: birthDate ? toIsoDay(birthDate) : null }
+    const body = accountEntryBody({ firstName, lastName, address: addr, birthDate })
     let ok = false
     try {
-      const request = updateMe(body)
+      if (!user) throw new ApiError(401, 'Unauthorized') // nothing can be kept or sent without an account
+      pendingUsed.current = true
+      putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
+      const request = sendNow('account')
       sending.current = true
       running.current = request.then(() => {}, () => {}).finally(() => void (sending.current = false))
-      await request
+      if ((await request) !== 'ok') throw new Error('not saved')
       lastSaved.current = JSON.stringify(body)
       if (silent) return true // left the screen or the app: no reload, no flash, no message
       await load()
       setOpen(null) // saved: the card folds again once the compulsory details are in
       ok = true
-    } catch (e) {
+    } catch {
       if (silent) return false
-      setError(e instanceof ApiError && e.code === 'Invalid input' && e.fields?.some((f) => f.startsWith('birthDate')) ? t('error.invalidBirthDate') : errorText(e instanceof ApiError ? e.code : ''))
+      setError(failureText(listEntries().find((x) => x.key === 'account')))
     }
     setBusy(false)
     return ok
@@ -227,9 +252,15 @@ export default function AccountScreen() {
           </Text>
         )}
       </KeyboardAwareScrollView>
-      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? done.message} />}
+      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? (stored?.state === 'refused' ? failureText(stored) : null) ?? done.message} />}
     </SafeAreaView>
   )
+}
+
+/** The error text of a failed (kept) account save. */
+function failureText(e: PendingEntry | undefined): string {
+  if (!e) return errorText('')
+  return e.field === 'birthDate' ? t('error.invalidBirthDate') : errorText(e.state === 'refused' ? (e.reason ?? '') : '')
 }
 
 /** The two push switches; everything else about bookings and payments is always pushed. Hidden until loaded; a failed save flips back. */
