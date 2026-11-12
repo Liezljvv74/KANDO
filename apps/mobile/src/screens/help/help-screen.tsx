@@ -4,12 +4,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { getHelpTopics } from '@/api/help'
-import { LinkText } from '@/components/auth-ui'
 import { ScreenBanner } from '@/components/screen-banner'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { getLang, t, useLang, type Key } from '@/i18n'
-import { goBack } from '@/lib/go'
 import { groupTopics, toggleOpen } from '@/lib/help'
 import { color, font } from '@/theme'
 
@@ -29,7 +27,6 @@ export default function HelpScreen() {
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('help.title')} hideHelp />
       <ScrollView contentContainerStyle={styles.content}>
-        <LinkText label={t('common.back')} onPress={goBack} />
         {!data && (error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />)}
         {data && data.length === 0 && <Empty text={t('help.empty')} />}
         {layout?.opening && (

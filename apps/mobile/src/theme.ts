@@ -2,6 +2,7 @@
 export const color = {
   bg: '#E3F6EE',
   surface: '#FFFFFF',
+  nav: '#FFC83D', // the Back and Forward arrows only: a colour used nowhere else, so they stand out on the indigo banner
   indigo: '#34328A', // hero, accent text, links, selected
   teal: '#19C3B8', // the one primary action; the label on it is ink
   ink: '#1D1C4A',

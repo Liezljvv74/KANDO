@@ -10,7 +10,7 @@ import { MAX_MESSAGE_CHARS } from '@kando/contract'
 
 import { blockUser, getThread, listBlocks, markThreadSeen, unblockUser } from '@/api/chat'
 import { ApiError } from '@/api/client'
-import { ErrorText, LinkText } from '@/components/auth-ui'
+import { ErrorText } from '@/components/auth-ui'
 import { SmallButton } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
@@ -19,7 +19,6 @@ import { useThreadMessages } from '@/hooks/use-thread-messages'
 import { errorText, t, useLang } from '@/i18n'
 import { askPhotoSource } from '@/lib/ask-photo-source'
 import { confirmDanger } from '@/lib/confirm'
-import { goBack } from '@/lib/go'
 import { notificationThreadId } from '@/lib/notification-text'
 import { nearBottom } from '@/lib/scroll'
 import { pickPhoto, uploadErrorCode } from '@/lib/pick'
@@ -62,7 +61,7 @@ export default function ThreadScreen() {
   if (!data || !thread)
     return (
       <SafeAreaView style={styles.root}>
-        <LinkText label={t('common.back')} onPress={goBack} />
+        <ScreenBanner title="" />
         {loadError ? <ErrorRetry code={loadError} onRetry={retry} /> : <Loading />}
       </SafeAreaView>
     )
@@ -129,7 +128,6 @@ export default function ThreadScreen() {
       {/* The message box rides above the keyboard on Android and iPhone alike (React Native's own view only did it on iPhone). */}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.header}>
-          <LinkText label={t('common.back')} onPress={goBack} />
           <View style={styles.flex} />
           <SmallButton label={t(blockedByMe ? 'chat.unblock' : 'chat.block')} onPress={toggleBlock} />
         </View>

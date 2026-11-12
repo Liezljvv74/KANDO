@@ -2,7 +2,7 @@ import { DEFAULT_ACTION_IDENTIFIER, clearLastNotificationResponse, setNotificati
 import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces'
 import { CourierPrime_700Bold } from '@expo-google-fonts/courier-prime'
 import { useFonts } from 'expo-font'
-import { Stack } from 'expo-router'
+import { Stack, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
@@ -13,6 +13,7 @@ import { TermsReaccept } from '@/components/terms-reaccept'
 import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
+import { noteRoute } from '@/lib/nav-history'
 import { pushRoute } from '@/lib/push'
 import { color } from '@/theme'
 
@@ -25,6 +26,8 @@ export default function RootLayout() {
   const { user, loading, offline, retry } = useSession()
   useLang()
   usePushTaps(!!user)
+  const path = usePathname()
+  useEffect(() => noteRoute(path), [path]) // a route change that is not Back or Forward clears the Forward arrow
   // The shop type; if it fails to load the app still opens with the system font.
   const [fontsReady, fontError] = useFonts({ Fraunces_700Bold, Fraunces_900Black, CourierPrime_700Bold })
   const [fontsLate, setFontsLate] = useState(false) // a font that hangs never keeps the app on the spinner

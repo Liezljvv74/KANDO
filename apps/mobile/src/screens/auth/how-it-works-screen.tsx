@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ScreenBanner } from '@/components/screen-banner'
@@ -28,9 +28,6 @@ export default function HowItWorksScreen() {
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('welcome.howTitle')} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace(signedIn ? '/' : '/welcome'))} hitSlop={12}>
-          <Text style={styles.link}>← {t('welcome.backHome')}</Text>
-        </Pressable>
         {GROUPS.map(({ title, steps, bg }) => (
           <View key={title} style={[styles.box, { backgroundColor: bg }]}>
             <Text style={styles.boxTitle}>{t(title)}</Text>

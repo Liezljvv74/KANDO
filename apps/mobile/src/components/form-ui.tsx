@@ -1,26 +1,22 @@
-import { useRouter } from 'expo-router'
 import type { ComponentRef } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
+import { KEYBOARD_GAP } from '@/components/auth-ui'
 import { ScreenBanner } from '@/components/screen-banner'
-import { t } from '@/i18n'
 import { color, font } from '@/theme'
 
 /** `scrollRef`: lets a screen scroll to one of its sections (y from that section's onLayout; sections are direct children). */
 /** Room the fixed Done bar takes at the bottom: the scroll keeps the field being typed in above it. */
 export const DONE_BAR_SPACE = 90
 
-export function FormScreen({ title, children, back = true, scrollRef, footer }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>>; footer?: React.ReactNode }) {
-  const router = useRouter()
+export function FormScreen({ title, children, scrollRef, footer }: { title: string; children: React.ReactNode; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>>; footer?: React.ReactNode }) {
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={title} />
       <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP + (footer ? DONE_BAR_SPACE : 0)} keyboardShouldPersistTaps="handled">
-        {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         {children}
       </KeyboardAwareScrollView>
       {footer}
