@@ -169,3 +169,35 @@ it('Publish fills only empty service titles with the category name in the user l
   await call(publish.POST, 'pf4', 'POST')
   expect(await titleOf(emptyId)).toBe('Gardening') // the next Publish fills it again
 })
+
+const titleOf = async (id: string) => (await pool.query('SELECT title FROM services WHERE id = $1', [id])).rows[0].title
+
+it('a service saved while the profile is live gets the category name at once (create and empty patch); in draft it stays empty', async () => {
+  await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenpflege'), ($1, 'en', 'Gardening') ON CONFLICT DO NOTHING", [categoryId])
+  await pool.query("INSERT INTO users (id, email, first_name, last_name) VALUES ('pf5', $1, 'Pia', 'Fuchs') ON CONFLICT (id) DO NOTHING", [EMAIL('pf5')])
+  await call(profileRoute.PUT, 'pf5', 'PUT', profile)
+  await givePhoto('pf5')
+  const add = async (extra: object = {}) => (await (await call(services.POST, 'pf5', 'POST', { categoryId, priceType: 'fixed', price: 10, ...extra })).json()).id as string
+  const draftId = await add()
+  expect(await titleOf(draftId)).toBe('') // draft
+  expect((await call(publish.POST, 'pf5', 'POST')).status).toBe(200)
+  expect(await titleOf(draftId)).toBe('Gartenpflege') // German user: the German name
+  const liveId = await add()
+  expect(await titleOf(liveId)).toBe('Gartenpflege')
+  const service = await import('../app/app-api/v1/services/[id]/route')
+  await call(service.PATCH, 'pf5', 'PATCH', { title: 'Eigener' }, { id: liveId })
+  await call(service.PATCH, 'pf5', 'PATCH', { title: '' }, { id: liveId })
+  expect(await titleOf(liveId)).toBe('Gartenpflege')
+})
+
+it('Publish falls back to the default-language name when the user language has none', async () => {
+  const slug = `pf-def-${Date.now()}`
+  const cat = (await pool.query("INSERT INTO categories (slug) VALUES ($1) RETURNING id", [slug])).rows[0].id as string
+  await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Nur Deutsch')", [cat])
+  await pool.query("INSERT INTO users (id, email, first_name, last_name, language) VALUES ('pf6', $1, 'Pia', 'Fuchs', 'en') ON CONFLICT (id) DO UPDATE SET language = 'en'", [EMAIL('pf6')])
+  await call(profileRoute.PUT, 'pf6', 'PUT', profile)
+  await givePhoto('pf6')
+  const id = (await (await call(services.POST, 'pf6', 'POST', { categoryId: cat, priceType: 'fixed', price: 10 })).json()).id as string
+  expect((await call(publish.POST, 'pf6', 'POST')).status).toBe(200)
+  expect(await titleOf(id)).toBe('Nur Deutsch')
+})

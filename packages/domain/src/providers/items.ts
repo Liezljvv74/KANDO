@@ -2,6 +2,7 @@ import { assertNoContactDetailsIn } from '../chat/flags'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { categories, providerReferences, providers, serviceAppInsert, services, type Tx } from '@kando/db'
 import type { OwnReference, OwnService, ReferenceInput, ReferencePatch, ServiceInput, ServicePatch } from '@kando/contract'
+import { categoryTitle } from './category-title'
 import { currencyOfCountry } from '../country-currency'
 import { missingRequirements } from './eligibility'
 import { fail } from './http'
@@ -68,7 +69,7 @@ export async function addService(tx: Tx, userId: string, input: ServiceInput): P
     .values({
       providerId: profile.id, // always the caller's own profile, never from the body
       categoryId: input.categoryId,
-      title: input.title?.trim() ?? '', // may stay empty until Publish fills it with the category name (fillEmptyServiceTitles)
+      title: input.title?.trim() || (profile.status === 'published' ? await categoryTitle(tx, userId, input.categoryId) : ''), // empty in draft until Publish fills it (fillEmptyServiceTitles); a live profile is finished, so it gets the category name now
       description: input.description?.trim() || null,
       priceType: input.priceType ?? null,
       price: price === null ? null : price.toFixed(2),
@@ -103,7 +104,7 @@ export async function updateService(tx: Tx, userId: string, id: string, patch: S
     .update(services)
     .set({
       ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
-      ...(patch.title !== undefined && { title: patch.title.trim() }),
+      ...(patch.title !== undefined && { title: patch.title.trim() || (profile.status === 'published' ? await categoryTitle(tx, userId, patch.categoryId ?? existing.categoryId) : '') }),
       ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
       priceType,
       price: price === null ? null : price.toFixed(2),

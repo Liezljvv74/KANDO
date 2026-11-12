@@ -10,6 +10,7 @@ import type { Exec } from '../providers/eligibility'
 import { rootJobs } from '../bookings/job-lookup'
 import { lapseReason } from '../bookings/rules'
 import { fail } from '../providers/http'
+import { DEFAULT_LANG } from '@kando/i18n'
 import { ownProvider } from '../providers/profile'
 import { documentsBucket, storage } from '../storage'
 import { buildQuoteDraft, renderQuotePdf, type QuoteDraft } from './pdf'
@@ -142,6 +143,7 @@ export async function storePendingQuoteDocuments(exec: Exec, timeUp: () => boole
  */
 export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(), requestId?: string): Promise<QuoteListItem[]> {
   const own = await ownProvider(tx, userId)
+  const lang = (await tx.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l ?? DEFAULT_LANG
   // the latest booking made from an accepted quote, joined per row (LATERAL) so the list stays one query
   const latest = tx
     .select({ id: bookings.id, createdAt: bookings.createdAt, status: bookings.status, answerBy: bookings.answerBy, payBy: bookings.payBy, parentBookingId: bookings.parentBookingId })
@@ -161,7 +163,8 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
       currency: quotes.currency,
       scope: quotes.scope,
       expiresAt: quotes.expiresAt,
-      service: sql<string | null>`nullif(${services.title}, '')`, // an empty title (cleared after Publish) counts as none
+      // the provider's title, else the category name (viewer's language, then the default); null only when the request has no service
+      service: sql<string | null>`coalesce(nullif(${services.title}, ''), (SELECT name FROM category_texts WHERE category_id = ${services.categoryId} AND lang = ${lang}), (SELECT name FROM category_texts WHERE category_id = ${services.categoryId} AND lang = ${DEFAULT_LANG}))`,
       booking: { id: latest.id, createdAt: latest.createdAt, status: latest.status, answerBy: latest.answerBy, payBy: latest.payBy, parentBookingId: latest.parentBookingId },
     })
     .from(quoteDocuments)

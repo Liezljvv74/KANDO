@@ -1,9 +1,9 @@
 import { assertNoContactDetailsIn } from '../chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
-import { categoryTexts, lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
-import { DEFAULT_LANG } from '@kando/i18n'
+import { lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
 import type { Missing, MyProfile, ProfileInput } from '@kando/contract'
 import { quoteSteps } from '../payments/rules'
+import { categoryTitles } from './category-title'
 import { fail } from './http'
 import { publicNameFor } from './public-name'
 import { slugify } from './slug'
@@ -189,19 +189,13 @@ export async function upsertMyProfile(
   return { profile, created }
 }
 
-/** The category's name in the user's language (default language when missing): the title a service saved without one gets at Publish. */
-async function categoryTitle(tx: Tx, userId: string, categoryId: string): Promise<string> {
-  const lang = (await tx.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l ?? DEFAULT_LANG
-  const names = await tx.select({ lang: categoryTexts.lang, name: categoryTexts.name }).from(categoryTexts).where(eq(categoryTexts.categoryId, categoryId))
-  return (names.find((n) => n.lang === lang) ?? names.find((n) => n.lang === DEFAULT_LANG))?.name ?? ''
-}
-
 /** Publish: every service of the caller's profile with an empty title gets its category name; a typed title is never touched. */
 export async function fillEmptyServiceTitles(tx: Tx, userId: string): Promise<void> {
   const profile = await ownProvider(tx, userId)
   if (!profile) return
   const empty = await tx.select({ id: services.id, categoryId: services.categoryId }).from(services).where(and(eq(services.providerId, profile.id), eq(services.title, '')))
-  for (const s of empty) await tx.update(services).set({ title: await categoryTitle(tx, userId, s.categoryId) }).where(eq(services.id, s.id))
+  const names = await categoryTitles(tx, userId, [...new Set(empty.map((s) => s.categoryId))])
+  for (const s of empty) await tx.update(services).set({ title: names.get(s.categoryId) ?? '' }).where(eq(services.id, s.id))
 }
 
 /** Publishes the caller's profile: 404 without one, 409 when suspended or incomplete (`missing` lists what). */
