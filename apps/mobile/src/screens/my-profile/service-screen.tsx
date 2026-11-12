@@ -133,12 +133,12 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
         style: 'destructive',
         onPress: async () => {
           if (!idRef.current) {
-            dropService(tmpRef)
+            dropService(tmpRef, true)
             return router.back()
           }
           try {
             await servicesApi.remove(idRef.current)
-            dropService(idRef.current)
+            dropService(idRef.current, true)
             router.back()
           } catch (e) {
             setCode((c) => ({ ...c, remove: e instanceof ApiError ? (e.code === 'Profile incomplete' ? 'last-service' : e.code) : 'network' })) // a live profile must keep one service

@@ -127,7 +127,12 @@ export function dropAccount(accountId: string) {
   if (any) changed()
 }
 
-export function dropService(serviceRef: string) {
+const deletedByPerson = new Set<string>()
+export const wasDeletedByPerson = (serviceRef: string) => deletedByPerson.has(serviceRef)
+
+/** `byPerson`: the person deleted the service, so a late 404 for it is no news to them. */
+export function dropService(serviceRef: string, byPerson = false) {
+  if (byPerson) deletedByPerson.add(serviceRef)
   for (const e of snapshot) if (e.serviceRef === serviceRef) removeKey(e.key, e.accountId)
 }
 

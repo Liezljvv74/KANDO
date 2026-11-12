@@ -1,6 +1,6 @@
 import { AppState } from 'react-native'
 import { ApiError } from '@/api/client'
-import { clearIfVersion, dropService, listEntries, loadStore, markFailed, type PendingEntry, type SaveKind } from '@/lib/pending-saves'
+import { clearIfVersion, dropService, listEntries, loadStore, markFailed, wasDeletedByPerson, type PendingEntry, type SaveKind } from '@/lib/pending-saves'
 
 const RETRY_SECONDS = [2, 5, 15, 45, 60]
 const SEND_LIMIT_MS = 30_000
@@ -62,9 +62,10 @@ async function attempt(key: string, accountId?: string): Promise<'ok' | 'failed'
   } catch (err) {
     markFailed(key, e.version, err, fieldFors.get(e.kind)?.(err))
     if (err instanceof ApiError && err.status === 404 && e.serviceRef) {
+      const news = !wasDeletedByPerson(e.serviceRef) && listEntries(e.accountId).some((x) => x.serviceRef === e.serviceRef)
       dropService(e.serviceRef)
       try {
-        onServiceGone?.(e.serviceRef)
+        if (news) onServiceGone?.(e.serviceRef)
       } catch {
         // a failing notice must not stop the runner
       }

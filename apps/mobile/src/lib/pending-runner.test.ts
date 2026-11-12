@@ -263,6 +263,20 @@ describe('pending-runner', () => {
     expect(s.listEntries().map((e) => e.key)).toEqual(['f3'])
   })
 
+  it('a 404 for a service the person deleted while its save was in flight shows no notice', async () => {
+    const gone = jest.fn()
+    let fail: () => void = () => {}
+    r.registerSender('service-field', () => new Promise<void>((_, rej) => (fail = () => rej(new ApiError(404, 'nf')))))
+    put('f1', { kind: 'service-field', serviceRef: 's1' })
+    await start({ onServiceGone: gone })
+    s.dropService('s1', true)
+    put('f1', { kind: 'service-field', serviceRef: 's1' }) // a late flush of the closed screen
+    fail()
+    await ms(0)
+    expect(gone).not.toHaveBeenCalled()
+    expect(s.listEntries()).toHaveLength(0)
+  })
+
   it('an entry whose kind has no sender is left alone', async () => {
     put('k')
     await start()
