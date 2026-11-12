@@ -18,14 +18,15 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
   let running: Promise<void> | null = null // the loop below: one request at a time, until nothing is dirty
   let timer: ReturnType<typeof setTimeout> | undefined
   let lastOk = true // did the most recent save work (true when nothing was ever sent)
-  let queueKey: string | undefined // the key the newest value was put under (it can change when a service gets its real id)
 
   const run = async (): Promise<void> => {
     while (dirty) {
       dirty = false // a change made during a request is sent when it ends; the status stays 'saving' until then
       try {
         if (queue) {
-          if ((await sendNow(queueKey ?? queue().key)) !== 'ok') throw new Error('not saved')
+          const q = queue()
+          if (!q.accountId || (await sendNow(q.key)) !== 'ok') throw new Error('not saved') // signed out: nothing can be kept or sent
+
         } else await save(latest)
         lastOk = true
         if (!dirty) onStatus('saved')
@@ -48,7 +49,6 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
       latest = value
       if (queue) {
         const q = queue()
-        queueKey = q.key
         const body = q.toBody(value)
         if (!body) {
           removeKey(q.key)
@@ -58,7 +58,7 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
           onStatus('saved')
           return
         }
-        putEntry({ key: q.key, kind: q.kind, accountId: q.accountId, body, serviceRef: q.serviceRef, route: q.route, field: q.field })
+        if (q.accountId) putEntry({ key: q.key, kind: q.kind, accountId: q.accountId, body, serviceRef: q.serviceRef, route: q.route, field: q.field })
       }
       dirty = true
       onStatus('saving')

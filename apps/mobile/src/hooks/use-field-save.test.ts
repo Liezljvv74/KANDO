@@ -1,6 +1,6 @@
 import { AppState } from 'react-native'
 import { ApiError } from '@/api/client'
-import { listEntries, dropAccount } from '@/lib/pending-saves'
+import { listEntries, dropAccount, replaceServiceRef } from '@/lib/pending-saves'
 import { registerSender, startRunner } from '@/lib/pending-runner'
 import { createFieldSaver, type SaveStatus } from './use-field-save'
 
@@ -287,5 +287,28 @@ describe('with a queue (the pending-saves store)', () => {
     await saver.flush()
     expect(sender).not.toHaveBeenCalled()
     expect(seen.at(-1)).toBe('saved')
+  })
+
+  test('a service renamed from tmp to its real id is still sent under the new key', async () => {
+    let q = { ...queue, key: 'service:tmp:1:bio', kind: 'service-field' as const, serviceRef: 'tmp:1' }
+    registerSender('service-field', sender)
+    const seen: SaveStatus[] = []
+    const saver = createFieldSaver(jest.fn(), 600, (x) => seen.push(x), () => q)
+    saver.set('v')
+    replaceServiceRef('tmp:1', 'real')
+    q = { ...q, key: 'service:real:bio', serviceRef: 'real' }
+    await saver.flush()
+    expect(sender).toHaveBeenCalledWith(expect.objectContaining({ key: 'service:real:bio', serviceRef: 'real' }))
+    expect(listEntries('a')).toEqual([])
+  })
+
+  test('without an account nothing is put and the status is error', async () => {
+    const seen: SaveStatus[] = []
+    const saver = createFieldSaver(jest.fn(), 600, (x) => seen.push(x), () => ({ ...queue, accountId: '' }))
+    saver.set('x')
+    await saver.flush()
+    expect(listEntries()).toEqual([])
+    expect(sender).not.toHaveBeenCalled()
+    expect(seen.at(-1)).toBe('error')
   })
 })
