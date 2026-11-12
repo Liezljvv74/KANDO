@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { COMPULSORY } from '@/lib/compulsory'
-import { bannerState } from '@/lib/pending-banner-state'
+import { bannerState, shouldClearGone } from '@/lib/pending-banner-state'
 import { usePendingEntries } from '@/lib/pending-saves'
 import { color } from '@/theme'
 
@@ -42,7 +42,11 @@ export function PendingBanner({ children }: { children: ReactNode }) {
   const accountId = useSession().user?.id ?? null
   const state = bannerState(usePendingEntries(accountId), accountId)
   const gone = useSyncExternalStore(subscribeGone, getGone, getGone)
-  useEffect(() => setGone(false), [accountId])
+  const prevAccount = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (shouldClearGone(prevAccount.current, accountId)) setGone(false)
+    prevAccount.current = accountId
+  }, [accountId])
 
   let text: string | null = null
   let onPress: (() => void) | undefined

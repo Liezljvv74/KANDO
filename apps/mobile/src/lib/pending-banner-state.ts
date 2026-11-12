@@ -4,6 +4,9 @@ export type BannerState =
   | { kind: 'retry'; reason: 'network' | 'busy' | 'auth' | 'waiting' }
   | { kind: 'refused'; count: number; first: PendingEntry }
 
+/** The service-gone notice is cleared only when the account changes after the first render (`prev` undefined = first render). */
+export const shouldClearGone = (prev: string | null | undefined, next: string | null) => prev !== undefined && prev !== next
+
 export function bannerState(all: PendingEntry[], accountId: string | null): BannerState | null {
   const mine = forAccount(all, accountId)
   const refused = mine.filter((e) => e.state === 'refused').sort((a, b) => a.createdAt - b.createdAt)

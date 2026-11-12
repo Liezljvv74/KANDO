@@ -1,8 +1,19 @@
 import type { PendingEntry } from '@/lib/pending-saves'
-import { bannerState } from '@/lib/pending-banner-state'
+import { bannerState, shouldClearGone } from '@/lib/pending-banner-state'
 
 const e = (o: Partial<PendingEntry> = {}): PendingEntry => ({
   key: 'k', kind: 'about', accountId: 'a', body: {}, route: '/r', field: 'f', version: 1, state: 'retry', attempts: 1, createdAt: 1, ...o,
+})
+
+describe('shouldClearGone', () => {
+  it('keeps a notice on the first render and when the account is unchanged', () => {
+    expect(shouldClearGone(undefined, 'a')).toBe(false)
+    expect(shouldClearGone('a', 'a')).toBe(false)
+  })
+  it('clears when the account changes', () => {
+    expect(shouldClearGone('a', null)).toBe(true)
+    expect(shouldClearGone(null, 'b')).toBe(true)
+  })
 })
 
 describe('bannerState', () => {
