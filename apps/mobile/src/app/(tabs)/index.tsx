@@ -10,7 +10,7 @@ import HomeScreen from '@/screens/home/home-screen'
 export default function Index() {
   const { user } = useSession()
   const me = useMe()
-  const leaving = readyToNavigate(usePending(), me)
+  const leaving = readyToNavigate(usePending(), me, !!user)
   if (!user) return <Redirect href="/welcome" />
   return leaving ? null : <HomeScreen />
 }

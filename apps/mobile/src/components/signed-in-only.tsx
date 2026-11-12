@@ -7,6 +7,7 @@ import { Button } from '@/components/auth-ui'
 import { LegalFooter } from '@/components/legal-footer'
 import { ScreenBanner } from '@/components/screen-banner'
 import { useSession } from '@/hooks/use-session'
+import { setAfterLogin } from '@/lib/after-login'
 import { t, useLang, type Key } from '@/i18n'
 import { color } from '@/theme'
 
@@ -19,7 +20,10 @@ function LoginPrompt({ title, legal }: { title: Key; legal?: boolean }) {
       <View style={styles.content}>
         <View style={styles.card}>
           <Text style={styles.text}>{t('auth.needLogin')}</Text>
-          <Button label={t('auth.needLoginButton')} onPress={() => router.push('/login')} />
+          <Button label={t('auth.needLoginButton')} onPress={() => {
+            void setAfterLogin(null) // a target left by an earlier, abandoned Request must not decide where this login lands
+            router.push('/login')
+          }} />
         </View>
         {legal && <LegalFooter />}
       </View>
