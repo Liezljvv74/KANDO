@@ -1,5 +1,5 @@
 import type { PendingEntry } from '@/lib/pending-saves'
-import { bannerState, shouldClearGone } from '@/lib/pending-banner-state'
+import { bannerState, discardPlan, shouldClearGone } from '@/lib/pending-banner-state'
 
 const e = (o: Partial<PendingEntry> = {}): PendingEntry => ({
   key: 'k', kind: 'about', accountId: 'a', body: {}, route: '/r', field: 'f', version: 1, state: 'retry', attempts: 1, createdAt: 1, ...o,
@@ -14,6 +14,15 @@ describe('shouldClearGone', () => {
     expect(shouldClearGone('a', null)).toBe(true)
     expect(shouldClearGone(null, 'b')).toBe(true)
   })
+})
+
+describe('discardPlan', () => {
+  const create = e({ key: 'c', kind: 'service-create', serviceRef: 'tmp:1', state: 'refused' })
+  const field = e({ key: 'f', kind: 'service-field', serviceRef: 'tmp:1' })
+  const other = e({ key: 'o', kind: 'service-field', serviceRef: 'tmp:2' })
+  it('a single refused entry removes only itself', () => expect(discardPlan(e({ key: 'x', state: 'refused' }), [e({ key: 'x' })])).toEqual(['x']))
+  it('a refused service-create takes its field entries along', () => expect(discardPlan(create, [create, field, other])).toEqual(['c', 'f']))
+  it('a refused field entry removes only its key', () => expect(discardPlan({ ...field, state: 'refused' }, [create, field, other])).toEqual(['f']))
 })
 
 describe('bannerState', () => {

@@ -1,14 +1,14 @@
 import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { COMPULSORY } from '@/lib/compulsory'
-import { bannerState, shouldClearGone } from '@/lib/pending-banner-state'
-import { usePendingEntries } from '@/lib/pending-saves'
+import { bannerState, discardPlan, shouldClearGone } from '@/lib/pending-banner-state'
+import { removeKey, usePendingEntries } from '@/lib/pending-saves'
 import { color } from '@/theme'
 
 const RETRY_TEXT: Record<'network' | 'busy' | 'auth' | 'waiting', Key> = {
@@ -40,7 +40,8 @@ export function PendingBanner({ children }: { children: ReactNode }) {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const accountId = useSession().user?.id ?? null
-  const state = bannerState(usePendingEntries(accountId), accountId)
+  const all = usePendingEntries(accountId)
+  const state = bannerState(all, accountId)
   const gone = useSyncExternalStore(subscribeGone, getGone, getGone)
   const prevAccount = useRef<string | null | undefined>(undefined)
   useEffect(() => {
@@ -50,12 +51,18 @@ export function PendingBanner({ children }: { children: ReactNode }) {
 
   let text: string | null = null
   let onPress: (() => void) | undefined
+  let onDiscard: (() => void) | undefined
   if (state?.kind === 'refused') {
     const { first, count } = state
     const label = first.field in COMPULSORY ? t(COMPULSORY[first.field as keyof typeof COMPULSORY].label) : ''
     const error = errorText(first.reason ?? '')
     text = count > 1 ? t('pending.refused', { n: count }) : label ? t('pending.refusedOne', { field: label, error }) : `${error} ${t('pending.tapToFix')}`
     onPress = () => router.push(first.route as never)
+    onDiscard = () =>
+      Alert.alert(t('pending.discardAsk'), undefined, [
+        { text: t('pending.discardKeep'), style: 'cancel' },
+        { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, all).forEach(removeKey) },
+      ])
   } else if (state) {
     text = t(RETRY_TEXT[state.reason])
   } else if (gone && accountId) {
@@ -79,6 +86,11 @@ export function PendingBanner({ children }: { children: ReactNode }) {
           >
             <Text style={styles.text}>{text}</Text>
           </Pressable>
+          {onDiscard && (
+            <Pressable onPress={onDiscard} style={styles.tap} accessibilityRole="button" accessibilityLabel={t('pending.discard')}>
+              <Text style={styles.discard}>{t('pending.discard')}</Text>
+            </Pressable>
+          )}
         </View>
       )}
       <SafeAreaInsetsContext.Provider value={text !== null ? { ...insets, top: 0 } : insets}>
@@ -92,5 +104,6 @@ const styles = StyleSheet.create({
   all: { flex: 1 },
   bar: { backgroundColor: color.ink, paddingHorizontal: 16, paddingBottom: 8 },
   tap: { minHeight: 44, justifyContent: 'center' },
+  discard: { color: color.teal, fontSize: 14, lineHeight: 20, fontWeight: '700' },
   text: { color: color.bg, fontSize: 14, lineHeight: 20 },
 })
