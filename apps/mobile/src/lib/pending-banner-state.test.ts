@@ -13,6 +13,10 @@ describe('bannerState', () => {
     expect(bannerState([e({ state: 'auth' })], 'a')).toEqual({ kind: 'retry', reason: 'auth' })
     expect(bannerState([e({ state: 'waiting' })], 'a')).toEqual({ kind: 'retry', reason: 'waiting' })
   })
+  it('auth and waiting win over a plain retry entry', () => {
+    expect(bannerState([e({ status: 503 }), e({ key: 'x', state: 'auth' })], 'a')).toEqual({ kind: 'retry', reason: 'auth' })
+    expect(bannerState([e({ status: 0 }), e({ key: 'x', state: 'waiting' })], 'a')).toEqual({ kind: 'retry', reason: 'waiting' })
+  })
   it('refused wins over retry', () => {
     const r = e({ key: 'r', state: 'refused' })
     expect(bannerState([e(), r], 'a')).toEqual({ kind: 'refused', count: 1, first: r })
