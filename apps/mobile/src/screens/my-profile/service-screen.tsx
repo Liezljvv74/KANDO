@@ -23,7 +23,7 @@ import { sendNow } from '@/lib/pending-runner'
 import { dropService, putEntry, subscribe, usePendingEntry } from '@/lib/pending-saves'
 import { parsePrice } from '@/lib/profile-form'
 import { serviceMissing } from '@/lib/required-fields'
-import { createdService } from '@/lib/serial-create'
+import { createBody, createdService, refusedCreate } from '@/lib/serial-create'
 import { color } from '@/theme'
 
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
@@ -54,14 +54,17 @@ export default function ServiceScreen({ id }: { id?: string }) {
 function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title: string; initial: OwnService | null; knownIds: string[]; docRows: DocumentRow[] }) {
   const router = useRouter()
   const { categories } = useCategories()
-  const [tmpRef] = useState(() => `tmp:${Date.now()}`) // a new service is kept under this until the server has created it
+  const accountId = useSession().user?.id ?? ''
+  // A new-service screen opens on a refused create (the banner's way back to it), else starts a new temporary id.
+  const [refused] = useState(() => (initial ? undefined : refusedCreate(accountId)))
+  const [tmpRef] = useState(() => refused?.serviceRef ?? `tmp:${Date.now()}`) // a new service is kept under this until the server has created it
   const createKey = `service-create:${tmpRef}`
   const createEntry = usePendingEntry(createKey)
   const created = useSyncExternalStore(subscribe, () => createdService(tmpRef)) // set when the queued create succeeds, also in the background
   const id = initial?.id ?? created?.id ?? null
   const idRef = useRef(id)
   idRef.current = id
-  const [category, setCategory] = useState(initial?.category ?? null)
+  const [category, setCategory] = useState(initial?.category ?? (refused?.body as { categoryId?: string } | undefined)?.categoryId ?? null)
   const [waitingFor, setWaitingFor] = useState(initial?.waitingFor ?? [])
   const [code, setCode] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -70,7 +73,6 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
   useEffect(() => {
     if (created) setWaitingFor(created.waitingFor ?? [])
   }, [created])
-  const accountId = useSession().user?.id ?? ''
   const serviceRef = id ?? tmpRef
   // One field = one saver = one request; `toBody` null removes the stored change. The value is kept on the phone from the
   // first keystroke and sent by the 'service-field' sender; a reopened screen starts from a stored value.
@@ -108,7 +110,7 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
       else {
         // Kept on the phone and sent by the 'service-create' sender (choosing again before it succeeds replaces it); the
         // fields wait for it and are then sent with the real id.
-        putEntry({ key: createKey, kind: 'service-create', accountId, body: { categoryId, known: knownIds }, serviceRef: tmpRef, route: '/my-profile/service/new', field: 'category' })
+        putEntry({ key: createKey, kind: 'service-create', accountId, body: createBody(createEntry, categoryId, knownIds), serviceRef: tmpRef, route: '/my-profile/service/new', field: 'category' })
         await sendNow(createKey)
       }
     } catch (e) {

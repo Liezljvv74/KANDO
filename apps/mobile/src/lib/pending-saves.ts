@@ -36,6 +36,7 @@ let finishLoad: () => void = () => {}
 const loadDone = new Promise<void>((resolve) => (finishLoad = resolve))
 const removedKeys = new Set<string>()
 const droppedAccounts = new Set<string>()
+const renamed = new Map<string, string>() // temporary service id -> real id, for a value put after the rename
 const KINDS = ['about', 'service-field', 'service-create', 'account']
 const STATES = ['retry', 'refused', 'auth', 'waiting']
 
@@ -79,6 +80,8 @@ async function persist() {
 }
 
 export function putEntry(e: Omit<PendingEntry, 'version' | 'attempts' | 'state' | 'createdAt' | 'status' | 'reason'>): number {
+  const to = e.serviceRef && renamed.get(e.serviceRef)
+  if (to) e = { ...e, key: e.key.split(`service:${e.serviceRef}:`).join(`service:${to}:`), serviceRef: to }
   const now = Date.now()
   lastVersion = Math.max(lastVersion + 1, now)
   entries.set(e.key, { ...e, version: lastVersion, state: 'retry', attempts: 0, createdAt: now })
@@ -124,6 +127,7 @@ export function dropService(serviceRef: string) {
 }
 
 export function replaceServiceRef(from: string, to: string) {
+  if (from.startsWith('tmp:')) renamed.set(from, to)
   let any = false
   for (const [k, e] of [...entries]) {
     if (e.serviceRef !== from) continue

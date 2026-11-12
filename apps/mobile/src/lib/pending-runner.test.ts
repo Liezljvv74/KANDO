@@ -322,7 +322,7 @@ describe('pending-runner', () => {
 
   describe('service-create', () => {
     const CREATE = 'service-create:tmp:1'
-    let api: { list: jest.Mock; create: jest.Mock; update: jest.Mock }
+    let api: { list: jest.Mock; create: jest.Mock; update: jest.Mock; remove: jest.Mock }
     let fieldRefs: (string | undefined)[]
     const putCreate = (categoryId: string, known: string[] = []) =>
       put(CREATE, { kind: 'service-create', serviceRef: 'tmp:1', body: { categoryId, known }, route: '/my-profile/service/new', field: 'category' })
@@ -330,7 +330,7 @@ describe('pending-runner', () => {
     const creates = () => s.listEntries().filter((e) => e.kind === 'service-create')
 
     beforeEach(() => {
-      api = { list: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({ id: 's1', category: 'c1' }), update: jest.fn().mockResolvedValue({ id: 's1' }) }
+      api = { list: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({ id: 's1', category: 'c1' }), update: jest.fn().mockResolvedValue({ id: 's1' }), remove: jest.fn().mockResolvedValue(undefined) }
       fieldRefs = []
       r.registerSender('service-create', require('./serial-create').serviceCreateSender(api))
       r.registerSender('service-field', async (e) => {
@@ -416,6 +416,76 @@ describe('pending-runner', () => {
       await ms(0)
       expect(api.create).toHaveBeenCalledTimes(1)
       expect(api.update).toHaveBeenCalledWith('s1', { categoryId: 'c2' })
+      expect(s.listEntries()).toHaveLength(0)
+    })
+
+    it('after a restart, a create kept from before is checked with a list first (the app may have died mid-POST)', async () => {
+      mockDisk['pending-saves.json'] = JSON.stringify([
+        { key: CREATE, kind: 'service-create', accountId: 'a', body: { categoryId: 'c1', known: [] }, serviceRef: 'tmp:1', route: '/my-profile/service/new', field: 'category', version: 1, state: 'retry', attempts: 0, createdAt: Date.now() - 1000 },
+      ])
+      api.list.mockResolvedValue([{ id: 's9', category: 'c1' }])
+      await start()
+      expect(api.list).toHaveBeenCalledTimes(1)
+      expect(api.create).not.toHaveBeenCalled()
+      expect(s.listEntries()).toHaveLength(0)
+    })
+
+    it('a category changed after a lost answer takes over the service of the earlier category and updates it', async () => {
+      api.create.mockRejectedValueOnce(new ApiError(0, 'lost'))
+      api.list.mockResolvedValue([{ id: 's9', category: 'c1' }])
+      api.update.mockImplementation(async (id: string, b: { categoryId: string }) => ({ id, category: b.categoryId }))
+      putCreate('c1')
+      putField('title')
+      await start()
+      const sc = require('./serial-create')
+      put(CREATE, { kind: 'service-create', serviceRef: 'tmp:1', body: sc.createBody(s.listEntries().find((e) => e.key === CREATE), 'c2', []), route: '/my-profile/service/new', field: 'category' })
+      await r.sendNow(CREATE)
+      expect(api.create).toHaveBeenCalledTimes(1)
+      expect(api.update).toHaveBeenCalledWith('s9', { categoryId: 'c2' })
+      await ms(0)
+      expect(fieldRefs).toEqual(['s9'])
+    })
+
+    it('createBody keeps the categories tried before', () => {
+      const sc = require('./serial-create')
+      expect(sc.createBody(undefined, 'c1', ['k'])).toEqual({ categoryId: 'c1', known: ['k'], tried: [] })
+      expect(sc.createBody({ body: { categoryId: 'c2', tried: ['c1'] } }, 'c3', [])).toEqual({ categoryId: 'c3', known: [], tried: ['c1', 'c2'] })
+    })
+
+    it('refusedCreate finds the refused create of that account, so a new-service screen can show it', async () => {
+      api.create.mockRejectedValueOnce(new ApiError(400, 'bad'))
+      putCreate('c1')
+      await start()
+      const sc = require('./serial-create')
+      expect(sc.refusedCreate('a')).toMatchObject({ serviceRef: 'tmp:1', body: { categoryId: 'c1' } })
+      expect(sc.refusedCreate('b')).toBeUndefined()
+    })
+
+    it('a value put under a temporary id that was already created goes under the real id', async () => {
+      putCreate('c1')
+      await start()
+      putField('title')
+      putCreate('c2')
+      expect(s.listEntries().map((e) => [e.key, e.serviceRef])).toEqual([
+        ['service:s1:title', 's1'],
+        [CREATE, 's1'],
+      ])
+      await r.sendNow(CREATE)
+      expect(api.create).toHaveBeenCalledTimes(1)
+      expect(api.update).toHaveBeenCalledWith('s1', { categoryId: 'c2' })
+    })
+
+    it('a service deleted on the phone while its create is in flight is removed again on the server', async () => {
+      let answer: (v: unknown) => void = () => {}
+      api.create.mockReturnValueOnce(new Promise((res) => (answer = res)))
+      putCreate('c1')
+      putField('title')
+      await start()
+      s.dropService('tmp:1')
+      answer({ id: 's1', category: 'c1' })
+      await ms(0)
+      expect(api.remove).toHaveBeenCalledWith('s1')
+      expect(fieldRefs).toEqual([])
       expect(s.listEntries()).toHaveLength(0)
     })
   })
