@@ -34,6 +34,7 @@ let ApiError: typeof import('@/api/client').ApiError
 let appStateHandler: (st: string) => void
 let account: string | null
 let stops: (() => void)[]
+let removeSub: jest.Mock
 
 const base = { kind: 'about' as const, accountId: 'a', body: { x: 1 }, route: '/r', field: 'f' }
 const put = (key: string, over: Partial<Parameters<Store['putEntry']>[0]> = {}) => s.putEntry({ ...base, key, ...over })
@@ -50,8 +51,9 @@ beforeEach(() => {
   const rn = require('react-native')
   jest.spyOn(rn.AppState, 'addEventListener').mockImplementation(((_: string, fn: (st: string) => void) => {
     appStateHandler = fn
-    return { remove: jest.fn() }
+    return { remove: removeSub }
   }) as never)
+  removeSub = jest.fn()
   s = require('./pending-saves')
   r = require('./pending-runner')
   ApiError = require('@/api/client').ApiError
@@ -195,6 +197,7 @@ describe('pending-runner', () => {
     })
     put('k')
     await s.loadStore()
+    stops.push(r.startRunner(() => account))
     const p = Promise.all([r.sendNow('k'), r.sendNow('k')])
     await ms(300)
     await p
@@ -218,7 +221,9 @@ describe('pending-runner', () => {
 
   it('a 404 on a service entry drops that service entries and reports it', async () => {
     const gone = jest.fn()
-    r.registerSender('service-field', jest.fn().mockRejectedValue(new ApiError(404, 'nf')))
+    r.registerSender('service-field', async (e) => {
+      throw new ApiError(e.serviceRef === 's1' ? 404 : 503, 'x')
+    })
     put('f1', { kind: 'service-field', serviceRef: 's1' })
     put('f2', { kind: 'service-field', serviceRef: 's1' })
     put('f3', { kind: 'service-field', serviceRef: 's2' })
@@ -226,6 +231,7 @@ describe('pending-runner', () => {
     expect(gone).toHaveBeenCalledWith('s1')
     expect(s.listEntries().map((e) => e.key)).not.toContain('f1')
     expect(s.listEntries().map((e) => e.key)).not.toContain('f2')
+    expect(s.listEntries().map((e) => e.key)).toEqual(['f3'])
   })
 
   it('an entry whose kind has no sender is left alone', async () => {
@@ -245,5 +251,72 @@ describe('pending-runner', () => {
     appStateHandler('active')
     await ms(0)
     expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('sendNow sends nothing when the runner is not started or has stopped', async () => {
+    const send = jest.fn().mockRejectedValue(new ApiError(503, 'busy'))
+    r.registerSender('about', send)
+    put('k')
+    expect(await r.sendNow('k')).toBe('failed')
+    expect(send).not.toHaveBeenCalled()
+    await start()
+    stops.pop()!()
+    expect(await r.sendNow('k')).toBe('failed')
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('a value put during a failing send is sent next, with a real schedule', async () => {
+    const bodies: unknown[] = []
+    r.registerSender('about', async (e) => {
+      bodies.push(e.body)
+      if (bodies.length === 1) {
+        put('k', { body: 2 })
+        throw new ApiError(503, 'busy')
+      }
+    })
+    put('k', { body: 1 })
+    await start()
+    expect(bodies).toEqual([1, 2])
+    expect(s.listEntries()).toHaveLength(0)
+  })
+
+  it('a throwing onServiceGone does not block later sendNow for that key', async () => {
+    const send = jest.fn().mockRejectedValueOnce(new ApiError(404, 'nf')).mockResolvedValue(undefined)
+    r.registerSender('service-field', send)
+    put('f1', { kind: 'service-field', serviceRef: 's1' })
+    await start({
+      onServiceGone: () => {
+        throw new Error('boom')
+      },
+    })
+    put('f1', { kind: 'service-field', serviceRef: 's1' })
+    expect(await r.sendNow('f1')).toBe('ok')
+  })
+
+  it('sendNow leaves a field alone while its service-create is unsent', async () => {
+    const field = jest.fn().mockResolvedValue(undefined)
+    r.registerSender('service-field', field)
+    r.registerSender('service-create', jest.fn().mockResolvedValue(undefined))
+    put('create', { kind: 'service-create', serviceRef: 'tmp:1' })
+    put('f1', { kind: 'service-field', serviceRef: 'tmp:1' })
+    await s.loadStore()
+    stops.push(r.startRunner(() => account))
+    expect(await r.sendNow('f1')).toBe('failed')
+    expect(field).not.toHaveBeenCalled()
+    expect(s.listEntries().find((e) => e.key === 'f1')?.attempts).toBe(0)
+  })
+
+  it('stop clears pending timers, removes the AppState subscription and ignores a late failure', async () => {
+    let fail: () => void = () => {}
+    const send = jest.fn(() => new Promise<void>((_, rej) => (fail = () => rej(new ApiError(503, 'busy')))))
+    r.registerSender('about', send)
+    put('k')
+    await start()
+    stops.pop()!()
+    expect(removeSub).toHaveBeenCalled()
+    fail()
+    await ms(100000)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
   })
 })

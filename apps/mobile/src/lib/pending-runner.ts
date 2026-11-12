@@ -10,7 +10,8 @@ type Sender = (e: PendingEntry) => Promise<void>
 const senders = new Map<SaveKind, Sender>()
 const locks = new Map<string, Promise<unknown>>()
 const running = new Set<string>()
-const nextAt = new Map<string, number>()
+const nextAt = new Map<string, { version: number; at: number }>()
+let generation = 0
 const timers = new Set<ReturnType<typeof setTimeout>>()
 let getAccountId: (() => string | null) | null = null
 let onServiceGone: ((serviceRef: string) => void) | undefined
@@ -35,7 +36,9 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
   const e = listEntries().find((x) => x.key === key)
   if (!e) return 'ok'
   const send = senders.get(e.kind)
-  if (!send || (getAccountId && getAccountId() !== e.accountId)) return 'failed'
+  if (!send || getAccountId?.() !== e.accountId) return 'failed'
+  if (e.serviceRef && e.kind !== 'service-create' && listEntries().some((x) => x.kind === 'service-create' && x.serviceRef === e.serviceRef && x.version < e.version)) return 'failed'
+  const gen = generation
   try {
     await withLimit(send(e))
     nextAt.delete(key)
@@ -45,13 +48,17 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
     markFailed(key, e.version, err)
     if (err instanceof ApiError && err.status === 404 && e.serviceRef) {
       for (const x of listEntries()) if (x.serviceRef === e.serviceRef) removeKey(x.key)
-      onServiceGone?.(e.serviceRef)
+      try {
+        onServiceGone?.(e.serviceRef)
+      } catch {
+        // a failing notice must not stop the runner
+      }
       return 'failed'
     }
     const cur = listEntries().find((x) => x.key === key)
-    if (cur?.state === 'retry') {
+    if (gen === generation && cur && cur.version === e.version && cur.state === 'retry') {
       const delay = RETRY_SECONDS[Math.min(cur.attempts - 1, RETRY_SECONDS.length - 1)] * 1000
-      nextAt.set(key, Date.now() + delay)
+      nextAt.set(key, { version: e.version, at: Date.now() + delay })
       const timer = setTimeout(() => {
         timers.delete(timer)
         pump(false)
@@ -64,19 +71,23 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
 
 /** One attempt for one entry. The only sender for a key: calls for one key run one after the other. */
 export function sendNow(key: string): Promise<'ok' | 'failed'> {
-  const p = (locks.get(key) ?? Promise.resolve()).then(() => attempt(key))
+  const run = () => attempt(key)
+  const p = (locks.get(key) ?? Promise.resolve()).then(run, run)
   locks.set(key, p)
-  void p.then(() => locks.get(key) === p && locks.delete(key))
+  const release = () => locks.get(key) === p && locks.delete(key)
+  void p.then(release, release)
   return p
 }
 
 function eligible(e: PendingEntry, everything: boolean): boolean {
   if (!senders.has(e.kind) || e.accountId !== getAccountId?.() || e.state === 'refused') return false
   if (everything) return true
-  return e.state === 'retry' && (nextAt.get(e.key) ?? Infinity) <= Date.now()
+  const due = nextAt.get(e.key)
+  return e.state === 'retry' && !!due && due.version === e.version && due.at <= Date.now()
 }
 
 async function runGroup(group: string, everything: boolean) {
+  const gen = generation
   if (running.has(group)) return
   running.add(group)
   const tried = new Map<string, number>()
@@ -93,7 +104,11 @@ async function runGroup(group: string, everything: boolean) {
       }
       if (!next) return
       tried.set(next.key, next.version)
-      if ((await sendNow(next.key)) !== 'ok') return
+      if ((await sendNow(next.key)) !== 'ok') {
+        const cur = listEntries().find((x) => x.key === next.key)
+        if (gen !== generation || !cur || cur.version === next.version) return
+        everything = true
+      }
     }
   } finally {
     running.delete(group)
@@ -120,6 +135,10 @@ export function startRunner(accountIdNow: () => string | null, opts?: { onServic
     sub.remove()
     timers.forEach(clearTimeout)
     timers.clear()
+    generation++
+    running.clear()
+    locks.clear()
+    nextAt.clear()
     getAccountId = null
     onServiceGone = undefined
   }
