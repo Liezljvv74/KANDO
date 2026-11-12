@@ -35,9 +35,9 @@ export default function HomeScreen() {
     useCallback(() => {
       if (!signedIn) return // signed out there is no account to load
       loadMe().catch(() => {})
-      // "I need help" was tapped before logging in or signing up: go to the search page now (unless the person asked to offer services, which opens their profile).
+      // A login (not a sign-up: that one decides in the code screen) that began on a provider's page or the search page: go back there now (unless the person asked to offer services, which opens their profile).
       consumeAfterLogin().then((dest) => {
-        if (dest && !peekPending()) router.navigate('/search')
+        if (dest && !peekPending()) router.navigate(dest)
       })
     }, [signedIn]),
   )
