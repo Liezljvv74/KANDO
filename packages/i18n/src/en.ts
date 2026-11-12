@@ -7,6 +7,8 @@ export const en: Record<AppKey, string> = {
   'common.email': 'Email',
   'common.password': 'Password',
   'common.name': 'Name',
+  'auth.needLogin': 'Log in or sign up to use this',
+  'auth.needLoginButton': 'Log in or sign up',
   'auth.logIn': 'Log in',
   'auth.signUp': 'Create account',
   'auth.logOut': 'Log out',

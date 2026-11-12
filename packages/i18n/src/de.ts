@@ -7,6 +7,8 @@ export const de = {
   'common.name': 'Name',
   'auth.logIn': 'Anmelden',
   'auth.signUp': 'Konto erstellen',
+  'auth.needLogin': 'Melde dich an oder registriere dich, um dies zu nutzen',
+  'auth.needLoginButton': 'Anmelden oder registrieren',
   'auth.logOut': 'Abmelden',
   'account.admin': 'Admin-Bereich (nur Testversion)',
   'auth.forgot': 'Passwort vergessen?',

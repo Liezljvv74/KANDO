@@ -1,5 +1,9 @@
 import { Stack } from 'expo-router'
 
-export default function InvoicesLayout() {
+import { signedInOnly } from '@/components/signed-in-only'
+
+function InvoicesLayout() {
   return <Stack screenOptions={{ headerShown: false }} />
 }
+
+export default signedInOnly(InvoicesLayout, 'tab.jobs')

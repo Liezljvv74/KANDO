@@ -1,5 +1,9 @@
 import { Stack } from 'expo-router'
 
-export default function ThreadsLayout() {
+import { signedInOnly } from '@/components/signed-in-only'
+
+function ThreadsLayout() {
   return <Stack screenOptions={{ headerShown: false }} />
 }
+
+export default signedInOnly(ThreadsLayout, 'tab.jobs')
