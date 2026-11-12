@@ -1,4 +1,35 @@
+import { AppState } from 'react-native'
+import { ApiError } from '@/api/client'
+import { listEntries, dropAccount } from '@/lib/pending-saves'
+import { registerSender, startRunner } from '@/lib/pending-runner'
 import { createFieldSaver, type SaveStatus } from './use-field-save'
+
+const mockDisk: Record<string, string> = {}
+jest.mock('expo-file-system', () => {
+  class File {
+    name: string
+    constructor(_dir: unknown, name: string) {
+      this.name = name
+    }
+    get exists() {
+      return this.name in mockDisk
+    }
+    create() {
+      mockDisk[this.name] = ''
+    }
+    async text() {
+      return mockDisk[this.name]
+    }
+    async write(s: string) {
+      mockDisk[this.name] = s
+    }
+    async move(to: File) {
+      mockDisk[to.name] = mockDisk[this.name]
+      delete mockDisk[this.name]
+    }
+  }
+  return { File, Paths: { document: {} } }
+})
 
 const flushPromises = async () => {
   for (let i = 0; i < 5; i++) await Promise.resolve()
@@ -166,4 +197,95 @@ test('flush still resolves without a value (unchanged)', async () => {
   const { saver } = setup(save)
   await expect(saver.flush()).resolves.toBeUndefined()
   expect(save).not.toHaveBeenCalled()
+})
+
+describe('with a queue (the pending-saves store)', () => {
+  let stop: () => void
+  let sender: jest.Mock
+  const queue = { key: 'about:bio', kind: 'about' as const, accountId: 'a', route: '/my-profile/about?field=bio', field: 'bio', toBody: (v: string) => (v ? { bio: v } : null) }
+  const queued = (save: (v: string) => Promise<unknown> = jest.fn()) => {
+    const seen: SaveStatus[] = []
+    return { saver: createFieldSaver(save, 600, (s) => seen.push(s), () => queue), seen, save }
+  }
+  const entry = () => listEntries('a').find((e) => e.key === queue.key)
+
+  beforeEach(() => {
+    jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() } as never)
+    sender = jest.fn(async () => {})
+    registerSender('about', sender)
+    stop = startRunner(() => 'a')
+  })
+  afterEach(() => {
+    stop()
+    dropAccount('a')
+    jest.restoreAllMocks()
+  })
+
+  test('a failed save leaves the entry as retry, a later success of a newer value clears it', async () => {
+    sender.mockRejectedValueOnce(new ApiError(503, 'busy'))
+    const { saver, seen } = queued()
+    saver.set('one')
+    await saver.flush()
+    expect(seen.at(-1)).toBe('error')
+    expect(entry()).toMatchObject({ state: 'retry', body: { bio: 'one' } })
+    saver.set('two')
+    await saver.flush()
+    expect(seen.at(-1)).toBe('saved')
+    expect(entry()).toBeUndefined()
+  })
+
+  test('after dispose with a failing save the entry is still in the store', async () => {
+    sender.mockRejectedValue(new ApiError(0, 'network'))
+    const { saver } = queued()
+    saver.set('late')
+    saver.dispose()
+    await flushPromises()
+    expect(entry()).toMatchObject({ state: 'retry' })
+  })
+
+  test('a refused save (400) marks the entry refused with the error code', async () => {
+    sender.mockRejectedValue(new ApiError(400, 'Invalid postcode'))
+    const { saver, seen } = queued()
+    saver.set('x')
+    await saver.flush()
+    expect(seen.at(-1)).toBe('error')
+    expect(entry()).toMatchObject({ state: 'refused', reason: 'Invalid postcode' })
+  })
+
+  test('a value set and the app killed before the 600 ms wait is in the store', () => {
+    const { saver } = queued()
+    saver.set('typed')
+    expect(entry()).toMatchObject({ body: { bio: 'typed' }, accountId: 'a' })
+    expect(sender).not.toHaveBeenCalled()
+  })
+
+  test('the saver never calls save itself, and requests for one key never overlap', async () => {
+    let open = 0
+    let max = 0
+    sender.mockImplementation(async () => {
+      max = Math.max(max, ++open)
+      await Promise.resolve()
+      await Promise.resolve()
+      open--
+    })
+    const { saver, save } = queued()
+    saver.set('a')
+    saver.flush()
+    await flushPromises()
+    saver.set('ab')
+    await saver.flush()
+    expect(save).not.toHaveBeenCalled()
+    expect(sender).toHaveBeenCalledTimes(2)
+    expect(max).toBe(1)
+  })
+
+  test('a value that has no body removes the entry and counts as saved', async () => {
+    const { saver, seen } = queued()
+    saver.set('x')
+    saver.set('')
+    expect(entry()).toBeUndefined()
+    await saver.flush()
+    expect(sender).not.toHaveBeenCalled()
+    expect(seen.at(-1)).toBe('saved')
+  })
 })

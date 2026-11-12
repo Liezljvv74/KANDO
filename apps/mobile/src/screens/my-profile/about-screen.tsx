@@ -4,8 +4,7 @@ import { AppState, StyleSheet, View } from 'react-native'
 
 import type { MyProfile } from '@kando/contract'
 
-import { ApiError } from '@/api/client'
-import { ensureDraft, getMyProfile, saveMyProfile } from '@/api/my-profile'
+import { ensureDraft, getMyProfile } from '@/api/my-profile'
 import { ErrorText, Field } from '@/components/auth-ui'
 import { Card, FormScreen, SmallButton, SwitchRow } from '@/components/form-ui'
 import { Select } from '@/components/select'
@@ -14,8 +13,10 @@ import { ErrorRetry, Loading } from '@/components/state-view'
 import { useDone } from '@/hooks/use-done'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { useLoad } from '@/hooks/use-load'
+import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { compulsory } from '@/lib/compulsory'
+import { usePendingEntry } from '@/lib/pending-saves'
 import { flushPendingTags, registerPendingTags } from '@/lib/pending-tags'
 import { aboutMissing } from '@/lib/required-fields'
 import { MAX_SKILLS, MAX_SKILL_LENGTH, radiusBody, typedTag, validRadius } from '@/lib/profile-form'
@@ -25,6 +26,7 @@ const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split
 /** The server keeps strengths as one text of at most 1000 characters. */
 const MAX_STRENGTHS_TEXT = 1000
 
+const noSave = async () => {} // every About you field is sent through the pending-saves store
 const loadProfile = async () => (await getMyProfile()) ?? (await ensureDraft())
 
 /** The "About you" screen: every field saves on its own. `?field=` (from a Live checklist row) puts the cursor in that field. */
@@ -41,19 +43,19 @@ export default function AboutScreen() {
  * what the user typed since. `initial` is read once: the form is mounted after the first load and keeps its own values.
  */
 function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
-  const [code, setCode] = useState<Record<string, string>>({})
-  // Binds a field to the profile: `toBody` makes the one-field PUT body, null skips the request.
-  function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null) {
-    return useFieldSave<V>(initialValue, async (v) => {
-      const body = toBody(v)
-      if (!body) return
-      try {
-        await saveMyProfile(body)
-        setCode((c) => (c[key] ? { ...c, [key]: '' } : c))
-      } catch (e) {
-        setCode((c) => ({ ...c, [key]: e instanceof ApiError ? e.code : 'network' }))
-        throw e
-      }
+  const accountId = useSession().user?.id ?? ''
+  // Binds a field to the profile: `toBody` makes the one-field PUT body (null removes the stored change). The value is kept
+  // on the phone from the first keystroke and sent by the 'about' sender; a reopened screen starts from a stored value.
+  function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null, fromBody: (body: Record<string, never>) => V = (b) => b[key] as V) {
+    const storeKey = `about:${key}`
+    const pending = usePendingEntry(storeKey)
+    return useFieldSave<V>(pending ? fromBody(pending.body as Record<string, never>) : initialValue, noSave, 600, {
+      key: storeKey,
+      kind: 'about',
+      accountId,
+      route: `/my-profile/about?field=${key}`,
+      field: key,
+      toBody,
     })
   }
 
@@ -61,11 +63,11 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
   const businessName = useField('businessName', initial.businessName ?? '', (v) => ({ businessName: v.trim() }))
   const impressum = useField('impressum', initial.impressum ?? '', (v) => ({ impressum: v.trim() }))
   const bio = useField('bio', initial.bio ?? '', (v) => ({ bio: v.trim() }))
-  const strengths = useField('strengths', splitLines(initial.strengths), (v) => ({ strengths: v.join('\n') }))
+  const strengths = useField('strengths', splitLines(initial.strengths), (v) => ({ strengths: v.join('\n') }), (b) => splitLines(b.strengths))
   const skills = useField('skills', initial.skills ?? [], (v) => ({ skills: v }))
   const experience = useField('experience', initial.experience ?? '', (v) => ({ experience: v.trim() }))
   const postcode = useField('basePostcode', initial.basePostcode ?? '', (v) => ({ basePostcode: v.trim() }))
-  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), radiusBody)
+  const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), radiusBody, (b) => String(b.serviceRadiusKm))
   const remote = useField('worksRemotely', !!initial.worksRemotely, (v) => ({ worksRemotely: v }))
   const [skillText, setSkillText] = useState('')
   const [strengthText, setStrengthText] = useState('')
@@ -105,10 +107,10 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
   }, [])
 
   // A failed save keeps the value and says why, with a retry.
-  const problem = (key: string, f: { status: string; retry: () => void }) =>
-    f.status === 'error' && code[key] ? (
+  const problem = (f: { status: string; errorCode: string | null; retry: () => void }) =>
+    f.status === 'error' && f.errorCode ? (
       <View>
-        <ErrorText text={errorText(code[key])} />
+        <ErrorText text={errorText(f.errorCode)} />
         <SmallButton label={t('common.retry')} onPress={f.retry} />
       </View>
     ) : null
@@ -132,7 +134,7 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
       return all.every(Boolean)
     },
   })
-  const unknownPostcode = postcode.status === 'error' && code.basePostcode === 'Unknown postcode'
+  const unknownPostcode = postcode.status === 'error' && postcode.errorCode === 'Unknown postcode'
 
   return (
     <FormScreen title={t('setup.aboutYou')} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
@@ -149,17 +151,17 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
           { value: 'business', label: t('f.business') },
         ]}
       />
-      {problem('providerType', type)}
+      {problem(type)}
       {type.value === 'business' && (
         <>
           <Field {...compulsory('businessName')} autoFocus={focus === 'businessName'} value={businessName.value} onChangeText={businessName.setValue} onBlur={businessName.flush} maxLength={120} />
-          {problem('businessName', businessName)}
+          {problem(businessName)}
           <Field {...compulsory('impressum')} autoFocus={focus === 'impressum'} value={impressum.value} onChangeText={impressum.setValue} onBlur={impressum.flush} multiline maxLength={1000} style={styles.multi} />
-          {problem('impressum', impressum)}
+          {problem(impressum)}
         </>
       )}
       <Field label={t('f.bio')} value={bio.value} onChangeText={bio.setValue} onBlur={bio.flush} multiline maxLength={2000} style={styles.multi} />
-      {problem('bio', bio)}
+      {problem(bio)}
       <TagInput
         {...compulsory('strengths')}
         autoFocus={focus === 'strengths'}
@@ -179,7 +181,7 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         addLabel={t('f.strengthAdd')}
         error={strengthsTooLong ? t('f.strengthsError') : null}
       />
-      {problem('strengths', strengths)}
+      {problem(strengths)}
       <TagInput
         {...compulsory('skills')}
         autoFocus={focus === 'skills'}
@@ -194,21 +196,21 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         maxLength={MAX_SKILL_LENGTH}
         addLabel={t('f.skillAdd')}
       />
-      {problem('skills', skills)}
+      {problem(skills)}
       <Field label={t('provider.experience')} placeholder={t('ph.experience')} hint={t('f.experienceHint')} value={experience.value} onChangeText={experience.setValue} onBlur={experience.flush} multiline maxLength={500} style={styles.multi} />
-      {problem('experience', experience)}
+      {problem(experience)}
       <Field
         {...compulsory('postcode')}
-        autoFocus={focus === 'postcode'}
+        autoFocus={focus === 'basePostcode' || focus === 'postcode'}
         value={postcode.value}
         onChangeText={postcode.setValue}
         onBlur={postcode.flush}
         error={unknownPostcode ? errorText('Unknown postcode') : null}
       />
-      {unknownPostcode ? null : problem('basePostcode', postcode)}
+      {unknownPostcode ? null : problem(postcode)}
       <Field
         {...compulsory('radius')}
-        autoFocus={focus === 'radius'}
+        autoFocus={focus === 'serviceRadiusKm' || focus === 'radius'}
         value={radius.value}
         onChangeText={radius.setValue}
         onBlur={radius.flush}
@@ -216,7 +218,7 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         maxLength={3}
         error={validRadius(radius.value) ? null : t('f.radiusError')}
       />
-      {problem('serviceRadiusKm', radius)}
+      {problem(radius)}
       <SwitchRow
         label={t('f.remote')}
         value={remote.value}
@@ -225,7 +227,7 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
           remote.flush()
         }}
       />
-      {problem('worksRemotely', remote)}
+      {problem(remote)}
     </Card>
     </FormScreen>
   )

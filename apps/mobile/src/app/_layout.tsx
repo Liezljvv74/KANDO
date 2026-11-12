@@ -8,18 +8,26 @@ import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
+import { ApiError } from '@/api/client'
+import { saveMyProfile, servicesApi } from '@/api/my-profile'
 import { Button } from '@/components/auth-ui'
 import { TermsReaccept } from '@/components/terms-reaccept'
 import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
-import { startRunner, wake } from '@/lib/pending-runner'
+import { registerSender, startRunner, wake } from '@/lib/pending-runner'
 import { pushRoute } from '@/lib/push'
 import { color } from '@/theme'
 
 // A push that arrives while the app is open still shows as a banner.
 setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+})
+
+registerSender('about', async (e) => void (await saveMyProfile(e.body as object)))
+registerSender('service-field', async (e) => {
+  if (!e.serviceRef || e.serviceRef.startsWith('tmp:')) throw new ApiError(0, 'service not created yet') // never against a temporary id
+  await servicesApi.update(e.serviceRef, e.body as object)
 })
 
 export default function RootLayout() {

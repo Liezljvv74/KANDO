@@ -15,9 +15,11 @@ import { useCategories } from '@/hooks/use-categories'
 import { useDone } from '@/hooks/use-done'
 import { useFieldSave } from '@/hooks/use-field-save'
 import { useLoad } from '@/hooks/use-load'
+import { useSession } from '@/hooks/use-session'
 import { docText, errorText, t, useLang } from '@/i18n'
 import { compulsory } from '@/lib/compulsory'
 import { documentRows, serviceDocNote, type DocumentRow } from '@/lib/documents'
+import { usePendingEntry } from '@/lib/pending-saves'
 import { parsePrice } from '@/lib/profile-form'
 import { serviceMissing } from '@/lib/required-fields'
 import { createSerial } from '@/lib/serial-create'
@@ -26,6 +28,7 @@ import { color } from '@/theme'
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
 const priceLabel = (p: string) => (p === 'on-request' ? t('price.onRequest') : t(`pt.${p}` as 'pt.fixed'))
 
+const noSave = async () => {} // every Service field is sent through the pending-saves store
 const loadAll = async () => ({ services: await servicesApi.list(), verifications: await documentsApi.list() })
 
 /** `id` set: edit that service; otherwise add a new one. */
@@ -60,18 +63,22 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
   const [serial] = useState(() => createSerial(initial?.id ?? null, (categoryId) => servicesApi.create({ categoryId }), (id, categoryId) => servicesApi.update(id, { categoryId })))
 
   const onService = (s: OwnService) => setWaitingFor(s.waitingFor ?? [])
-  // One field = one saver = one request; `toBody` null skips the request.
-  function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null) {
-    return useFieldSave<V>(initialValue, async (v) => {
-      const body = toBody(v)
-      if (!body || !idRef.current) return
-      try {
-        onService(await servicesApi.update(idRef.current, body))
-        setCode((c) => (c[key] ? { ...c, [key]: '' } : c))
-      } catch (e) {
-        setCode((c) => ({ ...c, [key]: e instanceof ApiError ? e.code : 'network' }))
-        throw e
-      }
+  const accountId = useSession().user?.id ?? ''
+  const [tmpRef] = useState(() => `tmp:${Date.now()}`) // a value typed before the service exists is kept under this and renamed when the create is done
+  const serviceRef = id ?? tmpRef
+  // One field = one saver = one request; `toBody` null removes the stored change. The value is kept on the phone from the
+  // first keystroke and sent by the 'service-field' sender; a reopened screen starts from a stored value.
+  function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null, fromBody: (body: Record<string, never>) => V = (b) => b[key] as V) {
+    const storeKey = `service:${serviceRef}:${key}`
+    const pending = usePendingEntry(storeKey)
+    return useFieldSave<V>(pending ? fromBody(pending.body as Record<string, never>) : initialValue, noSave, 600, {
+      key: storeKey,
+      kind: 'service-field',
+      accountId,
+      serviceRef,
+      route: id ? `/my-profile/service/${id}` : '/my-profile/service/new',
+      field: key,
+      toBody,
     })
   }
   // An empty title is not sent: the server keeps the category name it filled in.
@@ -81,7 +88,7 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
   const price = useField('price', initial?.price == null ? '' : String(initial.price).replace('.', ','), (v) => {
     const p = parsePrice(v)
     return p === null ? null : { price: p }
-  })
+  }, (b) => String(b.price).replace('.', ','))
 
   const choosing = useRef<Promise<void>>(Promise.resolve())
   const categoryFailed = useRef(false) // the last category choice was refused or lost: Done must not report "Saved"
@@ -120,10 +127,10 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
       },
     ])
 
-  const problem = (key: string, f: { status: string; retry: () => void }) =>
-    f.status === 'error' && code[key] ? (
+  const problem = (f: { status: string; errorCode: string | null; retry: () => void }) =>
+    f.status === 'error' && f.errorCode ? (
       <View>
-        <ErrorText text={errorText(code[key])} />
+        <ErrorText text={errorText(f.errorCode)} />
         <SmallButton label={t('common.retry')} onPress={f.retry} />
       </View>
     ) : null
@@ -154,9 +161,9 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
       {id && (
         <>
           <Field label={t('s.title')} placeholder={categoryName} value={title.value} onChangeText={title.setValue} onBlur={title.flush} maxLength={120} />
-          {problem('title', title)}
+          {problem(title)}
           <Field label={t('common.description')} value={description.value} onChangeText={description.setValue} onBlur={description.flush} multiline maxLength={2000} style={styles.multi} />
-          {problem('description', description)}
+          {problem(description)}
           <Select
             {...compulsory('priceType')}
             value={priceType.value}
@@ -166,11 +173,11 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
             }}
             options={PRICE_TYPES.map((p) => ({ value: p, label: priceLabel(p) }))}
           />
-          {problem('priceType', priceType)}
+          {problem(priceType)}
           {priceType.value !== 'on-request' && (
             <Field {...compulsory('price')} value={price.value} onChangeText={price.setValue} onBlur={price.flush} keyboardType="decimal-pad" error={priceInvalid ? t('s.priceError') : null} />
           )}
-          {problem('price', price)}
+          {problem(price)}
         </>
       )}
       {busy && <Text style={styles.hint}>…</Text>}
