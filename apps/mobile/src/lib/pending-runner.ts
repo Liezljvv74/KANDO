@@ -22,6 +22,7 @@ let onServiceGone: ((serviceRef: string) => void) | undefined
 export function registerSender(kind: SaveKind, send: Sender, fieldFor?: FieldFor): void {
   senders.set(kind, send)
   if (fieldFor) fieldFors.set(kind, fieldFor)
+  else fieldFors.delete(kind)
 }
 
 async function withLimit(send: Promise<void>): Promise<void> {

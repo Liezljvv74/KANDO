@@ -25,3 +25,8 @@ export function refusedField(e: ApiError): string {
   if (e.fields?.some((f) => f.startsWith('birthDate'))) return 'birthDate'
   return 'details'
 }
+
+/** Nothing to send: the values equal the server's and no kept entry would later overwrite them. */
+export function unchangedSinceSave(body: string, lastSaved: string | null, hasStoredEntry: boolean): boolean {
+  return body === lastSaved && !hasStoredEntry
+}

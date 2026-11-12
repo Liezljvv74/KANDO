@@ -98,6 +98,14 @@ describe('pending-runner', () => {
     expect(s.listEntries().find((x) => x.key === 'k')).toMatchObject({ state: 'refused', field: 'postcode' })
   })
 
+  it('forgets an earlier fieldFor when a sender is registered without one', async () => {
+    r.registerSender('about', jest.fn().mockRejectedValue(new ApiError(400, 'bad')), () => 'postcode')
+    r.registerSender('about', jest.fn().mockRejectedValue(new ApiError(400, 'bad')))
+    put('k')
+    await start()
+    expect(s.listEntries().find((x) => x.key === 'k')?.field).not.toBe('postcode')
+  })
+
   it('stops retrying a refused entry until it is replaced', async () => {
     const send = jest.fn().mockRejectedValue(new ApiError(400, 'bad'))
     r.registerSender('about', send)

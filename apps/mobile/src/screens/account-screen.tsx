@@ -22,7 +22,7 @@ import { useDone } from '@/hooks/use-done'
 import { loadMe, signOutGeneration, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
-import { accountEntryBody, shouldAutosave } from '@/lib/account-autosave'
+import { accountEntryBody, shouldAutosave, unchangedSinceSave } from '@/lib/account-autosave'
 import { sendNow } from '@/lib/pending-runner'
 import { listEntries, putEntry, usePendingEntry, type PendingEntry } from '@/lib/pending-saves'
 import { accountMissing } from '@/lib/required-fields'
@@ -58,6 +58,8 @@ export default function AccountScreen() {
   const storedRef = useRef(stored)
   storedRef.current = stored
   const pendingUsed = useRef(false)
+  const [edited, setEdited] = useState(false) // a kept entry's error is about the old value: gone once the person edits
+  const touch = () => (setError(null), setEdited(true))
   const lastSaved = useRef<string | null>(null) // the body last known to be on the server
   const [open, setOpen] = useState<boolean | null>(null) // the details form: null = by itself (open until the compulsory details are saved), else the person's choice
 
@@ -151,6 +153,7 @@ export default function AccountScreen() {
     try {
       if (!user) throw new ApiError(401, 'Unauthorized') // nothing can be kept or sent without an account
       pendingUsed.current = true
+      setEdited(false)
       putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
       const request = sendNow('account')
       sending.current = true
@@ -176,7 +179,7 @@ export default function AccountScreen() {
     const v = latest.current
     if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
     const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
-    if (sending.current || body === lastSaved.current) return // nothing changed since the last successful save
+    if (sending.current || unchangedSinceSave(body, lastSaved.current, !!storedRef.current)) return // a kept entry is replaced by the form's values even when they equal the server's
     void v.save(true)
   }
   // Account is a mounted tab: leaving it (focus lost) saves too, not only unmounting.
@@ -227,10 +230,10 @@ export default function AccountScreen() {
               {showDetails && (
                 <>
                   <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
-                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), setError(null))} autoComplete="given-name" editable={!busy && !scanning} />
-                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), setError(null))} autoComplete="family-name" editable={!busy && !scanning} />
-                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), setError(null))} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
-                  <AddressFields value={address} onChange={(a) => (setAddress(a), setError(null))} disabled={busy || scanning} />
+                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), touch())} autoComplete="given-name" editable={!busy && !scanning} />
+                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), touch())} autoComplete="family-name" editable={!busy && !scanning} />
+                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), touch())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
+                  <AddressFields value={address} onChange={(a) => (setAddress(a), touch())} disabled={busy || scanning} />
                   <LanguageSwitch />
                 </>
               )}
@@ -252,7 +255,7 @@ export default function AccountScreen() {
           </Text>
         )}
       </KeyboardAwareScrollView>
-      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? (stored?.state === 'refused' ? failureText(stored) : null) ?? done.message} />}
+      {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null) ?? done.message} />}
     </SafeAreaView>
   )
 }

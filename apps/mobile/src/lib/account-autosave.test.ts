@@ -1,5 +1,5 @@
 import { ApiError } from '@/api/client'
-import { accountEntryBody, refusedField, shouldAutosave } from './account-autosave'
+import { accountEntryBody, refusedField, shouldAutosave, unchangedSinceSave } from './account-autosave'
 
 const ok = { firstName: 'Anna', lastName: 'Berg', address: { street: '', postcode: '10115', city: '' }, birthDate: null }
 
@@ -27,4 +27,9 @@ test('the refused field comes from the error', () => {
   expect(refusedField(new ApiError(400, 'Invalid input', undefined, ['birthDate.x']))).toBe('birthDate')
   expect(refusedField(new ApiError(400, 'Invalid input', undefined, ['firstName']))).toBe('details')
   expect(refusedField(new ApiError(500, 'Server error'))).toBe('details')
+})
+test('equal values are skipped only when no kept entry exists', () => {
+  expect(unchangedSinceSave('x', 'x', false)).toBe(true)
+  expect(unchangedSinceSave('x', 'x', true)).toBe(false)
+  expect(unchangedSinceSave('y', 'x', false)).toBe(false)
 })
