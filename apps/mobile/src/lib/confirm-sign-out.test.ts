@@ -43,4 +43,13 @@ describe('confirmSignOut', () => {
     expect(signOut).toHaveBeenCalledTimes(1)
     expect(drop.mock.invocationCallOrder[0]).toBeLessThan(signOut.mock.invocationCallOrder[0])
   })
+
+  it('on confirm signs out once even when the changes were sent meanwhile', () => {
+    list.mockReturnValue([{ key: 'k' } as never])
+    const signOut = jest.fn()
+    confirmSignOut('a', signOut)
+    list.mockReturnValue([])
+    press('pending.signOutYes')
+    expect(signOut).toHaveBeenCalledTimes(1)
+  })
 })
