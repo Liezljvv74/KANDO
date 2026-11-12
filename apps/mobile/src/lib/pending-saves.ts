@@ -30,6 +30,14 @@ let snapshot: PendingEntry[] = []
 let lastVersion = 0
 let writeQueued = false
 let writing: Promise<void> = Promise.resolve()
+let loaded = false
+let readFailed = false
+let finishLoad: () => void = () => {}
+const loadDone = new Promise<void>((resolve) => (finishLoad = resolve))
+const removedKeys = new Set<string>()
+const droppedAccounts = new Set<string>()
+const KINDS = ['about', 'service-field', 'service-create', 'account']
+const STATES = ['retry', 'refused', 'auth', 'waiting']
 
 export function classifyFailure(e: unknown): FailureState {
   const status = e instanceof ApiError ? e.status : 0
@@ -39,10 +47,10 @@ export function classifyFailure(e: unknown): FailureState {
   return 'retry'
 }
 
-function changed() {
+function changed(persistToo = true) {
   snapshot = [...entries.values()].sort((a, b) => a.version - b.version)
   listeners.forEach((fn) => fn())
-  schedulePersist()
+  if (persistToo) schedulePersist()
 }
 
 function schedulePersist() {
@@ -55,6 +63,11 @@ function schedulePersist() {
 }
 
 async function persist() {
+  await loadDone
+  if (readFailed) {
+    readFailed = false
+    return
+  }
   try {
     const tmp = new File(Paths.document, `${FILE}.tmp`)
     if (!tmp.exists) tmp.create()
@@ -76,6 +89,7 @@ export function putEntry(e: Omit<PendingEntry, 'version' | 'attempts' | 'state' 
 export function clearIfVersion(key: string, version: number) {
   if (entries.get(key)?.version !== version) return
   entries.delete(key)
+  if (!loaded) removedKeys.add(key)
   changed()
 }
 
@@ -94,10 +108,12 @@ export function markFailed(key: string, version: number, e: unknown, field?: str
 }
 
 export function removeKey(key: string) {
+  if (!loaded) removedKeys.add(key)
   if (entries.delete(key)) changed()
 }
 
 export function dropAccount(accountId: string) {
+  if (!loaded) droppedAccounts.add(accountId)
   let any = false
   for (const [k, e] of entries) if (e.accountId === accountId) any = entries.delete(k) || any
   if (any) changed()
@@ -108,7 +124,7 @@ export function replaceServiceRef(from: string, to: string) {
   for (const [k, e] of [...entries]) {
     if (e.serviceRef !== from) continue
     entries.delete(k)
-    const key = k.replace(`service:${from}:`, `service:${to}:`)
+    const key = k.split(`service:${from}:`).join(`service:${to}:`)
     const other = entries.get(key)
     if (!other || other.version < e.version) entries.set(key, { ...e, key, serviceRef: to })
     any = true
@@ -120,24 +136,46 @@ export function listEntries(accountId?: string): PendingEntry[] {
   return accountId === undefined ? snapshot : snapshot.filter((e) => e.accountId === accountId)
 }
 
+function isValid(e: PendingEntry): boolean {
+  return (
+    !!e &&
+    typeof e.key === 'string' &&
+    typeof e.accountId === 'string' &&
+    typeof e.version === 'number' &&
+    typeof e.createdAt === 'number' &&
+    typeof e.attempts === 'number' &&
+    typeof e.route === 'string' &&
+    typeof e.field === 'string' &&
+    KINDS.includes(e.kind) &&
+    STATES.includes(e.state)
+  )
+}
+
 export async function loadStore(): Promise<void> {
-  let stored: unknown = []
   try {
-    const file = new File(Paths.document, FILE)
-    if (file.exists) stored = JSON.parse(await file.text())
-  } catch {
-    stored = []
+    let stored: unknown = []
+    try {
+      const file = new File(Paths.document, FILE)
+      if (file.exists) stored = JSON.parse(await file.text())
+    } catch (err) {
+      if (!(err instanceof SyntaxError)) readFailed = true
+    }
+    if (!Array.isArray(stored)) return
+    const now = Date.now()
+    for (const e of stored as PendingEntry[]) {
+      if (!isValid(e) || now - e.createdAt > MAX_AGE_MS) continue
+      if (removedKeys.has(e.key) || droppedAccounts.has(e.accountId)) continue
+      const mine = entries.get(e.key)
+      if (!mine || mine.version < e.version) entries.set(e.key, e)
+      lastVersion = Math.max(lastVersion, e.version)
+    }
+    changed(false)
+  } finally {
+    loaded = true
+    removedKeys.clear()
+    droppedAccounts.clear()
+    finishLoad()
   }
-  if (!Array.isArray(stored)) return
-  const now = Date.now()
-  for (const e of stored as PendingEntry[]) {
-    const ok = e && typeof e.key === 'string' && typeof e.accountId === 'string' && typeof e.version === 'number' && typeof e.createdAt === 'number'
-    if (!ok || now - e.createdAt > MAX_AGE_MS) continue
-    const mine = entries.get(e.key)
-    if (!mine || mine.version < e.version) entries.set(e.key, e)
-    lastVersion = Math.max(lastVersion, e.version)
-  }
-  changed()
 }
 
 export function subscribe(fn: () => void): () => void {
@@ -147,9 +185,13 @@ export function subscribe(fn: () => void): () => void {
 
 const getSnapshot = () => snapshot
 
+export function forAccount(all: PendingEntry[], accountId: string | null): PendingEntry[] {
+  return accountId === null ? [] : all.filter((e) => e.accountId === accountId)
+}
+
 export function usePendingEntries(accountId: string | null): PendingEntry[] {
   const all = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-  return useMemo(() => (accountId === null ? [] : all.filter((e) => e.accountId === accountId)), [all, accountId])
+  return useMemo(() => forAccount(all, accountId), [all, accountId])
 }
 
 export function usePendingEntry(key: string): PendingEntry | undefined {

@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- modules are reloaded per test to simulate an app restart */
 const mockDisk: Record<string, string> = {}
+let mockReadGate: Promise<void> | null = null
+let mockReadThrows = false
 const mockMoves: { from: string; to: string }[] = []
 jest.mock('expo-file-system', () => {
   class File {
@@ -14,6 +16,8 @@ jest.mock('expo-file-system', () => {
       mockDisk[this.name] = ''
     }
     async text() {
+      if (mockReadGate) await mockReadGate
+      if (mockReadThrows) throw new Error('EIO')
       return mockDisk[this.name]
     }
     async write(s: string) {
@@ -38,6 +42,8 @@ const put = (key: string, over: Partial<Parameters<Store['putEntry']>[0]> = {}) 
 beforeEach(() => {
   for (const k of Object.keys(mockDisk)) delete mockDisk[k]
   mockMoves.length = 0
+  mockReadGate = null
+  mockReadThrows = false
   jest.resetModules()
   s = require('./pending-saves')
   ApiError = require('@/api/client').ApiError
@@ -107,6 +113,7 @@ describe('pending-saves', () => {
   })
 
   it('survives a restart', async () => {
+    await s.loadStore()
     put('k')
     await tick()
     await tick()
@@ -118,6 +125,7 @@ describe('pending-saves', () => {
   })
 
   it('writes a temporary file, then moves it over the real one', async () => {
+    await s.loadStore()
     put('k')
     await tick()
     await tick()
@@ -156,6 +164,78 @@ describe('pending-saves', () => {
     ])
     await s.loadStore()
     expect(s.listEntries().map((e) => e.key)).toEqual(['fresh'])
+  })
+
+  const old = (key: string, over = {}) => ({ ...base, key, version: 1, state: 'retry', attempts: 0, createdAt: Date.now(), ...over })
+  const keysOnDisk = () => JSON.parse(mockDisk['pending-saves.json']).map((e: { key: string }) => e.key).sort()
+
+  it('does not write over the file before the load has read it', async () => {
+    mockDisk['pending-saves.json'] = JSON.stringify([old('old')])
+    let release = () => {}
+    mockReadGate = new Promise<void>((r) => (release = r))
+    const loading = s.loadStore()
+    put('new')
+    await tick()
+    await tick()
+    expect(keysOnDisk()).toEqual(['old'])
+    release()
+    await loading
+    await tick()
+    await tick()
+    expect(keysOnDisk()).toEqual(['new', 'old'])
+  })
+
+  it('skips the next write when an existing file could not be read', async () => {
+    const raw = JSON.stringify([old('old')])
+    mockDisk['pending-saves.json'] = raw
+    mockReadThrows = true
+    await s.loadStore()
+    put('new')
+    await tick()
+    await tick()
+    expect(mockDisk['pending-saves.json']).toBe(raw)
+  })
+
+  it('a dropAccount before the load is not undone by the merge', async () => {
+    mockDisk['pending-saves.json'] = JSON.stringify([old('k1', { accountId: 'a' }), old('k2', { accountId: 'b' })])
+    s.dropAccount('a')
+    await s.loadStore()
+    expect(s.listEntries().map((e) => e.key)).toEqual(['k2'])
+  })
+
+  it('removeKey and clearIfVersion before the load are not undone by the merge', async () => {
+    mockDisk['pending-saves.json'] = JSON.stringify([old('k1'), old('k2'), old('k3')])
+    s.removeKey('k1')
+    const v = put('k2')
+    s.clearIfVersion('k2', v)
+    await s.loadStore()
+    expect(s.listEntries().map((e) => e.key)).toEqual(['k3'])
+  })
+
+  it('drops invalid entries on load', async () => {
+    mockDisk['pending-saves.json'] = JSON.stringify([
+      old('ok'),
+      old('badkind', { kind: 'zzz' }),
+      old('badstate', { state: 'zzz' }),
+      old('noroute', { route: 5 }),
+      old('nofield', { field: undefined }),
+      null,
+    ])
+    await s.loadStore()
+    expect(s.listEntries().map((e) => e.key)).toEqual(['ok'])
+  })
+
+  it('replaceServiceRef treats $ in the id literally', () => {
+    put('service:tmp:1:name', { kind: 'service-field', serviceRef: 'tmp:1' })
+    s.replaceServiceRef('tmp:1', 'a$&b')
+    expect(s.listEntries()[0].key).toBe('service:a$&b:name')
+  })
+
+  it('forAccount keeps only that account', () => {
+    put('k1', { accountId: 'a' })
+    put('k2', { accountId: 'b' })
+    expect(s.forAccount(s.listEntries(), 'a').map((e) => e.key)).toEqual(['k1'])
+    expect(s.forAccount(s.listEntries(), null)).toEqual([])
   })
 
   it('notifies subscribers on every change and lists one account', () => {
