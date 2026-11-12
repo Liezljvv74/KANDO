@@ -48,7 +48,7 @@ By the owner:
 
 Builder's calls (marked here so the owner can check them):
 - **Queue unit:** per field with a partial body for About you and Service; Account details is one whole-form entry (names, address and birth date are validated together by the server). Last change wins per entry.
-- **Next step after an instant Done:** the screen just left is trusted (its required fields passed the local check). Other steps use data the phone already holds. If that data is not held, or a refused value is pending, Done opens My business (the checklist stays the authority).
+- **Next step after an instant Done:** the screen just left is trusted (its required fields passed the local check). Other steps use data the phone already holds. If that data is not held, Done opens My business (a pending refused value does not change this, see below) (the checklist stays the authority).
 - **Sign-out with unsaved changes:** the app asks first ("Some changes are not saved yet. Sign out anyway?"); if confirmed, the pending changes of that account are dropped. A different account never receives them.
 - **Expired login (401):** the entry is kept and resumes after the same person signs in again (matched by account id). 403 and 428 (terms must be accepted again) wait for the person; a 404 (the service no longer exists) counts as refused with a clear text.
 - **Several refused values:** the banner shows how many need attention and a tap opens the first (oldest). The refused banner survives an app restart and the field shows its error text when the screen opens (the error comes from the stored entry, not from screen state).
