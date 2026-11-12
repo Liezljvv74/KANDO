@@ -50,17 +50,16 @@ export default function HomeScreen() {
     setProblem(await startOffering())
     setBusy(false)
   }
-  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean; tone?: 'indigo' | 'teal' }[] = signedIn
-    ? [
-        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.navigate('/search'), main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer, tone: 'indigo' },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn'), tone: 'teal' },
-      ]
-    : [
-        { title: 'welcome.browse', text: 'welcome.browseText', onPress: () => router.navigate('/search'), main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') }, tone: 'indigo' },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') }, tone: 'teal' },
-      ]
+  // The same three cards signed in or out; only what the tap on "offer" and "learn" does differs (signed out: sign up / the public explanation).
+  const signedOutTo = (path: '/sign-up?offer=1' | '/how-it-works') => () => {
+    void setAfterLogin(null)
+    router.push(path)
+  }
+  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean; tone?: 'indigo' | 'teal' }[] = [
+    { title: 'welcome.browse', text: 'welcome.browseText', onPress: () => router.navigate('/search'), main: true },
+    { title: 'welcome.offer', text: 'welcome.offerText', onPress: signedIn ? offer : signedOutTo('/sign-up?offer=1'), tone: 'indigo' },
+    { title: 'welcome.learn', text: 'welcome.learnText', onPress: signedIn ? () => router.push('/learn') : signedOutTo('/how-it-works'), tone: 'teal' },
+  ]
 
   return (
     <SafeAreaView style={signedIn ? styles.root : [styles.root, styles.rootOut]} edges={['top']}>
