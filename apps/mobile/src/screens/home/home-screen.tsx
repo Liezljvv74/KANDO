@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { HelpFeedbackButtons } from '@/components/help-feedback-buttons'
 import { LanguageSwitch } from '@/components/language-switch'
+import { LegalFooter } from '@/components/legal-footer'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { ErrorText } from '@/components/auth-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
@@ -105,6 +106,7 @@ export default function HomeScreen() {
             <LanguageSwitch />
           </Tag>
         )}
+        {!signedIn && <LegalFooter onDark />}
       </ScrollView>
     </SafeAreaView>
   )

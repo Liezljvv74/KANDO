@@ -29,6 +29,7 @@ import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
+import { LegalFooter } from '@/components/legal-footer'
 import { IdScanButton } from '@/screens/id-scan-button'
 import { PictureNudge } from '@/screens/picture-nudge'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
@@ -226,6 +227,7 @@ export default function AccountScreen() {
             {t('account.admin')}
           </Text>
         )}
+        <LegalFooter />
       </KeyboardAwareScrollView>
       {me && <DoneBar onPress={done.onDone} busy={done.busy || busy} saved={done.saved} message={error ?? done.message} />}
     </SafeAreaView>

@@ -3,13 +3,15 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LanguageSwitch } from '@/components/language-switch'
+import { LegalFooter } from '@/components/legal-footer'
 import { ScreenBanner } from '@/components/screen-banner'
 import { color, font } from '@/theme'
 
 /** How far above the keyboard the field being typed in stays (every scrolling form uses it, Android and iPhone alike). */
 export const KEYBOARD_GAP = 24
 
-export function AuthScreen({ title, children }: { title: string; children: React.ReactNode }) {
+/** `legal` adds the Terms, Privacy and Legal notice links under the card (login and sign-up only). */
+export function AuthScreen({ title, children, legal }: { title: string; children: React.ReactNode; legal?: boolean }) {
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={title} />
@@ -18,6 +20,7 @@ export function AuthScreen({ title, children }: { title: string; children: React
           {children}
         </View>
         <LanguageSwitch />
+        {legal && <LegalFooter />}
       </KeyboardAwareScrollView>
     </SafeAreaView>
   )
