@@ -46,8 +46,12 @@ export default function TabsLayout() {
   const pending = usePending()
   useEffect(() => {
     if (!readyToNavigate(pending, me, !!user)) return // the target stays until the tab is visible
-    const p = consumePending()
-    if (p) router.navigate(urlOf(p))
+    // One tick later: this layout is already mounted while signed out, so this effect runs in the very commit that removes the sign-in screens, and a navigation made inside it was overridden (the person ended on Home).
+    const timer = setTimeout(() => {
+      const p = consumePending()
+      if (p) router.navigate(urlOf(p))
+    }, 0)
+    return () => clearTimeout(timer)
   }, [me, pending, user])
   // A notification created while the app was in the background shows its dot as soon as the user returns.
   useEffect(() => {

@@ -7,6 +7,7 @@ import { AuthScreen, Button, ErrorText, Field, Info, LinkText } from '@/componen
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
 import { afterVerifyTarget, consumeAfterLogin } from '@/lib/after-login'
+import { setPending } from '@/lib/pending-navigation'
 import { startOffering } from '@/lib/start-offering'
 
 /** "Enter the code we emailed you": a correct code confirms the address and signs in (the root layout then shows the tabs). */
@@ -23,11 +24,11 @@ export default function VerifyEmailScreen() {
     setBusy(true)
     setError(null)
     try {
-      // Where to land is decided here, once (the global router: the guard has already swapped this screen out): the setup page for people who ticked "offer services", else the page they came from (a provider) or Search.
+      // Where to land is decided here, once and handed to the tabs layout (a navigation made in this screen was lost when the guard swapped it out): the setup page for people who ticked "offer services", else the page they came from (a provider) or Search.
       // The setup (the draft profile) runs inside verify, before the person counts as signed in, so Home is never shown in between and the tabs layout opens the setup page at once. If it fails: Home; the setup page creates the draft itself.
       const offerServices = await verify(email, code.trim(), async () => void (await startOffering(true)))
       const target = afterVerifyTarget(offerServices, await consumeAfterLogin())
-      if (target) router.replace(target)
+      if (target) setPending({ path: target }) // the tabs layout opens it once the sign-in screens are gone (a navigation made here was lost)
     } catch (e) {
       setError(errorText(e instanceof ApiError ? e.code : ''))
       setBusy(false)
