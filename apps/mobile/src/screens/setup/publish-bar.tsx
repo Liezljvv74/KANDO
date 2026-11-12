@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import type { MyProfile, OwnService } from '@kando/contract'
 
 import { ApiError } from '@/api/client'
 import { publishProfile, unpublishProfile } from '@/api/my-profile'
 import { ErrorText } from '@/components/auth-ui'
-import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
+import { Card, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { useQuoteSteps } from '@/hooks/use-me'
 import { canShare, type DocumentRow } from '@/lib/documents'
@@ -95,7 +95,7 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
     <>
     <View style={highlight ? styles.highlight : undefined}>
     <Card>
-      <SwitchRow label={t('setup.live')} value={live} onChange={change} disabled={busy || locked} />
+      <SwitchRow label={t(live ? 'setup.live' : 'setup.inactive')} value={live} onChange={change} disabled={busy || locked} />
       {locked ? <Text style={styles.hint}>{t('setup.liveLocked')}</Text> : null}
       {items.length > 0 && (
         <>
@@ -120,8 +120,17 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
       {justPublished && live && isLive(profile) && (
         <>
-          <Text style={styles.live}>{waiting > 0 ? t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title }) : t('setup.liveMessage')}</Text>
-          {canShare(services) && profile.slug ? <SmallButton label={t('setup.share')} onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())} /> : null}
+          {waiting > 0 ? <Text style={styles.live}>{t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title })}</Text> : null}
+          {canShare(services) && profile.slug ? (
+            <Pressable
+              onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())}
+              accessibilityRole="button"
+              accessibilityLabel={t('setup.share')}
+              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+            >
+              <Text style={styles.shareLabel}>{t('setup.share')}</Text>
+            </Pressable>
+          ) : null}
         </>
       )}
       <ErrorText text={problem} />
@@ -135,6 +144,10 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
 const styles = StyleSheet.create({
   highlight: { borderWidth: 3, borderColor: color.indigo, borderRadius: 18 },
   live: { fontSize: 16, fontWeight: '700', color: color.indigo },
+  // 3D: a darker slab under the button; pressing sinks it onto the slab.
+  share: { minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: color.teal, borderBottomWidth: 6, borderBottomColor: '#0E7C75', borderTopWidth: 1, borderTopColor: '#7FE3DC' },
+  sharePressed: { borderBottomWidth: 2, marginTop: 4 },
+  shareLabel: { fontSize: 16, fontWeight: '700', color: color.ink, textAlign: 'center' },
   hint: { fontSize: 14, color: color.inkMuted },
   heading: { fontSize: 17, fontWeight: '700', color: color.ink },
   checking: { minHeight: 44, justifyContent: 'center' },

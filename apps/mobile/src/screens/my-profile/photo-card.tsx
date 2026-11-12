@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native'
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native'
 
 import type { Photo as OwnPhoto } from '@kando/contract'
 
@@ -84,7 +84,7 @@ export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | nul
           accessibilityState={{ busy, disabled: busy }}
           style={styles.edit}
         >
-          {busy ? <ActivityIndicator color={color.indigo} /> : <Ionicons name="pencil" size={20} color={color.indigo} style={styles.halo} />}
+          <Ionicons name="pencil" size={20} color={color.indigo} style={styles.halo} />
         </Pressable>
       </View>
       <ErrorText text={problem} />

@@ -12,7 +12,7 @@ export function DoneBar({ onPress, busy, saved, message }: { onPress: () => void
       <View style={styles.bar}>
         {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
         {!!message && <Text accessibilityRole="alert" style={styles.message}>{message}</Text>}
-        <Button label={t('common.done')} onPress={onPress} busy={busy} />
+        <Button label={t('common.done')} onPress={onPress} disabled={busy} />
       </View>
     </KeyboardStickyView>
   )

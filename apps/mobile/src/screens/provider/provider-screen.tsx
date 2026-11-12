@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { ProviderDetail } from '@kando/contract'
@@ -104,7 +104,7 @@ export default function ProviderScreen() {
         p.translatable && (
           <View style={styles.translateBox}>
             <Pressable accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={translate} style={styles.translate}>
-              {busy ? <ActivityIndicator color={color.indigo} accessibilityLabel={t('provider.translate')} /> : <Text style={styles.translateLabel}>{t('provider.translate')}</Text>}
+              <Text style={styles.translateLabel}>{t('provider.translate')}</Text>
             </Pressable>
             {translateError && (
               <Text style={styles.small} accessibilityRole="alert">

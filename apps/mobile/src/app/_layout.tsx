@@ -5,7 +5,7 @@ import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
 import { Button } from '@/components/auth-ui'
@@ -35,9 +35,7 @@ export default function RootLayout() {
   if (loading || offline || (!fontsReady && !fontError && !fontsLate)) {
     return (
       <View style={styles.center}>
-        {loading || !offline ? ( // spinner while the session or the fonts load; the offline notice only once loading is over
-          <ActivityIndicator size="large" color={color.indigo} />
-        ) : (
+        {loading || !offline ? null : ( // blank while the session or the fonts load (no spinner); the offline notice only once loading is over
           <>
             <Text style={styles.text}>{t(isAuthBusy() ? 'error.authBusy' : 'error.network')}</Text>
             <Button label={t('common.retry')} onPress={retry} />

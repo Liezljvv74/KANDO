@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router'
 import type { ComponentRef } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -79,7 +79,7 @@ export const SmallButton = ({
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
     style={({ pressed }) => [styles.small, grow && styles.smallGrow, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, !!badge && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={solid ? (danger ? color.surface : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? color.surface : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>}
+    <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? color.surface : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>
   </Pressable>
 )
 
@@ -106,7 +106,7 @@ export const IconButton = ({
     hitSlop={4}
     style={({ pressed }) => [styles.icon, (pressed || disabled) && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={color.indigo} /> : <Ionicons name={icon} size={22} color={color.indigo} />}
+    <Ionicons name={icon} size={22} color={color.indigo} />
   </Pressable>
 )
 

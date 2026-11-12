@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -49,7 +49,7 @@ export const Button = ({ label, onPress, busy, disabled, danger, a11yLabel, sele
     accessibilityState={{ busy: !!busy, disabled: !!(busy || disabled), selected }}
     // Dims while pressed, so a tap is visible.
     style={({ pressed }) => [styles.button, danger && styles.danger, (busy || disabled) && styles.busy, pressed && styles.pressed]}>
-    {busy ? <ActivityIndicator color={danger ? color.surface : color.ink} /> : <Text style={[styles.buttonLabel, danger && styles.dangerLabel]}>{label}</Text>}
+    <Text style={[styles.buttonLabel, danger && styles.dangerLabel]}>{label}</Text>
   </Pressable>
 )
 
