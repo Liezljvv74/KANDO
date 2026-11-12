@@ -1,0 +1,126 @@
+import { AppState } from 'react-native'
+import { ApiError } from '@/api/client'
+import { clearIfVersion, listEntries, loadStore, markFailed, removeKey, type PendingEntry, type SaveKind } from '@/lib/pending-saves'
+
+const RETRY_SECONDS = [2, 5, 15, 45, 60]
+const SEND_LIMIT_MS = 30_000
+
+type Sender = (e: PendingEntry) => Promise<void>
+
+const senders = new Map<SaveKind, Sender>()
+const locks = new Map<string, Promise<unknown>>()
+const running = new Set<string>()
+const nextAt = new Map<string, number>()
+const timers = new Set<ReturnType<typeof setTimeout>>()
+let getAccountId: (() => string | null) | null = null
+let onServiceGone: ((serviceRef: string) => void) | undefined
+
+export function registerSender(kind: SaveKind, send: Sender): void {
+  senders.set(kind, send)
+}
+
+async function withLimit(send: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ApiError(0, 'timeout')), SEND_LIMIT_MS)
+  })
+  try {
+    await Promise.race([send, limit])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function attempt(key: string): Promise<'ok' | 'failed'> {
+  const e = listEntries().find((x) => x.key === key)
+  if (!e) return 'ok'
+  const send = senders.get(e.kind)
+  if (!send || (getAccountId && getAccountId() !== e.accountId)) return 'failed'
+  try {
+    await withLimit(send(e))
+    nextAt.delete(key)
+    clearIfVersion(key, e.version)
+    return 'ok'
+  } catch (err) {
+    markFailed(key, e.version, err)
+    if (err instanceof ApiError && err.status === 404 && e.serviceRef) {
+      for (const x of listEntries()) if (x.serviceRef === e.serviceRef) removeKey(x.key)
+      onServiceGone?.(e.serviceRef)
+      return 'failed'
+    }
+    const cur = listEntries().find((x) => x.key === key)
+    if (cur?.state === 'retry') {
+      const delay = RETRY_SECONDS[Math.min(cur.attempts - 1, RETRY_SECONDS.length - 1)] * 1000
+      nextAt.set(key, Date.now() + delay)
+      const timer = setTimeout(() => {
+        timers.delete(timer)
+        pump(false)
+      }, delay)
+      timers.add(timer)
+    }
+    return 'failed'
+  }
+}
+
+/** One attempt for one entry. The only sender for a key: calls for one key run one after the other. */
+export function sendNow(key: string): Promise<'ok' | 'failed'> {
+  const p = (locks.get(key) ?? Promise.resolve()).then(() => attempt(key))
+  locks.set(key, p)
+  void p.then(() => locks.get(key) === p && locks.delete(key))
+  return p
+}
+
+function eligible(e: PendingEntry, everything: boolean): boolean {
+  if (!senders.has(e.kind) || e.accountId !== getAccountId?.() || e.state === 'refused') return false
+  if (everything) return true
+  return e.state === 'retry' && (nextAt.get(e.key) ?? Infinity) <= Date.now()
+}
+
+async function runGroup(group: string, everything: boolean) {
+  if (running.has(group)) return
+  running.add(group)
+  const tried = new Map<string, number>()
+  try {
+    for (;;) {
+      const mine = listEntries().filter((e) => (e.serviceRef ?? e.key) === group && tried.get(e.key) !== e.version)
+      let next: PendingEntry | undefined
+      for (const e of mine) {
+        if (eligible(e, everything)) {
+          next = e
+          break
+        }
+        if (e.kind === 'service-create' && e.state !== 'refused') break
+      }
+      if (!next) return
+      tried.set(next.key, next.version)
+      if ((await sendNow(next.key)) !== 'ok') return
+    }
+  } finally {
+    running.delete(group)
+  }
+}
+
+function pump(everything: boolean) {
+  const groups = new Set(listEntries().map((e) => e.serviceRef ?? e.key))
+  for (const g of groups) void runGroup(g, everything)
+}
+
+export function wake(): void {
+  pump(true)
+}
+
+export function startRunner(accountIdNow: () => string | null, opts?: { onServiceGone?: (serviceRef: string) => void }): () => void {
+  let stopped = false
+  getAccountId = accountIdNow
+  onServiceGone = opts?.onServiceGone
+  void loadStore().then(() => !stopped && pump(true))
+  const sub = AppState.addEventListener('change', (st) => st === 'active' && pump(true))
+  return () => {
+    stopped = true
+    sub.remove()
+    timers.forEach(clearTimeout)
+    timers.clear()
+    getAccountId = null
+    onServiceGone = undefined
+  }
+}
