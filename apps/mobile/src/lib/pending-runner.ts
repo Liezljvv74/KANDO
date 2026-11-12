@@ -1,6 +1,6 @@
 import { AppState } from 'react-native'
 import { ApiError } from '@/api/client'
-import { clearIfVersion, listEntries, loadStore, markFailed, removeKey, type PendingEntry, type SaveKind } from '@/lib/pending-saves'
+import { clearIfVersion, dropService, listEntries, loadStore, markFailed, type PendingEntry, type SaveKind } from '@/lib/pending-saves'
 
 const RETRY_SECONDS = [2, 5, 15, 45, 60]
 const SEND_LIMIT_MS = 30_000
@@ -37,17 +37,19 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
   if (!e) return 'ok'
   const send = senders.get(e.kind)
   if (!send || getAccountId?.() !== e.accountId) return 'failed'
-  if (e.serviceRef && e.kind !== 'service-create' && listEntries().some((x) => x.kind === 'service-create' && x.serviceRef === e.serviceRef && x.version < e.version)) return 'failed'
+  if (held(e)) return 'failed'
   const gen = generation
   try {
     await withLimit(send(e))
     nextAt.delete(key)
+    const ref = listEntries().find((x) => x.key === key)?.serviceRef
     clearIfVersion(key, e.version)
+    if (e.kind === 'service-create' && ref && ref !== e.serviceRef) void runGroup(ref, true) // the fields, now under the real id
     return 'ok'
   } catch (err) {
     markFailed(key, e.version, err)
     if (err instanceof ApiError && err.status === 404 && e.serviceRef) {
-      for (const x of listEntries()) if (x.serviceRef === e.serviceRef) removeKey(x.key)
+      dropService(e.serviceRef)
       try {
         onServiceGone?.(e.serviceRef)
       } catch {
@@ -79,8 +81,13 @@ export function sendNow(key: string): Promise<'ok' | 'failed'> {
   return p
 }
 
+/** A field of a service not created yet waits for its create (also a refused one) and is never sent with `tmp:`. */
+function held(e: PendingEntry): boolean {
+  return e.kind !== 'service-create' && !!e.serviceRef?.startsWith('tmp:') && listEntries().some((x) => x.kind === 'service-create' && x.serviceRef === e.serviceRef)
+}
+
 function eligible(e: PendingEntry, everything: boolean): boolean {
-  if (!senders.has(e.kind) || e.accountId !== getAccountId?.() || e.state === 'refused') return false
+  if (!senders.has(e.kind) || e.accountId !== getAccountId?.() || e.state === 'refused' || held(e)) return false
   if (everything) return true
   const due = nextAt.get(e.key)
   return e.state === 'retry' && !!due && due.version === e.version && due.at <= Date.now()

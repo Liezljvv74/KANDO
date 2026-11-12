@@ -100,6 +100,15 @@ describe('pending-saves', () => {
     expect(s.listEntries('a')).toHaveLength(0)
   })
 
+  it('dropService removes only that service entries', () => {
+    put('service-create:tmp:1', { kind: 'service-create', serviceRef: 'tmp:1' })
+    put('service:tmp:1:title', { kind: 'service-field', serviceRef: 'tmp:1' })
+    put('service:s2:title', { kind: 'service-field', serviceRef: 's2' })
+    put('other')
+    s.dropService('tmp:1')
+    expect(s.listEntries().map((e) => e.key)).toEqual(['service:s2:title', 'other'])
+  })
+
   it('removeKey and replaceServiceRef', () => {
     put('service:tmp:1:name', { kind: 'service-field', serviceRef: 'tmp:1' })
     put('other')

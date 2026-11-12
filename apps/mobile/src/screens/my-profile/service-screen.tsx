@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 
 import type { OwnService } from '@kando/contract'
@@ -19,10 +19,11 @@ import { useSession } from '@/hooks/use-session'
 import { docText, errorText, t, useLang } from '@/i18n'
 import { compulsory } from '@/lib/compulsory'
 import { documentRows, serviceDocNote, type DocumentRow } from '@/lib/documents'
-import { usePendingEntry } from '@/lib/pending-saves'
+import { sendNow } from '@/lib/pending-runner'
+import { dropService, putEntry, subscribe, usePendingEntry } from '@/lib/pending-saves'
 import { parsePrice } from '@/lib/profile-form'
 import { serviceMissing } from '@/lib/required-fields'
-import { createSerial } from '@/lib/serial-create'
+import { createdService } from '@/lib/serial-create'
 import { color } from '@/theme'
 
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
@@ -38,7 +39,7 @@ export default function ServiceScreen({ id }: { id?: string }) {
   const { done, data, error, retry } = useLoad(loadAll)
   const existing = id == null ? undefined : data?.services.find((s) => s.id === id)
   const title = t(id == null ? 's.new' : 's.edit')
-  if (done && !(id != null && !existing)) return <ServiceForm title={title} initial={existing ?? null} docRows={documentRows(data!.services, categories ?? [], data!.verifications)} />
+  if (done && !(id != null && !existing)) return <ServiceForm title={title} initial={existing ?? null} knownIds={data!.services.map((s) => s.id)} docRows={documentRows(data!.services, categories ?? [], data!.verifications)} />
   return (
     <FormScreen title={title}>
       {!done ? error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading /> : <Empty text={t('error.notFound')} />}
@@ -50,21 +51,26 @@ export default function ServiceScreen({ id }: { id?: string }) {
  * One service. It is created on the server when its category is chosen; every other field saves on its own.
  * `initial` is read once; `docRows` only feeds the "waiting for a document" note.
  */
-function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; initial: OwnService | null; docRows: DocumentRow[] }) {
+function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title: string; initial: OwnService | null; knownIds: string[]; docRows: DocumentRow[] }) {
   const router = useRouter()
   const { categories } = useCategories()
-  const [id, setId] = useState(initial?.id ?? null)
-  const idRef = useRef(id) // the savers read the id at send time, so a field typed right after the category still lands
+  const [tmpRef] = useState(() => `tmp:${Date.now()}`) // a new service is kept under this until the server has created it
+  const createKey = `service-create:${tmpRef}`
+  const createEntry = usePendingEntry(createKey)
+  const created = useSyncExternalStore(subscribe, () => createdService(tmpRef)) // set when the queued create succeeds, also in the background
+  const id = initial?.id ?? created?.id ?? null
+  const idRef = useRef(id)
+  idRef.current = id
   const [category, setCategory] = useState(initial?.category ?? null)
   const [waitingFor, setWaitingFor] = useState(initial?.waitingFor ?? [])
   const [code, setCode] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  // Choosing again before the create returns waits for it and updates: one service per screen.
-  const [serial] = useState(() => createSerial(initial?.id ?? null, (categoryId) => servicesApi.create({ categoryId }), (id, categoryId) => servicesApi.update(id, { categoryId })))
 
   const onService = (s: OwnService) => setWaitingFor(s.waitingFor ?? [])
+  useEffect(() => {
+    if (created) setWaitingFor(created.waitingFor ?? [])
+  }, [created])
   const accountId = useSession().user?.id ?? ''
-  const [tmpRef] = useState(() => `tmp:${Date.now()}`) // a value typed before the service exists is kept under this and renamed when the create is done
   const serviceRef = id ?? tmpRef
   // One field = one saver = one request; `toBody` null removes the stored change. The value is kept on the phone from the
   // first keystroke and sent by the 'service-field' sender; a reopened screen starts from a stored value.
@@ -98,16 +104,20 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
     setBusy(true)
     setCode((c) => ({ ...c, category: '' }))
     try {
-      const s = await serial.choose(categoryId)
-      idRef.current = s.id
-      setId(s.id)
-      onService(s)
+      if (idRef.current) onService(await servicesApi.update(idRef.current, { categoryId }))
+      else {
+        // Kept on the phone and sent by the 'service-create' sender (choosing again before it succeeds replaces it); the
+        // fields wait for it and are then sent with the real id.
+        putEntry({ key: createKey, kind: 'service-create', accountId, body: { categoryId, known: knownIds }, serviceRef: tmpRef, route: '/my-profile/service/new', field: 'category' })
+        await sendNow(createKey)
+      }
     } catch (e) {
       categoryFailed.current = true
       setCode((c) => ({ ...c, category: e instanceof ApiError ? e.code : 'network' }))
     }
-    setBusy(serial.creating())
+    setBusy(false)
   }
+  const categoryError = code.category || (createEntry?.attempts ? (createEntry.state === 'refused' ? (createEntry.reason ?? 'network') : 'network') : '')
 
   const remove = () =>
     Alert.alert(t('s.deleteConfirm'), undefined, [
@@ -116,9 +126,13 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
         text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
-          if (!idRef.current) return router.back()
+          if (!idRef.current) {
+            dropService(tmpRef)
+            return router.back()
+          }
           try {
             await servicesApi.remove(idRef.current)
+            dropService(idRef.current)
             router.back()
           } catch (e) {
             setCode((c) => ({ ...c, remove: e instanceof ApiError ? (e.code === 'Profile incomplete' ? 'last-service' : e.code) : 'network' })) // a live profile must keep one service
@@ -152,13 +166,13 @@ function ServiceForm({ title: screenTitle, initial, docRows }: { title: string; 
     <FormScreen title={screenTitle} footer={<DoneBar onPress={done.onDone} busy={done.busy} saved={done.saved} message={done.message} />}>
     <Card>
       <Select {...compulsory('category')} value={category} onChange={(c) => void (choosing.current = chooseCategory(c))} options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} searchable />
-      <ErrorText text={code.category ? errorText(code.category) : null} />
+      <ErrorText text={categoryError ? errorText(categoryError) : null} />
       {waitingFor.length > 0 && (
         <Text style={styles.waiting}>
           {t(serviceDocNote(waitingFor, docRows) === 'needed' ? 'myProfile.neededDocs' : 'myProfile.waitingDocs') + waitingFor.map(docText).join(', ')}
         </Text>
       )}
-      {id && (
+      {(id || createEntry) && (
         <>
           <Field label={t('s.title')} placeholder={categoryName} value={title.value} onChangeText={title.setValue} onBlur={title.flush} maxLength={120} />
           {problem(title)}

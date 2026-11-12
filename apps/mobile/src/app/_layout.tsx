@@ -17,6 +17,7 @@ import { t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
 import { registerSender, startRunner, wake } from '@/lib/pending-runner'
 import { pushRoute } from '@/lib/push'
+import { serviceCreateSender } from '@/lib/serial-create'
 import { color } from '@/theme'
 
 // A push that arrives while the app is open still shows as a banner.
@@ -29,6 +30,7 @@ registerSender('service-field', async (e) => {
   if (!e.serviceRef || e.serviceRef.startsWith('tmp:')) throw new ApiError(0, 'service not created yet') // never against a temporary id
   await servicesApi.update(e.serviceRef, e.body as object)
 })
+registerSender('service-create', serviceCreateSender(servicesApi))
 
 export default function RootLayout() {
   const { user, loading, offline, retry } = useSession()

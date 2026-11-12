@@ -119,6 +119,10 @@ export function dropAccount(accountId: string) {
   if (any) changed()
 }
 
+export function dropService(serviceRef: string) {
+  for (const e of snapshot) if (e.serviceRef === serviceRef) removeKey(e.key)
+}
+
 export function replaceServiceRef(from: string, to: string) {
   let any = false
   for (const [k, e] of [...entries]) {

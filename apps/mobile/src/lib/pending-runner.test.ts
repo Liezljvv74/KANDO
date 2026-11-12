@@ -319,4 +319,104 @@ describe('pending-runner', () => {
     expect(send).toHaveBeenCalledTimes(1)
     expect(jest.getTimerCount()).toBe(0)
   })
+
+  describe('service-create', () => {
+    const CREATE = 'service-create:tmp:1'
+    let api: { list: jest.Mock; create: jest.Mock; update: jest.Mock }
+    let fieldRefs: (string | undefined)[]
+    const putCreate = (categoryId: string, known: string[] = []) =>
+      put(CREATE, { kind: 'service-create', serviceRef: 'tmp:1', body: { categoryId, known }, route: '/my-profile/service/new', field: 'category' })
+    const putField = (f: string) => put(`service:tmp:1:${f}`, { kind: 'service-field', serviceRef: 'tmp:1', body: { [f]: 'x' } })
+    const creates = () => s.listEntries().filter((e) => e.kind === 'service-create')
+
+    beforeEach(() => {
+      api = { list: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({ id: 's1', category: 'c1' }), update: jest.fn().mockResolvedValue({ id: 's1' }) }
+      fieldRefs = []
+      r.registerSender('service-create', require('./serial-create').serviceCreateSender(api))
+      r.registerSender('service-field', async (e) => {
+        if (e.serviceRef?.startsWith('tmp:')) throw new ApiError(0, 'tmp')
+        fieldRefs.push(e.serviceRef)
+      })
+    })
+
+    it('sends the create first, then the fields typed before it with the real id (never tmp:)', async () => {
+      putCreate('c1')
+      putField('title')
+      putField('price')
+      await start()
+      expect(api.create).toHaveBeenCalledWith({ categoryId: 'c1' })
+      expect(api.list).not.toHaveBeenCalled()
+      expect(fieldRefs).toEqual(['s1', 's1'])
+      expect(s.listEntries()).toHaveLength(0)
+      expect(require('./serial-create').createdService('tmp:1')).toMatchObject({ id: 's1' })
+    })
+
+    it('a failed create keeps the fields waiting and unsent', async () => {
+      api.create.mockRejectedValue(new ApiError(503, 'busy'))
+      putCreate('c1')
+      putField('title')
+      await start()
+      await ms(7000)
+      expect(api.create).toHaveBeenCalledTimes(3)
+      expect(fieldRefs).toEqual([])
+      expect(s.listEntries().find((e) => e.kind === 'service-field')).toMatchObject({ serviceRef: 'tmp:1', attempts: 0 })
+    })
+
+    it('before resending, takes over a service of that category the phone does not know, without a second POST', async () => {
+      api.create.mockRejectedValueOnce(new ApiError(0, 'lost'))
+      api.list.mockResolvedValue([
+        { id: 'old', category: 'c1' },
+        { id: 's9', category: 'c1' },
+      ])
+      putCreate('c1', ['old'])
+      putField('title')
+      await start()
+      expect(api.create).toHaveBeenCalledTimes(1)
+      expect(api.list).not.toHaveBeenCalled()
+      await ms(2000)
+      expect(api.list).toHaveBeenCalledTimes(1)
+      expect(api.create).toHaveBeenCalledTimes(1)
+      expect(fieldRefs).toEqual(['s9'])
+      expect(s.listEntries()).toHaveLength(0)
+    })
+
+    it('two category changes before the create succeeds leave one create entry with the newest category', async () => {
+      api.create.mockRejectedValueOnce(new ApiError(503, 'busy'))
+      putCreate('c1')
+      await start()
+      putCreate('c2')
+      expect(creates()).toHaveLength(1)
+      expect(creates()[0].body).toMatchObject({ categoryId: 'c2' })
+      await r.sendNow(CREATE)
+      expect(api.create).toHaveBeenLastCalledWith({ categoryId: 'c2' })
+      expect(creates()).toHaveLength(0)
+    })
+
+    it('a refused create holds the fields; choosing another category releases them', async () => {
+      api.create.mockRejectedValueOnce(new ApiError(400, 'bad category'))
+      putCreate('c1')
+      putField('title')
+      await start()
+      expect(creates()[0]).toMatchObject({ state: 'refused', route: '/my-profile/service/new', field: 'category' })
+      expect(fieldRefs).toEqual([])
+      putCreate('c2')
+      r.wake()
+      await ms(0)
+      expect(fieldRefs).toEqual(['s1'])
+      expect(s.listEntries()).toHaveLength(0)
+    })
+
+    it('a category chosen again while the create is in flight updates the new service', async () => {
+      let answer: (v: unknown) => void = () => {}
+      api.create.mockReturnValueOnce(new Promise((res) => (answer = res)))
+      putCreate('c1')
+      await start()
+      putCreate('c2')
+      answer({ id: 's1', category: 'c1' })
+      await ms(0)
+      expect(api.create).toHaveBeenCalledTimes(1)
+      expect(api.update).toHaveBeenCalledWith('s1', { categoryId: 'c2' })
+      expect(s.listEntries()).toHaveLength(0)
+    })
+  })
 })
