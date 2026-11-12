@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Every user-facing text in German and English (`packages/i18n`); German is the main language; `notification-parity.int.spec.ts` must stay green.
-- The Welcome screen stays the first screen for a signed-out person. Its "I need help" card becomes **"Browse services"** (German **"Dienste durchsuchen"**) with its own text keys; the **signed-in Home keeps "I need help" unchanged** (the two cards stop sharing keys).
+- The Welcome screen stays the first screen for a signed-out person. **Decided later (12 November, owner): it is the Home tab itself** (one screen, one route, the tab bar is always at the bottom); the separate `(auth)/welcome` route is removed, and back from login or sign-up returns to where the person came from. Its "I need help" card becomes **"Browse services"** (German **"Dienste durchsuchen"**) with its own text keys; the **signed-in Home keeps "I need help" unchanged** (the two cards stop sharing keys).
 - **All tabs are visible when signed out.** Search, the provider page, Home, Learn and Help work fully. Jobs, My business, Account and every screen under bookings, invoices, threads and quotes show the prompt "Log in or sign up to use this" with a button to the login and sign-up page.
 - No transaction (request, quote, booking, payment, message, review, upload) is possible without a session; the server refuses with 401, the app asks first.
 - After login or sign-up the person returns to the **same provider page** (not to a half-filled form).

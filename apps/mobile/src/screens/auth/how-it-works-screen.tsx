@@ -23,12 +23,12 @@ const SAFETY: [Key, Key][] = [
 export default function HowItWorksScreen() {
   useLang()
   const router = useRouter()
-  const signedIn = !!useSession().user // signed in: back goes to Home and there is nothing to register for
+  const signedIn = !!useSession().user // signed in: there is nothing to register for
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('welcome.howTitle')} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace(signedIn ? '/' : '/welcome'))} hitSlop={12}>
+        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} hitSlop={12}>
           <Text style={styles.link}>← {t('welcome.backHome')}</Text>
         </Pressable>
         {GROUPS.map(({ title, steps, bg }) => (
