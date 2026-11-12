@@ -61,7 +61,6 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
           if (alive.current) setBusy(false)
         }
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
   // the data is saved: a failed move just leaves the person on the screen
