@@ -24,7 +24,7 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
       try {
         if (queue) {
           const q = queue()
-          if (!q.accountId || (await sendNow(q.key)) !== 'ok') throw new Error('not saved') // signed out: nothing can be kept or sent
+          if (!q.accountId || (await sendNow(q.key, q.accountId)) !== 'ok') throw new Error('not saved') // signed out: nothing can be kept or sent
 
         } else await save(latest)
         if (!dirty) onStatus('saved')
@@ -48,7 +48,7 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
         const q = queue()
         const body = q.toBody(value)
         if (!body) {
-          removeKey(q.key)
+          removeKey(q.key, q.accountId)
           dirty = false
           clearTimeout(timer)
           timer = undefined
@@ -81,7 +81,7 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
 /** One instance per field: `setValue` on every keystroke, `flush` on blur. */
 export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>, delayMs = 600, queue?: FieldQueue<V>) {
   const [value, setV] = useState(initial)
-  const pending = usePendingEntry(queue?.key ?? '')
+  const pending = usePendingEntry(queue?.key ?? '', queue?.accountId ?? null)
   const [status, setStatus] = useState<SaveStatus>(pending?.state === 'refused' ? 'error' : 'saved')
   const saveRef = useRef(save)
   saveRef.current = save

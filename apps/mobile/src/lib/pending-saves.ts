@@ -24,7 +24,8 @@ export type PendingEntry = {
 const FILE = 'pending-saves.json'
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-const entries = new Map<string, PendingEntry>()
+const entries = new Map<string, PendingEntry>() // by account + key: one phone, several accounts, the same keys
+const idOf = (accountId: string, key: string) => `${accountId} ${key}`
 const listeners = new Set<() => void>()
 let snapshot: PendingEntry[] = []
 let lastVersion = 0
@@ -84,22 +85,25 @@ export function putEntry(e: Omit<PendingEntry, 'version' | 'attempts' | 'state' 
   if (to) e = { ...e, key: e.key.split(`service:${e.serviceRef}:`).join(`service:${to}:`), serviceRef: to }
   const now = Date.now()
   lastVersion = Math.max(lastVersion + 1, now)
-  entries.set(e.key, { ...e, version: lastVersion, state: 'retry', attempts: 0, createdAt: now })
+  entries.set(idOf(e.accountId, e.key), { ...e, version: lastVersion, state: 'retry', attempts: 0, createdAt: now })
   changed()
   return lastVersion
 }
 
+/** Versions are unique across accounts, so key + version names one entry. */
+function byVersion(key: string, version: number): PendingEntry | undefined {
+  for (const e of entries.values()) if (e.key === key && e.version === version) return e
+}
+
 export function clearIfVersion(key: string, version: number) {
-  if (entries.get(key)?.version !== version) return
-  entries.delete(key)
-  if (!loaded) removedKeys.add(key)
-  changed()
+  const cur = byVersion(key, version)
+  if (cur) removeKey(key, cur.accountId)
 }
 
 export function markFailed(key: string, version: number, e: unknown, field?: string) {
-  const cur = entries.get(key)
-  if (!cur || cur.version !== version) return
-  entries.set(key, {
+  const cur = byVersion(key, version)
+  if (!cur) return
+  entries.set(idOf(cur.accountId, key), {
     ...cur,
     state: classifyFailure(e),
     reason: e instanceof Error ? e.message : String(e),
@@ -110,9 +114,10 @@ export function markFailed(key: string, version: number, e: unknown, field?: str
   changed()
 }
 
-export function removeKey(key: string) {
-  if (!loaded) removedKeys.add(key)
-  if (entries.delete(key)) changed()
+export function removeKey(key: string, accountId: string) {
+  const id = idOf(accountId, key)
+  if (!loaded) removedKeys.add(id)
+  if (entries.delete(id)) changed()
 }
 
 export function dropAccount(accountId: string) {
@@ -123,7 +128,7 @@ export function dropAccount(accountId: string) {
 }
 
 export function dropService(serviceRef: string) {
-  for (const e of snapshot) if (e.serviceRef === serviceRef) removeKey(e.key)
+  for (const e of snapshot) if (e.serviceRef === serviceRef) removeKey(e.key, e.accountId)
 }
 
 export function replaceServiceRef(from: string, to: string) {
@@ -132,9 +137,10 @@ export function replaceServiceRef(from: string, to: string) {
   for (const [k, e] of [...entries]) {
     if (e.serviceRef !== from) continue
     entries.delete(k)
-    const key = k.split(`service:${from}:`).join(`service:${to}:`)
-    const other = entries.get(key)
-    if (!other || other.version < e.version) entries.set(key, { ...e, key, serviceRef: to })
+    const key = e.key.split(`service:${from}:`).join(`service:${to}:`)
+    const id = idOf(e.accountId, key)
+    const other = entries.get(id)
+    if (!other || other.version < e.version) entries.set(id, { ...e, key, serviceRef: to })
     any = true
   }
   if (any) changed()
@@ -172,9 +178,10 @@ export async function loadStore(): Promise<void> {
     const now = Date.now()
     for (const e of stored as PendingEntry[]) {
       if (!isValid(e) || now - e.createdAt > MAX_AGE_MS) continue
-      if (removedKeys.has(e.key) || droppedAccounts.has(e.accountId)) continue
-      const mine = entries.get(e.key)
-      if (!mine || mine.version < e.version) entries.set(e.key, e)
+      const id = idOf(e.accountId, e.key)
+      if (removedKeys.has(id) || droppedAccounts.has(e.accountId)) continue
+      const mine = entries.get(id)
+      if (!mine || mine.version < e.version) entries.set(id, e)
       lastVersion = Math.max(lastVersion, e.version)
     }
     changed(false)
@@ -202,7 +209,11 @@ export function usePendingEntries(accountId: string | null): PendingEntry[] {
   return useMemo(() => forAccount(all, accountId), [all, accountId])
 }
 
-export function usePendingEntry(key: string): PendingEntry | undefined {
+export const findEntry = (all: PendingEntry[], key: string, accountId: string | null): PendingEntry | undefined =>
+  all.find((e) => e.key === key && e.accountId === accountId)
+
+/** The kept entry of this account only: another account on the same phone has the same keys. */
+export function usePendingEntry(key: string, accountId: string | null): PendingEntry | undefined {
   const all = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-  return useMemo(() => all.find((e) => e.key === key), [all, key])
+  return useMemo(() => findEntry(all, key, accountId), [all, key, accountId])
 }

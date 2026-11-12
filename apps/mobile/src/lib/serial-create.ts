@@ -57,7 +57,7 @@ export function serviceCreateSender(api: Api) {
     }
     sent.add(ref)
     s ??= await api.create({ categoryId })
-    if (!listEntries().some((x) => x.key === e.key)) return void (await api.remove(s.id)) // deleted on the phone meanwhile
+    if (!listEntries(e.accountId).some((x) => x.key === e.key)) return void (await api.remove(s.id)) // deleted on the phone meanwhile
     created.set(ref, s)
     replaceServiceRef(ref, s.id)
   }

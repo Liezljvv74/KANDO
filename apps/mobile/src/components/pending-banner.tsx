@@ -61,7 +61,7 @@ export function PendingBanner({ children }: { children: ReactNode }) {
     onDiscard = () =>
       Alert.alert(t('pending.discardAsk'), undefined, [
         { text: t('pending.discardKeep'), style: 'cancel' },
-        { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, listEntries(first.accountId)).forEach(removeKey) },
+        { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, listEntries(first.accountId)).forEach((k) => removeKey(k, first.accountId)) },
       ])
   } else if (state) {
     text = t(RETRY_TEXT[state.reason])

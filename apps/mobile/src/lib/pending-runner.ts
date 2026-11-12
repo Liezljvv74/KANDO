@@ -37,8 +37,16 @@ async function withLimit(send: Promise<void>): Promise<void> {
   }
 }
 
-async function attempt(key: string): Promise<'ok' | 'failed'> {
-  const e = listEntries().find((x) => x.key === key)
+/** The entries of the account signed in now (none when nobody is): the runner never reads another account's. */
+const current = () => {
+  const acc = getAccountId?.()
+  return acc ? listEntries(acc) : []
+}
+const own = (e: PendingEntry) => listEntries(e.accountId).find((x) => x.key === e.key)
+
+async function attempt(key: string, accountId?: string): Promise<'ok' | 'failed'> {
+  const who = accountId ?? getAccountId?.() ?? null
+  const e = listEntries().find((x) => x.key === key && (who === null || x.accountId === who))
   if (!e) return 'ok'
   const send = senders.get(e.kind)
   if (!send || getAccountId?.() !== e.accountId) return 'failed'
@@ -47,7 +55,7 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
   try {
     await withLimit(send(e))
     nextAt.delete(key)
-    const ref = listEntries().find((x) => x.key === key)?.serviceRef
+    const ref = own(e)?.serviceRef
     clearIfVersion(key, e.version)
     if (e.kind === 'service-create' && ref && ref !== e.serviceRef) void runGroup(ref, true) // the fields, now under the real id
     return 'ok'
@@ -62,7 +70,7 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
       }
       return 'failed'
     }
-    const cur = listEntries().find((x) => x.key === key)
+    const cur = own(e)
     if (gen === generation && cur && cur.version === e.version && cur.state === 'retry') {
       const delay = RETRY_SECONDS[Math.min(cur.attempts - 1, RETRY_SECONDS.length - 1)] * 1000
       nextAt.set(key, { version: e.version, at: Date.now() + delay })
@@ -76,9 +84,12 @@ async function attempt(key: string): Promise<'ok' | 'failed'> {
   }
 }
 
-/** One attempt for one entry. The only sender for a key: calls for one key run one after the other. */
-export function sendNow(key: string): Promise<'ok' | 'failed'> {
-  const run = () => attempt(key)
+/**
+ * One attempt for one entry. The only sender for a key: calls for one key run one after the other.
+ * `accountId` names whose entry (default: the account signed in now); another account's entry is never sent.
+ */
+export function sendNow(key: string, accountId?: string): Promise<'ok' | 'failed'> {
+  const run = () => attempt(key, accountId)
   const p = (locks.get(key) ?? Promise.resolve()).then(run, run)
   locks.set(key, p)
   const release = () => locks.get(key) === p && locks.delete(key)
@@ -88,7 +99,7 @@ export function sendNow(key: string): Promise<'ok' | 'failed'> {
 
 /** A field of a service not created yet waits for its create (also a refused one) and is never sent with `tmp:`. */
 function held(e: PendingEntry): boolean {
-  return e.kind !== 'service-create' && !!e.serviceRef?.startsWith('tmp:') && listEntries().some((x) => x.kind === 'service-create' && x.serviceRef === e.serviceRef)
+  return e.kind !== 'service-create' && !!e.serviceRef?.startsWith('tmp:') && listEntries(e.accountId).some((x) => x.kind === 'service-create' && x.serviceRef === e.serviceRef)
 }
 
 function eligible(e: PendingEntry, everything: boolean): boolean {
@@ -105,7 +116,7 @@ async function runGroup(group: string, everything: boolean) {
   const tried = new Map<string, number>()
   try {
     for (;;) {
-      const mine = listEntries().filter((e) => (e.serviceRef ?? e.key) === group && tried.get(e.key) !== e.version)
+      const mine = current().filter((e) => (e.serviceRef ?? e.key) === group && tried.get(e.key) !== e.version)
       let next: PendingEntry | undefined
       for (const e of mine) {
         if (eligible(e, everything)) {
@@ -116,8 +127,8 @@ async function runGroup(group: string, everything: boolean) {
       }
       if (!next) return
       tried.set(next.key, next.version)
-      if ((await sendNow(next.key)) !== 'ok') {
-        const cur = listEntries().find((x) => x.key === next.key)
+      if ((await sendNow(next.key, next.accountId)) !== 'ok') {
+        const cur = own(next)
         if (gen !== generation || !cur || cur.version === next.version) return
         everything = true
       }
@@ -128,7 +139,7 @@ async function runGroup(group: string, everything: boolean) {
 }
 
 function pump(everything: boolean) {
-  const groups = new Set(listEntries().map((e) => e.serviceRef ?? e.key))
+  const groups = new Set(current().map((e) => e.serviceRef ?? e.key))
   for (const g of groups) void runGroup(g, everything)
 }
 

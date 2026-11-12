@@ -52,8 +52,7 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState(false)
   const sending = useRef(false)
   const generation = useRef(signOutGeneration()) // a sign-out (or account deletion) changes it: nothing is sent for the old account
-  const pendingNow = usePendingEntry('account')
-  const stored = pendingNow && pendingNow.accountId === user?.id ? pendingNow : undefined // kept changes of this account fill the form first
+  const stored = usePendingEntry('account', user?.id ?? null) // kept changes of this account fill the form first
   const storedRef = useRef(stored)
   storedRef.current = stored
   const pendingUsed = useRef(false)
@@ -143,7 +142,7 @@ export default function AccountScreen() {
     setEdited(false)
     putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
     sending.current = true
-    const ok = (await sendNow('account').finally(() => void (sending.current = false))) === 'ok'
+    const ok = (await sendNow('account', user.id).finally(() => void (sending.current = false))) === 'ok'
     if (ok) lastSaved.current = JSON.stringify(body)
     return ok
   }

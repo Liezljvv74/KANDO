@@ -60,12 +60,12 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
   const [refused] = useState(() => (initial ? undefined : refusedCreate(accountId)))
   const [tmpRef] = useState(() => refused?.serviceRef ?? `tmp:${Date.now()}`) // a new service is kept under this until the server has created it
   const createKey = `service-create:${tmpRef}`
-  const createEntry = usePendingEntry(createKey)
+  const createEntry = usePendingEntry(createKey, accountId)
   const created = useSyncExternalStore(subscribe, () => createdService(tmpRef)) // set when the queued create succeeds, also in the background
   const id = initial?.id ?? created?.id ?? null
   const idRef = useRef(id)
   idRef.current = id
-  const categoryKept = usePendingEntry(id ? `service:${id}:category` : '') // a kept category change of an existing service
+  const categoryKept = usePendingEntry(id ? `service:${id}:category` : '', accountId) // a kept category change of an existing service
   const [category, setCategory] = useState(
     (categoryKept?.body as { categoryId?: string } | undefined)?.categoryId ?? initial?.category ?? (refused?.body as { categoryId?: string } | undefined)?.categoryId ?? null,
   )
@@ -82,7 +82,7 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
   // first keystroke and sent by the 'service-field' sender; a reopened screen starts from a stored value.
   function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null, fromBody: (body: Record<string, never>) => V = (b) => b[key] as V) {
     const storeKey = `service:${serviceRef}:${key}`
-    const pending = usePendingEntry(storeKey)
+    const pending = usePendingEntry(storeKey, accountId)
     return useFieldSave<V>(pending ? fromBody(pending.body as Record<string, never>) : initialValue, noSave, 600, {
       key: storeKey,
       kind: 'service-field',
@@ -111,12 +111,12 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
       if (sid) {
         // Kept and sent like the other fields: a failure after the screen is left is retried and shown by the banner.
         putEntry(categoryEntry(sid, accountId, categoryId))
-        if ((await sendNow(`service:${sid}:category`)) === 'ok') servicesApi.list().then((l) => { const s = l.find((x) => x.id === sid); if (s) onService(s) }, () => {})
+        if ((await sendNow(`service:${sid}:category`, accountId)) === 'ok') servicesApi.list().then((l) => { const s = l.find((x) => x.id === sid); if (s) onService(s) }, () => {})
       } else {
         // Kept on the phone and sent by the 'service-create' sender (choosing again before it succeeds replaces it); the
         // fields wait for it and are then sent with the real id.
         putEntry({ key: createKey, kind: 'service-create', accountId, body: createBody(createEntry, categoryId, knownIds), serviceRef: tmpRef, route: '/my-profile/service/new', field: 'category' })
-        await sendNow(createKey)
+        await sendNow(createKey, accountId)
       }
       void loadNextStep().catch(() => {}) // the category may ask for a document: Done reads the next step from held data
     } catch (e) {

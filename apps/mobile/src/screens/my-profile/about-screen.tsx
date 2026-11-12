@@ -48,7 +48,7 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
   // on the phone from the first keystroke and sent by the 'about' sender; a reopened screen starts from a stored value.
   function useField<V>(key: string, initialValue: V, toBody: (v: V) => object | null, fromBody: (body: Record<string, never>) => V = (b) => b[key] as V) {
     const storeKey = `about:${key}`
-    const pending = usePendingEntry(storeKey)
+    const pending = usePendingEntry(storeKey, accountId)
     return useFieldSave<V>(pending ? fromBody(pending.body as Record<string, never>) : initialValue, noSave, 600, {
       key: storeKey,
       kind: 'about',

@@ -158,8 +158,22 @@ describe('pending-runner', () => {
     appStateHandler('active')
     await ms(0)
     expect(send).not.toHaveBeenCalled()
-    expect(await r.sendNow('k')).toBe('failed')
+    expect(await r.sendNow('k')).toBe('ok') // nothing of this account to send under that key
+    expect(await r.sendNow('k', 'other')).toBe('failed')
     expect(send).not.toHaveBeenCalled()
+    expect(s.listEntries()).toHaveLength(1)
+  })
+
+  it('an entry of another account with the same key is neither sent nor removed; this account sends its own', async () => {
+    const send = jest.fn().mockResolvedValue(undefined)
+    r.registerSender('about', send)
+    put('about:street', { accountId: 'other', body: 'theirs' })
+    await start()
+    put('about:street', { body: 'mine' })
+    expect(await r.sendNow('about:street')).toBe('ok')
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ accountId: 'a', body: 'mine' })
+    expect(s.listEntries().map((e) => [e.accountId, e.body])).toEqual([['other', 'theirs']])
   })
 
   it('sends entries of one serviceRef in the order they were put', async () => {

@@ -117,7 +117,7 @@ describe('pending-saves', () => {
       ['service:real-id:name', 'real-id'],
       ['other', undefined],
     ])
-    s.removeKey('other')
+    s.removeKey('other', 'a')
     expect(s.listEntries()).toHaveLength(1)
   })
 
@@ -214,7 +214,7 @@ describe('pending-saves', () => {
 
   it('removeKey and clearIfVersion before the load are not undone by the merge', async () => {
     mockDisk['pending-saves.json'] = JSON.stringify([old('k1'), old('k2'), old('k3')])
-    s.removeKey('k1')
+    s.removeKey('k1', 'a')
     const v = put('k2')
     s.clearIfVersion('k2', v)
     await s.loadStore()
@@ -247,12 +247,40 @@ describe('pending-saves', () => {
     expect(s.forAccount(s.listEntries(), null)).toEqual([])
   })
 
+  it('two accounts with the same key keep both entries; one account never touches the other', async () => {
+    await s.loadStore()
+    const va = put('about:street', { accountId: 'a', body: 'A street' })
+    const vb = put('about:street', { accountId: 'b', body: 'B street' })
+    expect(s.listEntries('a').map((e) => e.body)).toEqual(['A street'])
+    expect(s.listEntries('b').map((e) => e.body)).toEqual(['B street'])
+    expect(s.findEntry(s.listEntries(), 'about:street', 'b')?.body).toBe('B street')
+    expect(s.findEntry(s.listEntries(), 'about:street', 'c')).toBeUndefined()
+    expect(s.findEntry(s.listEntries(), 'about:street', null)).toBeUndefined()
+    s.markFailed('about:street', vb, new ApiError(400, 'x'))
+    expect(s.listEntries('a')[0].state).toBe('retry')
+    s.clearIfVersion('about:street', va)
+    expect(s.listEntries().map((e) => e.accountId)).toEqual(['b'])
+    put('about:street', { accountId: 'a', body: 'A again' })
+    s.removeKey('about:street', 'b')
+    expect(s.listEntries().map((e) => e.body)).toEqual(['A again'])
+    put('about:street', { accountId: 'b', body: 'B again' })
+    await tick()
+    await tick()
+    jest.resetModules()
+    s = require('./pending-saves')
+    await s.loadStore()
+    expect(s.listEntries().map((e) => [e.accountId, e.body]).sort()).toEqual([
+      ['a', 'A again'],
+      ['b', 'B again'],
+    ])
+  })
+
   it('notifies subscribers on every change and lists one account', () => {
     const fn = jest.fn()
     const off = s.subscribe(fn)
     put('k1', { accountId: 'a' })
     put('k2', { accountId: 'b' })
-    s.removeKey('k2')
+    s.removeKey('k2', 'b')
     expect(fn).toHaveBeenCalledTimes(3)
     expect(s.listEntries('a').map((e) => e.key)).toEqual(['k1'])
     off()
