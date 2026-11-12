@@ -132,13 +132,13 @@ it('a fixed service without a price is not offerable, with a price it is; on-req
   expect(await offerable('sr2')).toBe(1)
 })
 
-it('the app sends a category alone, then one field per save: currency defaults to EUR, title to the category name', async () => {
+it('the app sends a category alone, then one field per save: currency defaults to EUR, title stays empty until Publish', async () => {
   await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenpflege'), ($1, 'en', 'Gardening')", [categoryId])
   const res = await call(services.POST, 'sr1', 'POST', { categoryId })
   expect(res.status).toBe(201)
   const created = OwnServiceSchema.parse(await res.json())
   expect(created).toMatchObject({ currency: 'EUR', priceType: null, price: null })
-  expect(['Gartenpflege', 'Gardening']).toContain(created.title)
+  expect(created.title).toBe('')
   const type = await call(service.PATCH, 'sr1', 'PATCH', { priceType: 'fixed' }, { id: created.id })
   expect(type.status).toBe(200)
   const price = await call(service.PATCH, 'sr1', 'PATCH', { price: 50 }, { id: created.id })
@@ -170,10 +170,10 @@ it('an optional document never holds a service back, and an approved one changes
   expect((await find('Mixed')).waitingFor).toEqual([])
 })
 
-it('a blank or whitespace title patch restores the category name, never a blank title', async () => {
+it('a blank or whitespace title patch leaves the title empty until the next Publish', async () => {
   await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenpflege'), ($1, 'en', 'Gardening') ON CONFLICT DO NOTHING", [categoryId])
   const created = OwnServiceSchema.parse(await (await call(services.POST, 'sr1', 'POST', svc({ title: 'Eigener Titel' }))).json())
   const res = await call(service.PATCH, 'sr1', 'PATCH', { title: '   ' }, { id: created.id })
   expect(res.status).toBe(200)
-  expect(['Gartenpflege', 'Gardening']).toContain(OwnServiceSchema.parse(await res.json()).title)
+  expect(OwnServiceSchema.parse(await res.json()).title).toBe('')
 })

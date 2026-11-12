@@ -161,7 +161,7 @@ export async function listQuoteDocuments(tx: Tx, userId: string, now = new Date(
       currency: quotes.currency,
       scope: quotes.scope,
       expiresAt: quotes.expiresAt,
-      service: services.title,
+      service: sql<string | null>`nullif(${services.title}, '')`, // an empty title (cleared after Publish) counts as none
       booking: { id: latest.id, createdAt: latest.createdAt, status: latest.status, answerBy: latest.answerBy, payBy: latest.payBy, parentBookingId: latest.parentBookingId },
     })
     .from(quoteDocuments)

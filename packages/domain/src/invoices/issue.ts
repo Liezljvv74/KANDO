@@ -122,7 +122,7 @@ async function issueOne(rootId: string, now: Date, forDeletion: boolean, clock: 
     const group = (
       await o.execute<GroupRow>(sql`
       SELECT b.id, b.parent_booking_id, b.status, b.amount::text AS amount, b.start_at,
-        b.cancelled_by, b.no_show, b.created_at, coalesce(q.scope, s.title, rq.description, '') AS title,
+        b.cancelled_by, b.no_show, b.created_at, coalesce(q.scope, nullif(s.title, ''), rq.description, '') AS title,
         (CASE WHEN b.released_at IS NULL THEN 0
           ELSE coalesce((SELECT sum(l.amount) FROM ledger_entries l WHERE l.booking_id = b.id AND l.kind IN ('transfer', 'commission')), 0) END)::text AS share
       FROM bookings b LEFT JOIN quotes q ON q.id = b.quote_id LEFT JOIN services s ON s.id = b.service_id LEFT JOIN requests rq ON rq.id = b.request_id

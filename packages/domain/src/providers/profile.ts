@@ -1,6 +1,7 @@
 import { assertNoContactDetailsIn } from '../chat/flags'
 import { and, eq, sql } from 'drizzle-orm'
-import { lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
+import { categoryTexts, lookupPostcode, notSuspendedSql, providers, services, users, type Tx } from '@kando/db'
+import { DEFAULT_LANG } from '@kando/i18n'
 import type { Missing, MyProfile, ProfileInput } from '@kando/contract'
 import { quoteSteps } from '../payments/rules'
 import { fail } from './http'
@@ -188,6 +189,21 @@ export async function upsertMyProfile(
   return { profile, created }
 }
 
+/** The category's name in the user's language (default language when missing): the title a service saved without one gets at Publish. */
+async function categoryTitle(tx: Tx, userId: string, categoryId: string): Promise<string> {
+  const lang = (await tx.select({ l: users.language }).from(users).where(eq(users.id, userId)))[0]?.l ?? DEFAULT_LANG
+  const names = await tx.select({ lang: categoryTexts.lang, name: categoryTexts.name }).from(categoryTexts).where(eq(categoryTexts.categoryId, categoryId))
+  return (names.find((n) => n.lang === lang) ?? names.find((n) => n.lang === DEFAULT_LANG))?.name ?? ''
+}
+
+/** Publish: every service of the caller's profile with an empty title gets its category name; a typed title is never touched. */
+export async function fillEmptyServiceTitles(tx: Tx, userId: string): Promise<void> {
+  const profile = await ownProvider(tx, userId)
+  if (!profile) return
+  const empty = await tx.select({ id: services.id, categoryId: services.categoryId }).from(services).where(and(eq(services.providerId, profile.id), eq(services.title, '')))
+  for (const s of empty) await tx.update(services).set({ title: await categoryTitle(tx, userId, s.categoryId) }).where(eq(services.id, s.id))
+}
+
 /** Publishes the caller's profile: 404 without one, 409 when suspended or incomplete (`missing` lists what). */
 export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
   await lockProfile(tx, userId) // serialises with a concurrent profile edit between this check and the status change
@@ -196,6 +212,7 @@ export async function publish(tx: Tx, userId: string): Promise<MyProfile> {
   if (await isSuspendedNow(tx, row.id)) fail(409, { error: 'Profile suspended' })
   const current = (await view(tx, userId, row)).missing
   if (current.length) fail(409, { error: 'Profile incomplete', missing: current })
+  await fillEmptyServiceTitles(tx, userId) // a service saved without a title gets its category name now
   await syncIdentity(tx, userId, row)
   const fresh = (await ownProvider(tx, userId))!
   const slugBase = slugify(fresh.publicName ?? '') // '' (no name) falls back to 'profile'
