@@ -118,21 +118,18 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
       {allSet(profile, steps, docRows) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
       {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
-      {justPublished && live && isLive(profile) && (
-        <>
-          {waiting > 0 ? <Text style={styles.live}>{t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title })}</Text> : null}
-          {canShare(services) && profile.slug ? (
-            <Pressable
-              onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())}
-              accessibilityRole="button"
-              accessibilityLabel={t('setup.share')}
-              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
-            >
-              <Text style={styles.shareLabel}>{t('setup.share')}</Text>
-            </Pressable>
-          ) : null}
-        </>
-      )}
+      {justPublished && live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title })}</Text> : null}
+      {/* Always there while the profile is live: the provider may want to share again later. */}
+      {live && isLive(profile) && canShare(services) && profile.slug ? (
+        <Pressable
+          onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())}
+          accessibilityRole="button"
+          accessibilityLabel={t('setup.share')}
+          style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+        >
+          <Text style={styles.shareLabel}>{t('setup.share')}</Text>
+        </Pressable>
+      ) : null}
       <ErrorText text={problem} />
     </Card>
     </View>
