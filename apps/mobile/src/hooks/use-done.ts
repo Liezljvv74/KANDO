@@ -5,7 +5,7 @@ import type { Key } from '@/i18n'
 import { errorText } from '@/i18n'
 import { createOnce, runDone } from '@/lib/done-flow'
 import { finishFlow } from '@/lib/finish-flow'
-import { goToStep, loadNextStep } from '@/lib/flow-state'
+import { goToStep, loadNextStep, payoutNotReady } from '@/lib/flow-state'
 import { goBack } from '@/lib/go'
 import { missingMessage } from '@/lib/required-fields'
 
@@ -56,7 +56,7 @@ export function useDone(cfg: { isProvider: boolean; missing: () => Key[]; commit
         try {
           if (out.type === 'edit') goBack()
           else if (out.type === 'next') await goToStep(out.step, true, () => alive.current)
-          else finishFlow(out.role)
+          else finishFlow(out.role, out.role === 'provider' && payoutNotReady())
         } finally {
           if (alive.current) setBusy(false)
         }

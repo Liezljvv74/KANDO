@@ -1,6 +1,6 @@
 import { documentsApi, getMyProfile, servicesApi } from '@/api/my-profile'
 import { getCategories } from '@/api/providers'
-import { loadMe } from '@/hooks/use-me'
+import { currentMe, loadMe } from '@/hooks/use-me'
 import { getLang } from '@/i18n'
 
 import { openPayoutSetup, payoutOpened } from './do-quote-step'
@@ -8,6 +8,9 @@ import { documentRows } from './documents'
 import { finishFlow } from './finish-flow'
 import { goReplace } from './go'
 import { nextStep, type NextStep } from './next-step'
+
+/** True while the provider's payout is not ready (the shared /me lists it as an open quote step): read right after `loadNextStep` refreshed /me. */
+export const payoutNotReady = () => currentMe()?.quoteSteps?.includes('payout') === true
 
 /** The next open step, from fresh server data (never cached). A customer's account is the only thing that can be open for them. */
 export async function loadNextStep(): Promise<NextStep | null> {
@@ -39,7 +42,7 @@ export async function continueAfterAutoStep(stillHere: () => boolean): Promise<v
     return
   }
   if (!stillHere()) return // the person left the screen while this loaded: nothing opens
-  if (!next) return finishFlow('provider')
+  if (!next) return finishFlow('provider', payoutNotReady())
   if (next.kind === 'payout') return goReplace('/my-profile')
   return goToStep(next, false, stillHere)
 }
