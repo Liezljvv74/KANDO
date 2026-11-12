@@ -25,7 +25,6 @@ import { dropService, putEntry, subscribe, usePendingEntry } from '@/lib/pending
 import { parsePrice } from '@/lib/profile-form'
 import { serviceMissing } from '@/lib/required-fields'
 import { categoryEntry, createBody, createdService, refusedCreate } from '@/lib/serial-create'
-import { color } from '@/theme'
 
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
 const priceLabel = (p: string) => (p === 'on-request' ? t('price.onRequest') : t(`pt.${p}` as 'pt.fixed'))
@@ -93,8 +92,7 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
       toBody,
     })
   }
-  // An empty title is not sent: the server keeps the category name it filled in.
-  const title = useField('title', initial?.title ?? '', (v) => (v.trim() ? { title: v.trim() } : null))
+  const title = useField('title', initial?.title ?? '', (v) => ({ title: v.trim() }))
   const description = useField('description', initial?.description ?? '', (v) => ({ description: v.trim() }))
   const priceType = useField<string | null>('priceType', initial?.priceType ?? null, (v) => (v ? { priceType: v, ...(v === 'on-request' && { price: null }) } : null))
   const price = useField('price', initial?.price == null ? '' : String(initial.price).replace('.', ','), (v) => {
@@ -198,7 +196,6 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
           {problem(price)}
         </>
       )}
-      {busy && <Text style={styles.hint}>…</Text>}
       <ErrorText text={code.remove ? errorText(code.remove) : null} />
       <SmallButton label={t('setup.removeService')} onPress={remove} disabled={busy} />
     </Card>
@@ -207,7 +204,6 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
 }
 
 const styles = StyleSheet.create({
-  hint: { fontSize: 14, color: color.inkMuted },
   waiting: { fontSize: 14, fontWeight: '600', color: '#8A5A00' },
   multi: { minHeight: 72, paddingTop: 10, textAlignVertical: 'top' },
 })
