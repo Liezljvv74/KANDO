@@ -145,6 +145,35 @@ test('switching the language also saves it for emails, but only while signed in'
   expect(api.updateMe).toHaveBeenCalledWith({ language: 'en' })
 })
 
+test('a new provider is signed in only after the sign-up is saved and the setup is ready: the root layout never shows Home in between', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  const signedInDuring: unknown[] = []
+  api.updateMe.mockImplementation(async () => {
+    signedInDuring.push(getSession().user)
+    return {}
+  })
+  photos.add.mockImplementation(async () => {
+    signedInDuring.push(getSession().user)
+    return { id: 'p1', kind: 'profile', url: null, alt: null }
+  })
+  const onOffering = jest.fn(async () => void signedInDuring.push(getSession().user))
+  await expect(verify('a@b.de', '123456', onOffering)).resolves.toBe(true)
+  expect(onOffering).toHaveBeenCalledTimes(1)
+  expect(signedInDuring.length).toBeGreaterThanOrEqual(3) // the names, the picture and the setup
+  expect(signedInDuring.every((u) => u === null)).toBe(true)
+  expect(getSession().user).toEqual(user)
+})
+
+test('the setup step runs only for a person who ticked "offer services"', async () => {
+  await savePending({ ...pending, offerServices: false })
+  a.verifyEmail.mockResolvedValueOnce(user)
+  const onOffering = jest.fn(async () => {})
+  await expect(verify('a@b.de', '123456', onOffering)).resolves.toBe(false)
+  expect(onOffering).not.toHaveBeenCalled()
+  expect(getSession().user).toEqual(user)
+})
+
 test('verify finishes the sign-up: names and address, then the picture, then the record is cleared; returns the tick', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)

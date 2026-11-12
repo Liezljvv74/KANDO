@@ -1,10 +1,16 @@
 import { Redirect } from 'expo-router'
 
+import { useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
+import { readyToNavigate, usePending } from '@/lib/pending-navigation'
 import HomeScreen from '@/screens/home/home-screen'
 
 // Signed out, the Home tab is the Welcome screen (the first screen of the app); signed in it is the Home screen.
+// Blank for the moment before the tabs layout opens the page a new provider is on the way to (the setup page): no flash of Home.
 export default function Index() {
   const { user } = useSession()
-  return user ? <HomeScreen /> : <Redirect href="/welcome" />
+  const me = useMe()
+  const leaving = readyToNavigate(usePending(), me)
+  if (!user) return <Redirect href="/welcome" />
+  return leaving ? null : <HomeScreen />
 }

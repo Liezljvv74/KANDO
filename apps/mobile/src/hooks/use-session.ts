@@ -128,13 +128,18 @@ async function finish(p: PendingSignup) {
   }
 }
 
-/** A correct code signs in and finishes the sign-up; true when the person ticked "offer services" (the screen then opens the provider page). */
-export async function verify(email: string, code: string) {
+/**
+ * A correct code finishes the sign-up and signs in; true when the person ticked "offer services".
+ * The sign-up data is saved and `onOffering` (the provider setup: the draft profile) runs BEFORE the person counts as signed in: the root
+ * layout switches to the tabs (Home) the moment they do, so a new provider stays on the code screen until the setup page can open.
+ */
+export async function verify(email: string, code: string, onOffering?: () => Promise<void>) {
   const user = await auth.verifyEmail(email, code)
   const pending = await pendingFor(user)
-  signedIn(user)
   if (pending) await completeSignup(user)
-  else updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
+  if (pending?.offerServices) await onOffering?.()
+  signedIn(user)
+  if (!pending) updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
   return !!pending?.offerServices
 }
 
