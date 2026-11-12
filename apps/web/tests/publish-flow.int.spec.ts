@@ -149,7 +149,7 @@ it('two providers with the same name publish at once', async () => {
   }
 })
 
-it('Publish fills only empty service titles with the category name in the user language; a typed title survives; a later clear stays empty', async () => {
+it('Publish fills only empty service titles with the category name in the user language; a typed title survives; a clear while unpublished stays empty until the next Publish', async () => {
   await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Gartenpflege'), ($1, 'en', 'Gardening') ON CONFLICT DO NOTHING", [categoryId])
   await pool.query("INSERT INTO users (id, email, first_name, last_name, language) VALUES ('pf4', $1, 'Pia', 'Fuchs', 'en') ON CONFLICT (id) DO UPDATE SET language = 'en'", [EMAIL('pf4')])
   await call(profileRoute.PUT, 'pf4', 'PUT', profile)
@@ -157,15 +157,14 @@ it('Publish fills only empty service titles with the category name in the user l
   const mk = async (extra: object) => (await (await call(services.POST, 'pf4', 'POST', { categoryId, priceType: 'fixed', price: 10, ...extra })).json()).id as string
   const emptyId = await mk({})
   const typedId = await mk({ title: 'Mein Titel' })
-  const titleOf = async (id: string) => (await pool.query('SELECT title FROM services WHERE id = $1', [id])).rows[0].title
   expect(await titleOf(emptyId)).toBe('') // open until Publish
   expect((await call(publish.POST, 'pf4', 'POST')).status).toBe(200)
   expect(await titleOf(emptyId)).toBe('Gardening')
   expect(await titleOf(typedId)).toBe('Mein Titel')
   const service = await import('../app/app-api/v1/services/[id]/route')
-  await call(service.PATCH, 'pf4', 'PATCH', { title: '' }, { id: emptyId })
-  expect(await titleOf(emptyId)).toBe('') // cleared later: stays empty
   await call(unpublish.POST, 'pf4', 'POST')
+  await call(service.PATCH, 'pf4', 'PATCH', { title: '' }, { id: emptyId })
+  expect(await titleOf(emptyId)).toBe('') // cleared while a draft again: stays empty
   await call(publish.POST, 'pf4', 'POST')
   expect(await titleOf(emptyId)).toBe('Gardening') // the next Publish fills it again
 })
