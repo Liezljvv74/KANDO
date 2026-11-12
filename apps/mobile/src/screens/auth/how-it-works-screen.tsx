@@ -23,7 +23,7 @@ const SAFETY: [Key, Key][] = [
 export default function HowItWorksScreen() {
   useLang()
   const router = useRouter()
-  const signedIn = !!useSession().user // signed in: back goes to Home and there is nothing to register for
+  const signedIn = !!useSession().user // signed in: there is nothing to register for
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('welcome.howTitle')} />

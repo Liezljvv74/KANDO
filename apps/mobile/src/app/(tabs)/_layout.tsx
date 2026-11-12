@@ -41,14 +41,14 @@ const icon = (name: React.ComponentProps<typeof Ionicons>['name']) => ({ color, 
 export default function TabsLayout() {
   useLang()
   const me = useMe()
-  // "Offer services": go to the profile page only once this layout has rendered with the tab visible.
   const { user } = useSession() // signed out: every tab shows (the private ones ask for a login)
+  // "Offer services": go to the profile page only once this layout has rendered with the tab visible and the person is signed in.
   const pending = usePending()
   useEffect(() => {
-    if (!readyToNavigate(pending, me)) return // the target stays until the tab is visible
+    if (!readyToNavigate(pending, me, !!user)) return // the target stays until the tab is visible
     const p = consumePending()
     if (p) router.navigate(urlOf(p))
-  }, [me, pending])
+  }, [me, pending, user])
   // A notification created while the app was in the background shows its dot as soon as the user returns.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))

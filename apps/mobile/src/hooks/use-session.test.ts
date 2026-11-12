@@ -165,6 +165,13 @@ test('a new provider is signed in only after the sign-up is saved and the setup 
   expect(getSession().user).toEqual(user)
 })
 
+test('the person is signed in even if the sign-up save or the setup step throws (the code cannot be used twice)', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await expect(verify('a@b.de', '123456', async () => { throw new Error('boom') })).resolves.toBe(true)
+  expect(getSession().user).toEqual(user)
+})
+
 test('the setup step runs only for a person who ticked "offer services"', async () => {
   await savePending({ ...pending, offerServices: false })
   a.verifyEmail.mockResolvedValueOnce(user)

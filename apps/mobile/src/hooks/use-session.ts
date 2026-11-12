@@ -136,8 +136,12 @@ async function finish(p: PendingSignup) {
 export async function verify(email: string, code: string, onOffering?: () => Promise<void>) {
   const user = await auth.verifyEmail(email, code)
   const pending = await pendingFor(user)
-  if (pending) await completeSignup(user)
-  if (pending?.offerServices) await onOffering?.()
+  try {
+    if (pending) await completeSignup(user)
+    if (pending?.offerServices) await onOffering?.()
+  } catch {
+    // the code is used up: the person must still end up signed in (a kept record is finished at the next start)
+  }
   signedIn(user)
   if (!pending) updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
   return !!pending?.offerServices

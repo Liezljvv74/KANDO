@@ -20,7 +20,7 @@ export function consumePending() {
   if (p) set(null)
   return p
 }
-export const readyToNavigate = (p: PendingNavigation | null, me: { isProvider: boolean } | null) => !!p && showProfileTab(me)
+export const readyToNavigate = (p: PendingNavigation | null, me: { isProvider: boolean } | null, signedIn = true) => signedIn && !!p && showProfileTab(me)
 export const urlOf = (p: PendingNavigation) => (p.welcome ? `${p.path}?welcome=1` : p.path) as '/my-profile'
 
 export const usePending = () =>
