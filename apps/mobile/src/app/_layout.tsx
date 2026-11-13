@@ -66,7 +66,9 @@ function usePushTaps(signedIn: boolean) {
     if (!signedIn || !response || response.actionIdentifier !== DEFAULT_ACTION_IDENTIFIER) return
     clearLastNotificationResponse()
     const route = pushRoute(response.notification.request.content.data?.url)
-    if (route) go(route)
+    // One tick later: after a login this effect runs in the very commit that removes the sign-in screens, and a navigation made
+    // inside it was overridden (the person ended on Home, the booking never opened). Same reason as in the tabs layout.
+    if (route) setTimeout(() => go(route), 0)
   }, [signedIn, response])
 }
 

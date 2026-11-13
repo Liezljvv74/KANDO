@@ -16,7 +16,7 @@ const routes = (dir: string): string[] =>
   })
 
 /** Every exported handler with the auth option of its appRequest call. */
-export const handlers = (src: string) =>
+const handlers = (src: string) =>
   [...src.matchAll(/export const (GET|POST|PUT|PATCH|DELETE) = appRequest\(\s*\{([^}]*)\}/g)].map((m) => ({
     method: m[1]!,
     auth: /auth:\s*'(required|optional)'/.exec(m[2]!)?.[1],
@@ -25,6 +25,18 @@ export const handlers = (src: string) =>
 it('the scan sees optional and required handlers (negative fixture)', () => {
   expect(handlers("export const GET = appRequest({ auth: 'optional' }, async () => {})")).toEqual([{ method: 'GET', auth: 'optional' }])
   expect(handlers("export const POST = appRequest({ auth: 'required', maxBodyBytes: 8 }, async () => {})")).toEqual([{ method: 'POST', auth: 'required' }])
+})
+
+/** Every HTTP method a route file exports, however it is written. */
+export const exportedMethods = (src: string) => [...src.matchAll(/export\s+(?:async\s+)?(?:const|function|let|var)\s+(GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]!)
+
+it('the scan reads every exported handler: one written another way fails here, not silently', () => {
+  expect(exportedMethods('export async function POST() {}')).toEqual(['POST'])
+  expect(exportedMethods('export const DELETE = wrap(appRequest(opts, fn))')).toEqual(['DELETE'])
+  for (const file of routes(root)) {
+    const src = readFileSync(file, 'utf8')
+    expect(handlers(src).map((h) => h.method).sort(), relative(root, file)).toEqual(exportedMethods(src).sort())
+  }
 })
 
 it('every handler states its auth', () => {

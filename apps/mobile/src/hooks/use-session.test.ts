@@ -5,11 +5,11 @@ import { loadMe } from '@/hooks/use-me'
 import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
 import { registerForPush, unregisterPush } from '@/lib/push'
 
-import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, verify } from './use-session'
+import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, SIGNUP_WAIT_MS, verify } from './use-session'
 
 jest.mock('@/api/auth')
 jest.mock('@/lib/push', () => ({ registerForPush: jest.fn(), unregisterPush: jest.fn() }))
-jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn() }))
+jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn(() => Promise.resolve()), setSignedInCheck: jest.fn() }))
 let mockFileExists = true
 jest.mock('expo-file-system', () => ({ File: class { get exists() { return mockFileExists } } }))
 jest.mock('@/api/my-profile', () => ({ photosApi: { add: jest.fn() } }))
@@ -322,16 +322,31 @@ test('sign-up keeps the record for the code step; a failed sign-up leaves none',
   expect(await loadPending()).toBeNull()
 })
 
-test('finishing a sign-up reloads /me so the home nudge sees the new picture; nothing to finish, nothing to reload', async () => {
+test('finishing a sign-up reloads /me after the picture is saved (the home nudge sees it); every sign-in loads /me once (the tabs were mounted signed out)', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)
   await verify('a@b.de', '123456')
-  expect(loadMe).toHaveBeenCalledTimes(1)
+  expect(loadMe).toHaveBeenCalledTimes(2) // after the sign-up data, and at the sign-in
   expect(photos.add.mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadMe).mock.invocationCallOrder[0])
   jest.mocked(loadMe).mockClear()
   a.verifyEmail.mockResolvedValueOnce(user)
   await verify('a@b.de', '123456')
-  expect(loadMe).not.toHaveBeenCalled()
+  expect(loadMe).toHaveBeenCalledTimes(1) // nothing to finish: only the sign-in's own load
+})
+
+test('a sign-up whose data takes too long still signs the person in after SIGNUP_WAIT_MS', async () => {
+  jest.useFakeTimers()
+  try {
+    await savePending(pending)
+    a.verifyEmail.mockResolvedValueOnce(user)
+    photos.add.mockReturnValueOnce(new Promise(() => {})) // the upload never answers
+    const done = verify('a@b.de', '123456')
+    await jest.advanceTimersByTimeAsync(SIGNUP_WAIT_MS + 1)
+    await done
+    expect(getSession().user).toEqual(user)
+  } finally {
+    jest.useRealTimers()
+  }
 })
 
 test('every session start registers for push; an unverified account or no session does not', async () => {

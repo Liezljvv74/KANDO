@@ -67,8 +67,13 @@ export async function markNotificationsSeen(only: (n: Notification) => boolean =
 
 let firstLoad: Promise<Me> | null = null
 /** Loads `/me` unless it is held or already on its way: any number of screens mounting together make one request. */
+/** Set by the session: signed out there is no `/me` to ask (it would answer 401 on every screen a visitor opens). */
+let signedInNow: () => boolean = () => true
+export const setSignedInCheck = (fn: () => boolean) => void (signedInNow = fn)
+
 export function ensureMe() {
   if (me) return Promise.resolve(me)
+  if (!signedInNow()) return Promise.reject(new Error('signed out'))
   if (firstLoad) return firstLoad
   const p: Promise<Me> = loadMe().finally(() => {
     if (firstLoad === p) firstLoad = null // a sign-out may have started a newer one meanwhile

@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, TextInput, type TextInputProps, View } fro
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { LanguageSwitch } from '@/components/language-switch'
 import { LegalFooter } from '@/components/legal-footer'
 import { ScreenBanner } from '@/components/screen-banner'
 import { color, font } from '@/theme'
@@ -18,6 +19,7 @@ export function AuthScreen({ title, children, legal }: { title: string; children
         <View style={styles.card}>
           {children}
         </View>
+        <LanguageSwitch />
         {legal && <LegalFooter />}
       </KeyboardAwareScrollView>
     </SafeAreaView>

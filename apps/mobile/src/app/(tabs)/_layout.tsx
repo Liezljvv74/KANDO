@@ -6,7 +6,7 @@ import { AppState, type ColorValue } from 'react-native'
 
 import { jobCounts } from '@/api/jobs'
 import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
-import { useSession } from '@/hooks/use-session'
+import { getSession, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/job-notices'
 import { tabBadge } from '@/lib/jobs'
@@ -55,7 +55,7 @@ export default function TabsLayout() {
   }, [me, pending, user])
   // A notification created while the app was in the background shows its dot as soon as the user returns.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && getSession().user && loadMe().catch(() => {})) // signed out there is no account to ask for
     return () => sub.remove()
   }, [])
   // The Jobs badge: the customer and the provider counter added (jobs that need me or have unread messages, each once per side), from

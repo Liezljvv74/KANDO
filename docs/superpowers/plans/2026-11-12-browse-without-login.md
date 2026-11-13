@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Every user-facing text in German and English (`packages/i18n`); German is the main language; `notification-parity.int.spec.ts` must stay green.
-- The Welcome screen stays the first screen for a signed-out person. **Decided later (12 November, owner): it is the Home tab itself** (one screen, one route, the tab bar is always at the bottom); the separate `(auth)/welcome` route is removed, and back from login or sign-up returns to where the person came from. Its "I need help" card becomes **"Browse services"** (German **"Dienste durchsuchen"**) with its own text keys; the **signed-in Home keeps "I need help" unchanged** (the two cards stop sharing keys).
+- The Welcome screen stays the first screen for a signed-out person. **Decided later (12 November, owner): it is the Home tab itself** (one screen, one route, the tab bar is always at the bottom); the separate `(auth)/welcome` route is removed, and back from login or sign-up returns to where the person came from. Its "I need help" card becomes **"Browse services"** (German **"Dienste durchsuchen"**) with its own text keys. **As built (13 November): the signed-in Home shows "Browse services" too**, the same three cards as signed out; `welcome.needHelp` and `welcome.needHelpText` are removed.
 - **All tabs are visible when signed out.** Search, the provider page, Home, Learn and Help work fully. Jobs, My business, Account and every screen under bookings, invoices, threads and quotes show the prompt "Log in or sign up to use this" with a button to the login and sign-up page.
 - No transaction (request, quote, booking, payment, message, review, upload) is possible without a session; the server refuses with 401, the app asks first.
 - After login or sign-up the person returns to the **same provider page** (not to a half-filled form).
@@ -71,10 +71,10 @@
 - Test: `apps/mobile/src/lib/home-choices.test.ts` if the choice list is extracted; otherwise the manual check in Task 6
 
 **Interfaces:**
-- Produces: texts `welcome.browse` ("Browse services" / "Dienste durchsuchen") and `welcome.browseText` ("Look through providers near you and see what they offer." / "Stöbere durch Anbieter in deiner Nähe und sieh, was sie anbieten."). `welcome.needHelp` and `welcome.needHelpText` stay, used only by the signed-in Home.
+- Produces: texts `welcome.browse` ("Browse services" / "Dienste durchsuchen") and `welcome.browseText` ("Look through providers near you and see what they offer." / "Stöbere durch Anbieter in deiner Nähe und sieh, was sie anbieten."). As built: `welcome.needHelp` and `welcome.needHelpText` are removed (the signed-in Home shows the same card).
 
 - [ ] **Step 1:** In `app/_layout.tsx` remove the `Stack.Protected guard={!!user}` around `(tabs)` (keep the `(auth)` guard `!user`, so a signed-in person still cannot open the auth screens). Keep the comment about the SDK 58 redirect accurate or delete it.
-- [ ] **Step 2:** In `home-screen.tsx` the signed-out `needHelp` choice becomes `{ title: 'welcome.browse', text: 'welcome.browseText', onPress: () => router.navigate('/search'), main: true }` (no `setAfterLogin`, no sign-up). The signed-in list is unchanged.
+- [ ] **Step 2:** In `home-screen.tsx` the signed-out `needHelp` choice becomes `{ title: 'welcome.browse', text: 'welcome.browseText', onPress: () => router.navigate('/search'), main: true }` (no `setAfterLogin`, no sign-up). As built: the signed-in list shows the same card.
 - [ ] **Step 3:** Read `(tabs)/_layout.tsx`, `search-screen.tsx` and `provider-screen.tsx` for anything that requires `me` (a `useMe()` result used without a null check, a `loadMe()` that signs out on 401) and make each work signed out (a signed-out `loadMe` must not run).
 - [ ] **Step 4:** Add the two new text keys in `en.ts` and `de.ts`.
 - [ ] **Step 5: Run** `pnpm --filter mobile exec tsc --noEmit` and `pnpm --filter @kando/i18n test`. Expected: PASS.

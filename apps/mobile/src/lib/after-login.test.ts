@@ -27,7 +27,7 @@ describe('after login', () => {
     expect(await consumeAfterLogin()).toBeNull()
   })
   it('ignores a stored target that is not allowed', async () => {
-    mockStore.set('kando.afterLogin', `/jobs|${Date.now()}`)
+    mockStore.set('kando.afterLogin', `/bookings/b1|${Date.now()}`)
     expect(await consumeAfterLogin()).toBeNull()
   })
 })
@@ -37,14 +37,21 @@ describe('isAfterLogin', () => {
     expect(isAfterLogin('/search')).toBe(true)
     expect(isAfterLogin('/provider/anna-schmidt')).toBe(true)
   })
+  it('accepts the private tabs that ask for a login, so the person is back on that tab afterwards', () => {
+    for (const v of ['/jobs', '/my-profile', '/account']) expect(isAfterLogin(v)).toBe(true)
+  })
   it('refuses anything else', () => {
-    for (const v of ['/provider/../x', '/provider/', '/provider/A B', 'https://evil.example', '/jobs', '', '/provider/a/b']) expect(isAfterLogin(v)).toBe(false)
+    for (const v of ['/provider/../x', '/provider/', '/provider/A B', 'https://evil.example', '/bookings/b1', '/admin', '', '/provider/a/b']) expect(isAfterLogin(v)).toBe(false)
   })
 })
 
 describe('afterVerifyTarget (a new customer lands on Search, not Home)', () => {
   it('a customer with nothing stored goes to Search', () => expect(afterVerifyTarget(false, null)).toBe('/search'))
   it('a customer with a stored provider page goes there', () => expect(afterVerifyTarget(false, '/provider/anna')).toBe('/provider/anna'))
+  it('a customer who signed up from the Jobs prompt is back on Jobs; My business is not there for a customer, so Search', () => {
+    expect(afterVerifyTarget(false, '/jobs')).toBe('/jobs')
+    expect(afterVerifyTarget(false, '/my-profile')).toBe('/search')
+  })
   it('a person who offers services is led by the offering flow', () => {
     expect(afterVerifyTarget(true, null)).toBeNull()
     expect(afterVerifyTarget(true, '/search')).toBeNull()
