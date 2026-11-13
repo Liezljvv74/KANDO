@@ -142,7 +142,7 @@ export const en: Record<AppKey, string> = {
   'myProfile.addReference': 'Add past job',
   'error.referenceLimit': 'You can list at most 2 past jobs. Remove one first to add another.',
   'setup.title': 'My business',
-  'setup.welcome': "Let's set up your service profile",
+  'setup.welcome': 'Business setup',
   'setup.aboutYou': 'About you',
   'setup.publish': 'Publish',
   'setup.live': 'Live',
