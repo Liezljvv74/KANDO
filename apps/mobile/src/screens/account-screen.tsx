@@ -13,9 +13,9 @@ import { API_URL, ApiError } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { DateTimeField } from '@/components/date-time-field'
-import { Button, Field, KEYBOARD_GAP } from '@/components/auth-ui'
+import { Field, KEYBOARD_GAP } from '@/components/auth-ui'
 import { DoneBar } from '@/components/done-bar'
-import { SwitchRow } from '@/components/form-ui'
+import { SmallButton, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useDone } from '@/hooks/use-done'
@@ -189,9 +189,9 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('tab.account')} />
       <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          {user && <Text style={styles.email}>{user.email}</Text>}
-          <Button label={t('auth.logOut')} onPress={() => confirmSignOut(user?.id, signOut)} />
+        <View style={[styles.card, styles.logOutRow]}>
+          <Text style={styles.email} numberOfLines={1} ellipsizeMode="middle">{user?.email}</Text>
+          <SmallButton label={t('auth.logOut')} onPress={() => confirmSignOut(user?.id, signOut)} />
         </View>
         <View style={styles.card}>
           <Text style={styles.heading}>{t('account.detailsHeading')}</Text>
@@ -268,7 +268,8 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 12 },
   card: { backgroundColor: color.surface, borderRadius: 16, padding: 16, gap: 12 },
   title: { fontSize: 22, fontWeight: '700', color: color.indigo },
-  email: { fontSize: 16, color: color.ink },
+  email: { flex: 1, fontSize: 16, color: color.ink },
+  logOutRow: { flexDirection: 'row', alignItems: 'center' },
   fold: { fontSize: 16, fontWeight: '600', color: color.indigo, minHeight: 44, textAlignVertical: 'center' },
   heading: { fontSize: 17, fontWeight: '700', color: color.ink },
   hint: { fontSize: 14, color: color.inkMuted },
