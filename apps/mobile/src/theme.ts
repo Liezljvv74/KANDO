@@ -20,3 +20,6 @@ export const font = {
   heading: 'Fraunces_700Bold',
   tag: 'CourierPrime_700Bold',
 } as const
+
+/** The small fold and dropdown arrows (▾ ▸ ▴), on every page: large enough to see at a glance (owner decision, 13 November 2026). */
+export const foldArrow = { fontSize: 30, lineHeight: 30 } as const

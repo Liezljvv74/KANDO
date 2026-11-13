@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { ScreenBanner } from '@/components/screen-banner'
 import { t } from '@/i18n'
-import { color, font } from '@/theme'
+import { color, foldArrow, font } from '@/theme'
 
 /** `scrollRef`: lets a screen scroll to one of its sections (y from that section's onLayout; sections are direct children). */
 export function FormScreen({ title, children, back = true, scrollRef, footer }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>>; footer?: React.ReactNode }) {
@@ -34,7 +34,13 @@ export const Card = ({ children, done, list }: { children: React.ReactNode; done
   <View style={[styles.card, list && styles.cardList, done && styles.cardDone]}>{children}</View>
 )
 
-export const SectionTitle = ({ text, tint }: { text: string; tint?: string }) => <Text style={[styles.section, tint ? { color: tint } : null]}>{text}</Text>
+/** `arrow`: a fold arrow after the text (▾ open, ▸ closed), in the size all fold arrows have. */
+export const SectionTitle = ({ text, tint, arrow }: { text: string; tint?: string; arrow?: string }) => (
+  <Text style={[styles.section, tint ? { color: tint } : null]}>
+    {text}
+    {arrow ? <Text style={foldArrow}>{` ${arrow}`}</Text> : null}
+  </Text>
+)
 
 export const SwitchRow = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
   <View style={styles.switchRow}>

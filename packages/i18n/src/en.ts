@@ -620,7 +620,7 @@ export const en: Record<AppKey, string> = {
   'payouts.continue': 'Continue payout set-up',
   'payouts.taxNumber': 'Tax number',
   'payouts.taxNumberHint': 'Needed if you are a small business (Kleinunternehmer) or a business without a VAT ID: it is printed on your invoices.',
-  'payouts.invoiceConsent': 'The platform issues invoices and receipts for my jobs in my name.',
+  'payouts.invoiceConsent': 'I agree that the platform issues invoices and receipts for my jobs in my name.',
   'payouts.invoiceConsentNeeded': 'Before you can send quotes and accept bookings, agree that invoices are issued in your name.',
   'quoteGate.headingOne': 'To send quotes, 1 step is missing',
   'quoteGate.headingMany': 'To send quotes, {n} steps are missing',

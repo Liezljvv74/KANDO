@@ -619,7 +619,7 @@ export const de = {
   'payouts.continue': 'Auszahlung weiter einrichten',
   'payouts.taxNumber': 'Steuernummer',
   'payouts.taxNumberHint': 'Nötig für Kleinunternehmer und Unternehmen ohne USt-IdNr.: Die Nummer steht auf deinen Rechnungen.',
-  'payouts.invoiceConsent': 'Die Plattform stellt Rechnungen und Quittungen zu meinen Aufträgen in meinem Namen aus.',
+  'payouts.invoiceConsent': 'Ich stimme zu, dass die Plattform Rechnungen und Quittungen zu meinen Aufträgen in meinem Namen ausstellt.',
   'payouts.invoiceConsentNeeded': 'Bevor du Angebote senden und Buchungen annehmen kannst, stimme zu, dass Rechnungen in deinem Namen ausgestellt werden.',
   'quoteGate.headingOne': 'Um Angebote zu senden, fehlt noch 1 Schritt',
   'quoteGate.headingMany': 'Um Angebote zu senden, fehlen noch {n} Schritte',

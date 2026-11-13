@@ -35,7 +35,7 @@ import { AccountDataSection } from '@/screens/account-data-section'
 import { IdScanButton } from '@/screens/id-scan-button'
 import { PictureNudge } from '@/screens/picture-nudge'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
-import { color } from '@/theme'
+import { color, foldArrow } from '@/theme'
 
 export default function AccountScreen() {
   useLang()
@@ -202,7 +202,7 @@ export default function AccountScreen() {
               <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
               <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setOpen(!showDetails)}>
-                <Text style={styles.fold}>{`${showDetails ? '▾' : '▸'} ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trim()}</Text>
+                <Text style={styles.fold}><Text style={foldArrow}>{showDetails ? '▾' : '▸'}</Text>{` ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trimEnd()}</Text>
               </Pressable>
               {showDetails && (
                 <>
