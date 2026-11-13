@@ -177,7 +177,6 @@ export const en: Record<AppKey, string> = {
   'ph.strengths': 'What people value about you',
   'ph.skills': 'What you are good at, one at a time',
   'ph.experience': 'Where and how long you have worked',
-  'ph.postcode': 'The postcode where you are based',
   'ph.radius': 'How far you travel, in km',
   'setup.noServices': 'No services yet.',
   'setup.noPrice': 'No price yet',

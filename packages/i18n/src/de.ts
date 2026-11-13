@@ -176,7 +176,6 @@ export const de = {
   'ph.strengths': 'Was andere an dir schätzen',
   'ph.skills': 'Worin du gut bist, eins nach dem anderen',
   'ph.experience': 'Wo und wie lange du gearbeitet hast',
-  'ph.postcode': 'Die Postleitzahl deines Standorts',
   'ph.radius': 'Wie weit du fährst, in km',
   'setup.noServices': 'Noch keine Leistungen.',
   'setup.noPrice': 'Noch kein Preis',

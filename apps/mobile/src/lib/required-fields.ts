@@ -11,13 +11,13 @@ export const accountMissing = (v: { firstName: string; lastName: string; postcod
   const k: Key[] = []
   if (empty(v.firstName)) k.push('auth.firstName')
   if (empty(v.lastName)) k.push('auth.lastName')
-  if (empty(v.postcode)) k.push(L('postcode'))
+  if (empty(v.postcode)) k.push('search.postcode')
   if (v.isProvider && !v.hasBirthDate) k.push('auth.birthDate')
   return k
 }
 
 /** What is still empty on About you; business name and legal notice are for businesses only. */
-export const aboutMissing = (v: { providerType: string | null; businessName: string; impressum: string; strengths: string[]; skills: string[]; postcode: string; radiusValid: boolean }): Key[] => {
+export const aboutMissing = (v: { providerType: string | null; businessName: string; impressum: string; strengths: string[]; skills: string[]; radiusValid: boolean }): Key[] => {
   const k: Key[] = []
   if (!v.providerType) k.push(L('providerType'))
   if (v.providerType === 'business') {
@@ -26,7 +26,6 @@ export const aboutMissing = (v: { providerType: string | null; businessName: str
   }
   if (!v.strengths.length) k.push(L('strengths'))
   if (!v.skills.length) k.push(L('skills'))
-  if (empty(v.postcode)) k.push(L('postcode'))
   if (!v.radiusValid) k.push(L('radius'))
   return k
 }
