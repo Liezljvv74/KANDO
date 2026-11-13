@@ -3,10 +3,12 @@ import { useSyncExternalStore } from 'react'
 /**
  * The Forward arrow. The router only remembers where you came from, so Forward works like a browser's: pressing Back remembers the
  * page it left, Forward goes back to it. Any other navigation (a tab, a button, a link) clears it.
+ *
+ * An arrow says so itself (`moving`) before it navigates, so the route change that follows is known to be its own. No clock.
  */
 let forward: string[] = []
-let ours = 0 // when Back or Forward last moved: the route change that follows is theirs, not a new navigation
-const OURS_MS = 1500
+let current = '' // where the app is now, as the root layout last reported it
+let moving = false // an arrow was pressed and its route change has not arrived yet
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach((l) => l())
 
@@ -19,25 +21,37 @@ export function hrefOf(pathname: string, params: Record<string, string | string[
   return q ? `${pathname}?${q}` : pathname
 }
 
-/** The Back arrow is about to go back from `current`: remember it for Forward. */
-export function backFrom(current: string) {
+/**
+ * The Back arrow was pressed: remembers the current page for Forward. False while an earlier arrow press is still on its way (a
+ * double tap); the caller then does nothing.
+ * ponytail: an arrow move that lands on the very same route (the same page opened twice in a row) reports no change, so the arrows
+ * ignore presses until the next navigation; listen to the navigation state itself if that ever shows.
+ */
+export function backFrom(): boolean {
+  if (moving) return false
   forward.push(current)
-  ours = Date.now()
+  moving = true
   changed()
+  return true
 }
 
-/** The page Back came from (most recent first), or null. The caller opens it. */
+/** The Forward arrow was pressed: the page Back came from (most recent first) for the caller to open, or null. */
 export function forwardTo(): string | null {
+  if (moving) return null
   const next = forward.pop() ?? null
-  if (next) ours = Date.now()
-  changed()
+  if (next) {
+    moving = true
+    changed()
+  }
   return next
 }
 
-/** Called on every route change: one made by Back or Forward keeps the list, any other clears it. */
-export function noteRoute(_path: string) {
-  if (Date.now() - ours < OURS_MS) ours = 0
-  else if (forward.length) {
+/** Called by the root layout on every route change: one made by an arrow keeps the list, any other clears it. */
+export function noteRoute(href: string) {
+  const byArrow = moving
+  moving = false
+  current = href
+  if (!byArrow && forward.length) {
     forward = []
     changed()
   }
@@ -46,7 +60,8 @@ export function noteRoute(_path: string) {
 export const canGoForward = () => forward.length > 0
 export const resetNavHistory = () => {
   forward = []
-  ours = 0
+  current = ''
+  moving = false
 }
 
 export const useCanGoForward = () =>

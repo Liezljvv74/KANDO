@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { router, useCanGoBack, useGlobalSearchParams, usePathname, type Href } from 'expo-router'
+import { router, useCanGoBack, type Href } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { HelpFeedbackButtons } from '@/components/help-feedback-buttons'
 import { t, useLang } from '@/i18n'
-import { backFrom, forwardTo, hrefOf, useCanGoForward } from '@/lib/nav-history'
+import { backFrom, forwardTo, useCanGoForward } from '@/lib/nav-history'
 import { color, font } from '@/theme'
 
 /** A small arrow: lit when it can go, dimmed when it cannot. */
@@ -25,7 +25,6 @@ function Arrow({ name, label, enabled, onPress }: { name: 'arrow-back' | 'arrow-
 export function ScreenBanner({ title, hideHelp }: { title: string; hideHelp?: boolean }) {
   useLang()
   const top = useSafeAreaInsets().top
-  const here = hrefOf(usePathname(), useGlobalSearchParams())
   const canForward = useCanGoForward()
   const canBack = useCanGoBack() // live, from the navigation state; router.canGoBack() read while drawing was stale inside a nested stack (My business)
   return (
@@ -35,8 +34,7 @@ export function ScreenBanner({ title, hideHelp }: { title: string; hideHelp?: bo
         label={t('nav.back')}
         enabled={canBack}
         onPress={() => {
-          backFrom(here)
-          router.back()
+          if (backFrom()) router.back()
         }}
       />
       <Text style={styles.title} numberOfLines={1} accessibilityRole="header">

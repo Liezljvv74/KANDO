@@ -14,7 +14,8 @@ describe('hrefOf', () => {
 describe('forward history (like a browser: Back remembers where you were)', () => {
   it('nothing to go forward to at the start', () => expect(canGoForward()).toBe(false))
   it('Back remembers the page left; Forward returns to it once', () => {
-    backFrom('/jobs')
+    noteRoute('/jobs') // the person is on Jobs
+    expect(backFrom()).toBe(true)
     noteRoute('/search') // the route change the Back made
     expect(canGoForward()).toBe(true)
     expect(forwardTo()).toBe('/jobs')
@@ -23,18 +24,37 @@ describe('forward history (like a browser: Back remembers where you were)', () =
     expect(forwardTo()).toBeNull()
   })
   it('several Backs can be undone in order', () => {
-    backFrom('/c')
+    noteRoute('/c')
+    backFrom()
     noteRoute('/b')
-    backFrom('/b')
+    backFrom()
     noteRoute('/a')
     expect(forwardTo()).toBe('/b')
     noteRoute('/b')
     expect(forwardTo()).toBe('/c')
   })
-  it('any other navigation clears Forward', () => {
-    backFrom('/jobs')
+  it('any other navigation clears Forward, however soon after an arrow it comes', () => {
+    noteRoute('/jobs')
+    backFrom()
     noteRoute('/search')
-    noteRoute('/account') // the person tapped a tab: not Back, not Forward
+    noteRoute('/account') // the person tapped a tab at once: not Back, not Forward
     expect(canGoForward()).toBe(false)
+  })
+  it('a slow route change after an arrow still counts as the arrow (no clock)', () => {
+    jest.useFakeTimers()
+    noteRoute('/jobs')
+    backFrom()
+    jest.advanceTimersByTime(60_000)
+    noteRoute('/search')
+    expect(canGoForward()).toBe(true)
+    jest.useRealTimers()
+  })
+  it('a double tap is one move: the second press is ignored until the first has landed', () => {
+    noteRoute('/jobs')
+    expect(backFrom()).toBe(true)
+    expect(backFrom()).toBe(false)
+    noteRoute('/search')
+    expect(forwardTo()).toBe('/jobs')
+    expect(forwardTo()).toBeNull() // the Forward is still on its way
   })
 })
