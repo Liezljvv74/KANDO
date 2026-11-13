@@ -1,19 +1,16 @@
 import { StyleSheet, Text, View } from 'react-native'
-import { KeyboardStickyView } from 'react-native-keyboard-controller'
 
 import { Button } from '@/components/auth-ui'
 import { t } from '@/i18n'
 import { color } from '@/theme'
 
-/** The fixed bar at the bottom of a form screen: the Done button and a message line (what is missing, or an error). */
+/** The bar at the bottom of a form screen: the Done button and a message line (what is missing, or an error). It stays at the bottom of the page; the keyboard covers it while typing (owner decision, 13 November 2026). */
 export function DoneBar({ onPress, disabled = false, message }: { onPress: () => void; disabled?: boolean; message: string | null }) {
   return (
-    <KeyboardStickyView>
-      <View style={styles.bar}>
-        {!!message && <Text accessibilityRole="alert" style={styles.message}>{message}</Text>}
-        <Button label={t('common.done')} onPress={onPress} disabled={disabled} />
-      </View>
-    </KeyboardStickyView>
+    <View style={styles.bar}>
+      {!!message && <Text accessibilityRole="alert" style={styles.message}>{message}</Text>}
+      <Button label={t('common.done')} onPress={onPress} disabled={disabled} />
+    </View>
   )
 }
 

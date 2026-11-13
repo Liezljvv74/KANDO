@@ -19,7 +19,10 @@ export function bannerState(all: PendingEntry[], accountId: string | null): Bann
   const mine = forAccount(all, accountId)
   const refused = mine.filter((e) => e.state === 'refused').sort((a, b) => a.createdAt - b.createdAt)
   if (refused.length) return { kind: 'refused', count: refused.length, first: refused[0] }
-  const e = mine.find((x) => x.state === 'auth') ?? mine.find((x) => x.state === 'waiting') ?? mine[0]
+  // Only a change whose send has failed counts. One that is merely on its way (every keystroke stores one) shows nothing:
+  // the bar would appear and vanish with each save and push the whole screen down and up.
+  const failed = mine.filter((x) => x.attempts > 0 || x.status !== undefined)
+  const e = failed.find((x) => x.state === 'auth') ?? failed.find((x) => x.state === 'waiting') ?? failed[0]
   if (!e) return null
   if (e.state === 'auth' || e.state === 'waiting') return { kind: 'retry', reason: e.state }
   return { kind: 'retry', reason: e.status === 0 || e.status === undefined ? 'network' : 'busy' }

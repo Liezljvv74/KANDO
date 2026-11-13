@@ -54,6 +54,10 @@ describe('bannerState', () => {
     const young = e({ key: 'young', state: 'refused', createdAt: 5 })
     expect(bannerState([young, old], 'a')).toEqual({ kind: 'refused', count: 2, first: old })
   })
+  it('shows nothing for a change that is only on its way (never failed): no flashing while typing', () =>
+    expect(bannerState([e({ attempts: 0 })], 'a')).toBeNull())
+  it('keeps showing while a failed change is typed on (attempts start again, the failure is remembered)', () =>
+    expect(bannerState([e({ attempts: 0, status: 0 })], 'a')).toEqual({ kind: 'retry', reason: 'network' }))
   it('ignores another account', () => expect(bannerState([e({ accountId: 'b' })], 'a')).toBeNull())
   it('is null without an account', () => expect(bannerState([e()], null)).toBeNull())
 })

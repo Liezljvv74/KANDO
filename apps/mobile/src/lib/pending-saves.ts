@@ -85,7 +85,8 @@ export function putEntry(e: Omit<PendingEntry, 'version' | 'attempts' | 'state' 
   if (to) e = { ...e, key: e.key.split(`service:${e.serviceRef}:`).join(`service:${to}:`), serviceRef: to, route: routeFor(e.route, to) }
   const now = Date.now()
   lastVersion = Math.max(lastVersion + 1, now)
-  entries.set(idOf(e.accountId, e.key), { ...e, version: lastVersion, state: 'retry', attempts: 0, createdAt: now })
+  // `status` of a failed earlier version is kept: typing on without signal must not hide the banner and show it again per keystroke
+  entries.set(idOf(e.accountId, e.key), { ...e, version: lastVersion, state: 'retry', attempts: 0, createdAt: now, status: entries.get(idOf(e.accountId, e.key))?.status })
   changed()
   return lastVersion
 }
