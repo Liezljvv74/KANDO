@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ScreenBanner } from '@/components/screen-banner'
@@ -28,9 +28,6 @@ export default function HowItWorksScreen() {
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('welcome.howTitle')} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable accessibilityRole="link" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} hitSlop={12}>
-          <Text style={styles.link}>← {t('welcome.backHome')}</Text>
-        </Pressable>
         {GROUPS.map(({ title, steps, bg }) => (
           <View key={title} style={[styles.box, { backgroundColor: bg }]}>
             <Text style={styles.boxTitle}>{t(title)}</Text>
@@ -57,8 +54,6 @@ export default function HowItWorksScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 16, gap: 16 },
-  link: { fontSize: 15, fontWeight: '600', color: color.indigo },
-  title: { fontSize: 28, fontFamily: font.heading, color: color.ink },
   box: { borderRadius: 6, padding: 16, gap: 8 },
   boxTitle: { fontSize: 17, fontFamily: font.heading, color: color.ink },
   text: { fontSize: 15, lineHeight: 21, color: color.ink },

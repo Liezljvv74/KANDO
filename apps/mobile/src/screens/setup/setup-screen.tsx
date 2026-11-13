@@ -78,13 +78,13 @@ export default function SetupScreen() {
     return () => clearTimeout(timer)
   }, [params.publish, done])
   const title = welcome ? t('setup.welcome') : t('setup.title')
-  if (!done || !data) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
+  if (!done || !data) return <FormScreen title={title}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
   const { profile, services, references, photos, verifications } = data
   const name = profile.publicName ?? ''
   const docRows = documentRows(services, categories ?? [], verifications)
 
   return (
-    <FormScreen title={title} back={false} scrollRef={scrollRef}>
+    <FormScreen title={title} scrollRef={scrollRef}>
       <PublishBar highlight={highlight} profile={profile} services={services} docRows={docRows} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
       <Card>
         <View style={styles.row}>

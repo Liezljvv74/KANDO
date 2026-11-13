@@ -7,7 +7,7 @@ import {
 import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces'
 import { CourierPrime_700Bold } from '@expo-google-fonts/courier-prime'
 import { useFonts } from 'expo-font'
-import { Stack } from 'expo-router'
+import { Stack, useGlobalSearchParams, usePathname, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
@@ -23,6 +23,7 @@ import { isAuthBusy, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { refusedField } from '@/lib/account-autosave'
 import { go } from '@/lib/go'
+import { hrefOf, noteRoute } from '@/lib/nav-history'
 import { registerSender, startRunner, wake } from '@/lib/pending-runner'
 import { pushRoute } from '@/lib/push'
 import { serviceCreateSender } from '@/lib/serial-create'
@@ -86,6 +87,7 @@ export default function RootLayout() {
   return (
     <KeyboardProvider>
       <StatusBar style="dark" />
+      <RouteWatcher />
       <PendingBanner>
         <Stack screenOptions={{ headerShown: false }}>
           {/* The tabs are open to everyone (a signed-out person browses; private screens ask for a login). The auth screens are for signed-out people only. */}
@@ -98,6 +100,13 @@ export default function RootLayout() {
       {user && <TermsReaccept />}
     </KeyboardProvider>
   )
+}
+
+/** The one place that follows the route, for the Forward arrow. A component of its own (it draws nothing): its hooks change on every navigation, and only it renders again. */
+function RouteWatcher() {
+  const href = hrefOf(usePathname(), useGlobalSearchParams(), useSegments())
+  useEffect(() => noteRoute(href), [href])
+  return null
 }
 
 /** A tapped push (also the one that launched the app) opens its booking, thread or invoice once signed in; any other link is ignored. */

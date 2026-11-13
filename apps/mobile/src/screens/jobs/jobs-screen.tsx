@@ -107,7 +107,7 @@ export default function JobsScreen() {
   }
 
   return (
-    <FormScreen title={t('tab.jobs')} back={false}>
+    <FormScreen title={t('tab.jobs')}>
       {both && (
         <View style={styles.switch}>
           {(['customer', 'provider'] as const).map((side) => (
