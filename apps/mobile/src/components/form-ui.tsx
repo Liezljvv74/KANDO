@@ -19,8 +19,8 @@ export function FormScreen({ title, children, back = true, scrollRef, footer }: 
       <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         {children}
+        {footer}
       </KeyboardAwareScrollView>
-      {footer}
     </SafeAreaView>
   )
 }

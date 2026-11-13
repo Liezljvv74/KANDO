@@ -4,7 +4,7 @@ import { Button } from '@/components/auth-ui'
 import { t } from '@/i18n'
 import { color } from '@/theme'
 
-/** The bar at the bottom of a form screen: the Done button and a message line (what is missing, or an error). It stays at the bottom of the page; the keyboard covers it while typing (owner decision, 13 November 2026). */
+/** The end of a form screen: the Done button and a message line (what is missing, or an error). It is the last thing in the scrolling page, not fixed to the screen: the person scrolls down to it (owner decision, 13 November 2026). */
 export function DoneBar({ onPress, disabled = false, message }: { onPress: () => void; disabled?: boolean; message: string | null }) {
   return (
     <View style={styles.bar}>
@@ -15,6 +15,6 @@ export function DoneBar({ onPress, disabled = false, message }: { onPress: () =>
 }
 
 const styles = StyleSheet.create({
-  bar: { padding: 12, gap: 6, backgroundColor: color.bg, borderTopWidth: 1, borderTopColor: color.divider },
+  bar: { gap: 6, marginTop: 8 },
   message: { color: color.ink, textAlign: 'center' },
 })

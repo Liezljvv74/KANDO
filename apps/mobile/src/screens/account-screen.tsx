@@ -33,7 +33,6 @@ import { startOffering } from '@/lib/start-offering'
 import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { IdScanButton } from '@/screens/id-scan-button'
-import { PictureNudge } from '@/screens/picture-nudge'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 import { color, foldArrow } from '@/theme'
 
@@ -194,12 +193,11 @@ export default function AccountScreen() {
           {user && <Text style={styles.email}>{user.email}</Text>}
           <Button label={t('auth.logOut')} onPress={() => confirmSignOut(user?.id, signOut)} />
         </View>
-        <PictureNudge me={me} />
         <View style={styles.card}>
           <Text style={styles.heading}>{t('account.detailsHeading')}</Text>
           {me && (
             <>
-              <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
+              <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} hint={me.photoUrl ? undefined : t('home.pictureNudge')} onChanged={() => loadMe().then(setMe, () => {})} />
               <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setOpen(!showDetails)}>
                 <Text style={styles.fold}><Text style={foldArrow}>{showDetails ? '▾' : '▸'}</Text>{` ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trimEnd()}</Text>
@@ -231,8 +229,8 @@ export default function AccountScreen() {
             {t('account.admin')}
           </Text>
         )}
+        {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? done.message ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null)} />}
       </KeyboardAwareScrollView>
-      {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? done.message ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null)} />}
     </SafeAreaView>
   )
 }
