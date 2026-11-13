@@ -34,9 +34,16 @@ export const flowCache = {
   /** A load that ran over a sign-out, or one older than the data held, is never used. */
   note(data: FlowData, start: Start = flowCache.begin()) {
     if (held && start.n < held.n) return
-    if (held && held.generation !== start.generation) (trusted.clear(), sentAt.clear())
+    if (held && held.generation !== start.generation) {
+      trusted.clear()
+      sentAt.clear()
+    }
     // data requested after a trusted step's send settled is the truth about that step: its trust ends (also when the refresh right after the send failed)
-    for (const [step, n] of sentAt) if (start.n > n) (trusted.delete(step), sentAt.delete(step))
+    for (const [step, n] of sentAt) {
+      if (start.n <= n) continue
+      trusted.delete(step)
+      sentAt.delete(step)
+    }
     held = { data, ...start }
   },
   /** A step whose Done passed the local check counts as finished until data requested after its send settled arrives. The returned function says the send settled. */
