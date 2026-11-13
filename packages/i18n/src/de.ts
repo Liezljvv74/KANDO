@@ -425,7 +425,6 @@ export const de = {
   'address.postcode': 'Postleitzahl',
   'address.city': 'Ort (optional)',
   'home.pictureNudge': 'Füge dein Foto hinzu, damit Anbieter dich erkennen. Das macht es für beide Seiten sicherer.',
-  'home.pictureAdd': 'Foto hinzufügen',
   'home.pictureDismiss': 'Schließen',
   'idScan.button': 'Ausweis scannen und Angaben ausfüllen',
   'idScan.source': 'Foto deines Ausweises',

@@ -426,7 +426,6 @@ export const en: Record<AppKey, string> = {
   'address.postcode': 'Postcode',
   'address.city': 'City (optional)',
   'home.pictureNudge': 'Add your picture so providers can recognise you. It keeps both sides safer.',
-  'home.pictureAdd': 'Add picture',
   'home.pictureDismiss': 'Dismiss',
   'idScan.button': 'Scan your ID card to fill in your details',
   'idScan.source': 'Photo of your ID card',

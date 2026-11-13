@@ -1,53 +1,29 @@
 import * as SecureStore from 'expo-secure-store'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { StyleSheet, Text } from 'react-native'
 
-import { photosApi } from '@/api/my-profile'
-import { Button, ErrorText } from '@/components/auth-ui'
+import type { Me } from '@kando/contract'
+
 import { Card } from '@/components/form-ui'
-import { loadMe } from '@/hooks/use-me'
-import { errorText, t } from '@/i18n'
-import { askPhotoSource } from '@/lib/ask-photo-source'
+import { t } from '@/i18n'
 import { pictureNudgeKey } from '@/lib/picture-nudge'
-import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 import { color } from '@/theme'
 
-/** Shown while the person has no picture and has not dismissed it; the account picture serves customers and providers alike. */
-export function PictureNudge() {
-  const [show, setShow] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const [key, setKey] = useState('')
+/** Shown while the person has no picture and has not dismissed it; the picture is added with the pencil next to it (no second button: owner decision, 13 November 2026). */
+export function PictureNudge({ me }: { me: Me | null }) {
+  const [dismissed, setDismissed] = useState(true)
+  const key = me ? pictureNudgeKey(me.id) : ''
   useEffect(() => {
-    loadMe()
-      .then(async (me) => {
-        setKey(pictureNudgeKey(me.id))
-        setShow(!me.photoUrl && !(await SecureStore.getItemAsync(pictureNudgeKey(me.id))))
-      })
-      .catch(() => {})
-  }, [])
+    if (key) SecureStore.getItemAsync(key).then((v) => setDismissed(!!v), () => {})
+  }, [key])
+  if (!me || me.photoUrl || dismissed) return null
   const dismiss = () => {
-    setShow(false)
+    setDismissed(true)
     SecureStore.setItemAsync(key, '1').catch(() => {})
   }
-  const add = useCallback(async (source: 'camera' | 'library') => {
-    setProblem(null)
-    try {
-      const file = await pickPhoto(source, true)
-      if (file === 'denied') setProblem(t('myProfile.denied'))
-      else if (file) {
-        await photosApi.add(file, 'profile')
-        setShow(false)
-      }
-    } catch (e) {
-      setProblem(errorText(uploadErrorCode(e)))
-    }
-  }, [])
-  if (!show) return null
   return (
     <Card>
       <Text style={styles.body}>{t('home.pictureNudge')}</Text>
-      <ErrorText text={problem} />
-      <Button label={t('home.pictureAdd')} onPress={() => askPhotoSource(add)} />
       <Text style={styles.dismiss} accessibilityRole="button" accessibilityLabel={t('home.pictureDismiss')} onPress={dismiss}>
         {'×'}
       </Text>
@@ -56,6 +32,6 @@ export function PictureNudge() {
 }
 
 const styles = StyleSheet.create({
-  body: { fontSize: 15, lineHeight: 22, color: color.ink },
+  body: { fontSize: 15, lineHeight: 22, color: color.ink, paddingRight: 32 },
   dismiss: { position: 'absolute', top: 0, right: 0, padding: 12, fontSize: 28, lineHeight: 32, color: color.ink },
 })

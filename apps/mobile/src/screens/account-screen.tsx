@@ -194,7 +194,7 @@ export default function AccountScreen() {
           {user && <Text style={styles.email}>{user.email}</Text>}
           <Button label={t('auth.logOut')} onPress={() => confirmSignOut(user?.id, signOut)} />
         </View>
-        <PictureNudge />
+        <PictureNudge me={me} />
         <View style={styles.card}>
           <Text style={styles.heading}>{t('account.detailsHeading')}</Text>
           {me && (
