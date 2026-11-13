@@ -216,6 +216,21 @@ it('the draft prefills the postcode only when it is a known one', async () => {
   expect(good.missing).not.toContain('postcode')
 })
 
+it('the base follows the account postcode: a known one is taken (with its map location), an unlisted or cleared one leaves it', async () => {
+  await call(me.GET, 'dr8')
+  const base = async () => (await pool.query("SELECT base_postcode, location IS NOT NULL AS placed FROM providers WHERE owner_id = 'dr8'")).rows[0]
+  const patch = (address: unknown) => call(me.PATCH, 'dr8', 'PATCH', { address })
+  await call(POST, 'dr8', 'POST')
+  expect(await base()).toEqual({ base_postcode: null, placed: false })
+  expect((await patch({ postcode: '10115', country: 'DE' })).status).toBe(200)
+  expect(await base()).toEqual({ base_postcode: '10115', placed: true })
+  expect(MyProfileSchema.parse(await (await call(GET, 'dr8')).json()).missing).not.toContain('postcode')
+  expect((await patch({ postcode: '99999', country: 'DE' })).status).toBe(200) // well-formed but not in the list
+  expect(await base()).toEqual({ base_postcode: '10115', placed: true })
+  expect((await patch(null)).status).toBe(200)
+  expect(await base()).toEqual({ base_postcode: '10115', placed: true })
+})
+
 it('a live profile cannot be emptied by a save: 409 with the missing list, nothing changed', async () => {
   const { categoryId } = await seedBase()
   await call(me.GET, 'lv1')

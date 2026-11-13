@@ -130,6 +130,20 @@ async function insertProvider(tx: Tx, userId: string, values: Record<string, unk
 
 const clean = (v: string | null) => v?.trim() || null
 
+/**
+ * The provider's base follows the account postcode (the app has no separate field for it: owner decision, 13 November 2026).
+ * Only a postcode the country's list knows is taken: an unlisted or cleared one leaves the base as it was, so an account
+ * save can never empty a live profile.
+ */
+export async function syncBasePostcode(tx: Tx, userId: string): Promise<void> {
+  const row = await ownProvider(tx, userId)
+  if (!row) return
+  const postcode = (await tx.select({ postcode: users.addressPostcode }).from(users).where(eq(users.id, userId)))[0]?.postcode
+  if (!postcode || postcode === row.basePostcode || !(await lookupPostcode(row.country, postcode, tx))) return
+  await tx.update(providers).set({ basePostcode: postcode, updatedAt: new Date() }).where(eq(providers.id, row.id))
+  await syncIdentity(tx, userId, { ...row, basePostcode: postcode }) // the map location moves with it
+}
+
 /** The caller's draft: created on first open (postcode taken from the private address), the same row every time. */
 export async function ensureDraft(tx: Tx, userId: string): Promise<MyProfile> {
   return (await ensure(tx, userId, true)).profile

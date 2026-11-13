@@ -4,7 +4,7 @@ import { t, type Key } from '@/i18n'
 /**
  * The fields the server's `missing` list asks for (domain `completeness`), each with its label and the short lead text
  * shown inside it. `item` is what the server reports; one item can be several fields (a service: category, price type, price).
- * `name` is not here: it lives on the account screen.
+ * `name` and `postcode` are not here: they live on the account screen (the provider's base follows the account postcode).
  */
 export const COMPULSORY = {
   category: { item: 'service', label: 'search.category', placeholder: 'ph.category' },
@@ -15,7 +15,6 @@ export const COMPULSORY = {
   impressum: { item: 'impressum', label: 'provider.impressum', placeholder: 'ph.impressum' },
   strengths: { item: 'strengths', label: 'provider.strengths', placeholder: 'ph.strengths' },
   skills: { item: 'skills', label: 'provider.skills', placeholder: 'ph.skills' },
-  postcode: { item: 'postcode', label: 'search.postcode', placeholder: 'ph.postcode' },
   radius: { item: 'radius', label: 'f.radius', placeholder: 'ph.radius' },
 } as const satisfies Record<string, { item: Missing; label: Key; placeholder: Key }>
 

@@ -5,7 +5,7 @@ import { TERMS_VERSION, type Me, type MePatch } from '@kando/contract'
 import { termsStale } from './terms'
 export { termsCurrent, termsStale } from './terms'
 import { fail } from './providers/http'
-import { ownProvider, syncIdentity } from './providers/profile'
+import { ownProvider, syncBasePostcode, syncIdentity } from './providers/profile'
 import { listNotifications } from './notifications-store'
 import { photoUrl } from './storage'
 import { currencyOfCountrySql, requireCurrency } from './country-currency'
@@ -155,6 +155,7 @@ export async function updateMe(tx: Tx, userId: string, patch: MePatch): Promise<
     const provider = await ownProvider(tx, userId)
     if (provider) await syncIdentity(tx, userId, provider)
   }
+  if (a) await syncBasePostcode(tx, userId)
   return getMe(tx, userId)
 }
 

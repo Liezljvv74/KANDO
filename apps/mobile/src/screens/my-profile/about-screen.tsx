@@ -66,7 +66,6 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
   const strengths = useField('strengths', splitLines(initial.strengths), (v) => ({ strengths: v.join('\n') }), (b) => splitLines(b.strengths))
   const skills = useField('skills', initial.skills ?? [], (v) => ({ skills: v }))
   const experience = useField('experience', initial.experience ?? '', (v) => ({ experience: v.trim() }))
-  const postcode = useField('basePostcode', initial.basePostcode ?? '', (v) => ({ basePostcode: v.trim() }))
   const radius = useField('serviceRadiusKm', String(initial.serviceRadiusKm ?? 25), radiusBody, (b) => String(b.serviceRadiusKm))
   const remote = useField('worksRemotely', !!initial.worksRemotely, (v) => ({ worksRemotely: v }))
   const [skillText, setSkillText] = useState('')
@@ -126,12 +125,10 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
         // typed text counts only when it would really be added (not too long, not a duplicate, not over the maximum)
         strengths: strengths.value.length ? strengths.value : (typedTag(strengths.value, strengthText, MAX_SKILLS, MAX_SKILL_LENGTH, MAX_STRENGTHS_TEXT).list ?? []),
         skills: skills.value.length ? skills.value : (typedTag(skills.value, skillText, MAX_SKILLS, MAX_SKILL_LENGTH, Infinity).list ?? []),
-        postcode: postcode.value,
         radiusValid: validRadius(radius.value),
       }),
-    flush: () => Promise.all([flushPendingTags(), ...[type, businessName, impressum, bio, strengths, skills, experience, postcode, radius, remote].map((f) => f.flush())]),
+    flush: () => Promise.all([flushPendingTags(), ...[type, businessName, impressum, bio, strengths, skills, experience, radius, remote].map((f) => f.flush())]),
   })
-  const unknownPostcode = postcode.status === 'error' && postcode.errorCode === 'Unknown postcode'
 
   return (
     <FormScreen title={t('setup.aboutYou')} footer={<DoneBar onPress={done.onDone} message={done.message} />}>
@@ -196,15 +193,6 @@ function AboutForm({ initial, focus }: { initial: MyProfile; focus?: string }) {
       {problem(skills)}
       <Field label={t('provider.experience')} placeholder={t('ph.experience')} hint={t('f.experienceHint')} value={experience.value} onChangeText={experience.setValue} onBlur={experience.flush} multiline maxLength={500} style={styles.multi} />
       {problem(experience)}
-      <Field
-        {...compulsory('postcode')}
-        autoFocus={focus === 'basePostcode' || focus === 'postcode'}
-        value={postcode.value}
-        onChangeText={postcode.setValue}
-        onBlur={postcode.flush}
-        error={unknownPostcode ? errorText('Unknown postcode') : null}
-      />
-      {unknownPostcode ? null : problem(postcode)}
       <Field
         {...compulsory('radius')}
         autoFocus={focus === 'serviceRadiusKm' || focus === 'radius'}

@@ -3,7 +3,7 @@ import { setLang, t } from '@/i18n'
 import { COMPULSORY, compulsory, liveLocked } from './compulsory'
 
 // `name` is the account's name, edited on the account screen, not on the profile page.
-const ON_ACCOUNT_SCREEN = ['name']
+const ON_ACCOUNT_SCREEN = ['name', 'postcode']
 
 test('every item the server can report as missing has a field with a star and a lead text', () => {
   for (const item of MissingSchema.options.filter((i) => !ON_ACCOUNT_SCREEN.includes(i))) expect(Object.values(COMPULSORY).some((f) => f.item === item)).toBe(true)

@@ -15,7 +15,7 @@ const ROW: Record<Missing, { label: Key; path: string }> = {
   impressum: aboutRow('impressum'),
   strengths: aboutRow('strengths'),
   skills: aboutRow('skills'),
-  postcode: aboutRow('postcode'),
+  postcode: { label: 'search.postcode', path: '/account' }, // the base follows the account postcode
   radius: aboutRow('radius'),
 }
 
