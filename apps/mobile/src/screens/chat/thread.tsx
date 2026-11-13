@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ScreenBanner } from '@/components/screen-banner'
 
@@ -48,6 +48,7 @@ export default function ThreadScreen() {
     return { thread, blocks }
   }, [id])
   const { data, error: loadError, retry } = useLoad(load)
+  const insets = useSafeAreaInsets() // the pending banner sets the top inset to 0 while it shows; the native SafeAreaView would not see that
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const working = useRef(false) // a ref: two quick taps in one render must not send twice
@@ -61,7 +62,7 @@ export default function ThreadScreen() {
   const thread = data?.thread
   if (!data || !thread)
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={[styles.root, { paddingTop: insets.top }]} edges={['left', 'right', 'bottom']}>
         <LinkText label={t('common.back')} onPress={goBack} />
         {loadError ? <ErrorRetry code={loadError} onRetry={retry} /> : <Loading />}
       </SafeAreaView>

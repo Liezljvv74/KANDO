@@ -4,12 +4,13 @@ import * as profile from '@/api/my-profile'
 import { loadMe } from '@/hooks/use-me'
 import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
 import { registerForPush, unregisterPush } from '@/lib/push'
+import { flowCache, nextStepHeld } from '@/lib/flow-cache'
 
 import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, SIGNUP_WAIT_MS, verify } from './use-session'
 
 jest.mock('@/api/auth')
 jest.mock('@/lib/push', () => ({ registerForPush: jest.fn(), unregisterPush: jest.fn() }))
-jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn(() => Promise.resolve()), setSignedInCheck: jest.fn() }))
+jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn(() => Promise.resolve()), setSignedInCheck: jest.fn(), signOutGeneration: () => 0 }))
 let mockFileExists = true
 jest.mock('expo-file-system', () => ({ File: class { get exists() { return mockFileExists } } }))
 jest.mock('@/api/my-profile', () => ({ photosApi: { add: jest.fn() } }))
@@ -129,6 +130,15 @@ test('a busy login server (429, 5xx) on load is offline with the Retry screen, n
   expect(getSession()).toEqual({ user: null, loading: false, offline: false })
 })
 
+test('signing out (also by the server) drops the held next-step data of the Done flow', async () => {
+  const data = { me: { isProvider: false, firstName: 'A', lastName: 'B', address: { postcode: '10115' } } as never, profile: null, docRows: [] }
+  flowCache.note(data)
+  await signOut()
+  expect(nextStepHeld()).toBe('unknown')
+  flowCache.note(data)
+  onUnauthorized()
+  expect(nextStepHeld()).toBe('unknown')
+})
 test('onUnauthorized from the API client signs the user out', async () => {
   a.signIn.mockResolvedValueOnce(user)
   await signIn('a@b.de', 'secret123')

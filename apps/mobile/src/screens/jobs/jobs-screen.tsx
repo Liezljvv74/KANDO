@@ -161,7 +161,7 @@ export default function JobsScreen() {
           ))}
           <More list={active} />
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: pastOpen }} onPress={() => setPastOpen((o) => !o)}>
-            <SectionTitle text={`${t('jobs.past', { n: pastCount ?? past.docs.length })} ${pastOpen ? '▾' : '▸'}`} />
+            <SectionTitle text={t('jobs.past', { n: pastCount ?? past.docs.length })} arrow={pastOpen ? '▾' : '▸'} />
           </Pressable>
           {pastOpen && past.docs.map((r) => <PastLine key={r.id} row={r} role={role} />)}
           {pastOpen && pastLoad.error && <ErrorRetry code={pastLoad.error} onRetry={pastLoad.retry} />}

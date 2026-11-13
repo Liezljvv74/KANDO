@@ -161,18 +161,18 @@ it('publish of an incomplete draft is 409 with the list; complete publishes with
   expect(refused.status).toBe(409)
   expect(await refused.json()).toEqual({ error: 'Profile incomplete', missing: ['service', 'providerType', 'strengths', 'skills', 'postcode'] })
 
-  // a service with a category alone: title = category name in the user's language, no price type, not offerable
+  // a service with a category alone: no title while the profile is a draft, no price type, not offerable
   const created = await call(servicesRoute.POST, 'dr3', 'POST', { categoryId })
   expect(created.status).toBe(201)
-  expect(await created.json()).toMatchObject({ title: 'Gartenarbeit', priceType: null, price: null })
+  expect(await created.json()).toMatchObject({ title: '', priceType: null, price: null })
   const sid = (await pool.query("SELECT id FROM services WHERE provider_id = (SELECT id FROM providers WHERE owner_id = 'dr3')")).rows[0].id
   expect((await pool.query("SELECT count(*)::int AS n FROM offerable_service_ids((SELECT id FROM providers WHERE owner_id = 'dr3'))")).rows[0].n).toBe(0)
   expect(await missingOf(await call(PUT, 'dr3', 'PUT', {}))).toContain('service')
   await pool.query("UPDATE users SET language = 'en' WHERE id = 'dr3'")
   const en = await call(servicesRoute.POST, 'dr3', 'POST', { categoryId, title: '  ' })
-  expect((await en.json()).title).toBe('Gardening')
+  expect((await en.json()).title).toBe('')
   const blank = await call(serviceRoute.PATCH, 'dr3', 'PATCH', { title: '' }, { id: sid })
-  expect((await blank.json()).title).toBe('Gardening')
+  expect((await blank.json()).title).toBe('')
   await call(serviceRoute.PATCH, 'dr3', 'PATCH', { priceType: 'on-request' }, { id: sid })
   expect(await missingOf(await call(PUT, 'dr3', 'PUT', {}))).not.toContain('service')
 
@@ -181,6 +181,9 @@ it('publish of an incomplete draft is 409 with the list; complete publishes with
   const ok = await call(publishRoute.POST, 'dr3', 'POST')
   expect(ok.status).toBe(200)
   expect(MyProfileSchema.parse(await ok.json())).toMatchObject({ status: 'published', publicName: 'Lena F.', missing: [] })
+  // Publish fills every empty title with the category name in the user's language
+  const titles = await pool.query("SELECT title FROM services WHERE provider_id = (SELECT id FROM providers WHERE owner_id = 'dr3')")
+  expect(titles.rows.map((r) => r.title)).toEqual(['Gardening', 'Gardening'])
 })
 
 it('a draft with every nullable field null is invisible in search and the sitemap', async () => {

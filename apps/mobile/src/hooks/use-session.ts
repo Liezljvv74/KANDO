@@ -5,8 +5,9 @@ import { File } from 'expo-file-system'
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
-import { clearMe, loadMe, setSignedInCheck } from '@/hooks/use-me'
+import { clearMe as clearHeldMe, loadMe, setSignedInCheck } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
+import { flowCache } from '@/lib/flow-cache'
 import { clearPending, loadPending, savePending, settle, type PendingSignup } from '@/lib/pending-signup'
 import { registerForPush, unregisterPush } from '@/lib/push'
 
@@ -157,6 +158,9 @@ export async function verify(email: string, code: string, onOffering?: () => Pro
   if (!pending) updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
   return !!pending?.offerServices
 }
+
+/** The signed-out account's held data goes: /me and the Done flow's next-step data. */
+const clearMe = () => (clearHeldMe(), flowCache.clear())
 
 export async function signOut() {
   clearMe()

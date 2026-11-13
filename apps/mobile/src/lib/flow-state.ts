@@ -1,23 +1,29 @@
 import { documentsApi, getMyProfile, servicesApi } from '@/api/my-profile'
 import { getCategories } from '@/api/providers'
-import { loadMe } from '@/hooks/use-me'
+import { currentMe, loadMe } from '@/hooks/use-me'
 import { getLang } from '@/i18n'
 
 import { openPayoutSetup, payoutOpened } from './do-quote-step'
 import { documentRows } from './documents'
 import { finishFlow } from './finish-flow'
+import { flowCache, stepsOf, type FlowData } from './flow-cache'
 import { goReplace } from './go'
-import { nextStep, type NextStep } from './next-step'
+import type { NextStep } from './next-step'
 
-/** The next open step, from fresh server data (never cached). A customer's account is the only thing that can be open for them. */
+/** True while the provider's payout is not ready (the shared /me lists it as an open quote step): read right after `loadNextStep` refreshed /me. */
+export const payoutNotReady = () => currentMe()?.quoteSteps?.includes('payout') === true
+
+/** The next open step, from fresh server data; the data is also kept for an instant Done. A customer's account is the only thing that can be open for them. */
 export async function loadNextStep(): Promise<NextStep | null> {
+  const start = flowCache.begin()
   const me = await loadMe()
-  const isProvider = me.isProvider === true
-  // same rule as the account screen: name and postcode, a provider's date of birth too
-  const accountComplete = !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)
-  if (!isProvider) return accountComplete ? null : nextStep({ isProvider, accountComplete, profile: null, docRows: [] })
-  const [profile, services, verifications, categories] = await Promise.all([getMyProfile(), servicesApi.list(), documentsApi.list(), getCategories(getLang())])
-  return nextStep({ isProvider, accountComplete, profile, docRows: documentRows(services, categories, verifications), payoutSent: profile?.payoutStarted === true || payoutOpened() }) // the server's flag lasts; the local marker covers a form just opened and an older server
+  let data: FlowData = { me, profile: null, docRows: [] }
+  if (me.isProvider === true) {
+    const [profile, services, verifications, categories] = await Promise.all([getMyProfile(), servicesApi.list(), documentsApi.list(), getCategories(getLang())])
+    data = { me, profile, docRows: documentRows(services, categories, verifications), payoutSent: profile?.payoutStarted === true || payoutOpened() } // the server's flag lasts; the local marker covers a form just opened and an older server
+  }
+  flowCache.note(data, start)
+  return stepsOf(data)[0] ?? null
 }
 
 /** Opens the screen of a step; replace, so back does not return to the finished screen. `followUp`: after a ready payout, one more step may follow, never a second payout (no loop). */
@@ -39,7 +45,7 @@ export async function continueAfterAutoStep(stillHere: () => boolean): Promise<v
     return
   }
   if (!stillHere()) return // the person left the screen while this loaded: nothing opens
-  if (!next) return finishFlow('provider')
+  if (!next) return finishFlow('provider', payoutNotReady())
   if (next.kind === 'payout') return goReplace('/my-profile')
   return goToStep(next, false, stillHere)
 }

@@ -5,7 +5,8 @@ const mockDocs = jest.fn()
 const mockCats = jest.fn()
 const mockOpenPayout = jest.fn()
 const mockReplace = jest.fn()
-jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...a) }))
+const mockHeldMe = jest.fn(() => ({ quoteSteps: [] as string[] }))
+jest.mock('@/hooks/use-me', () => ({ loadMe: (...a: unknown[]) => mockLoadMe(...a), currentMe: () => mockHeldMe(), signOutGeneration: () => 0 }))
 jest.mock('@/api/my-profile', () => ({ getMyProfile: (...a: unknown[]) => mockProfile(...a), servicesApi: { list: (...a: unknown[]) => mockList(...a) }, documentsApi: { list: (...a: unknown[]) => mockDocs(...a) } }))
 jest.mock('@/api/providers', () => ({ getCategories: (...a: unknown[]) => mockCats(...a) }))
 const mockSent = jest.fn(() => false)
@@ -14,6 +15,7 @@ const mockFinish = jest.fn()
 jest.mock('@/lib/finish-flow', () => ({ finishFlow: (...a: unknown[]) => mockFinish(...a) }))
 jest.mock('@/lib/go', () => ({ goReplace: (...a: unknown[]) => mockReplace(...a) }))
 
+import { flowCache, nextStepHeld } from './flow-cache'
 import { continueAfterAutoStep, goToStep, loadNextStep } from './flow-state'
 
 const fullMe = { isProvider: true, firstName: 'A', lastName: 'B', birthDate: '1990-01-01', address: { postcode: '10115' } }
@@ -28,6 +30,12 @@ beforeEach(() => {
 test('a provider with a service missing goes to the service first', async () => {
   mockProfile.mockResolvedValue({ missing: ['service'], quoteSteps: ['payout'] })
   expect(await loadNextStep()).toEqual({ kind: 'service', path: '/my-profile/service/new' })
+})
+test('the loaded data is held for an instant Done', async () => {
+  flowCache.clear()
+  mockProfile.mockResolvedValue({ missing: ['skills', 'service'], quoteSteps: [] })
+  await loadNextStep()
+  expect(nextStepHeld('about')).toEqual({ kind: 'service', path: '/my-profile/service/new' })
 })
 test('everything done: null', async () => {
   mockProfile.mockResolvedValue({ missing: [], quoteSteps: [] })
@@ -54,7 +62,7 @@ test('ready payout and nothing else open: the flow ends for a provider', async (
   mockOpenPayout.mockResolvedValue({ ready: true })
   mockProfile.mockResolvedValue({ missing: [], quoteSteps: [] })
   await goToStep({ kind: 'payout' })
-  expect(mockFinish).toHaveBeenCalledWith('provider')
+  expect(mockFinish).toHaveBeenCalledWith('provider', false)
 })
 test('ready payout and the reload fails: My profile, not the end', async () => {
   mockOpenPayout.mockResolvedValue({ ready: true })
@@ -78,7 +86,7 @@ test('continueAfterAutoStep: a next step opens it, none ends the flow, a load er
   mockReplace.mockReset()
   mockProfile.mockResolvedValue({ missing: [], quoteSteps: [] })
   await continueAfterAutoStep(() => true)
-  expect(mockFinish).toHaveBeenCalledWith('provider')
+  expect(mockFinish).toHaveBeenCalledWith('provider', false)
   mockLoadMe.mockRejectedValue(new Error('x'))
   await continueAfterAutoStep(() => true)
   expect(mockReplace).toHaveBeenCalledWith('/my-profile')
@@ -122,4 +130,11 @@ test('an older server (no flag) falls back to the local marker', async () => {
   mockSent.mockReturnValue(true)
   expect(await loadNextStep()).toBeNull()
   mockSent.mockReturnValue(false)
+})
+
+test('the flow ends with the payout flag while /me still lists the payout as an open step', async () => {
+  mockHeldMe.mockReturnValue({ quoteSteps: ['payout'] })
+  mockProfile.mockResolvedValue({ missing: [], quoteSteps: [], payoutStarted: true })
+  await continueAfterAutoStep(() => true)
+  expect(mockFinish).toHaveBeenCalledWith('provider', true)
 })

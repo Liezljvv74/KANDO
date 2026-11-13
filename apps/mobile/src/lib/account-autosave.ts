@@ -1,3 +1,5 @@
+import type { Address } from '@kando/contract'
+import type { ApiError } from '@/api/client'
 import { toIsoDay } from './birth-date'
 
 /** Postcode shape without a country: 3 to 10 letters, digits, space or dash (the server checks the rest). */
@@ -10,4 +12,21 @@ export function shouldAutosave(v: { firstName: string; lastName: string; address
   const pc = postcode.trim()
   if (pc ? !POSTCODE.test(pc) : !!(street.trim() || city.trim())) return false
   return !v.birthDate || toIsoDay(v.birthDate) < toIsoDay(new Date())
+}
+
+/** The body of the account entry: exactly what `updateMe` receives. */
+export function accountEntryBody(v: { firstName: string; lastName: string; address: Address | null; birthDate: Date | null }) {
+  return { firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: v.address, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null }
+}
+
+/** Which field the server refused, for the stored error text. */
+export function refusedField(e: ApiError): string {
+  if (e.code === 'Invalid postcode') return 'postcode'
+  if (e.fields?.some((f) => f.startsWith('birthDate'))) return 'birthDate'
+  return 'details'
+}
+
+/** Nothing to send: the values equal the server's and no kept entry would later overwrite them. */
+export function unchangedSinceSave(body: string, lastSaved: string | null, hasStoredEntry: boolean): boolean {
+  return body === lastSaved && !hasStoredEntry
 }
