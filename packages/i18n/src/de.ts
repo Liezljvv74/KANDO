@@ -341,7 +341,7 @@ export const de = {
   'welcome.logInRegister': 'Anmelden/Registrieren',
   'welcome.needHelp': 'Ich brauche Hilfe',
   'welcome.needHelpText': 'Beschreibe kostenlos, was du brauchst, und frage einen Anbieter in deiner Nähe nach einem Angebot.',
-  'welcome.offer': 'Ich biete mein Können an',
+  'welcome.offer': 'Leistung anmelden',
   'welcome.offerText': 'Erstelle dein Profil und finde neue Kunden. Ohne Leadgebühren, ohne Abo.',
   'welcome.learn': 'Mehr erfahren',
   'welcome.learnText': 'Sieh, wie {brand} funktioniert und wie es beide Seiten schützt.',
