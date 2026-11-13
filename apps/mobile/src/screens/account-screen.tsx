@@ -216,10 +216,9 @@ export default function AccountScreen() {
           )}
           {!me && loadError !== null && <ErrorRetry code={loadError} onRetry={load} />}
         </View>
-        <View style={styles.card}>
-          <Text style={styles.heading}>{t('account.exportHeading')}</Text>
+        <FoldCard title={t('account.exportHeading')}>
           <AccountDataSection part="export" />
-        </View>
+        </FoldCard>
         <PushSwitches />
         <AccountDataSection part="delete" />
         {/* Staff shortcut while testing; release builds never show it. The in-app browser's ✕ returns here (createTask false:
@@ -254,11 +253,23 @@ function PushSwitches() {
     setPushSettings({ [key]: value }).then(setSettings, () => setSettings(settings))
   }
   return (
-    <View style={styles.card}>
-      <Text style={styles.heading}>{t('account.pushHeading')}</Text>
+    <FoldCard title={t('account.pushHeading')}>
       <SwitchRow label={t('account.pushChat')} value={settings.chat} onChange={change('chat')} />
       <SwitchRow label={t('account.pushReminders')} value={settings.reminders} onChange={change('reminders')} />
       <Text style={styles.hint}>{t(settings.chat || settings.reminders ? 'account.pushHint' : 'account.pushOff')}</Text>
+    </FoldCard>
+  )
+}
+
+/** A card that shows only its heading until it is tapped open (closed at first). */
+function FoldCard({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <View style={styles.card}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)}>
+        <Text style={styles.heading}>{title}<Text style={foldArrow}>{open ? ' ▾' : ' ▸'}</Text></Text>
+      </Pressable>
+      {open && children}
     </View>
   )
 }
