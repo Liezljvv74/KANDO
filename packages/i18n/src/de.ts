@@ -140,7 +140,7 @@ export const de = {
   'myProfile.noReferences': 'Noch keine bisherigen Aufträge.',
   'myProfile.addReference': 'Bisherigen Auftrag hinzufügen',
   'error.referenceLimit': 'Du kannst höchstens 2 bisherige Aufträge angeben. Entferne zuerst einen, um einen neuen hinzuzufügen.',
-  'setup.title': 'Mein Leistungsprofil',
+  'setup.title': 'Mein Geschäft',
   'setup.welcome': 'Richte dein Leistungsprofil ein',
   'setup.aboutYou': 'Über dich',
   'setup.publish': 'Veröffentlichen',
