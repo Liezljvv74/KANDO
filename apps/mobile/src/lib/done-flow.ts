@@ -51,10 +51,10 @@ export function runDone(d: {
  * After the send the held data is refreshed in the background.
  */
 export function pressDone(c: { isProvider: boolean; step: Step; missing: () => Key[]; invalid?: () => string | null; flush: () => unknown }, wasOpen: boolean): DoneOutcome {
-  let untrust = () => {}
-  const out = runDone({ ...c, wasOpen, next: () => nextStepHeld(c.step), onSent: () => void loadNextStep().then(() => untrust(), () => {}) })
+  let sent = () => {}
+  const out = runDone({ ...c, wasOpen, next: () => nextStepHeld(c.step), onSent: () => (sent(), void loadNextStep().catch(() => {})) })
   if (out.type === 'missing' || out.type === 'invalid') return out
-  untrust = flowCache.trust(c.step)
+  sent = flowCache.trust(c.step)
   if (out.type === 'edit') goBack()
   else if (out.type === 'myBusiness') goReplace('/my-profile')
   else if (out.type === 'next') goReplace(out.step.kind === 'payout' ? '/my-profile' : out.step.path)

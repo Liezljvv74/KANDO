@@ -16,6 +16,7 @@ export type FlowData = {
 type Start = { generation: number; n: number }
 let held: { data: FlowData; generation: number; n: number } | null = null
 const trusted = new Map<Step, number>()
+const sentAt = new Map<Step, number>() // a trusted step whose send settled: the number of loads started by then
 let seq = 0
 let loads = 0
 
@@ -33,18 +34,22 @@ export const flowCache = {
   /** A load that ran over a sign-out, or one older than the data held, is never used. */
   note(data: FlowData, start: Start = flowCache.begin()) {
     if (held && start.n < held.n) return
-    if (held && held.generation !== start.generation) trusted.clear()
+    if (held && held.generation !== start.generation) (trusted.clear(), sentAt.clear())
+    // data requested after a trusted step's send settled is the truth about that step: its trust ends (also when the refresh right after the send failed)
+    for (const [step, n] of sentAt) if (start.n > n) (trusted.delete(step), sentAt.delete(step))
     held = { data, ...start }
   },
-  /** A step whose Done passed the local check counts as finished until the returned function is called (its refresh landed). */
+  /** A step whose Done passed the local check counts as finished until data requested after its send settled arrives. The returned function says the send settled. */
   trust(step: Step): () => void {
     const n = ++seq
     trusted.set(step, n)
-    return () => void (trusted.get(step) === n && trusted.delete(step))
+    sentAt.delete(step)
+    return () => void (trusted.get(step) === n && sentAt.set(step, loads))
   },
   clear() {
     held = null
     trusted.clear()
+    sentAt.clear()
   },
 }
 

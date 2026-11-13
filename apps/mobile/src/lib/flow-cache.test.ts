@@ -26,12 +26,26 @@ test('same rules as nextStep: account first, payout last, a sent payout is not o
   flowCache.note(data({ profile: { missing: [], quoteSteps: ['payout'] }, payoutSent: true }))
   expect(nextStepHeld('account')).toBeNull()
 })
-test('a step finished by an earlier Done stays finished until its refresh lands', () => {
+test('a step finished by an earlier Done stays finished until data requested after its send settled arrives', () => {
+  const about = { kind: 'about', path: expect.stringContaining('/my-profile/about') }
   flowCache.note(data())
-  const untrust = flowCache.trust('about')
+  const early = flowCache.begin() // a load already on its way when Done is pressed
+  const sent = flowCache.trust('about')
   expect(nextStepHeld('service')).toEqual({ kind: 'payout' })
-  untrust()
-  expect(nextStepHeld('service')).toEqual({ kind: 'about', path: expect.stringContaining('/my-profile/about') })
+  sent()
+  expect(nextStepHeld('service')).toEqual({ kind: 'payout' }) // the send settled, no newer data yet
+  flowCache.note(data(), early)
+  expect(nextStepHeld('service')).toEqual({ kind: 'payout' }) // data requested before the send says nothing about it
+  flowCache.note(data()) // any later load ends the trust, also when the refresh right after the send failed
+  expect(nextStepHeld('service')).toEqual(about)
+})
+test('a step trusted again is not un-trusted by the settled send of the earlier Done', () => {
+  flowCache.note(data())
+  const first = flowCache.trust('about')
+  flowCache.trust('about')
+  first()
+  flowCache.note(data())
+  expect(nextStepHeld('service')).toEqual({ kind: 'payout' })
 })
 test('data of a signed-out account is not used', () => {
   flowCache.note(data())

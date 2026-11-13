@@ -49,7 +49,6 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const sending = useRef(false)
   const generation = useRef(signOutGeneration()) // a sign-out (or account deletion) changes it: nothing is sent for the old account
   const stored = usePendingEntry('account', user?.id ?? null) // kept changes of this account fill the form first
   const storedRef = useRef(stored)
@@ -140,24 +139,29 @@ export default function AccountScreen() {
     pendingUsed.current = true
     setEdited(false)
     putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
-    sending.current = true
-    const ok = (await sendNow('account', user.id).finally(() => void (sending.current = false))) === 'ok'
+    const ok = (await sendNow('account', user.id)) === 'ok' // sends of one key run one after another, so a second call during a send is safe
     if (ok) lastSaved.current = JSON.stringify(body)
     return ok
   }
 
-  // Leaving a field, the screen or the app: valid, changed details are saved quietly with the same call as Done (never twice at once).
+  // Leaving a field, the screen or the app: valid, changed details are saved quietly with the same call as Done.
   const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, signedIn: false, country: undefined as string | undefined, save })
   latest.current = { firstName, lastName, address, birthDate, loaded: !!me, signedIn: !!user, country: me?.address?.country, save }
   const autosave = () => {
     const v = latest.current
     if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
     const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
-    if (sending.current || unchangedSinceSave(body, lastSaved.current, !!storedRef.current)) return // a kept entry is replaced by the form's values even when they equal the server's
+    if (unchangedSinceSave(body, lastSaved.current, !!storedRef.current)) return // a kept entry is replaced by the form's values even when they equal the server's
     void v.save()
   }
   // Account is a mounted tab: leaving it (focus lost) saves too, not only unmounting.
-  useFocusEffect(useCallback(() => () => autosave(), []))
+  // Shown again: what the server holds now (a save made while the tab was open) decides whether the details card folds; the form is not touched.
+  useFocusEffect(
+    useCallback(() => {
+      if (latest.current.loaded) loadMe().then(setMe, () => {})
+      return () => autosave()
+    }, []),
+  )
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => s !== 'active' && autosave())
     return () => {
