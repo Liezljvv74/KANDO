@@ -181,8 +181,6 @@ export const en: Record<AppKey, string> = {
   'ph.radius': 'How far you travel, in km',
   'setup.noServices': 'No services yet.',
   'setup.noPrice': 'No price yet',
-  'setup.aboutEmpty': 'Tell customers who you are.',
-  'setup.aboutStrengths': 'Strengths: {n}',
   'setup.documentsExtra': 'Consider submitting additional documents, as proposed below to improve your marketability. Our team checks your documents. Customers only see which documents you submitted, never the documents themselves.',
   'missing.photo': 'Profile picture',
   'setup.share': 'Share your profile, so customers can find you',

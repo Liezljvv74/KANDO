@@ -180,8 +180,6 @@ export const de = {
   'ph.radius': 'Wie weit du fährst, in km',
   'setup.noServices': 'Noch keine Leistungen.',
   'setup.noPrice': 'Noch kein Preis',
-  'setup.aboutEmpty': 'Erzähl den Kunden, wer du bist.',
-  'setup.aboutStrengths': 'Stärken: {n}',
   'setup.documentsExtra': 'Überlege, zusätzliche Dokumente einzureichen, wie unten vorgeschlagen, um deine Chancen zu verbessern. Unser Team prüft deine Dokumente. Kunden sehen nur, welche Dokumente du eingereicht hast, nie die Dokumente selbst.',
   'missing.photo': 'Profilbild',
   'setup.share': 'Teile dein Profil, damit Kunden dich finden',
