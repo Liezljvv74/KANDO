@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { HelpFeedbackButtons } from '@/components/help-feedback-buttons'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -26,6 +26,7 @@ const splitHeadline = (s: string): [string, string] => {
 /** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in the same choices. */
 export default function HomeScreen() {
   useLang()
+  const top = useSafeAreaInsets().top
   const me = useMe()
   const signedIn = !!useSession().user
   const [busy, setBusy] = useState(false)
@@ -62,7 +63,7 @@ export default function HomeScreen() {
       ]
 
   return (
-    <SafeAreaView style={signedIn ? styles.root : [styles.root, styles.rootOut]} edges={['top']}>
+    <View style={[styles.root, !signedIn && styles.rootOut, { paddingTop: top }]}>
       {!signedIn && <StatusBar style="light" />}
       <ScrollView contentContainerStyle={styles.content}>
         {!signedIn && (
@@ -106,7 +107,7 @@ export default function HomeScreen() {
           </Tag>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 

@@ -84,7 +84,7 @@ async function issueOne(providerId: string, month: string, clock: () => Date, li
       const rows = (
         await o.execute<{ booking_id: string; amount: string; at: Date | string; currency: string; currencies: number; title: string | null }>(sql`
         SELECT l.booking_id, sum(l.amount)::text AS amount, max(l.created_at) AS at, min(l.currency) AS currency, count(DISTINCT l.currency)::int AS currencies,
-          (SELECT coalesce(q.scope, s.title, rq.description) FROM bookings b LEFT JOIN quotes q ON q.id = b.quote_id LEFT JOIN services s ON s.id = b.service_id
+          (SELECT coalesce(q.scope, nullif(s.title, ''), rq.description) FROM bookings b LEFT JOIN quotes q ON q.id = b.quote_id LEFT JOIN services s ON s.id = b.service_id
             LEFT JOIN requests rq ON rq.id = b.request_id WHERE b.id = l.booking_id) AS title
         FROM ledger_entries l WHERE l.provider_id = ${providerId} AND l.kind = 'commission' AND ${inMonth(month)}
         GROUP BY l.booking_id HAVING sum(l.amount) > 0 ORDER BY max(l.created_at), l.booking_id`)

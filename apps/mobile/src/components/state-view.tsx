@@ -1,14 +1,12 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '@/components/auth-ui'
 import { errorText, t } from '@/i18n'
 import { color } from '@/theme'
 
-export const Loading = () => (
-  <View style={styles.box}>
-    <ActivityIndicator size="large" color={color.indigo} />
-  </View>
-)
+// No spinner (owner rule): the screen stays empty until its data arrives.
+export const Loading = () => <View style={styles.box} />
+
 
 export const Empty = ({ text }: { text: string }) => (
   <View style={styles.box}>

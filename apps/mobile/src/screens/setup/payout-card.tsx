@@ -8,12 +8,14 @@ import { ErrorText, Field } from '@/components/auth-ui'
 import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { useAlive } from '@/hooks/use-alive'
 import { errorText, t } from '@/i18n'
 import { useMe, useQuoteSteps } from '@/hooks/use-me'
+import { continueAfterAutoStep } from '@/lib/flow-state'
 import { openPayoutSetup, payoutOpened, saveQuoteField } from '@/lib/do-quote-step'
 import { noteIfOff, paymentsOff, paymentsProblem } from '@/lib/payments-off'
 import { payoutState, saveSwitch } from '@/lib/payouts'
-import { color } from '@/theme'
+import { color, foldArrow } from '@/theme'
 
 /** "Set up payouts": the status and the Stripe link. `useLoad` re-checks the status on focus and when the app returns to the front (no polling). `onSaved` gets the profile a save answered with. */
 export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile; onSaved: (p: MyProfile) => void; taxAsked: number }) {
@@ -21,6 +23,7 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
   const { steps, reload } = useQuoteSteps()
   const fetch = useCallback(() => payoutStatus(), [])
   const { data, error, retry, update } = useLoad(fetch)
+  const alive = useAlive()
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const state = payoutState(data?.ready, payoutOpened())
@@ -33,12 +36,14 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
 
   // The same Stripe round trip as a checklist row: it reads the status once and reloads /me itself; its status answer is shown here as it is.
   async function open() {
+    const wasOpen = state !== 'ready' // a ready payout reopened to change bank details is a plain edit: the flow does not start again
     setBusy(true)
     setProblem(null)
     try {
       const status = await openPayoutSetup()
       if (status && data) update(() => status) // nothing held yet (the first load failed): update would drop it, so load again
       else retry()
+      if (wasOpen && status?.ready && alive.current) void continueAfterAutoStep(() => alive.current) // payouts ready: on to the next open step
     } catch (e) {
       setProblem(paymentsProblem(e))
     }
@@ -106,7 +111,7 @@ function InvoicingFields({ initial, onSaved, taxAsked }: { initial: MyProfile; o
     <>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: taxOpen }} onPress={() => setTaxOpen(!taxOpen)} style={styles.toggle}>
         <Text style={styles.toggleText}>{taxNumber.trim() && !taxOpen ? `${t('payouts.taxNumber')}: ${taxNumber.trim()}` : t('payouts.taxNumber')}</Text>
-        <Text style={styles.toggleText}>{taxOpen ? '▴' : '▾'}</Text>
+        <Text style={[styles.toggleText, foldArrow]}>{taxOpen ? '▴' : '▾'}</Text>
       </Pressable>
       {taxOpen && <Field label={t('payouts.taxNumber')} hint={t('payouts.taxNumberHint')} value={taxNumber} onChangeText={(v) => {
         taxDirty.current = true

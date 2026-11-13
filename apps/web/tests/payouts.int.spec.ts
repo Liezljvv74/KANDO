@@ -19,6 +19,7 @@ const confirmRoute = await import('../app/app-api/v1/quotes/[id]/confirm/route')
 const webhook = await import('../app/api/stripe/webhook/route')
 const exportRoute = await import('../app/app-api/v1/me/export/route')
 const meRoute = await import('../app/app-api/v1/me/route')
+const ownProfileRoute = await import('../app/app-api/v1/provider-profile/route')
 
 const U = { c1: 'po-c1', c2: 'po-c2', c3: 'po-c3', third: 'po-third' }
 const DAY = 86_400_000
@@ -172,6 +173,17 @@ it('/me carries the quote steps for a provider only, and they follow the set-up'
   await ready(p.id)
   expect(await steps(p.uid)).toEqual([])
   expect(await steps(U.c1)).toBeUndefined() // a customer has no profile: no steps
+})
+
+it('the own profile says whether the payout form was started, and never carries the account id', async () => {
+  const p = await provider()
+  const read = async () => (await call(ownProfileRoute.GET, p.uid)).text()
+  expect(JSON.parse(await read()).payoutStarted).toBe(false)
+  await pool.query("UPDATE providers SET stripe_account_id = 'acct_started_secret' WHERE id = $1", [p.id])
+  const text = await read()
+  expect(JSON.parse(text).payoutStarted).toBe(true)
+  expect(JSON.parse(text).quoteSteps).toContain('payout') // still open on the server until Stripe says ready
+  expect(text).not.toContain('acct_started_secret')
 })
 
 it('a provider who stops being ready: the customer cannot confirm their quote; bookings already accepted stay', async () => {

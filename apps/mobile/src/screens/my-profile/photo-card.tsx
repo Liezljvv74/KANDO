@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native'
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import type { Photo as OwnPhoto } from '@kando/contract'
 
@@ -13,8 +13,8 @@ import { photoMenu } from '@/lib/photo-menu'
 import { DeniedNotice } from './denied-notice'
 import { color } from '@/theme'
 
-/** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library, and offers Remove when there is a picture. */
-export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | null; name: string; onChanged: () => void }) {
+/** The profile photo with a pencil over its bottom-right edge; the pencil asks camera or library, and offers Remove when there is a picture. `hint`: a text between the photo and the pencil (Account, while there is no picture). */
+export function ProfilePhoto({ photo, name, onChanged, hint }: { photo: OwnPhoto | null; name: string; onChanged: () => void; hint?: string }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
@@ -74,17 +74,18 @@ export function ProfilePhoto({ photo, name, onChanged }: { photo: OwnPhoto | nul
 
   return (
     <View style={styles.root}>
-      <View>
+      <View style={hint ? styles.row : null}>
         <Avatar name={name} url={photo?.url ?? null} size={72} />
+        {!!hint && <Text style={styles.hint}>{hint}</Text>}
         <Pressable
           onPress={choose}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={t('myProfile.photoEdit')}
           accessibilityState={{ busy, disabled: busy }}
-          style={styles.edit}
+          style={hint ? styles.editInRow : styles.edit}
         >
-          {busy ? <ActivityIndicator color={color.indigo} /> : <Ionicons name="pencil" size={20} color={color.indigo} style={styles.halo} />}
+          <Ionicons name="pencil" size={20} color={color.indigo} style={styles.halo} />
         </Pressable>
       </View>
       <ErrorText text={problem} />
@@ -98,5 +99,8 @@ const styles = StyleSheet.create({
   // Half over the photo's edge; no frame, a white halo keeps the pencil readable on any photo.
   // Just below the photo's centre line, on its right edge (photo 72, button 44: its centre sits at 46 of 72).
   edit: { position: 'absolute', right: -14, top: 24, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hint: { flex: 1, fontSize: 15, lineHeight: 22, color: color.ink },
+  editInRow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   halo: { textShadowColor: color.surface, textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
 })

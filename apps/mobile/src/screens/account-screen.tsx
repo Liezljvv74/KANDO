@@ -1,34 +1,40 @@
 import type { IdScan, Me, Photo, PushSettings } from '@kando/contract'
+import { useFocusEffect } from 'expo-router'
 import { openBrowserAsync } from 'expo-web-browser'
-import { useCallback, useEffect, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ScreenBanner } from '@/components/screen-banner'
 
 import { stopOffering } from '@/api/account'
-import { API_URL, ApiError, updateMe } from '@/api/client'
+import { API_URL, ApiError } from '@/api/client'
 import { getPushSettings, setPushSettings } from '@/api/push'
 import { AddressFields, EMPTY_ADDRESS, toAddress } from '@/components/address-fields'
 import { DateTimeField } from '@/components/date-time-field'
-import { Button, ErrorText, Field, KEYBOARD_GAP } from '@/components/auth-ui'
-import { SwitchRow } from '@/components/form-ui'
+import { Field, KEYBOARD_GAP } from '@/components/auth-ui'
+import { DoneBar } from '@/components/done-bar'
+import { SmallButton, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry } from '@/components/state-view'
 import { LanguageSwitch } from '@/components/language-switch'
-import { useFlash } from '@/hooks/use-flash'
-import { loadMe, useMe } from '@/hooks/use-me'
+import { useDone } from '@/hooks/use-done'
+import { loadMe, signOutGeneration, useMe } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
+import { accountEntryBody, shouldAutosave, unchangedSinceSave } from '@/lib/account-autosave'
+import { confirmSignOut } from '@/lib/confirm-sign-out'
+import { sendNow } from '@/lib/pending-runner'
+import { putEntry, usePendingEntry, type PendingEntry } from '@/lib/pending-saves'
+import { accountMissing } from '@/lib/required-fields'
 import { showProfileTab } from '@/lib/profile-tab'
 import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
 import { IdScanButton } from '@/screens/id-scan-button'
-import { PictureNudge } from '@/screens/picture-nudge'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
-import { color } from '@/theme'
+import { color, foldArrow } from '@/theme'
 
 export default function AccountScreen() {
   useLang()
@@ -43,18 +49,27 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const generation = useRef(signOutGeneration()) // a sign-out (or account deletion) changes it: nothing is sent for the old account
+  const stored = usePendingEntry('account', user?.id ?? null) // kept changes of this account fill the form first
+  const storedRef = useRef(stored)
+  storedRef.current = stored
+  const pendingUsed = useRef(false)
+  const [edited, setEdited] = useState(false) // a kept entry's error is about the old value: gone once the person edits
+  const touch = () => (setError(null), setEdited(true))
+  const lastSaved = useRef<string | null>(null) // the body last known to be on the server
   const [open, setOpen] = useState<boolean | null>(null) // the details form: null = by itself (open until the compulsory details are saved), else the person's choice
-  const [saved, showSaved, hideSaved] = useFlash()
 
   const load = useCallback(async () => {
     try {
       const m = await loadMe()
       setLoadError(null)
       setMe(m)
+      lastSaved.current = JSON.stringify({ firstName: (m.firstName ?? '').trim(), lastName: (m.lastName ?? '').trim(), address: m.address ? toAddress({ street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' }, m.address.country) : null, birthDate: m.birthDate ?? null })
       setFirstName(m.firstName ?? '')
       setLastName(m.lastName ?? '')
       setBirthDate(fromIsoDay(m.birthDate))
       setAddress(m.address ? { street: m.address.street ?? '', postcode: m.address.postcode, city: m.address.city ?? '' } : EMPTY_ADDRESS)
+      if (storedRef.current) applyStored(storedRef.current)
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.code : '') // the form stays hidden behind a retry
     }
@@ -63,13 +78,27 @@ export default function AccountScreen() {
     load()
   }, [load])
 
-  /** The suggestions from an ID card scan fill the form (only what was read); nothing is saved until the person taps Save. */
+  /** Once per visit: the kept (not yet saved or refused) values replace the server's in the form. */
+  function applyStored(p: PendingEntry) {
+    if (pendingUsed.current) return
+    pendingUsed.current = true
+    const b = p.body as ReturnType<typeof accountEntryBody>
+    setFirstName(b.firstName)
+    setLastName(b.lastName)
+    setBirthDate(fromIsoDay(b.birthDate))
+    setAddress(b.address ? { street: b.address.street ?? '', postcode: b.address.postcode, city: b.address.city ?? '' } : EMPTY_ADDRESS)
+  }
+  useEffect(() => {
+    if (stored && me) applyStored(stored) // the store finished loading after the server answer
+  }, [stored, me])
+
+  /** The suggestions from an ID card scan fill the form (only what was read); nothing is saved until the person presses Done. */
   function applyScan(r: IdScan) {
-    hideSaved()
     if (r.firstName) setFirstName(r.firstName)
     if (r.lastName) setLastName(r.lastName)
     if (r.birthDate) setBirthDate(fromIsoDay(r.birthDate))
     if (r.postcode || r.street || r.city) setAddress((a) => ({ street: r.street ?? a.street, postcode: r.postcode ?? a.postcode, city: r.city ?? a.city }))
+    if (r.firstName || r.lastName || r.birthDate || r.postcode || r.street || r.city) touch()
   }
 
   async function stop() {
@@ -93,26 +122,62 @@ export default function AccountScreen() {
     setBusy(false)
   }
 
-  async function save() {
-    const addr = toAddress(address, me?.address?.country)
-    if (!firstName.trim() || !lastName.trim()) return setError(t('auth.fillAll'))
-    if (addr === undefined) return setError(t('auth.addressIncomplete'))
-    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return setError(t('error.invalidBirthDate'))
-    setBusy(true)
-    setError(null)
-    hideSaved()
-    try {
-      await updateMe({ firstName: firstName.trim(), lastName: lastName.trim(), address: addr, birthDate: birthDate ? toIsoDay(birthDate) : null })
-      await load()
-      setOpen(null) // saved: the card folds again once the compulsory details are in
-      showSaved()
-    } catch (e) {
-      setError(e instanceof ApiError && e.code === 'Invalid input' && e.fields?.some((f) => f.startsWith('birthDate')) ? t('error.invalidBirthDate') : errorText(e instanceof ApiError ? e.code : ''))
-    }
-    setBusy(false)
+  /** Why the details cannot be kept as they are (Done shows it), null when they can. */
+  function invalid(): string | null {
+    if (scanning) return t('account.busyWait') // the ID scan is still working: say so, not a vague error
+    if (toAddress(address, me?.address?.country) === undefined) return t('auth.addressIncomplete')
+    if (birthDate && toIsoDay(birthDate) >= toIsoDay(new Date())) return t('error.invalidBirthDate')
+    return null
   }
 
+  /** Keeps the details and sends them (Done and leaving never wait for it); true once the server took them. A failure is kept and shown by the banner and the stored entry. */
+  async function save(): Promise<boolean> {
+    const addr = toAddress(address, me?.address?.country)
+    if (!firstName.trim() || !lastName.trim() || addr === undefined || invalid()) return false
+    if (!user) return false // nothing can be kept or sent without an account
+    const body = accountEntryBody({ firstName, lastName, address: addr, birthDate })
+    pendingUsed.current = true
+    setEdited(false)
+    putEntry({ key: 'account', kind: 'account', accountId: user.id, body, route: '/account', field: 'details' })
+    const ok = (await sendNow('account', user.id)) === 'ok' // sends of one key run one after another, so a second call during a send is safe
+    if (ok) lastSaved.current = JSON.stringify(body)
+    return ok
+  }
+
+  // Leaving a field, the screen or the app: valid, changed details are saved quietly with the same call as Done.
+  const latest = useRef({ firstName, lastName, address, birthDate, loaded: false, signedIn: false, country: undefined as string | undefined, save })
+  latest.current = { firstName, lastName, address, birthDate, loaded: !!me, signedIn: !!user, country: me?.address?.country, save }
+  const autosave = () => {
+    const v = latest.current
+    if (!v.loaded || !v.signedIn || generation.current !== signOutGeneration() || !shouldAutosave(v)) return
+    const body = JSON.stringify({ firstName: v.firstName.trim(), lastName: v.lastName.trim(), address: toAddress(v.address, v.country) ?? null, birthDate: v.birthDate ? toIsoDay(v.birthDate) : null })
+    if (unchangedSinceSave(body, lastSaved.current, !!storedRef.current)) return // a kept entry is replaced by the form's values even when they equal the server's
+    void v.save()
+  }
+  // Account is a mounted tab: leaving it (focus lost) saves too, not only unmounting.
+  // Shown again: what the server holds now (a save made while the tab was open) decides whether the details card folds; the form is not touched.
+  useFocusEffect(
+    useCallback(() => {
+      if (latest.current.loaded) loadMe().then(setMe, () => {})
+      return () => autosave()
+    }, []),
+  )
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s !== 'active' && autosave())
+    return () => {
+      sub.remove()
+      autosave()
+    }
+  }, [])
+
   const isProvider = showProfileTab(shared ?? me)
+  const done = useDone({
+    isProvider,
+    step: 'account',
+    missing: () => accountMissing({ firstName, lastName, postcode: address.postcode, hasBirthDate: !!birthDate, isProvider }),
+    invalid,
+    flush: save,
+  })
   // compulsory: the name and the postcode (a provider's date of birth too); with those saved the details card folds
   const complete = !!me && !!me.firstName?.trim() && !!me.lastName?.trim() && !!me.address?.postcode && (!isProvider || !!me.birthDate)
   const showDetails = open ?? !complete
@@ -128,42 +193,36 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScreenBanner title={t('tab.account')} />
       <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          {user && <Text style={styles.email}>{user.email}</Text>}
-          <Button label={t('auth.logOut')} onPress={signOut} />
+        <View style={[styles.card, styles.logOutRow]}>
+          <Text style={styles.email} numberOfLines={1} ellipsizeMode="middle">{user?.email}</Text>
+          <SmallButton label={t('auth.logOut')} onPress={() => confirmSignOut(user?.id, signOut)} />
         </View>
-        <PictureNudge />
         <View style={styles.card}>
           <Text style={styles.heading}>{t('account.detailsHeading')}</Text>
           {me && (
             <>
-              <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} onChanged={() => loadMe().then(setMe, () => {})} />
+              <ProfilePhoto photo={me.photoUrl ? ({ url: me.photoUrl } as Photo) : null} name={`${firstName} ${lastName}`} hint={me.photoUrl ? undefined : t('home.pictureNudge')} onChanged={() => loadMe().then(setMe, () => {})} />
               <SwitchRow label={t('account.offerSwitch')} value={isProvider} onChange={changeOffer} disabled={busy} />
-              <ErrorText text={error} />
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setOpen(!showDetails)}>
-                <Text style={styles.fold}>{`${showDetails ? '▾' : '▸'} ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trim()}</Text>
+                <Text style={styles.fold}><Text style={foldArrow}>{showDetails ? '▾' : '▸'}</Text>{` ${firstName} ${lastName}${address.postcode ? ` · ${address.postcode} ${address.city}` : ''}`.trimEnd()}</Text>
               </Pressable>
-              {!showDetails && saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
               {showDetails && (
                 <>
                   <IdScanButton onResult={applyScan} onBusy={setScanning} disabled={busy} />
-                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), hideSaved())} autoComplete="given-name" editable={!busy && !scanning} />
-                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), hideSaved())} autoComplete="family-name" editable={!busy && !scanning} />
-                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), hideSaved())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
-                  <AddressFields value={address} onChange={(a) => (setAddress(a), hideSaved())} disabled={busy || scanning} />
+                  <Field label={t('auth.firstName')} value={firstName} onChangeText={(v) => (setFirstName(v), touch())} autoComplete="given-name" onBlur={autosave} editable={!busy && !scanning} />
+                  <Field label={t('auth.lastName')} value={lastName} onChangeText={(v) => (setLastName(v), touch())} autoComplete="family-name" onBlur={autosave} editable={!busy && !scanning} />
+                  <DateTimeField label={t('auth.birthDate')} placeholder={t('auth.birthDatePlaceholder')} mode="date" value={birthDate} onChange={(d) => (setBirthDate(d), touch())} maximumDate={new Date()} initial={new Date()} disabled={busy || scanning} />
+                  <AddressFields value={address} onChange={(a) => (setAddress(a), touch())} disabled={busy || scanning} onBlur={autosave} />
                   <LanguageSwitch />
-                  <Button label={t('common.save')} onPress={save} busy={busy} disabled={scanning} />
-                  {saved && <Text style={styles.saved}>{t('account.saved')}</Text>}
                 </>
               )}
             </>
           )}
           {!me && loadError !== null && <ErrorRetry code={loadError} onRetry={load} />}
         </View>
-        <View style={styles.card}>
-          <Text style={styles.heading}>{t('account.exportHeading')}</Text>
+        <FoldCard title={t('account.exportHeading')}>
           <AccountDataSection part="export" />
-        </View>
+        </FoldCard>
         <PushSwitches />
         <AccountDataSection part="delete" />
         {/* Staff shortcut while testing; release builds never show it. The in-app browser's ✕ returns here (createTask false:
@@ -173,9 +232,16 @@ export default function AccountScreen() {
             {t('account.admin')}
           </Text>
         )}
+        {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? done.message ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null)} />}
       </KeyboardAwareScrollView>
     </SafeAreaView>
   )
+}
+
+/** The error text of a failed (kept) account save. */
+function failureText(e: PendingEntry | undefined): string {
+  if (!e) return errorText('')
+  return e.field === 'birthDate' ? t('error.invalidBirthDate') : errorText(e.state === 'refused' ? (e.reason ?? '') : '')
 }
 
 /** The two push switches; everything else about bookings and payments is always pushed. Hidden until loaded; a failed save flips back. */
@@ -191,11 +257,23 @@ function PushSwitches() {
     setPushSettings({ [key]: value }).then(setSettings, () => setSettings(settings))
   }
   return (
-    <View style={styles.card}>
-      <Text style={styles.heading}>{t('account.pushHeading')}</Text>
+    <FoldCard title={t('account.pushHeading')}>
       <SwitchRow label={t('account.pushChat')} value={settings.chat} onChange={change('chat')} />
       <SwitchRow label={t('account.pushReminders')} value={settings.reminders} onChange={change('reminders')} />
-      <Text style={styles.hint}>{t('account.pushHint')}</Text>
+      <Text style={styles.hint}>{t(settings.chat || settings.reminders ? 'account.pushHint' : 'account.pushOff')}</Text>
+    </FoldCard>
+  )
+}
+
+/** A card that shows only its heading until it is tapped open (closed at first). */
+function FoldCard({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <View style={styles.card}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)}>
+        <Text style={styles.heading}>{title}<Text style={foldArrow}>{open ? ' ▾' : ' ▸'}</Text></Text>
+      </Pressable>
+      {open && children}
     </View>
   )
 }
@@ -205,8 +283,8 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 12 },
   card: { backgroundColor: color.surface, borderRadius: 16, padding: 16, gap: 12 },
   title: { fontSize: 22, fontWeight: '700', color: color.indigo },
-  saved: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: color.indigo },
-  email: { fontSize: 16, color: color.ink },
+  email: { flex: 1, fontSize: 16, color: color.ink },
+  logOutRow: { flexDirection: 'row', alignItems: 'center' },
   fold: { fontSize: 16, fontWeight: '600', color: color.indigo, minHeight: 44, textAlignVertical: 'center' },
   heading: { fontSize: 17, fontWeight: '700', color: color.ink },
   hint: { fontSize: 14, color: color.inkMuted },

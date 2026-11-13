@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router'
 import type { ComponentRef } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -8,10 +8,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { KEYBOARD_GAP, LinkText } from '@/components/auth-ui'
 import { ScreenBanner } from '@/components/screen-banner'
 import { t } from '@/i18n'
-import { color, font } from '@/theme'
+import { color, foldArrow, font } from '@/theme'
 
 /** `scrollRef`: lets a screen scroll to one of its sections (y from that section's onLayout; sections are direct children). */
-export function FormScreen({ title, children, back = true, scrollRef }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>> }) {
+export function FormScreen({ title, children, back = true, scrollRef, footer }: { title: string; children: React.ReactNode; back?: boolean; scrollRef?: React.Ref<ComponentRef<typeof KeyboardAwareScrollView>>; footer?: React.ReactNode }) {
   const router = useRouter()
   return (
     <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
@@ -19,6 +19,7 @@ export function FormScreen({ title, children, back = true, scrollRef }: { title:
       <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} bottomOffset={KEYBOARD_GAP} keyboardShouldPersistTaps="handled">
         {back && <LinkText label={t('common.back')} onPress={() => router.back()} />}
         {children}
+        {footer}
       </KeyboardAwareScrollView>
     </SafeAreaView>
   )
@@ -33,7 +34,13 @@ export const Card = ({ children, done, list }: { children: React.ReactNode; done
   <View style={[styles.card, list && styles.cardList, done && styles.cardDone]}>{children}</View>
 )
 
-export const SectionTitle = ({ text, tint }: { text: string; tint?: string }) => <Text style={[styles.section, tint ? { color: tint } : null]}>{text}</Text>
+/** `arrow`: a fold arrow after the text (▾ open, ▸ closed), in the size all fold arrows have. */
+export const SectionTitle = ({ text, tint, arrow }: { text: string; tint?: string; arrow?: string }) => (
+  <Text style={[styles.section, tint ? { color: tint } : null]}>
+    {text}
+    {arrow ? <Text style={foldArrow}>{` ${arrow}`}</Text> : null}
+  </Text>
+)
 
 export const SwitchRow = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
   <View style={styles.switchRow}>
@@ -75,7 +82,7 @@ export const SmallButton = ({
     accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
     style={({ pressed }) => [styles.small, grow && styles.smallGrow, solid && { backgroundColor: danger ? color.danger : color.teal, borderColor: danger ? color.danger : color.teal }, !solid && danger && { borderColor: color.danger }, !!badge && { borderColor: color.danger }, (disabled || busy) && styles.smallOff, pressed && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={solid ? (danger ? color.surface : color.ink) : danger ? color.danger : color.indigo} /> : <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? color.surface : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>}
+    <Text style={[styles.smallLabel, grow && styles.smallGrowLabel, solid && { color: danger ? color.surface : color.ink }, !solid && danger && { color: color.danger }]}>{label}{!!badge && <Text style={{ color: color.danger }}>{` ${badge}`}</Text>}</Text>
   </Pressable>
 )
 
@@ -102,7 +109,7 @@ export const IconButton = ({
     hitSlop={4}
     style={({ pressed }) => [styles.icon, (pressed || disabled) && styles.smallOff]}
   >
-    {busy ? <ActivityIndicator color={color.indigo} /> : <Ionicons name={icon} size={22} color={color.indigo} />}
+    <Ionicons name={icon} size={22} color={color.indigo} />
   </Pressable>
 )
 

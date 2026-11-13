@@ -33,6 +33,8 @@ export const MyProfileSchema = z.object({
   underCheck: z.array(z.string()).optional(),
   /** What the provider still needs before quoting (empty when payments are off); the server always sends it. */
   quoteSteps: z.array(z.enum(['payout', 'consent', 'taxId'])).optional(),
+  /** The provider has opened Stripe's payout form (an account exists); only this flag is sent, never the account id. A newer app may talk to an older server, so it can be missing. */
+  payoutStarted: z.boolean().optional(),
 })
 export type MyProfile = z.infer<typeof MyProfileSchema>
 

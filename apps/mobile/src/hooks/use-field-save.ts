@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import { AppState } from 'react-native'
+import { isHeld, sendNow } from '@/lib/pending-runner'
+import { putEntry, removeKey, usePendingEntry, type SaveKind } from '@/lib/pending-saves'
 
 export type SaveStatus = 'saved' | 'saving' | 'error'
+
+/** The value is kept in the pending-saves store from the moment it is set; the registered sender for `kind` does the API call. */
+export type FieldQueue<V> = { key: string; kind: SaveKind; accountId: string; route: string; field: string; serviceRef?: string; toBody: (v: V) => object | null }
 
 /**
  * The framework-free core: one field, one request at a time, quick changes coalesced into one request.
  * It only ever reports a status; the value stays with the caller and is never reset by a response or an error.
  */
-export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayMs: number, onStatus: (s: SaveStatus) => void) {
+export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayMs: number, onStatus: (s: SaveStatus) => void, queue?: () => FieldQueue<V>) {
   let latest: V
   let dirty = false
   let running: Promise<void> | null = null // the loop below: one request at a time, until nothing is dirty
@@ -16,7 +22,17 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
     while (dirty) {
       dirty = false // a change made during a request is sent when it ends; the status stays 'saving' until then
       try {
-        await save(latest)
+        if (queue) {
+          const q = queue()
+          if (!q.accountId) throw new Error('not saved') // signed out: nothing can be kept or sent
+          if ((await sendNow(q.key, q.accountId)) !== 'ok') {
+            if (isHeld(q.key, q.accountId)) {
+              if (!dirty) onStatus('saved') // kept; the runner sends it after its service is created
+              continue
+            }
+            throw new Error('not saved')
+          }
+        } else await save(latest)
         if (!dirty) onStatus('saved')
       } catch {
         onStatus('error') // the value stays; `retry` resends it (or a newer change does)
@@ -34,6 +50,19 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
   return {
     set(value: V) {
       latest = value
+      if (queue) {
+        const q = queue()
+        const body = q.toBody(value)
+        if (!body) {
+          removeKey(q.key, q.accountId)
+          dirty = false
+          clearTimeout(timer)
+          timer = undefined
+          onStatus('saved')
+          return
+        }
+        if (q.accountId) putEntry({ key: q.key, kind: q.kind, accountId: q.accountId, body, serviceRef: q.serviceRef, route: q.route, field: q.field })
+      }
       dirty = true
       onStatus('saving')
       clearTimeout(timer)
@@ -53,22 +82,45 @@ export function createFieldSaver<V>(save: (value: V) => Promise<unknown>, delayM
   }
 }
 
-/** One instance per field: `setValue` on every keystroke, `flush` on blur. */
-export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>, delayMs = 600) {
+/** The `save` of a field that is sent through the pending-saves store (`queue`): nothing to do here. */
+export const noSave = async () => {}
+
+/** One instance per field: `setValue` on every keystroke, `flush` on blur. `initial` is the kept value when one is stored, else the server's. */
+export function useFieldSave<V>(initial: V, save: (value: V) => Promise<unknown>, delayMs = 600, queue?: FieldQueue<V>) {
   const [value, setV] = useState(initial)
-  const [status, setStatus] = useState<SaveStatus>('saved')
+  const pending = usePendingEntry(queue?.key ?? '', queue?.accountId ?? null)
+  const [status, setStatus] = useState<SaveStatus>(pending?.state === 'refused' ? 'error' : 'saved')
+  const touched = useRef(false)
+  const hadPending = useRef(!!pending)
+  useEffect(() => {
+    // The store finished loading after the form was shown: the kept value fills the field, unless the person typed meanwhile.
+    if (pending && !hadPending.current && !touched.current) setV(initial)
+    hadPending.current ||= !!pending
+  }, [pending])
   const saveRef = useRef(save)
   saveRef.current = save
+  const queueRef = useRef(queue)
+  queueRef.current = queue
   const saver = useRef<ReturnType<typeof createFieldSaver<V>>>(null)
-  saver.current ??= createFieldSaver<V>((v) => saveRef.current(v), delayMs, setStatus)
-  useEffect(() => () => saver.current?.dispose(), [])
+  saver.current ??= createFieldSaver<V>((v) => saveRef.current(v), delayMs, setStatus, queue && (() => queueRef.current!))
+  useEffect(() => {
+    // Nothing typed waits for the 600 ms timer when the app goes to the background.
+    const sub = AppState.addEventListener('change', (s) => s !== 'active' && void saver.current?.flush())
+    return () => {
+      sub.remove()
+      saver.current?.dispose()
+    }
+  }, [])
   return {
     value,
     setValue: (v: V) => {
+      touched.current = true
       setV(v)
       saver.current!.set(v)
     },
     status,
+    /** The error text key of the stored entry: the server's error code for a refused one, 'network' for one being retried; null when nothing is stored or it waits for the person (sign in again, new terms: the banner says so, a Retry here could not work). */
+    errorCode: pending ? (pending.state === 'refused' ? (pending.reason ?? 'network') : pending.state === 'retry' ? 'network' : null) : null,
     retry: () => void saver.current!.retry(),
     /** Resolves when nothing is dirty and nothing is in flight. */
     flush: () => saver.current!.flush(),

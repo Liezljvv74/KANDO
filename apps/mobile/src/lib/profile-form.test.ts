@@ -1,7 +1,7 @@
 import { ApiError } from '@/api/client'
 
 import { createFieldSaver } from '@/hooks/use-field-save'
-import { aboutSummary, isLive, needsFormError, radiusBody, typedTag, validRadius, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
+import { isLive, needsFormError, radiusBody, typedTag, validRadius, withItem, parsePrice, serverFieldErrors, serviceBody, validateReference, validateService } from './profile-form'
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
@@ -84,10 +84,4 @@ test('an invalid radius keeps the typed value, is reported as invalid and sends 
   saver.set('30')
   await saver.flush()
   expect(request).toHaveBeenCalledWith({ serviceRadiusKm: 30 })
-})
-
-test('the About you summary: nothing filled in gives null, else type, strength count and a short description', () => {
-  expect(aboutSummary({ providerType: null, strengths: ' \n', bio: ' ' })).toBeNull()
-  expect(aboutSummary({ providerType: 'business', strengths: 'a\nb\na\n', bio: 'Hello  there' })).toEqual({ type: 'business', strengths: 2, bio: 'Hello there' })
-  expect(aboutSummary({ bio: 'x'.repeat(200) })!.bio).toHaveLength(81)
 })

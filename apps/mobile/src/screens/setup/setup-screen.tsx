@@ -1,6 +1,7 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import type { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 
 import type { MyProfile } from '@kando/contract'
 
@@ -26,10 +27,10 @@ import { ReferencesCard } from './references-card'
 import { ServicesCard } from './services-card'
 import { color } from '@/theme'
 
-/** The one-page "My service profile". */
+/** The one-page "My business". */
 export default function SetupScreen() {
   useLang()
-  const params = useLocalSearchParams<{ welcome?: string }>()
+  const params = useLocalSearchParams<{ welcome?: string; publish?: string }>()
   // The sign-up lands here with ?welcome=1: the welcome title shows until the user leaves the tab.
   const [welcome, setWelcome] = useState(params.welcome === '1')
   useEffect(() => {
@@ -66,6 +67,16 @@ export default function SetupScreen() {
   const { categories } = useCategories()
   const me = useMe()
   const [taxAsked, setTaxAsked] = useState(0) // the tax number step opens the field in the payout card
+  // Arriving from the last Done with ?publish=1: back to the top, with the Publish switch briefly highlighted.
+  const scrollRef = useRef<ComponentRef<typeof KeyboardAwareScrollView>>(null)
+  const [highlight, setHighlight] = useState(false)
+  useEffect(() => {
+    if (!params.publish || !done) return
+    scrollRef.current?.scrollTo({ y: 0, animated: true })
+    setHighlight(true)
+    const timer = setTimeout(() => setHighlight(false), 2500)
+    return () => clearTimeout(timer)
+  }, [params.publish, done])
   const title = welcome ? t('setup.welcome') : t('setup.title')
   if (!done || !data) return <FormScreen title={title} back={false}>{error ? <ErrorRetry code={error} onRetry={retry} /> : <Loading />}</FormScreen>
   const { profile, services, references, photos, verifications } = data
@@ -73,8 +84,8 @@ export default function SetupScreen() {
   const docRows = documentRows(services, categories ?? [], verifications)
 
   return (
-    <FormScreen title={title} back={false}>
-      <PublishBar profile={profile} services={services} docRows={docRows} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
+    <FormScreen title={title} back={false} scrollRef={scrollRef}>
+      <PublishBar highlight={highlight} profile={profile} services={services} docRows={docRows} onChanged={retry} onSaved={onSaved} onTaxId={() => setTaxAsked((n) => n + 1)} />
       <Card>
         <View style={styles.row}>
           <ProfilePhoto photo={photos.find((p) => p.kind === 'profile') ?? null} name={name} onChanged={retry} />

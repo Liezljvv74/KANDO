@@ -6,6 +6,7 @@ import { Card, EditButton, IconButton, SectionHeader } from '@/components/form-u
 import { docText, t } from '@/i18n'
 import { documentsComplete } from '@/lib/completeness'
 import { DOC_COLORS, docTone, groupColor, groupNeedsAction, type DocumentRow } from '@/lib/documents'
+import { foldArrow } from '@/theme'
 
 /** Verification documents in two collapsible groups with an approved count each. A group that needs attention (a required document missing or rejected, an optional one rejected) is red and open; the optional group is indigo while nothing of it is uploaded. Each document has its own screen. */
 export function DocumentsCard({ rows }: { rows: DocumentRow[] }) {
@@ -34,7 +35,7 @@ function Group({ title, rows, optional }: { title: string; rows: DocumentRow[]; 
     <View>
       <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={styles.toggle}>
         <Text style={[styles.groupTitle, { color: tone }]}>{`${title} (${approved}/${rows.length})`}</Text>
-        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.groupTitle, { color: tone }]}>{open ? '▴' : '▾'}</Text>
+        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.groupTitle, { color: tone }, foldArrow]}>{open ? '▴' : '▾'}</Text>
       </Pressable>
       {open &&
         rows.map((r) => {

@@ -10,7 +10,10 @@ import { Card, FormScreen, SmallButton } from '@/components/form-ui'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
+import { useAlive } from '@/hooks/use-alive'
 import { docText, errorText, t, useLang } from '@/i18n'
+import { continueAfterAutoStep } from '@/lib/flow-state'
+import { isOpenDocument } from '@/lib/next-step'
 import { DOC_COLORS, deleteBodyKey, docTone, documentRows, submittedDocs, type DocumentRow } from '@/lib/documents'
 import { pickDocument, pickPhoto, tooLarge, uploadErrorCode } from '@/lib/pick'
 import { DeniedNotice } from './denied-notice'
@@ -36,6 +39,8 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
   const [busy, setBusy] = useState(false) // one submit at a time
   const [problem, setProblem] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
+  const alive = useAlive()
+  const wasOpen = isOpenDocument(row) // an open step: after its upload the flow goes on by itself
 
   async function submit(pick: () => Promise<PickedFile | null | 'denied'>) {
     if (busy) return
@@ -49,6 +54,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
       else if (file) {
         await documentsApi.submit(file, requirement)
         onChanged()
+        if (wasOpen && alive.current) void continueAfterAutoStep(() => alive.current)
       }
     } catch (e) {
       setProblem(errorText(uploadErrorCode(e)))

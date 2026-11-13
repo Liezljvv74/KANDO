@@ -8,6 +8,7 @@ import { TermsCheckbox } from '@/components/terms-checkbox'
 import { loadMe, setAside, useTermsPopup } from '@/hooks/use-me'
 import { errorText, t, useLang } from '@/i18n'
 import { go } from '@/lib/go'
+import { wake } from '@/lib/pending-runner'
 import { color, font } from '@/theme'
 
 /**
@@ -28,6 +29,7 @@ export function TermsReaccept() {
     setError(null)
     try {
       await updateMe({ termsAccepted: true, termsVersion: TERMS_VERSION })
+      wake() // changes kept while the Terms were not accepted are sent now
       await loadMe()
       setTicked(false)
     } catch (e) {
