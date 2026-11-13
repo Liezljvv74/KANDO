@@ -454,6 +454,7 @@ export const de = {
   'account.pushChat': 'Chatnachrichten',
   'account.pushReminders': 'Erinnerungen',
   'account.pushHint': 'Alles zu deinen Buchungen und Zahlungen bekommst du immer als Mitteilung.',
+  'account.pushOff': 'Du bekommst derzeit keine Erinnerungen und keine Chat-Mitteilungen. Alles zu deinen Buchungen und Zahlungen bekommst du weiterhin als Mitteilung.',
   'account.offerServices': 'Leistungen anbieten',
   'account.exportHeading': 'Meine Daten',
   'account.detailsHeading': 'Meine Angaben',

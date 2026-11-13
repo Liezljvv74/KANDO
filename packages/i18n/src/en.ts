@@ -455,6 +455,7 @@ export const en: Record<AppKey, string> = {
   'account.pushChat': 'Chat messages',
   'account.pushReminders': 'Reminders',
   'account.pushHint': 'You always get a notification about your bookings and payments.',
+  'account.pushOff': 'You are not currently receiving reminders or chat notifications. You still get a notification about your bookings and payments.',
   'account.offerServices': 'Offer services',
   'account.exportHeading': 'My data',
   'account.detailsHeading': 'My details',

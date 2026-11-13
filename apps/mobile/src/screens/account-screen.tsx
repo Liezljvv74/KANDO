@@ -260,7 +260,7 @@ function PushSwitches() {
       <Text style={styles.heading}>{t('account.pushHeading')}</Text>
       <SwitchRow label={t('account.pushChat')} value={settings.chat} onChange={change('chat')} />
       <SwitchRow label={t('account.pushReminders')} value={settings.reminders} onChange={change('reminders')} />
-      <Text style={styles.hint}>{t('account.pushHint')}</Text>
+      <Text style={styles.hint}>{t(settings.chat || settings.reminders ? 'account.pushHint' : 'account.pushOff')}</Text>
     </View>
   )
 }
