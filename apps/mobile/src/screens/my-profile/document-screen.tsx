@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 
 import type { Document } from '@kando/contract'
@@ -10,6 +10,7 @@ import { Card, FormScreen, SmallButton } from '@/components/form-ui'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useLoad } from '@/hooks/use-load'
+import { useAlive } from '@/hooks/use-alive'
 import { docText, errorText, t, useLang } from '@/i18n'
 import { continueAfterAutoStep } from '@/lib/flow-state'
 import { isOpenDocument } from '@/lib/next-step'
@@ -38,11 +39,7 @@ function DocumentView({ row, verifications, onChanged }: { row: DocumentRow; ver
   const [busy, setBusy] = useState(false) // one submit at a time
   const [problem, setProblem] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => void (alive.current = false)
-  }, [])
+  const alive = useAlive()
   const wasOpen = isOpenDocument(row) // an open step: after its upload the flow goes on by itself
 
   async function submit(pick: () => Promise<PickedFile | null | 'denied'>) {

@@ -10,6 +10,7 @@ import { Card, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { useQuoteSteps } from '@/hooks/use-me'
 import { canShare, type DocumentRow } from '@/lib/documents'
+import { useAlive } from '@/hooks/use-alive'
 import { errorText, getLang, t } from '@/i18n'
 import { liveLocked } from '@/lib/compulsory'
 import { go } from '@/lib/go'
@@ -67,11 +68,7 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
   // Switched off and greyed out while the profile is incomplete; the starred fields say what is needed.
   const locked = liveLocked(profile, refused)
   const later = steps ?? []
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => void (alive.current = false)
-  }, [])
+  const alive = useAlive()
   const stepping = useRef(false) // a double tap must not start Stripe or save twice
   const doStep = async (step: (typeof later)[number]) => {
     if (stepping.current) return

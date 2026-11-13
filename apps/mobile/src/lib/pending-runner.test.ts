@@ -495,13 +495,13 @@ describe('pending-runner', () => {
       expect(sc.createBody({ body: { categoryId: 'c2', tried: ['c1'] } }, 'c3', [])).toEqual({ categoryId: 'c3', known: [], tried: ['c1', 'c2'] })
     })
 
-    it('refusedCreate finds the refused create of that account, so a new-service screen can show it', async () => {
+    it('keptCreate finds the kept create of that account, so a new-service screen can show it', async () => {
       api.create.mockRejectedValueOnce(new ApiError(400, 'bad'))
       putCreate('c1')
       await start()
       const sc = require('./serial-create')
-      expect(sc.refusedCreate('a')).toMatchObject({ serviceRef: 'tmp:1', body: { categoryId: 'c1' } })
-      expect(sc.refusedCreate('b')).toBeUndefined()
+      expect(sc.keptCreate('a')).toMatchObject({ serviceRef: 'tmp:1', body: { categoryId: 'c1' } })
+      expect(sc.keptCreate('b')).toBeUndefined()
     })
 
     it('a value put under a temporary id that was already created goes under the real id', async () => {

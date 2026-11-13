@@ -34,8 +34,14 @@ export const categoryEntry = (serviceId: string, accountId: string, categoryId: 
   field: 'category',
 })
 
-/** A refused create of this account: a new-service screen opens on it, so the person can choose another category. */
-export const refusedCreate = (accountId: string) => listEntries(accountId).find((e) => e.kind === 'service-create' && e.state === 'refused' && !!e.serviceRef?.startsWith('tmp:'))
+/**
+ * A create of this account that is still kept (a refused one first, else one waiting to be sent): a new-service screen
+ * opens on it, so the person can choose another category and no second service is started for the same one.
+ */
+export const keptCreate = (accountId: string) => {
+  const mine = listEntries(accountId).filter((e) => e.kind === 'service-create' && !!e.serviceRef?.startsWith('tmp:'))
+  return mine.find((e) => e.state === 'refused') ?? mine[0]
+}
 
 /**
  * Sends a 'service-create' entry (body `{ categoryId, known, tried }`, `known` = the service ids the phone had when the

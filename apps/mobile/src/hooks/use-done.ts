@@ -15,7 +15,7 @@ export function useDone(cfg: { isProvider: boolean; step: Step; missing: () => K
   const [message, setMessage] = useState<string | null>(null)
   const cfgRef = useRef(cfg)
   cfgRef.current = cfg
-  const wasOpen = useRef(true) // something was open when the screen was shown; unknown counts as open
+  const wasOpen = useRef(false) // something was open when the screen was shown; not known yet (or the load failed) counts as a plain edit: no "all done" for a changed name
   const [guard] = useState(() =>
     pressGuard(() => {
       const out = pressDone(cfgRef.current, wasOpen.current)
@@ -28,7 +28,8 @@ export function useDone(cfg: { isProvider: boolean; step: Step; missing: () => K
   useFocusEffect(
     useCallback(() => {
       guard.reset()
-      wasOpen.current = nextStepHeld() !== null
+      const held = nextStepHeld()
+      wasOpen.current = held !== null && held !== 'unknown'
       loadNextStep().then((s) => void (wasOpen.current = s !== null), () => {})
     }, [guard]),
   )

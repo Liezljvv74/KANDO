@@ -14,6 +14,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
 import { ApiError, updateMe } from '@/api/client'
+import { removeKey } from '@/lib/pending-saves'
 import { saveMyProfile, servicesApi } from '@/api/my-profile'
 import { Button } from '@/components/auth-ui'
 import { PendingBanner, showServiceGone } from '@/components/pending-banner'
@@ -39,8 +40,9 @@ setNotificationHandler({
 
 registerSender('about', async (e) => void (await saveMyProfile(e.body as object)))
 registerSender('service-field', async (e) => {
-  if (!e.serviceRef || e.serviceRef.startsWith('tmp:'))
-    throw new ApiError(0, 'service not created yet') // never against a temporary id
+  // Never against a temporary id. The runner holds a field back while its create is kept, so one that arrives here has
+  // lost its create (too old, or discarded): it can never be sent and is dropped, not retried for good under a banner.
+  if (!e.serviceRef || e.serviceRef.startsWith('tmp:')) return removeKey(e.key, e.accountId)
   await servicesApi.update(e.serviceRef, e.body as object)
 })
 registerSender(

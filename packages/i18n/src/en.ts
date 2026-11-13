@@ -35,6 +35,7 @@ export const en: Record<AppKey, string> = {
   'pending.tapToFix': 'Tap to fix.',
   'pending.discard': 'Discard change',
   'pending.discardAsk': 'This change cannot be saved and will be lost. Discard it?',
+  'pending.discardAskKept': 'This change is not saved yet. Discard it?',
   'pending.discardYes': 'Discard',
   'pending.discardKeep': 'Keep',
   'pending.signOutAsk': 'Some changes are not saved yet. Sign out anyway?',

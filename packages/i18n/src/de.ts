@@ -34,6 +34,7 @@ export const de = {
   'pending.tapToFix': 'Tippe, um es zu korrigieren.',
   'pending.discard': 'Änderung verwerfen',
   'pending.discardAsk': 'Diese Änderung kann nicht gespeichert werden und geht verloren. Verwerfen?',
+  'pending.discardAskKept': 'Diese Änderung ist noch nicht gespeichert. Verwerfen?',
   'pending.discardYes': 'Verwerfen',
   'pending.discardKeep': 'Behalten',
   'pending.signOutAsk': 'Einige Änderungen sind noch nicht gespeichert. Trotzdem abmelden?',

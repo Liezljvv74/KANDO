@@ -1,7 +1,7 @@
 import { forAccount, type PendingEntry } from '@/lib/pending-saves'
 
 export type BannerState =
-  | { kind: 'retry'; reason: 'network' | 'busy' | 'auth' | 'waiting' }
+  | { kind: 'retry'; reason: 'network' | 'busy' | 'auth' | 'waiting'; first?: PendingEntry } // `first`: the entry that waits for the person (auth, waiting); it can be discarded
   | { kind: 'refused'; count: number; first: PendingEntry }
 
 /** The service-gone notice is cleared only when the account changes after the first render (`prev` undefined = first render). */
@@ -24,6 +24,6 @@ export function bannerState(all: PendingEntry[], accountId: string | null): Bann
   const failed = mine.filter((x) => x.attempts > 0 || x.status !== undefined)
   const e = failed.find((x) => x.state === 'auth') ?? failed.find((x) => x.state === 'waiting') ?? failed[0]
   if (!e) return null
-  if (e.state === 'auth' || e.state === 'waiting') return { kind: 'retry', reason: e.state }
+  if (e.state === 'auth' || e.state === 'waiting') return { kind: 'retry', reason: e.state, first: e }
   return { kind: 'retry', reason: e.status === 0 || e.status === undefined ? 'network' : 'busy' }
 }

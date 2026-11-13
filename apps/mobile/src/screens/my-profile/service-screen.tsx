@@ -13,7 +13,7 @@ import { DoneBar } from '@/components/done-bar'
 import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useCategories } from '@/hooks/use-categories'
 import { useDone } from '@/hooks/use-done'
-import { useFieldSave } from '@/hooks/use-field-save'
+import { noSave, useFieldSave } from '@/hooks/use-field-save'
 import { useLoad } from '@/hooks/use-load'
 import { useSession } from '@/hooks/use-session'
 import { docText, errorText, t, useLang } from '@/i18n'
@@ -24,12 +24,11 @@ import { sendNow } from '@/lib/pending-runner'
 import { dropService, putEntry, subscribe, usePendingEntry } from '@/lib/pending-saves'
 import { parsePrice } from '@/lib/profile-form'
 import { serviceMissing } from '@/lib/required-fields'
-import { categoryEntry, createBody, createdService, refusedCreate } from '@/lib/serial-create'
+import { categoryEntry, createBody, createdService, keptCreate } from '@/lib/serial-create'
 
 const PRICE_TYPES = ['fixed', 'hourly', 'from', 'on-request'] as const
 const priceLabel = (p: string) => (p === 'on-request' ? t('price.onRequest') : t(`pt.${p}` as 'pt.fixed'))
 
-const noSave = async () => {} // every Service field is sent through the pending-saves store
 const loadAll = async () => ({ services: await servicesApi.list(), verifications: await documentsApi.list() })
 
 /** `id` set: edit that service; otherwise add a new one. */
@@ -55,9 +54,9 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
   const router = useRouter()
   const { categories } = useCategories()
   const accountId = useSession().user?.id ?? ''
-  // A new-service screen opens on a refused create (the banner's way back to it), else starts a new temporary id.
-  const [refused] = useState(() => (initial ? undefined : refusedCreate(accountId)))
-  const [tmpRef] = useState(() => refused?.serviceRef ?? `tmp:${Date.now()}`) // a new service is kept under this until the server has created it
+  // A new-service screen opens on a create that is still kept (refused: the banner's way back to it; or not sent yet, e.g. offline), else starts a new temporary id.
+  const [keptNew] = useState(() => (initial ? undefined : keptCreate(accountId)))
+  const [tmpRef] = useState(() => keptNew?.serviceRef ?? `tmp:${Date.now()}`) // a new service is kept under this until the server has created it
   const createKey = `service-create:${tmpRef}`
   const createEntry = usePendingEntry(createKey, accountId)
   const created = useSyncExternalStore(subscribe, () => createdService(tmpRef)) // set when the queued create succeeds, also in the background
@@ -66,7 +65,7 @@ function ServiceForm({ title: screenTitle, initial, knownIds, docRows }: { title
   idRef.current = id
   const categoryKept = usePendingEntry(id ? `service:${id}:category` : '', accountId) // a kept category change of an existing service
   const [category, setCategory] = useState(
-    (categoryKept?.body as { categoryId?: string } | undefined)?.categoryId ?? initial?.category ?? (refused?.body as { categoryId?: string } | undefined)?.categoryId ?? null,
+    (categoryKept?.body as { categoryId?: string } | undefined)?.categoryId ?? initial?.category ?? (keptNew?.body as { categoryId?: string } | undefined)?.categoryId ?? null,
   )
   const [waitingFor, setWaitingFor] = useState(initial?.waitingFor ?? [])
   const [code, setCode] = useState<Record<string, string>>({})

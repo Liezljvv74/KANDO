@@ -11,7 +11,7 @@ import { Select } from '@/components/select'
 import { DoneBar } from '@/components/done-bar'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useDone } from '@/hooks/use-done'
-import { useFieldSave } from '@/hooks/use-field-save'
+import { noSave, useFieldSave } from '@/hooks/use-field-save'
 import { useLoad } from '@/hooks/use-load'
 import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang } from '@/i18n'
@@ -26,7 +26,6 @@ const splitLines = (s: string | null | undefined) => [...new Set((s ?? '').split
 /** The server keeps strengths as one text of at most 1000 characters. */
 const MAX_STRENGTHS_TEXT = 1000
 
-const noSave = async () => {} // every About you field is sent through the pending-saves store
 const loadProfile = async () => (await getMyProfile()) ?? (await ensureDraft())
 
 /** The "About you" screen: every field saves on its own. `?field=` (from a Live checklist row) puts the cursor in that field. */

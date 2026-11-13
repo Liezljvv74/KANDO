@@ -38,12 +38,14 @@ describe('bannerState', () => {
   it('says network for status 0', () => expect(bannerState([e({ status: 0 })], 'a')).toEqual({ kind: 'retry', reason: 'network' }))
   it('says busy for a 503', () => expect(bannerState([e({ status: 503 })], 'a')).toEqual({ kind: 'retry', reason: 'busy' }))
   it('says auth and waiting', () => {
-    expect(bannerState([e({ state: 'auth' })], 'a')).toEqual({ kind: 'retry', reason: 'auth' })
-    expect(bannerState([e({ state: 'waiting' })], 'a')).toEqual({ kind: 'retry', reason: 'waiting' })
+    const auth = e({ state: 'auth' })
+    const waiting = e({ state: 'waiting' })
+    expect(bannerState([auth], 'a')).toEqual({ kind: 'retry', reason: 'auth', first: auth }) // `first`: it can be discarded
+    expect(bannerState([waiting], 'a')).toEqual({ kind: 'retry', reason: 'waiting', first: waiting })
   })
   it('auth and waiting win over a plain retry entry', () => {
-    expect(bannerState([e({ status: 503 }), e({ key: 'x', state: 'auth' })], 'a')).toEqual({ kind: 'retry', reason: 'auth' })
-    expect(bannerState([e({ status: 0 }), e({ key: 'x', state: 'waiting' })], 'a')).toEqual({ kind: 'retry', reason: 'waiting' })
+    expect(bannerState([e({ status: 503 }), e({ key: 'x', state: 'auth' })], 'a')).toMatchObject({ kind: 'retry', reason: 'auth' })
+    expect(bannerState([e({ status: 0 }), e({ key: 'x', state: 'waiting' })], 'a')).toMatchObject({ kind: 'retry', reason: 'waiting' })
   })
   it('refused wins over retry', () => {
     const r = e({ key: 'r', state: 'refused' })

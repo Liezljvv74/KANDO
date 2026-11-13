@@ -8,7 +8,7 @@ import { useSession } from '@/hooks/use-session'
 import { errorText, t, useLang, type Key } from '@/i18n'
 import { COMPULSORY } from '@/lib/compulsory'
 import { bannerState, discardPlan, shouldClearGone } from '@/lib/pending-banner-state'
-import { listEntries, removeKey, usePendingEntries } from '@/lib/pending-saves'
+import { listEntries, removeKey, usePendingEntries, type PendingEntry } from '@/lib/pending-saves'
 import { color } from '@/theme'
 
 const RETRY_TEXT: Record<'network' | 'busy' | 'auth' | 'waiting', Key> = {
@@ -34,7 +34,7 @@ const getGone = () => goneFlag
 /** The notice for a service that no longer exists; kept until tapped (or the account changes), even if the runner fires before the banner mounts. */
 export const showServiceGone = () => setGone(true)
 
-/** Over every screen, under the status bar. Not dismissible while a change is pending; gone when the store is empty. */
+/** Over every screen, under the status bar. A change being retried cannot be dismissed; a refused one, or one that waits for the person, can be discarded. Gone when the store is empty. */
 export function PendingBanner({ children }: { children: ReactNode }) {
   useLang()
   const router = useRouter()
@@ -52,19 +52,21 @@ export function PendingBanner({ children }: { children: ReactNode }) {
   let text: string | null = null
   let onPress: (() => void) | undefined
   let onDiscard: (() => void) | undefined
+  const discard = (first: PendingEntry, ask: Key) => () =>
+    Alert.alert(t(ask), undefined, [
+      { text: t('pending.discardKeep'), style: 'cancel' },
+      { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, listEntries(first.accountId)).forEach((k) => removeKey(k, first.accountId)) },
+    ])
   if (state?.kind === 'refused') {
     const { first, count } = state
     const label = first.field in COMPULSORY ? t(COMPULSORY[first.field as keyof typeof COMPULSORY].label) : ''
     const error = errorText(first.reason ?? '')
     text = count > 1 ? t('pending.refused', { n: count }) : label ? t('pending.refusedOne', { field: label, error }) : `${error} ${t('pending.tapToFix')}`
     onPress = () => router.push(first.route as never)
-    onDiscard = () =>
-      Alert.alert(t('pending.discardAsk'), undefined, [
-        { text: t('pending.discardKeep'), style: 'cancel' },
-        { text: t('pending.discardYes'), style: 'destructive', onPress: () => discardPlan(first, listEntries(first.accountId)).forEach((k) => removeKey(k, first.accountId)) },
-      ])
+    onDiscard = discard(first, 'pending.discardAsk')
   } else if (state) {
     text = t(RETRY_TEXT[state.reason])
+    if (state.first) onDiscard = discard(state.first, 'pending.discardAskKept') // it waits for the person, perhaps for good (a suspended account): never a bar that cannot be removed
   } else if (gone && accountId) {
     text = t('pending.serviceGone')
     onPress = () => setGone(false)

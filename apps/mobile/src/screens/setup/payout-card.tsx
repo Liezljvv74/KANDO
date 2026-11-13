@@ -8,6 +8,7 @@ import { ErrorText, Field } from '@/components/auth-ui'
 import { Card, SmallButton, SwitchRow } from '@/components/form-ui'
 import { ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
+import { useAlive } from '@/hooks/use-alive'
 import { errorText, t } from '@/i18n'
 import { useMe, useQuoteSteps } from '@/hooks/use-me'
 import { continueAfterAutoStep } from '@/lib/flow-state'
@@ -22,11 +23,7 @@ export function PayoutCard({ profile, onSaved, taxAsked }: { profile: MyProfile;
   const { steps, reload } = useQuoteSteps()
   const fetch = useCallback(() => payoutStatus(), [])
   const { data, error, retry, update } = useLoad(fetch)
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => void (alive.current = false)
-  }, [])
+  const alive = useAlive()
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const state = payoutState(data?.ready, payoutOpened())
