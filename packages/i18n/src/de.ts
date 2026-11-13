@@ -255,7 +255,7 @@ export const de = {
   'f.remote': 'Arbeite auch remote',
   's.new': 'Neue Leistung',
   's.edit': 'Leistung bearbeiten',
-  's.title': 'Titel',
+  's.title': 'Name der Leistung',
   's.priceType': 'Preisart',
   's.price': 'Preis (EUR)',
   's.priceError': 'Bitte einen Preis ab 0 mit höchstens 2 Nachkommastellen eingeben.',

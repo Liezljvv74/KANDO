@@ -256,7 +256,7 @@ export const en: Record<AppKey, string> = {
   'f.remote': 'Also work remotely',
   's.new': 'New service',
   's.edit': 'Edit service',
-  's.title': 'Title',
+  's.title': 'Service name',
   's.priceType': 'Price type',
   's.price': 'Price (EUR)',
   's.priceError': 'Please enter a price of 0 or more with at most 2 decimals.',
