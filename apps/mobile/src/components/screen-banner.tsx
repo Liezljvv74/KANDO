@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { router, useGlobalSearchParams, usePathname, type Href } from 'expo-router'
+import { router, useCanGoBack, useGlobalSearchParams, usePathname, type Href } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -27,7 +27,7 @@ export function ScreenBanner({ title, hideHelp }: { title: string; hideHelp?: bo
   const top = useSafeAreaInsets().top
   const here = hrefOf(usePathname(), useGlobalSearchParams())
   const canForward = useCanGoForward()
-  const canBack = router.canGoBack()
+  const canBack = useCanGoBack() // live, from the navigation state; router.canGoBack() read while drawing was stale inside a nested stack (My business)
   return (
     <View style={[styles.bar, { paddingTop: top + 6 }]}>
       <Arrow
