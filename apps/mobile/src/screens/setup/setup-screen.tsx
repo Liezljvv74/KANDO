@@ -27,7 +27,7 @@ import { ReferencesCard } from './references-card'
 import { ServicesCard } from './services-card'
 import { color } from '@/theme'
 
-/** The one-page "My service profile". */
+/** The one-page "My business". */
 export default function SetupScreen() {
   useLang()
   const params = useLocalSearchParams<{ welcome?: string; publish?: string }>()

@@ -102,6 +102,17 @@ it('quotes of different providers to the same customer are independent', async (
   expect((await confirming(qb.id)).status).toBe(200)
 })
 
+it('the quote list shows the category name for a service with an empty title', async () => {
+  const cat = (await pool.query('SELECT category_id FROM services WHERE id = $1', [serviceOwner])).rows[0].category_id as string
+  await pool.query("INSERT INTO category_texts (category_id, lang, name) VALUES ($1, 'de', 'Kategorie DE'), ($1, 'en', 'Category EN') ON CONFLICT DO NOTHING", [cat])
+  await pool.query("UPDATE services SET title = '' WHERE id = $1", [serviceOwner])
+  const r = await newRequest(pOwner, U.other, { serviceId: serviceOwner })
+  const q = await sendQuote(U.owner, r, 333)
+  const item = (await listing(U.other)).find((d) => d.quoteId === q.id)!
+  await pool.query("UPDATE services SET title = 'Sb Owner service' WHERE id = $1", [serviceOwner])
+  expect(['Kategorie DE', 'Category EN']).toContain(item.service)
+})
+
 it('the quote list carries service, scope, expiry, and for an accepted quote the booking and when it was made', async () => {
   const r1 = await newRequest(pOwner, U.other, { serviceId: serviceOwner })
   const r2 = await newRequest(pOwner, U.other)

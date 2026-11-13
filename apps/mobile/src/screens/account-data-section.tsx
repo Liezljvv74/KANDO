@@ -7,6 +7,7 @@ import { Button, ErrorText, Field, LinkText } from '@/components/auth-ui'
 import { signOutGeneration } from '@/hooks/use-me'
 import { useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
+import { dropAccount } from '@/lib/pending-saves'
 import { accountError, afterDeleteFailure, exportText } from '@/lib/account-data'
 import { color } from '@/theme'
 
@@ -47,6 +48,7 @@ export function AccountDataSection({ part }: { part: 'export' | 'delete' }) {
         return setBusy(null)
       }
     }
+    if (user) dropAccount(user.id) // no queued change of the deleted account stays behind
     await signOut() // the account is gone: same local sign-out as the Log out button, back to the start screen
   }
 

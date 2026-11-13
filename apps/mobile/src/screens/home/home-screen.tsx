@@ -2,15 +2,14 @@ import { router, useFocusEffect } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { HelpFeedbackButtons } from '@/components/help-feedback-buttons'
-import { LanguageSwitch } from '@/components/language-switch'
 import { LegalFooter } from '@/components/legal-footer'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { ErrorText } from '@/components/auth-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
-import { useSession } from '@/hooks/use-session'
+import { chooseLanguage, useSession } from '@/hooks/use-session'
 import { t, useLang, type Key } from '@/i18n'
 import { consumeAfterLogin, setAfterLogin } from '@/lib/after-login'
 import { peekPending } from '@/lib/pending-navigation'
@@ -26,7 +25,8 @@ const splitHeadline = (s: string): [string, string] => {
 
 /** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in the same choices. */
 export default function HomeScreen() {
-  useLang()
+  const lang = useLang()
+  const top = useSafeAreaInsets().top
   const me = useMe()
   const signedIn = !!useSession().user
   const [busy, setBusy] = useState(false)
@@ -62,7 +62,7 @@ export default function HomeScreen() {
   ]
 
   return (
-    <SafeAreaView style={signedIn ? styles.root : [styles.root, styles.rootOut]} edges={['top']}>
+    <View style={[styles.root, !signedIn && styles.rootOut, { paddingTop: top }]}>
       {!signedIn && <StatusBar style="light" />}
       <ScrollView contentContainerStyle={styles.content}>
         {!signedIn && (
@@ -70,9 +70,15 @@ export default function HomeScreen() {
             <View style={styles.brandTag}>
               <Text style={styles.brand}>{t('brand.name')}</Text>
             </View>
-            <Pressable accessibilityRole="link" onPress={() => { void setAfterLogin(null); router.push('/login') }} hitSlop={12} style={styles.loginHit}>
-              <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
-            </Pressable>
+            <View style={styles.headerRight}>
+              <Pressable accessibilityRole="link" onPress={() => { void setAfterLogin(null); router.push('/login') }} hitSlop={12} style={styles.loginHit}>
+                <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
+              </Pressable>
+              {/* Shows the language that is NOT active; pressing it switches to that one (each name in its own words, as in the language list). */}
+              <Pressable accessibilityRole="button" accessibilityLabel={lang === 'en' ? 'Deutsch' : 'English'} onPress={() => chooseLanguage(lang === 'en' ? 'de' : 'en')} hitSlop={8} style={styles.langHit}>
+                <Text style={styles.langText}>{lang === 'en' ? 'DE' : 'ENG'}</Text>
+              </Pressable>
+            </View>
           </View>
         )}
         <View style={signedIn ? styles.hero : styles.heroOut}>
@@ -100,14 +106,9 @@ export default function HomeScreen() {
           </Rise>
         ))}
         <ErrorText text={problem} />
-        {!signedIn && (
-          <Tag>
-            <LanguageSwitch />
-          </Tag>
-        )}
         {!signedIn && <LegalFooter onDark />}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -118,6 +119,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   brandTag: { backgroundColor: color.bg, borderWidth: 2, borderColor: color.teal, paddingHorizontal: 12, paddingVertical: 6, transform: [{ rotate: '-3deg' }] },
   brand: { fontFamily: font.tag, fontSize: 15, letterSpacing: 1, color: color.ink },
+  headerRight: { alignItems: 'flex-end' },
+  langHit: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
+  langText: { fontSize: 14, fontWeight: '700', color: color.bg, letterSpacing: 1, borderWidth: 1, borderColor: color.bg, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
   loginHit: { minHeight: 44, justifyContent: 'center' },
   link: { fontSize: 15, fontWeight: '700', color: color.bg, textDecorationLine: 'underline' },
   hero: { backgroundColor: color.indigo, borderRadius: 8, padding: 20, gap: 16 },

@@ -16,7 +16,7 @@ import { pickPhoto, uploadErrorCode } from '@/lib/pick'
 export default function SignUpScreen() {
   useLang()
   const router = useRouter()
-  const { offer } = useLocalSearchParams<{ offer?: string }>() // the welcome card "I offer my skills" presets the switch
+  const { offer } = useLocalSearchParams<{ offer?: string }>() // the welcome card "Register a service" presets the switch
   const { signUp } = useSession()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')

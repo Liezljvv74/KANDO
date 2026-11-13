@@ -65,7 +65,7 @@ export function InvoicesFold({ provider }: { provider: boolean }) {
   return (
     <>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen((o) => !o)}>
-        <SectionTitle text={`${data ? t('jobs.invoicesCount', { n: data.length }) : t('invoice.heading')} ${open ? '▾' : '▸'}`} />
+        <SectionTitle text={data ? t('jobs.invoicesCount', { n: data.length }) : t('invoice.heading')} arrow={open ? '▾' : '▸'} />
       </Pressable>
       {open && <ErrorText text={pdf.problem} />}
       {open && data?.length === 0 && <Empty text={t('invoice.none')} />}

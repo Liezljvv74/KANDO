@@ -54,8 +54,6 @@ export default function HowItWorksScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.bg },
   content: { padding: 16, gap: 16 },
-  link: { fontSize: 15, fontWeight: '600', color: color.indigo },
-  title: { fontSize: 28, fontFamily: font.heading, color: color.ink },
   box: { borderRadius: 6, padding: 16, gap: 8 },
   boxTitle: { fontSize: 17, fontFamily: font.heading, color: color.ink },
   text: { fontSize: 15, lineHeight: 21, color: color.ink },

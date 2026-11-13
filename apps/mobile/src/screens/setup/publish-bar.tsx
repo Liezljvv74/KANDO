@@ -10,6 +10,7 @@ import { Card, SwitchRow } from '@/components/form-ui'
 import { useCategories } from '@/hooks/use-categories'
 import { useQuoteSteps } from '@/hooks/use-me'
 import { canShare, type DocumentRow } from '@/lib/documents'
+import { useAlive } from '@/hooks/use-alive'
 import { errorText, getLang, t } from '@/i18n'
 import { liveLocked } from '@/lib/compulsory'
 import { go } from '@/lib/go'
@@ -67,11 +68,7 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
   // Switched off and greyed out while the profile is incomplete; the starred fields say what is needed.
   const locked = liveLocked(profile, refused)
   const later = steps ?? []
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => void (alive.current = false)
-  }, [])
+  const alive = useAlive()
   const stepping = useRef(false) // a double tap must not start Stripe or save twice
   const doStep = async (step: (typeof later)[number]) => {
     if (stepping.current) return
@@ -118,21 +115,18 @@ export function PublishBar({ profile, services, docRows, onChanged, onSaved, onT
       {allSet(profile, steps, docRows) ? <Text style={styles.done}>{t('setup.allSet')}</Text> : null}
       {live && !isLive(profile) ? <ErrorText text={errorText('Profile suspended')} /> : null}
       {live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.liveWaiting', { count: waiting })}</Text> : null}
-      {justPublished && live && isLive(profile) && (
-        <>
-          {waiting > 0 ? <Text style={styles.live}>{t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title })}</Text> : null}
-          {canShare(services) && profile.slug ? (
-            <Pressable
-              onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())}
-              accessibilityRole="button"
-              accessibilityLabel={t('setup.share')}
-              style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
-            >
-              <Text style={styles.shareLabel}>{t('setup.share')}</Text>
-            </Pressable>
-          ) : null}
-        </>
-      )}
+      {justPublished && live && isLive(profile) && waiting > 0 ? <Text style={styles.live}>{t('setup.pendingMessage', { category: categories?.find((c) => c.id === waitingServices[0]!.category)?.name ?? waitingServices[0]!.title })}</Text> : null}
+      {/* Always there while the profile is live: the provider may want to share again later. */}
+      {live && isLive(profile) && canShare(services) && profile.slug ? (
+        <Pressable
+          onPress={() => shareProfile(providerUrl(profile.slug!, getLang()), getLang())}
+          accessibilityRole="button"
+          accessibilityLabel={t('setup.share')}
+          style={({ pressed }) => [styles.share, pressed && styles.sharePressed]}
+        >
+          <Text style={styles.shareLabel}>{t('setup.share')}</Text>
+        </Pressable>
+      ) : null}
       <ErrorText text={problem} />
     </Card>
     </View>

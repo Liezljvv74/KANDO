@@ -7,11 +7,14 @@ import { Button } from '@/components/auth-ui'
 import { LegalFooter } from '@/components/legal-footer'
 import { ScreenBanner } from '@/components/screen-banner'
 import { useSession } from '@/hooks/use-session'
-import { setAfterLogin } from '@/lib/after-login'
+import { setAfterLogin, type AfterLogin } from '@/lib/after-login'
 import { t, useLang, type Key } from '@/i18n'
 import { color } from '@/theme'
 
 /** What a signed-out person sees on a private screen: one line and a button to the login and sign-up page. */
+/** The tab a private screen belongs to: after the login the person is back on it (the screens under bookings, invoices and chats belong to Jobs). */
+const TAB_OF: Partial<Record<Key, AfterLogin>> = { 'tab.jobs': '/jobs', 'tab.myProfile': '/my-profile', 'tab.account': '/account' }
+
 function LoginPrompt({ title, legal }: { title: Key; legal?: boolean }) {
   useLang()
   return (
@@ -21,7 +24,7 @@ function LoginPrompt({ title, legal }: { title: Key; legal?: boolean }) {
         <View style={styles.card}>
           <Text style={styles.text}>{t('auth.needLogin')}</Text>
           <Button label={t('auth.needLoginButton')} onPress={() => {
-            void setAfterLogin(null) // a target left by an earlier, abandoned Request must not decide where this login lands
+            void setAfterLogin(TAB_OF[title] ?? null) // back to this tab after the login; never a target left by an earlier, abandoned Request
             router.push('/login')
           }} />
         </View>

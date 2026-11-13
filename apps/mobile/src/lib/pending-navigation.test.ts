@@ -35,3 +35,9 @@ test('the layout order: not ready keeps the target, ready consumes it once', () 
   expect(step({ isProvider: true })).toEqual({ path: '/my-profile', welcome: true })
   expect(step({ isProvider: true })).toBeNull()
 })
+
+test('a customer target (Search, a provider page) does not wait for the profile tab, only for the session', () => {
+  expect(readyToNavigate({ path: '/search' }, null, true)).toBe(true)
+  expect(readyToNavigate({ path: '/provider/anna' }, { isProvider: false }, true)).toBe(true)
+  expect(readyToNavigate({ path: '/search' }, null, false)).toBe(false)
+})

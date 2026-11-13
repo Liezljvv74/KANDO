@@ -60,7 +60,7 @@ export default function ThreadScreen() {
   const thread = data?.thread
   if (!data || !thread)
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
         <ScreenBanner title="" />
         {loadError ? <ErrorRetry code={loadError} onRetry={retry} /> : <Loading />}
       </SafeAreaView>

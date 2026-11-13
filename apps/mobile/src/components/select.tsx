@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { t } from '@/i18n'
 import { matches } from '@/lib/match'
-import { color, font } from '@/theme'
+import { color, foldArrow, font } from '@/theme'
 
 /** A dropdown: a field showing the chosen option; tapping it opens a scrollable list of options. */
 export function Select<T extends string | number>({
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   value: { flex: 1, fontSize: 16, color: color.ink },
   placeholder: { color: color.placeholder },
-  chevron: { fontSize: 16, color: color.indigo },
+  chevron: { ...foldArrow, color: color.indigo },
   flex: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(20, 53, 46, 0.35)' },
   list: { flexShrink: 1 },

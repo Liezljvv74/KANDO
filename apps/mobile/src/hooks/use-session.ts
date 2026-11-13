@@ -5,8 +5,9 @@ import { File } from 'expo-file-system'
 import * as auth from '@/api/auth'
 import { ApiError, setOnUnauthorized, updateMe } from '@/api/client'
 import { photosApi } from '@/api/my-profile'
-import { clearMe, loadMe } from '@/hooks/use-me'
+import { clearMe as clearHeldMe, loadMe, setSignedInCheck } from '@/hooks/use-me'
 import { getLang, setLang, type Lang } from '@/i18n'
+import { flowCache } from '@/lib/flow-cache'
 import { clearPending, loadPending, savePending, settle, type PendingSignup } from '@/lib/pending-signup'
 import { registerForPush, unregisterPush } from '@/lib/push'
 
@@ -28,7 +29,10 @@ function set(next: State) {
 /** Only a confirmed email counts as signed in; until then the auth screens stay. A session start registers for push (never awaited). */
 function signedIn(user: User | null) {
   set({ user: user?.emailVerified ? user : null, loading: false, offline: false })
-  if (state.user) registerForPush()
+  if (state.user) {
+    registerForPush()
+    loadMe().catch(() => {}) // the tabs were mounted signed out, where `/me` is never asked
+  }
 }
 
 /** Loads the signed-in user. A lost connection sets `offline` (cookie kept) so the app can offer a retry instead of the login form. */
@@ -128,6 +132,9 @@ async function finish(p: PendingSignup) {
   }
 }
 
+/** How long the code screen waits for the sign-up data (names, picture, the provider draft) before it signs the person in anyway. */
+export const SIGNUP_WAIT_MS = 8000
+
 /**
  * A correct code finishes the sign-up and signs in; true when the person ticked "offer services".
  * The sign-up data is saved and `onOffering` (the provider setup: the draft profile) runs BEFORE the person counts as signed in: the root
@@ -136,16 +143,24 @@ async function finish(p: PendingSignup) {
 export async function verify(email: string, code: string, onOffering?: () => Promise<void>) {
   const user = await auth.verifyEmail(email, code)
   const pending = await pendingFor(user)
-  try {
+  const setup = (async () => {
     if (pending) await completeSignup(user)
     if (pending?.offerServices) await onOffering?.()
-  } catch {
+  })().catch(() => {
     // the code is used up: the person must still end up signed in (a kept record is finished at the next start)
-  }
+  })
+  // On a weak connection the picture upload or the draft can take very long: after SIGNUP_WAIT_MS the person is signed in
+  // anyway and the rest finishes behind (or at the next start, from the kept record).
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([setup, new Promise((resolve) => (timer = setTimeout(resolve, SIGNUP_WAIT_MS)))])
+  clearTimeout(timer)
   signedIn(user)
   if (!pending) updateMe({ language: getLang() }).catch(() => {}) // signing in with a still unconfirmed account: no form data
   return !!pending?.offerServices
 }
+
+/** The signed-out account's held data goes: /me and the Done flow's next-step data. */
+const clearMe = () => (clearHeldMe(), flowCache.clear())
 
 export async function signOut() {
   clearMe()
@@ -161,6 +176,7 @@ export function chooseLanguage(lang: Lang) {
 }
 
 export const getSession = () => state
+setSignedInCheck(() => !!state.user)
 
 // The server no longer accepts the session: back to the login (Stack.Protected follows `user`).
 // The push token is forgotten too, so the next sign-in registers it again.

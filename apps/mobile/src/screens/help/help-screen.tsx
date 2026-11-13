@@ -9,7 +9,7 @@ import { Empty, ErrorRetry, Loading } from '@/components/state-view'
 import { useLoad } from '@/hooks/use-load'
 import { getLang, t, useLang, type Key } from '@/i18n'
 import { groupTopics, toggleOpen } from '@/lib/help'
-import { color, font } from '@/theme'
+import { color, foldArrow, font } from '@/theme'
 
 /**
  * Help as a full screen (opened from the Help button of the banner and of Home, also when signed out): the opening topic
@@ -74,6 +74,6 @@ const styles = StyleSheet.create({
   row: { backgroundColor: color.surface, borderRadius: 6, borderWidth: 1, borderColor: color.divider, paddingHorizontal: 12 },
   rowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 12, minHeight: 44 },
   rowTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: color.ink },
-  chevron: { fontSize: 16, color: color.indigo },
+  chevron: { ...foldArrow, color: color.indigo },
   body: { fontSize: 15, lineHeight: 22, color: color.ink, paddingBottom: 12 },
 })
