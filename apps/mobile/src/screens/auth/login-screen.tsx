@@ -31,7 +31,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <AuthScreen title={t('auth.logIn')}>
+    <AuthScreen title={t('auth.logIn')} legal>
       <Field label={t('common.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
       <Field label={t('common.password')} value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" />
       <ErrorText text={error} />

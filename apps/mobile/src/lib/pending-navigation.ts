@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from 'react'
 
+import type { AfterLogin } from '@/lib/after-login'
 import { showProfileTab } from '@/lib/profile-tab'
 
-export type PendingNavigation = { path: '/my-profile'; welcome?: boolean }
+/** The setup page of a new provider, or (after the email code) the search page or the provider page a customer came from. */
+export type PendingNavigation = { path: '/my-profile'; welcome?: boolean } | { path: AfterLogin; welcome?: never }
 
 /** Where to go once the tabs layout shows the target tab (navigating to a hidden tab falls back to Home). */
 let pending: PendingNavigation | null = null
@@ -20,7 +22,7 @@ export function consumePending() {
   if (p) set(null)
   return p
 }
-export const readyToNavigate = (p: PendingNavigation | null, me: { isProvider: boolean } | null) => !!p && showProfileTab(me)
+export const readyToNavigate = (p: PendingNavigation | null, me: { isProvider: boolean } | null, signedIn = true) => signedIn && !!p && (p.path !== '/my-profile' || showProfileTab(me)) // only the profile page waits for its tab
 export const urlOf = (p: PendingNavigation) => (p.welcome ? `${p.path}?welcome=1` : p.path) as '/my-profile'
 
 export const usePending = () =>

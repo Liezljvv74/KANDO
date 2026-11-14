@@ -5,11 +5,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { HelpFeedbackButtons } from '@/components/help-feedback-buttons'
-import { LanguageSwitch } from '@/components/language-switch'
+import { LegalFooter } from '@/components/legal-footer'
 import { Rise, Stamp, Tag } from '@/components/shop-ui'
 import { ErrorText } from '@/components/auth-ui'
 import { loadMe, useMe } from '@/hooks/use-me'
-import { useSession } from '@/hooks/use-session'
+import { chooseLanguage, useSession } from '@/hooks/use-session'
 import { t, useLang, type Key } from '@/i18n'
 import { consumeAfterLogin, setAfterLogin } from '@/lib/after-login'
 import { peekPending } from '@/lib/pending-navigation'
@@ -25,7 +25,7 @@ const splitHeadline = (s: string): [string, string] => {
 
 /** The one Home screen: three choices (help, offer, learn more). Signed out it is the first screen (log in, language); signed in the same choices. */
 export default function HomeScreen() {
-  useLang()
+  const lang = useLang()
   const top = useSafeAreaInsets().top
   const me = useMe()
   const signedIn = !!useSession().user
@@ -35,9 +35,9 @@ export default function HomeScreen() {
     useCallback(() => {
       if (!signedIn) return // signed out there is no account to load
       loadMe().catch(() => {})
-      // "I need help" was tapped before logging in or signing up: go to the search page now (unless the person asked to offer services, which opens their profile).
+      // A login (not a sign-up: that one decides in the code screen) that began on a provider's page or the search page: go back there now (unless the person asked to offer services, which opens their profile).
       consumeAfterLogin().then((dest) => {
-        if (dest && !peekPending()) router.navigate('/search')
+        if (dest && !peekPending()) router.navigate(dest)
       })
     }, [signedIn]),
   )
@@ -50,17 +50,16 @@ export default function HomeScreen() {
     setProblem(await startOffering())
     setBusy(false)
   }
-  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean; tone?: 'indigo' | 'teal' }[] = signedIn
-    ? [
-        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => router.navigate('/search'), main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: offer, tone: 'indigo' },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => router.push('/learn'), tone: 'teal' },
-      ]
-    : [
-        { title: 'welcome.needHelp', text: 'welcome.needHelpText', onPress: () => { void setAfterLogin('/search'); router.push('/sign-up') }, main: true },
-        { title: 'welcome.offer', text: 'welcome.offerText', onPress: () => { void setAfterLogin(null); router.push('/sign-up?offer=1') }, tone: 'indigo' },
-        { title: 'welcome.learn', text: 'welcome.learnText', onPress: () => { void setAfterLogin(null); router.push('/how-it-works') }, tone: 'teal' },
-      ]
+  // The same three cards signed in or out; only what the tap on "offer" and "learn" does differs (signed out: sign up / the public explanation).
+  const signedOutTo = (path: '/sign-up?offer=1' | '/how-it-works') => () => {
+    void setAfterLogin(null)
+    router.push(path)
+  }
+  const choices: { title: Key; text: Key; onPress: () => void; main?: boolean; tone?: 'indigo' | 'teal' }[] = [
+    { title: 'welcome.browse', text: 'welcome.browseText', onPress: () => router.navigate('/search'), main: true },
+    { title: 'welcome.offer', text: 'welcome.offerText', onPress: signedIn ? offer : signedOutTo('/sign-up?offer=1'), tone: 'indigo' },
+    { title: 'welcome.learn', text: 'welcome.learnText', onPress: signedIn ? () => router.push('/learn') : signedOutTo('/how-it-works'), tone: 'teal' },
+  ]
 
   return (
     <View style={[styles.root, !signedIn && styles.rootOut, { paddingTop: top }]}>
@@ -71,9 +70,15 @@ export default function HomeScreen() {
             <View style={styles.brandTag}>
               <Text style={styles.brand}>{t('brand.name')}</Text>
             </View>
-            <Pressable accessibilityRole="link" onPress={() => { void setAfterLogin(null); router.push('/login') }} hitSlop={12} style={styles.loginHit}>
-              <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
-            </Pressable>
+            <View style={styles.headerRight}>
+              <Pressable accessibilityRole="link" onPress={() => { void setAfterLogin(null); router.push('/login') }} hitSlop={12} style={styles.loginHit}>
+                <Text style={styles.link}>{t('welcome.logInRegister')}</Text>
+              </Pressable>
+              {/* Shows the language that is NOT active; pressing it switches to that one (each name in its own words, as in the language list). */}
+              <Pressable accessibilityRole="button" accessibilityLabel={lang === 'en' ? 'Deutsch' : 'English'} onPress={() => chooseLanguage(lang === 'en' ? 'de' : 'en')} hitSlop={8} style={styles.langHit}>
+                <Text style={styles.langText}>{lang === 'en' ? 'DE' : 'ENG'}</Text>
+              </Pressable>
+            </View>
           </View>
         )}
         <View style={signedIn ? styles.hero : styles.heroOut}>
@@ -101,11 +106,7 @@ export default function HomeScreen() {
           </Rise>
         ))}
         <ErrorText text={problem} />
-        {!signedIn && (
-          <Tag>
-            <LanguageSwitch />
-          </Tag>
-        )}
+        {!signedIn && <LegalFooter onDark />}
       </ScrollView>
     </View>
   )
@@ -118,6 +119,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   brandTag: { backgroundColor: color.bg, borderWidth: 2, borderColor: color.teal, paddingHorizontal: 12, paddingVertical: 6, transform: [{ rotate: '-3deg' }] },
   brand: { fontFamily: font.tag, fontSize: 15, letterSpacing: 1, color: color.ink },
+  headerRight: { alignItems: 'flex-end' },
+  langHit: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
+  langText: { fontSize: 14, fontWeight: '700', color: color.bg, letterSpacing: 1, borderWidth: 1, borderColor: color.bg, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
   loginHit: { minHeight: 44, justifyContent: 'center' },
   link: { fontSize: 15, fontWeight: '700', color: color.bg, textDecorationLine: 'underline' },
   hero: { backgroundColor: color.indigo, borderRadius: 8, padding: 20, gap: 16 },

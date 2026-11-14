@@ -22,10 +22,22 @@ test('readyToNavigate: only with a target and a visible profile tab', () => {
   expect(readyToNavigate(p, { isProvider: true })).toBe(true)
 })
 
+test('readyToNavigate: never while signed out (a new provider is set up before the session starts)', () => {
+  const p = { path: '/my-profile' as const }
+  expect(readyToNavigate(p, { isProvider: true }, false)).toBe(false)
+  expect(readyToNavigate(p, { isProvider: true }, true)).toBe(true)
+})
+
 test('the layout order: not ready keeps the target, ready consumes it once', () => {
   setPending({ path: '/my-profile', welcome: true })
   const step = (me: { isProvider: boolean } | null) => (readyToNavigate(usePendingValue(), me) ? consumePending() : null)
   expect(step({ isProvider: false })).toBeNull()
   expect(step({ isProvider: true })).toEqual({ path: '/my-profile', welcome: true })
   expect(step({ isProvider: true })).toBeNull()
+})
+
+test('a customer target (Search, a provider page) does not wait for the profile tab, only for the session', () => {
+  expect(readyToNavigate({ path: '/search' }, null, true)).toBe(true)
+  expect(readyToNavigate({ path: '/provider/anna' }, { isProvider: false }, true)).toBe(true)
+  expect(readyToNavigate({ path: '/search' }, null, false)).toBe(false)
 })

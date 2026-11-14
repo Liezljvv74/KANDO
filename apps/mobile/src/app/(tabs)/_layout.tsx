@@ -6,6 +6,7 @@ import { AppState, type ColorValue } from 'react-native'
 
 import { jobCounts } from '@/api/jobs'
 import { loadMe, unseenOf, useMe } from '@/hooks/use-me'
+import { getSession, useSession } from '@/hooks/use-session'
 import { t, useLang } from '@/i18n'
 import { categoryOf } from '@/lib/job-notices'
 import { tabBadge } from '@/lib/jobs'
@@ -40,16 +41,21 @@ const icon = (name: React.ComponentProps<typeof Ionicons>['name']) => ({ color, 
 export default function TabsLayout() {
   useLang()
   const me = useMe()
-  // "Offer services": go to the profile page only once this layout has rendered with the tab visible.
+  const { user } = useSession() // signed out: every tab shows (the private ones ask for a login)
+  // "Offer services": go to the profile page only once this layout has rendered with the tab visible and the person is signed in.
   const pending = usePending()
   useEffect(() => {
-    if (!readyToNavigate(pending, me)) return // the target stays until the tab is visible
-    const p = consumePending()
-    if (p) router.navigate(urlOf(p))
-  }, [me, pending])
+    if (!readyToNavigate(pending, me, !!user)) return // the target stays until the tab is visible
+    // One tick later: this layout is already mounted while signed out, so this effect runs in the very commit that removes the sign-in screens, and a navigation made inside it was overridden (the person ended on Home).
+    const timer = setTimeout(() => {
+      const p = consumePending()
+      if (p) router.navigate(urlOf(p))
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [me, pending, user])
   // A notification created while the app was in the background shows its dot as soon as the user returns.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && loadMe().catch(() => {}))
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && getSession().user && loadMe().catch(() => {})) // signed out there is no account to ask for
     return () => sub.remove()
   }, [])
   // The Jobs badge: the customer and the provider counter added (jobs that need me or have unread messages, each once per side), from
@@ -75,7 +81,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ tabBarIcon: icon('home-outline'), title: t('tab.home') }} />
       <Tabs.Screen name="search" options={{ tabBarIcon: icon('search-outline'), title: t('tab.search') }} />
       <Tabs.Screen name="jobs" options={{ title: t('tab.jobs'), tabBarBadge: badge > 0 ? badge : undefined, tabBarIcon: icon('clipboard-outline') }} />
-      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, ...(showProfileTab(me) ? {} : { tabBarButton: () => null }) }} /> // not `href: null`: that redirects away, also while the profile is still loading on a reload
+      <Tabs.Screen name="my-profile" options={{ tabBarIcon: icon('briefcase-outline'), title: t('tab.myProfile'), tabBarBadge: businessDot ? '' : undefined, ...(!user || showProfileTab(me) ? {} : { tabBarButton: () => null }) }} /> // not `href: null`: that redirects away, also while the profile is still loading on a reload
       <Tabs.Screen name="account" options={{ tabBarIcon: icon('person-outline'), title: t('tab.account') }} />
       {HIDDEN.map((name) => (
         <Tabs.Screen key={name} name={name} options={{ tabBarButton: () => null }} /> // no button, but still reachable (`href: null` hides AND redirects away in this Expo Router)

@@ -32,6 +32,7 @@ import { registerForPush } from '@/lib/push'
 import { startOffering } from '@/lib/start-offering'
 import { fromIsoDay, toIsoDay } from '@/lib/birth-date'
 import { AccountDataSection } from '@/screens/account-data-section'
+import { LegalFooter } from '@/components/legal-footer'
 import { IdScanButton } from '@/screens/id-scan-button'
 import { ProfilePhoto } from '@/screens/my-profile/photo-card'
 import { color, foldArrow } from '@/theme'
@@ -232,6 +233,7 @@ export default function AccountScreen() {
             {t('account.admin')}
           </Text>
         )}
+        <LegalFooter />
         {me && <DoneBar onPress={done.onDone} disabled={busy} message={error ?? done.message ?? (stored?.state === 'refused' && !edited ? failureText(stored) : null)} />}
       </KeyboardAwareScrollView>
     </SafeAreaView>

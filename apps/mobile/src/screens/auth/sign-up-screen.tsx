@@ -71,7 +71,7 @@ export default function SignUpScreen() {
   }
 
   return (
-    <AuthScreen title={t('auth.signUp')}>
+    <AuthScreen title={t('auth.signUp')} legal>
       <Field label={t('auth.firstName')} value={firstName} onChangeText={setFirstName} autoComplete="given-name" />
       <Field label={t('auth.lastName')} value={lastName} onChangeText={setLastName} autoComplete="family-name" />
       <View style={styles.emailRow}>

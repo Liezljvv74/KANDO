@@ -88,10 +88,8 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <PendingBanner>
         <Stack screenOptions={{ headerShown: false }}>
-          {/* SDK 58 sends a closed guard to "/" by default, which only exists while logged in: logout showed "Unmatched Route". */}
-          <Stack.Protected guard={!!user} redirectTo="/welcome">
-            <Stack.Screen name="(tabs)" />
-          </Stack.Protected>
+          {/* The tabs are open to everyone (a signed-out person browses; private screens ask for a login). The auth screens are for signed-out people only. */}
+          <Stack.Screen name="(tabs)" />
           <Stack.Protected guard={!user}>
             <Stack.Screen name="(auth)" />
           </Stack.Protected>
@@ -109,7 +107,9 @@ function usePushTaps(signedIn: boolean) {
     if (!signedIn || !response || response.actionIdentifier !== DEFAULT_ACTION_IDENTIFIER) return
     clearLastNotificationResponse()
     const route = pushRoute(response.notification.request.content.data?.url)
-    if (route) go(route)
+    // One tick later: after a login this effect runs in the very commit that removes the sign-in screens, and a navigation made
+    // inside it was overridden (the person ended on Home, the booking never opened). Same reason as in the tabs layout.
+    if (route) setTimeout(() => go(route), 0)
   }, [signedIn, response])
 }
 

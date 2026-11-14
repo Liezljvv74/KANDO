@@ -6,11 +6,11 @@ import { loadPending, savePending, clearPending } from '@/lib/pending-signup'
 import { registerForPush, unregisterPush } from '@/lib/push'
 import { flowCache, nextStepHeld } from '@/lib/flow-cache'
 
-import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, verify } from './use-session'
+import { chooseLanguage, getSession, loadSession, resetSession, signIn, signOut, signUp, SIGNUP_WAIT_MS, verify } from './use-session'
 
 jest.mock('@/api/auth')
 jest.mock('@/lib/push', () => ({ registerForPush: jest.fn(), unregisterPush: jest.fn() }))
-jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn(), signOutGeneration: () => 0 }))
+jest.mock('@/hooks/use-me', () => ({ clearMe: jest.fn(), loadMe: jest.fn(() => Promise.resolve()), setSignedInCheck: jest.fn(), signOutGeneration: () => 0 }))
 let mockFileExists = true
 jest.mock('expo-file-system', () => ({ File: class { get exists() { return mockFileExists } } }))
 jest.mock('@/api/my-profile', () => ({ photosApi: { add: jest.fn() } }))
@@ -155,6 +155,42 @@ test('switching the language also saves it for emails, but only while signed in'
   expect(api.updateMe).toHaveBeenCalledWith({ language: 'en' })
 })
 
+test('a new provider is signed in only after the sign-up is saved and the setup is ready: the root layout never shows Home in between', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  const signedInDuring: unknown[] = []
+  api.updateMe.mockImplementation(async () => {
+    signedInDuring.push(getSession().user)
+    return {}
+  })
+  photos.add.mockImplementation(async () => {
+    signedInDuring.push(getSession().user)
+    return { id: 'p1', kind: 'profile', url: null, alt: null }
+  })
+  const onOffering = jest.fn(async () => void signedInDuring.push(getSession().user))
+  await expect(verify('a@b.de', '123456', onOffering)).resolves.toBe(true)
+  expect(onOffering).toHaveBeenCalledTimes(1)
+  expect(signedInDuring.length).toBeGreaterThanOrEqual(3) // the names, the picture and the setup
+  expect(signedInDuring.every((u) => u === null)).toBe(true)
+  expect(getSession().user).toEqual(user)
+})
+
+test('the person is signed in even if the sign-up save or the setup step throws (the code cannot be used twice)', async () => {
+  await savePending(pending)
+  a.verifyEmail.mockResolvedValueOnce(user)
+  await expect(verify('a@b.de', '123456', async () => { throw new Error('boom') })).resolves.toBe(true)
+  expect(getSession().user).toEqual(user)
+})
+
+test('the setup step runs only for a person who ticked "offer services"', async () => {
+  await savePending({ ...pending, offerServices: false })
+  a.verifyEmail.mockResolvedValueOnce(user)
+  const onOffering = jest.fn(async () => {})
+  await expect(verify('a@b.de', '123456', onOffering)).resolves.toBe(false)
+  expect(onOffering).not.toHaveBeenCalled()
+  expect(getSession().user).toEqual(user)
+})
+
 test('verify finishes the sign-up: names and address, then the picture, then the record is cleared; returns the tick', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)
@@ -296,16 +332,31 @@ test('sign-up keeps the record for the code step; a failed sign-up leaves none',
   expect(await loadPending()).toBeNull()
 })
 
-test('finishing a sign-up reloads /me so the home nudge sees the new picture; nothing to finish, nothing to reload', async () => {
+test('finishing a sign-up reloads /me after the picture is saved (the home nudge sees it); every sign-in loads /me once (the tabs were mounted signed out)', async () => {
   await savePending(pending)
   a.verifyEmail.mockResolvedValueOnce(user)
   await verify('a@b.de', '123456')
-  expect(loadMe).toHaveBeenCalledTimes(1)
+  expect(loadMe).toHaveBeenCalledTimes(2) // after the sign-up data, and at the sign-in
   expect(photos.add.mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadMe).mock.invocationCallOrder[0])
   jest.mocked(loadMe).mockClear()
   a.verifyEmail.mockResolvedValueOnce(user)
   await verify('a@b.de', '123456')
-  expect(loadMe).not.toHaveBeenCalled()
+  expect(loadMe).toHaveBeenCalledTimes(1) // nothing to finish: only the sign-in's own load
+})
+
+test('a sign-up whose data takes too long still signs the person in after SIGNUP_WAIT_MS', async () => {
+  jest.useFakeTimers()
+  try {
+    await savePending(pending)
+    a.verifyEmail.mockResolvedValueOnce(user)
+    photos.add.mockReturnValueOnce(new Promise(() => {})) // the upload never answers
+    const done = verify('a@b.de', '123456')
+    await jest.advanceTimersByTimeAsync(SIGNUP_WAIT_MS + 1)
+    await done
+    expect(getSession().user).toEqual(user)
+  } finally {
+    jest.useRealTimers()
+  }
 })
 
 test('every session start registers for push; an unverified account or no session does not', async () => {
